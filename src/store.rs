@@ -139,9 +139,7 @@ impl SqliteStore {
     pub fn earliest_session_ts(&self) -> Result<Option<String>> {
         let v: Option<String> = self
             .conn
-            .query_row("SELECT MIN(first_ts) FROM sessions", [], |r| r.get(0))
-            .ok()
-            .flatten();
+            .query_row("SELECT MIN(first_ts) FROM sessions", [], |r| r.get(0))?;
         Ok(v)
     }
 
