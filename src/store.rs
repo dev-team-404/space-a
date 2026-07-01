@@ -204,6 +204,35 @@ impl SqliteStore {
         Ok(n as u64)
     }
 
+    pub fn upsert_inventory(
+        &self,
+        host: &str,
+        project_id: &str,
+        servers: &[crate::inventory::McpServer],
+    ) -> Result<()> {
+        for s in servers {
+            self.conn.execute(
+                "INSERT INTO mcp_inventory (host, project_id, server, source)
+                 VALUES (?1,?2,?3,?4)
+                 ON CONFLICT(host, project_id, server) DO UPDATE SET source = ?4",
+                params![host, project_id, s.name, s.source],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn active_servers(&self, host: &str, project_id: &str) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT server FROM mcp_inventory WHERE host=?1 AND project_id=?2 ORDER BY server",
+        )?;
+        let rows = stmt.query_map(params![host, project_id], |r| r.get::<_, String>(0))?;
+        let mut out = Vec::new();
+        for r in rows {
+            out.push(r?);
+        }
+        Ok(out)
+    }
+
     /// last_seen 날짜가 주어진 날짜인 Finding들. (다이어리 브리프 재료)
     pub fn findings_for_date(&self, date: &str) -> Result<Vec<Finding>> {
         let mut stmt = self.conn.prepare(
