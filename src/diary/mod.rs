@@ -1,9 +1,11 @@
 pub mod engine;
 
+use crate::diary::engine::Engine;
 use crate::store::SqliteStore;
 use anyhow::Result;
 use rusqlite::params;
 use serde::Serialize;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct BriefTotals {
@@ -64,6 +66,74 @@ pub fn assemble_brief(store: &SqliteStore, host: &str, date: &str) -> Result<Bri
     Ok(Brief { date: date.to_string(), host: host.to_string(), totals, findings })
 }
 
+#[derive(Debug, Clone)]
+pub struct DiaryConfig {
+    pub vault_dir: PathBuf,
+    pub tone: String,      // "A" | "B" | "C"
+    pub honorific: String, // 기본 "주인"
+}
+
+impl Default for DiaryConfig {
+    fn default() -> Self {
+        DiaryConfig {
+            vault_dir: PathBuf::from("./diary"),
+            tone: "B".to_string(),
+            honorific: "주인".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DiaryOutput {
+    pub path: PathBuf,
+    pub tokens_used: u64,
+}
+
+pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
+    format!(
+        "당신은 사용자의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
+         1인칭으로 하루를 회고하는 일기를 씁니다. 사용자를 '{honorific}'이라고 부릅니다. \
+         톤 프리셋은 '{tone}'(A=감성, B=균형, C=분석)입니다. \
+         규칙(정밀도의 선): 아래 JSON 브리프의 사실과 수치에만 근거해 서술하고, \
+         브리프에 없는 구체적 수치를 지어내지 마세요. 자유로운 소감은 서사에만 담고 \
+         행동 지시로 승격하지 마세요. '잘한 것'과 '아쉬운 것'을 均衡있게 담되 짧게 쓰세요.",
+        honorific = cfg.honorific,
+        tone = cfg.tone,
+    )
+}
+
+pub fn generate_diary(
+    store: &SqliteStore,
+    engine: &dyn Engine,
+    brief: &Brief,
+    cfg: &DiaryConfig,
+) -> Result<DiaryOutput> {
+    let system = build_system_prompt(cfg);
+    let user = serde_json::to_string_pretty(brief)?;
+
+    let out = engine.generate(&system, &user)?;
+    let body = format!(
+        "{narrative}\n\n*— 이 일기 ~{tokens} 토큰 (엔진: {engine})*\n",
+        narrative = out.text,
+        tokens = out.tokens_used,
+        engine = engine.name(),
+    );
+
+    std::fs::create_dir_all(&cfg.vault_dir)?;
+    let path = cfg.vault_dir.join(format!("{}.md", brief.date));
+    std::fs::write(&path, body)?;
+
+    store.upsert_diary_index(
+        &brief.date,
+        &brief.host,
+        &path.to_string_lossy(),
+        out.tokens_used,
+        &engine.name(),
+    )?;
+
+    Ok(DiaryOutput { path, tokens_used: out.tokens_used })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,5 +175,45 @@ mod tests {
         assert_eq!(brief.findings.len(), 1);
         assert_eq!(brief.findings[0].rule_id, "R5");
         assert_eq!(brief.findings[0].est_tokens_saved, 7200);
+    }
+
+    #[test]
+    fn generate_diary_writes_md_with_token_footer_and_index() {
+        use crate::diary::engine::MockEngine;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let brief = Brief {
+            date: "2026-07-01".into(),
+            host: "Windows".into(),
+            totals: BriefTotals { tok_cache_create: 55000, session_count: 3, ..Default::default() },
+            findings: vec![],
+        };
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = DiaryConfig {
+            vault_dir: tmp.path().to_path_buf(),
+            tone: "B".into(),
+            honorific: "주인".into(),
+        };
+        let engine = MockEngine { canned: "오늘 주인은 세 세션을 돌렸다.".into() };
+
+        let out = generate_diary(&store, &engine, &brief, &cfg).unwrap();
+        assert_eq!(out.path, tmp.path().join("2026-07-01.md"));
+        let content = std::fs::read_to_string(&out.path).unwrap();
+        assert!(content.contains("오늘 주인은 세 세션을 돌렸다."));
+        assert!(content.contains("토큰"), "footer meters tokens");
+        assert!(out.tokens_used > 0);
+
+        // diary_index 기록됨
+        let n: i64 = store.conn
+            .query_row("SELECT COUNT(*) FROM diary_index WHERE date='2026-07-01'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn system_prompt_injects_tone_and_honorific() {
+        let cfg = DiaryConfig::default();
+        let p = build_system_prompt(&cfg);
+        assert!(p.contains("주인"));
+        assert!(p.contains("B"));
     }
 }

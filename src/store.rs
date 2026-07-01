@@ -221,6 +221,24 @@ impl SqliteStore {
         Ok(())
     }
 
+    pub fn upsert_diary_index(
+        &self,
+        date: &str,
+        scope: &str,
+        path: &str,
+        tokens: u64,
+        engine: &str,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO diary_index (date, scope, path, tokens_used, engine)
+             VALUES (?1,?2,?3,?4,?5)
+             ON CONFLICT(date, scope) DO UPDATE SET
+                path=?3, tokens_used=?4, engine=?5",
+            params![date, scope, path, tokens as i64, engine],
+        )?;
+        Ok(())
+    }
+
     pub fn active_servers(&self, host: &str, project_id: &str) -> Result<Vec<String>> {
         let mut stmt = self.conn.prepare(
             "SELECT server FROM mcp_inventory WHERE host=?1 AND project_id=?2 ORDER BY server",
