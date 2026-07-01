@@ -60,8 +60,8 @@ fn cmd_rules(store: &SqliteStore) -> Result<()> {
 
 fn cmd_diary(store: &SqliteStore, date: Option<String>) -> Result<()> {
     let date = date.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m-%d").to_string());
-    let brief = assemble_brief(store, "Windows", &date)?;
     let cfg = DiaryConfig::default();
+    let brief = assemble_brief(store, "Windows", &date, &cfg)?;
 
     let engine: Box<dyn Engine> = match OpenAiCompatEngine::from_env() {
         Some(e) => {

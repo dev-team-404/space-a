@@ -2,8 +2,10 @@ pub mod engine;
 pub mod occasions;
 
 use crate::diary::engine::Engine;
+use crate::diary::occasions::{compute_occasions, Occasion};
 use crate::store::SqliteStore;
 use anyhow::Result;
+use chrono::NaiveDate;
 use rusqlite::params;
 use serde::Serialize;
 use std::path::PathBuf;
@@ -33,6 +35,7 @@ pub struct Brief {
     pub host: String,
     pub totals: BriefTotals,
     pub findings: Vec<BriefFinding>,
+    pub occasions: Vec<Occasion>,
 }
 
 /// rule_id + evidence에서 사람이 읽는 근거(detail)와 개선방향(suggested_action)을 결정론적으로 생성.
@@ -62,7 +65,12 @@ pub fn finding_advice(
     }
 }
 
-pub fn assemble_brief(store: &SqliteStore, host: &str, date: &str) -> Result<Brief> {
+pub fn assemble_brief(
+    store: &SqliteStore,
+    host: &str,
+    date: &str,
+    cfg: &DiaryConfig,
+) -> Result<Brief> {
     // 해당 host+date의 rollup 합산(여러 프로젝트 합)
     let totals = store.conn.query_row(
         "SELECT COALESCE(SUM(tok_input),0), COALESCE(SUM(tok_output),0),
@@ -98,14 +106,26 @@ pub fn assemble_brief(store: &SqliteStore, host: &str, date: &str) -> Result<Bri
         })
         .collect();
 
-    Ok(Brief { date: date.to_string(), host: host.to_string(), totals, findings })
+    let locale = resolve_locale(cfg);
+    let today = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok();
+    let anchor = store
+        .earliest_session_ts()?
+        .and_then(|ts| NaiveDate::parse_from_str(&ts[..10.min(ts.len())], "%Y-%m-%d").ok());
+    let occasions = match today {
+        Some(d) => compute_occasions(d, anchor, &locale, cfg.include_dev_days),
+        None => Vec::new(),
+    };
+
+    Ok(Brief { date: date.to_string(), host: host.to_string(), totals, findings, occasions })
 }
 
 #[derive(Debug, Clone)]
 pub struct DiaryConfig {
     pub vault_dir: PathBuf,
-    pub tone: String,      // "A" | "B" | "C"
-    pub honorific: String, // 기본 "주인"
+    pub tone: String,
+    pub honorific: String,
+    pub locale: Option<String>,
+    pub include_dev_days: bool,
 }
 
 impl Default for DiaryConfig {
@@ -114,8 +134,18 @@ impl Default for DiaryConfig {
             vault_dir: PathBuf::from("./diary"),
             tone: "B".to_string(),
             honorific: "주인".to_string(),
+            locale: None,
+            include_dev_days: true,
         }
     }
+}
+
+/// cfg.locale이 있으면 사용, 없으면 OS 로케일 자동 감지, 그것도 실패하면 "en".
+pub fn resolve_locale(cfg: &DiaryConfig) -> String {
+    cfg.locale
+        .clone()
+        .or_else(sys_locale::get_locale)
+        .unwrap_or_else(|| "en".to_string())
 }
 
 #[derive(Debug, Clone)]
@@ -203,7 +233,7 @@ mod tests {
             dedup_key: "R5|s1|report.xlsx".into(),
         }, "2026-07-01T10:00:00Z").unwrap();
 
-        let brief = assemble_brief(&store, "Windows", "2026-07-01").unwrap();
+        let brief = assemble_brief(&store, "Windows", "2026-07-01", &DiaryConfig::default()).unwrap();
         assert_eq!(brief.date, "2026-07-01");
         assert_eq!(brief.totals.tok_cache_create, 55000);
         assert_eq!(brief.totals.session_count, 1);
@@ -221,12 +251,14 @@ mod tests {
             host: "Windows".into(),
             totals: BriefTotals { tok_cache_create: 55000, session_count: 3, ..Default::default() },
             findings: vec![],
+            occasions: vec![],
         };
         let tmp = tempfile::tempdir().unwrap();
         let cfg = DiaryConfig {
             vault_dir: tmp.path().to_path_buf(),
             tone: "B".into(),
             honorific: "주인".into(),
+            ..DiaryConfig::default()
         };
         let engine = MockEngine { canned: "오늘 주인은 세 세션을 돌렸다.".into() };
 
@@ -250,6 +282,30 @@ mod tests {
         let p = build_system_prompt(&cfg);
         assert!(p.contains("주인"));
         assert!(p.contains("B"));
+    }
+
+    #[test]
+    fn assemble_brief_includes_occasions_from_anchor() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 첫 세션 = 2026-01-01 → anchor
+        store.upsert_events(&[NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "c--users-jibin".into(),
+            session_id: "s1".into(), uuid: Some("u1".into()), parent_uuid: None,
+            is_sidechain: false, ts: Some("2026-01-01T09:00:00Z".into()),
+            source_file: "s.jsonl".into(), source_offset: 0,
+            kind: EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-opus-4-8"),
+                usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
+            },
+        }]).unwrap();
+        store.rebuild_rollup().unwrap();
+
+        let cfg = DiaryConfig { locale: Some("ko-KR".into()), ..DiaryConfig::default() };
+        // 2026-04-11 = 2026-01-01 + 100일
+        let brief = assemble_brief(&store, "Windows", "2026-04-11", &cfg).unwrap();
+        assert!(brief.occasions.iter().any(|o| o.label == "함께한 지 100일"));
     }
 
     #[test]
