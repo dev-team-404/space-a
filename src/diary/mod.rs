@@ -1,4 +1,5 @@
 pub mod engine;
+pub mod occasions;
 
 use crate::diary::engine::Engine;
 use crate::store::SqliteStore;
