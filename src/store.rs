@@ -134,6 +134,75 @@ impl SqliteStore {
         let n: i64 = self.conn.query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0))?;
         Ok(n as u64)
     }
+
+    pub fn rebuild_rollup(&self) -> Result<()> {
+        self.conn.execute("DELETE FROM daily_rollup", [])?;
+        self.conn.execute(
+            "INSERT INTO daily_rollup
+                (host, project_id, date, tok_input, tok_output, tok_cache_read,
+                 tok_cache_create, session_count)
+             SELECT host, project_id, date(ts) AS d,
+                    SUM(tok_input), SUM(tok_output), SUM(tok_cache_read),
+                    SUM(tok_cache_create), COUNT(DISTINCT session_id)
+             FROM events
+             WHERE ts IS NOT NULL
+             GROUP BY host, project_id, d",
+            [],
+        )?;
+        Ok(())
+    }
+
+    pub fn rollup_for(&self, host: &str, project_id: &str, date: &str) -> Result<Option<RollupRow>> {
+        let row = self
+            .conn
+            .query_row(
+                "SELECT tok_input, tok_output, tok_cache_read, tok_cache_create, session_count
+                 FROM daily_rollup WHERE host=?1 AND project_id=?2 AND date=?3",
+                params![host, project_id, date],
+                |r| {
+                    Ok(RollupRow {
+                        tok_input: r.get::<_, i64>(0)? as u64,
+                        tok_output: r.get::<_, i64>(1)? as u64,
+                        tok_cache_read: r.get::<_, i64>(2)? as u64,
+                        tok_cache_create: r.get::<_, i64>(3)? as u64,
+                        session_count: r.get::<_, i64>(4)? as u64,
+                    })
+                },
+            )
+            .ok();
+        Ok(row)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RollupRow {
+    pub tok_input: u64,
+    pub tok_output: u64,
+    pub tok_cache_read: u64,
+    pub tok_cache_create: u64,
+    pub session_count: u64,
+}
+
+/// 한 파일을 offset부터 증분 수집. 반환값 = 신규 삽입 이벤트 수.
+pub fn ingest_file(
+    store: &SqliteStore,
+    adapter: &dyn crate::adapter::SourceAdapter,
+    file: &Path,
+) -> Result<usize> {
+    let file_key = file.to_string_lossy().to_string();
+    let from = store.get_offset(&file_key)?;
+    let (lines, new_offset) = adapter.read_incremental(file, from)?;
+
+    let mut all = Vec::new();
+    let mut off = from;
+    for line in &lines {
+        let evs = adapter.map(line, &file_key, off);
+        off += line.len() as u64 + 1; // 개행 1바이트 근사(정렬용, dedup은 uuid 기준)
+        all.extend(evs);
+    }
+    let inserted = store.upsert_events(&all)?;
+    store.set_offset(&file_key, new_offset)?;
+    Ok(inserted)
 }
 
 type FlatRow = (
@@ -235,5 +304,37 @@ mod tests {
         assert_eq!(store.get_offset("f.jsonl").unwrap(), 4096);
         store.set_offset("f.jsonl", 8192).unwrap();
         assert_eq!(store.get_offset("f.jsonl").unwrap(), 8192);
+    }
+
+    #[test]
+    fn ingest_file_then_rollup_aggregates_tokens() {
+        use crate::adapter::ClaudeCodeAdapter;
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        // 트랜스크립트 디렉터리명이 project_id의 원천이므로 하위 디렉터리에 배치
+        let proj = dir.path().join("C--Users-jibin");
+        std::fs::create_dir_all(&proj).unwrap();
+        let file = proj.join("s1.jsonl");
+        let mut f = std::fs::File::create(&file).unwrap();
+        let line1 = r#"{"type":"assistant","sessionId":"s1","uuid":"u1","timestamp":"2026-07-01T10:00:00Z","message":{"model":"claude-opus-4-8","usage":{"input_tokens":10,"output_tokens":20,"cache_creation_input_tokens":55000}}}"#;
+        let line2 = r#"{"type":"assistant","sessionId":"s1","uuid":"u2","timestamp":"2026-07-01T10:05:00Z","message":{"model":"claude-opus-4-8","usage":{"input_tokens":5,"output_tokens":7}}}"#;
+        writeln!(f, "{line1}").unwrap();
+        writeln!(f, "{line2}").unwrap();
+
+        let store = SqliteStore::open_in_memory().unwrap();
+        let adapter = ClaudeCodeAdapter { root: dir.path().into(), host: "Windows".into() };
+        let n = ingest_file(&store, &adapter, &file).unwrap();
+        assert_eq!(n, 2);
+
+        // 재수집(offset 저장됨) → 신규 0
+        assert_eq!(ingest_file(&store, &adapter, &file).unwrap(), 0);
+
+        store.rebuild_rollup().unwrap();
+        let r = store.rollup_for("Windows", "c--users-jibin", "2026-07-01").unwrap().unwrap();
+        assert_eq!(r.tok_input, 15);
+        assert_eq!(r.tok_output, 27);
+        assert_eq!(r.tok_cache_create, 55000);
+        assert_eq!(r.session_count, 1);
     }
 }
