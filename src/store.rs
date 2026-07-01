@@ -73,10 +73,10 @@ impl SqliteStore {
     pub fn upsert_events(&self, evs: &[NormalizedEvent]) -> Result<usize> {
         let mut inserted = 0usize;
         for e in evs {
-            let dedup_key = e
-                .uuid
-                .clone()
-                .unwrap_or_else(|| format!("{}:{}", e.source_file, e.source_offset));
+            let dedup_key = match &e.uuid {
+                Some(u) => format!("{}:{}", u, e.source_offset),
+                None => format!("{}:{}", e.source_file, e.source_offset),
+            };
 
             // 봉투 공통 + kind별 컬럼 추출
             let (kind_str, mfam, mtier, ti, to, tcr, tcc, e1h, ws, wf,
@@ -421,6 +421,52 @@ mod tests {
         assert_eq!(store.get_offset("f.jsonl").unwrap(), 4096);
         store.set_offset("f.jsonl", 8192).unwrap();
         assert_eq!(store.get_offset("f.jsonl").unwrap(), 8192);
+    }
+
+    #[test]
+    fn upsert_keeps_multiple_events_sharing_one_line_uuid() {
+        use crate::model::*;
+        let mk = |off: u64, kind: EventKind| NormalizedEvent {
+            source_agent: "claude-code".into(),
+            schema_version: "t".into(),
+            host: "Windows".into(),
+            project_id: "c--users-jibin".into(),
+            session_id: "s1".into(),
+            uuid: Some("u1".into()),
+            parent_uuid: None,
+            is_sidechain: false,
+            ts: Some("2026-07-01T10:00:00Z".into()),
+            source_file: "s.jsonl".into(),
+            source_offset: off,
+            kind,
+        };
+        let evs = vec![
+            mk(0, EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-opus-4-8"),
+                usage: TokenUsage::default(),
+                web_search: 0,
+                web_fetch: 0,
+            }),
+            mk(1, EventKind::ToolCall {
+                kind: ToolKind::FileRead,
+                raw_name: "Read".into(),
+                target: Some("a.txt".into()),
+            }),
+            mk(2, EventKind::ToolCall {
+                kind: ToolKind::FileRead,
+                raw_name: "Read".into(),
+                target: Some("b.txt".into()),
+            }),
+        ];
+        let store = SqliteStore::open_in_memory().unwrap();
+        assert_eq!(
+            store.upsert_events(&evs).unwrap(),
+            3,
+            "AssistantTurn + 2 ToolCalls sharing one line uuid must all persist"
+        );
+        assert_eq!(store.count_events().unwrap(), 3);
+        // idempotent re-insert
+        assert_eq!(store.upsert_events(&evs).unwrap(), 0);
     }
 
     #[test]
