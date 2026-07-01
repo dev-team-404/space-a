@@ -1,8 +1,11 @@
 pub mod engine;
+pub mod occasions;
 
 use crate::diary::engine::Engine;
+use crate::diary::occasions::{compute_occasions, Occasion};
 use crate::store::SqliteStore;
 use anyhow::Result;
+use chrono::NaiveDate;
 use rusqlite::params;
 use serde::Serialize;
 use std::path::PathBuf;
@@ -22,6 +25,8 @@ pub struct BriefFinding {
     pub evidence: serde_json::Value,
     pub est_tokens_saved: u64,
     pub prescription: Option<serde_json::Value>,
+    pub detail: String,
+    pub suggested_action: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -30,9 +35,42 @@ pub struct Brief {
     pub host: String,
     pub totals: BriefTotals,
     pub findings: Vec<BriefFinding>,
+    pub occasions: Vec<Occasion>,
 }
 
-pub fn assemble_brief(store: &SqliteStore, host: &str, date: &str) -> Result<Brief> {
+/// rule_id + evidence에서 사람이 읽는 근거(detail)와 개선방향(suggested_action)을 결정론적으로 생성.
+/// 정밀도의 선: 여기서 만든 사실만 서사에 인용된다.
+pub fn finding_advice(
+    rule_id: &str,
+    evidence: &serde_json::Value,
+    est_tokens_saved: u64,
+) -> (String, String) {
+    match rule_id {
+        "R5" => {
+            let path = evidence.get("path").and_then(|v| v.as_str()).unwrap_or("어떤 파일");
+            let count = evidence.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
+            (
+                format!("`{path}`를 {count}회 반복해서 읽음 (~{est_tokens_saved}토큰)"),
+                "한 번만 읽고 그 내용을 기억해 두면 다음엔 그 토큰을 아낄 수 있어요".to_string(),
+            )
+        }
+        "R1" => {
+            let server = evidence.get("server").and_then(|v| v.as_str()).unwrap_or("어떤 서버");
+            (
+                format!("MCP 서버 `{server}`가 상주하는데 호출 0회 (~{est_tokens_saved}토큰 추정)"),
+                format!("안 쓰는 `{server}`를 설정에서 제거하면 매 세션 상주 토큰을 아껴요"),
+            )
+        }
+        _ => (format!("{evidence}"), String::new()),
+    }
+}
+
+pub fn assemble_brief(
+    store: &SqliteStore,
+    host: &str,
+    date: &str,
+    cfg: &DiaryConfig,
+) -> Result<Brief> {
     // 해당 host+date의 rollup 합산(여러 프로젝트 합)
     let totals = store.conn.query_row(
         "SELECT COALESCE(SUM(tok_input),0), COALESCE(SUM(tok_output),0),
@@ -52,25 +90,42 @@ pub fn assemble_brief(store: &SqliteStore, host: &str, date: &str) -> Result<Bri
     let findings = store
         .findings_for_date(date)?
         .into_iter()
-        .map(|f| BriefFinding {
-            rule_id: f.rule_id,
-            severity: f.severity.as_str().to_string(),
-            evidence: f.evidence,
-            est_tokens_saved: f.est_tokens_saved,
-            prescription: f.prescription.map(|p| serde_json::json!({
-                "kind": p.kind, "payload": p.payload
-            })),
+        .map(|f| {
+            let (detail, suggested_action) = finding_advice(&f.rule_id, &f.evidence, f.est_tokens_saved);
+            BriefFinding {
+                rule_id: f.rule_id,
+                severity: f.severity.as_str().to_string(),
+                evidence: f.evidence,
+                est_tokens_saved: f.est_tokens_saved,
+                prescription: f.prescription.map(|p| serde_json::json!({
+                    "kind": p.kind, "payload": p.payload
+                })),
+                detail,
+                suggested_action,
+            }
         })
         .collect();
 
-    Ok(Brief { date: date.to_string(), host: host.to_string(), totals, findings })
+    let locale = resolve_locale(cfg);
+    let today = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok();
+    let anchor = store
+        .earliest_session_ts()?
+        .and_then(|ts| NaiveDate::parse_from_str(ts.get(..10)?, "%Y-%m-%d").ok());
+    let occasions = match today {
+        Some(d) => compute_occasions(d, anchor, &locale, cfg.include_dev_days),
+        None => Vec::new(),
+    };
+
+    Ok(Brief { date: date.to_string(), host: host.to_string(), totals, findings, occasions })
 }
 
 #[derive(Debug, Clone)]
 pub struct DiaryConfig {
     pub vault_dir: PathBuf,
-    pub tone: String,      // "A" | "B" | "C"
-    pub honorific: String, // 기본 "주인"
+    pub tone: String,
+    pub honorific: String,
+    pub locale: Option<String>,
+    pub include_dev_days: bool,
 }
 
 impl Default for DiaryConfig {
@@ -79,8 +134,18 @@ impl Default for DiaryConfig {
             vault_dir: PathBuf::from("./diary"),
             tone: "B".to_string(),
             honorific: "주인".to_string(),
+            locale: None,
+            include_dev_days: true,
         }
     }
+}
+
+/// cfg.locale이 있으면 사용, 없으면 OS 로케일 자동 감지, 그것도 실패하면 "en".
+pub fn resolve_locale(cfg: &DiaryConfig) -> String {
+    cfg.locale
+        .clone()
+        .or_else(sys_locale::get_locale)
+        .unwrap_or_else(|| "en".to_string())
 }
 
 #[derive(Debug, Clone)]
@@ -93,10 +158,18 @@ pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
     format!(
         "당신은 사용자의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
          1인칭으로 하루를 회고하는 일기를 씁니다. 사용자를 '{honorific}'이라고 부릅니다. \
-         톤 프리셋은 '{tone}'(A=감성, B=균형, C=분석)입니다. \
-         규칙(정밀도의 선): 아래 JSON 브리프의 사실과 수치에만 근거해 서술하고, \
-         브리프에 없는 구체적 수치를 지어내지 마세요. 자유로운 소감은 서사에만 담고 \
-         행동 지시로 승격하지 마세요. '잘한 것'과 '아쉬운 것'을 均衡있게 담되 짧게 쓰세요.",
+         톤 프리셋은 '{tone}'(A=감성, B=균형, C=분석)이며, 톤과 무관하게 기본적으로 \
+         가볍고 유머러스하게, 다마고치풍의 능청과 장난기를 살려 쓰세요(단 과하지 않게). \
+         \
+         정밀도의 선(반드시 지킬 것): 아래 JSON 브리프의 사실과 수치에만 근거해 서술하고, \
+         브리프에 없는 구체적 수치를 지어내지 마세요. \
+         '잘한 것'과 '아쉬운 것'은 각 finding의 `detail`(근거 수치)과 `suggested_action`(개선 방향)에 \
+         근거해 구체적으로 써서, 무엇을 왜 그렇게 하면 좋은지 주인이 바로 알 수 있게 하세요. \
+         자유로운 소감은 서사에만 담고 행동 지시로 승격하지 마세요. \
+         \
+         브리프의 `occasions` 배열이 비어있지 않으면(기념일·명절), 일기의 도입이나 마무리에 \
+         자연스럽고 다정하게 언급하세요(예: 오늘이 크리스마스이거나 함께한 지 100일 등). \
+         비어있으면 언급하지 마세요.",
         honorific = cfg.honorific,
         tone = cfg.tone,
     )
@@ -168,7 +241,7 @@ mod tests {
             dedup_key: "R5|s1|report.xlsx".into(),
         }, "2026-07-01T10:00:00Z").unwrap();
 
-        let brief = assemble_brief(&store, "Windows", "2026-07-01").unwrap();
+        let brief = assemble_brief(&store, "Windows", "2026-07-01", &DiaryConfig::default()).unwrap();
         assert_eq!(brief.date, "2026-07-01");
         assert_eq!(brief.totals.tok_cache_create, 55000);
         assert_eq!(brief.totals.session_count, 1);
@@ -186,12 +259,14 @@ mod tests {
             host: "Windows".into(),
             totals: BriefTotals { tok_cache_create: 55000, session_count: 3, ..Default::default() },
             findings: vec![],
+            occasions: vec![],
         };
         let tmp = tempfile::tempdir().unwrap();
         let cfg = DiaryConfig {
             vault_dir: tmp.path().to_path_buf(),
             tone: "B".into(),
             honorific: "주인".into(),
+            ..DiaryConfig::default()
         };
         let engine = MockEngine { canned: "오늘 주인은 세 세션을 돌렸다.".into() };
 
@@ -215,5 +290,68 @@ mod tests {
         let p = build_system_prompt(&cfg);
         assert!(p.contains("주인"));
         assert!(p.contains("B"));
+    }
+
+    #[test]
+    fn assemble_brief_includes_occasions_from_anchor() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 첫 세션 = 2026-01-01 → anchor
+        store.upsert_events(&[NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "c--users-jibin".into(),
+            session_id: "s1".into(), uuid: Some("u1".into()), parent_uuid: None,
+            is_sidechain: false, ts: Some("2026-01-01T09:00:00Z".into()),
+            source_file: "s.jsonl".into(), source_offset: 0,
+            kind: EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-opus-4-8"),
+                usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
+            },
+        }]).unwrap();
+        store.rebuild_rollup().unwrap();
+
+        let cfg = DiaryConfig { locale: Some("ko-KR".into()), ..DiaryConfig::default() };
+        // 2026-04-11 = 2026-01-01 + 100일
+        let brief = assemble_brief(&store, "Windows", "2026-04-11", &cfg).unwrap();
+        assert!(brief.occasions.iter().any(|o| o.label == "함께한 지 100일"));
+    }
+
+    #[test]
+    fn finding_advice_r5_and_r1() {
+        let (detail, action) = super::finding_advice(
+            "R5",
+            &serde_json::json!({"path": "report.xlsx", "count": 7}),
+            7200,
+        );
+        assert!(detail.contains("report.xlsx"));
+        assert!(detail.contains("7"));
+        assert!(detail.contains("7200"));
+        assert!(!action.is_empty());
+
+        let (d1, a1) = super::finding_advice(
+            "R1",
+            &serde_json::json!({"server": "playwright"}),
+            2500,
+        );
+        assert!(d1.contains("playwright"));
+        assert!(a1.contains("playwright"));
+    }
+
+    #[test]
+    fn system_prompt_has_humor_evidence_and_occasions_instructions() {
+        let p = build_system_prompt(&DiaryConfig::default());
+        assert!(p.contains("주인"));   // 호칭
+        assert!(p.contains("유머"));   // 유머 지시
+        assert!(p.contains("detail")); // 근거 필드 사용 지시
+        assert!(p.contains("suggested_action")); // 개선방향 필드 사용 지시
+        assert!(p.contains("occasions")); // 기념일/명절 사용 지시
+    }
+
+    #[test]
+    fn finding_advice_default_arm() {
+        let ev = serde_json::json!({"x": 1});
+        let (detail, action) = super::finding_advice("RX", &ev, 0);
+        assert_eq!(action, "");
+        assert_eq!(detail, format!("{ev}"));
     }
 }

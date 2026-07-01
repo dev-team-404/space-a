@@ -136,6 +136,13 @@ impl SqliteStore {
         Ok(n as u64)
     }
 
+    pub fn earliest_session_ts(&self) -> Result<Option<String>> {
+        let v: Option<String> = self
+            .conn
+            .query_row("SELECT MIN(first_ts) FROM sessions", [], |r| r.get(0))?;
+        Ok(v)
+    }
+
     pub fn rebuild_rollup(&self) -> Result<()> {
         self.conn.execute("DELETE FROM daily_rollup", [])?;
         self.conn.execute(
@@ -465,6 +472,27 @@ mod tests {
         assert_eq!(store.count_events().unwrap(), 3);
         // idempotent re-insert
         assert_eq!(store.upsert_events(&evs).unwrap(), 0);
+    }
+
+    #[test]
+    fn earliest_session_ts_returns_min_first_ts() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |sid: &str, uuid: &str, ts: &str| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: sid.into(),
+            uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
+            ts: Some(ts.into()), source_file: "s.jsonl".into(), source_offset: 0,
+            kind: EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-opus-4-8"),
+                usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
+            },
+        };
+        store.upsert_events(&[
+            mk("s2", "u2", "2026-03-10T09:00:00Z"),
+            mk("s1", "u1", "2026-01-05T09:00:00Z"),
+        ]).unwrap();
+        assert_eq!(store.earliest_session_ts().unwrap().as_deref(), Some("2026-01-05T09:00:00Z"));
     }
 
     #[test]
