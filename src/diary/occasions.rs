@@ -109,7 +109,9 @@ pub fn compute_occasions(
     locale: &str,
     include_dev_days: bool,
 ) -> Vec<Occasion> {
-    let lang = lang_of(locale);
+    // BCP-47 언어 태그는 대소문자 무관 — 소문자로 정규화해 매칭 실패를 방지
+    let lang_normalized = lang_of(locale).to_lowercase();
+    let lang = lang_normalized.as_str();
     let mut out = Vec::new();
 
     // 기념일 (마일스톤)
@@ -167,6 +169,15 @@ mod tests {
     }
     fn labels(v: &[Occasion]) -> Vec<String> {
         v.iter().map(|o| o.label.clone()).collect()
+    }
+
+    #[test]
+    fn locale_matching_is_case_insensitive() {
+        // BCP-47은 대소문자 무관 — 대문자 로케일도 동아시아/로케일 명절이 매칭돼야 함
+        assert!(labels(&compute_occasions(d(2025, 1, 29), None, "KO-KR", false))
+            .contains(&"설날".to_string()));
+        assert!(labels(&compute_occasions(d(2026, 12, 25), None, "KO", false))
+            .contains(&"크리스마스".to_string()));
     }
 
     #[test]

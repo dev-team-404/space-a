@@ -110,7 +110,7 @@ pub fn assemble_brief(
     let today = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok();
     let anchor = store
         .earliest_session_ts()?
-        .and_then(|ts| NaiveDate::parse_from_str(&ts[..10.min(ts.len())], "%Y-%m-%d").ok());
+        .and_then(|ts| NaiveDate::parse_from_str(ts.get(..10)?, "%Y-%m-%d").ok());
     let occasions = match today {
         Some(d) => compute_occasions(d, anchor, &locale, cfg.include_dev_days),
         None => Vec::new(),
