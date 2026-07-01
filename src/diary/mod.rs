@@ -158,10 +158,18 @@ pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
     format!(
         "당신은 사용자의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
          1인칭으로 하루를 회고하는 일기를 씁니다. 사용자를 '{honorific}'이라고 부릅니다. \
-         톤 프리셋은 '{tone}'(A=감성, B=균형, C=분석)입니다. \
-         규칙(정밀도의 선): 아래 JSON 브리프의 사실과 수치에만 근거해 서술하고, \
-         브리프에 없는 구체적 수치를 지어내지 마세요. 자유로운 소감은 서사에만 담고 \
-         행동 지시로 승격하지 마세요. '잘한 것'과 '아쉬운 것'을 均衡있게 담되 짧게 쓰세요.",
+         톤 프리셋은 '{tone}'(A=감성, B=균형, C=분석)이며, 톤과 무관하게 기본적으로 \
+         가볍고 유머러스하게, 다마고치풍의 능청과 장난기를 살려 쓰세요(단 과하지 않게). \
+         \
+         정밀도의 선(반드시 지킬 것): 아래 JSON 브리프의 사실과 수치에만 근거해 서술하고, \
+         브리프에 없는 구체적 수치를 지어내지 마세요. \
+         '잘한 것'과 '아쉬운 것'은 각 finding의 `detail`(근거 수치)과 `suggested_action`(개선 방향)에 \
+         근거해 구체적으로 써서, 무엇을 왜 그렇게 하면 좋은지 주인이 바로 알 수 있게 하세요. \
+         자유로운 소감은 서사에만 담고 행동 지시로 승격하지 마세요. \
+         \
+         브리프의 `occasions` 배열이 비어있지 않으면(기념일·명절), 일기의 도입이나 마무리에 \
+         자연스럽고 다정하게 언급하세요(예: 오늘이 크리스마스이거나 함께한 지 100일 등). \
+         비어있으면 언급하지 마세요.",
         honorific = cfg.honorific,
         tone = cfg.tone,
     )
@@ -327,5 +335,15 @@ mod tests {
         );
         assert!(d1.contains("playwright"));
         assert!(a1.contains("playwright"));
+    }
+
+    #[test]
+    fn system_prompt_has_humor_evidence_and_occasions_instructions() {
+        let p = build_system_prompt(&DiaryConfig::default());
+        assert!(p.contains("주인"));   // 호칭
+        assert!(p.contains("유머"));   // 유머 지시
+        assert!(p.contains("detail")); // 근거 필드 사용 지시
+        assert!(p.contains("suggested_action")); // 개선방향 필드 사용 지시
+        assert!(p.contains("occasions")); // 기념일/명절 사용 지시
     }
 }
