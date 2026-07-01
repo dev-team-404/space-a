@@ -2,3 +2,5 @@
 /target
 /agent-mentor.db
 /diary/
+.env
+.env.ref
