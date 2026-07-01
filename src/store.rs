@@ -311,10 +311,8 @@ pub fn ingest_file(
     let (lines, new_offset) = adapter.read_incremental(file, from)?;
 
     let mut all = Vec::new();
-    let mut off = from;
-    for line in &lines {
-        let evs = adapter.map(line, &file_key, off);
-        off += line.len() as u64 + 1; // 개행 1바이트 근사(정렬용, dedup은 uuid 기준)
+    for (offset, line) in &lines {
+        let evs = adapter.map(line, &file_key, *offset);
         all.extend(evs);
     }
     let inserted = store.upsert_events(&all)?;

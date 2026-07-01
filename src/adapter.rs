@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 pub trait SourceAdapter {
     fn discover(&self) -> Result<Vec<PathBuf>>;
-    fn read_incremental(&self, file: &Path, from_offset: u64) -> Result<(Vec<String>, u64)>;
+    fn read_incremental(&self, file: &Path, from_offset: u64) -> Result<(Vec<(u64, String)>, u64)>;
     fn map(&self, line: &str, source_file: &str, source_offset: u64) -> Vec<NormalizedEvent>;
 }
 
@@ -65,20 +65,21 @@ impl SourceAdapter for ClaudeCodeAdapter {
         Ok(out)
     }
 
-    fn read_incremental(&self, file: &Path, from_offset: u64) -> Result<(Vec<String>, u64)> {
+    fn read_incremental(&self, file: &Path, from_offset: u64) -> Result<(Vec<(u64, String)>, u64)> {
         let mut f = std::fs::File::open(file)?;
         f.seek(SeekFrom::Start(from_offset))?;
         let mut buf = String::new();
         f.read_to_string(&mut buf)?;
 
         let mut lines = Vec::new();
-        let mut consumed = 0u64; // 완결 라인들이 차지한 바이트 수
+        let mut consumed = 0u64;
         for segment in buf.split_inclusive('\n') {
             if segment.ends_with('\n') {
+                let start = from_offset + consumed;
                 consumed += segment.len() as u64;
                 let trimmed = segment.trim_end_matches(['\n', '\r']);
                 if !trimmed.is_empty() {
-                    lines.push(trimmed.to_string());
+                    lines.push((start, trimmed.to_string()));
                 }
             }
             // 개행으로 끝나지 않는 마지막 tail은 버림(미완결) → consumed에 미포함
@@ -239,7 +240,7 @@ mod tests {
         f.flush().unwrap();
 
         let (lines, new_off) = adapter().read_incremental(&path, 0).unwrap();
-        assert_eq!(lines, vec!["{\"a\":1}".to_string(), "{\"b\":2}".to_string()]);
+        assert_eq!(lines, vec![(0u64, "{\"a\":1}".to_string()), (8u64, "{\"b\":2}".to_string())]);
         // 새 오프셋은 두 완결 라인의 바이트 길이(개행 포함)
         assert_eq!(new_off, ("{\"a\":1}\n{\"b\":2}\n").len() as u64);
 

@@ -4,6 +4,12 @@ use crate::store::SqliteStore;
 use anyhow::Result;
 use rusqlite::params;
 
+/// R1 — 안 쓰는 always-on MCP.
+///
+/// v0 단순화 (스펙과의 의도적 이탈, 추후 보정):
+/// - 스펙 §5는 "최근 10세션 호출 0"이지만 v0는 **전체 기간 호출 0**으로 판정(더 보수적, 오탐 적음).
+/// - 스펙 §8은 "세션 첫 턴 cache_creation"이지만 v0는 프로젝트 전체 assistant_turn의 **MAX(tok_cache_create)**를 상주 비용 근사로 사용.
+/// - 서버별 정확 귀속(옵트인 프로브)은 유예 — est_tokens_saved는 flat heuristic("약~").
 pub struct R1UnusedMcp {
     pub min_resident_tokens: u64,
     pub heuristic_tokens_per_server: u64,
