@@ -64,5 +64,15 @@ mod tests {
         let got = store.findings_for_date("2026-07-01").unwrap();
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].est_tokens_saved, 7200);
+
+        let occ: i64 = store
+            .conn
+            .query_row(
+                "SELECT occurrences FROM findings WHERE dedup_key = 'R5|s1|report.xlsx'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(occ, 2, "second upsert of same dedup_key must increment occurrences");
     }
 }
