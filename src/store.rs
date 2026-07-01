@@ -1,3 +1,4 @@
+use crate::finding::{Finding, Prescription, Severity};
 use crate::model::{EventKind, NormalizedEvent, ToolKind};
 use anyhow::Result;
 use rusqlite::{params, Connection};
@@ -171,6 +172,75 @@ impl SqliteStore {
             )
             .ok();
         Ok(row)
+    }
+
+    pub fn upsert_finding(&self, f: &Finding, now_ts: &str) -> Result<()> {
+        let evidence = serde_json::to_string(&f.evidence)?;
+        let presc = match &f.prescription {
+            Some(p) => Some(serde_json::to_string(p)?),
+            None => None,
+        };
+        self.conn.execute(
+            "INSERT INTO findings
+                (dedup_key, rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
+                 evidence_json, est_tokens_saved, prescription_json, status,
+                 first_seen, last_seen, occurrences)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'new',?11,?11,1)
+             ON CONFLICT(dedup_key) DO UPDATE SET
+                last_seen = ?11,
+                occurrences = occurrences + 1,
+                est_tokens_saved = ?9,
+                evidence_json = ?8",
+            params![
+                f.dedup_key, f.rule_id, f.severity.as_str(), f.scope_host, f.scope_project,
+                f.scope_kind, f.scope_ref, evidence, f.est_tokens_saved as i64, presc, now_ts
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn count_findings(&self) -> Result<u64> {
+        let n: i64 = self.conn.query_row("SELECT COUNT(*) FROM findings", [], |r| r.get(0))?;
+        Ok(n as u64)
+    }
+
+    /// last_seen 날짜가 주어진 날짜인 Finding들. (다이어리 브리프 재료)
+    pub fn findings_for_date(&self, date: &str) -> Result<Vec<Finding>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
+                    evidence_json, est_tokens_saved, prescription_json, dedup_key
+             FROM findings WHERE date(last_seen) = ?1
+             ORDER BY est_tokens_saved DESC",
+        )?;
+        let rows = stmt.query_map(params![date], |r| {
+            let sev = match r.get::<_, String>(1)?.as_str() {
+                "warn" => Severity::Warn,
+                "suggest" => Severity::Suggest,
+                _ => Severity::Info,
+            };
+            let evidence: serde_json::Value =
+                serde_json::from_str(&r.get::<_, String>(6)?).unwrap_or(serde_json::Value::Null);
+            let presc: Option<Prescription> = r
+                .get::<_, Option<String>>(8)?
+                .and_then(|s| serde_json::from_str(&s).ok());
+            Ok(Finding {
+                rule_id: r.get(0)?,
+                severity: sev,
+                scope_host: r.get(2)?,
+                scope_project: r.get(3)?,
+                scope_kind: r.get(4)?,
+                scope_ref: r.get(5)?,
+                evidence,
+                est_tokens_saved: r.get::<_, i64>(7)? as u64,
+                prescription: presc,
+                dedup_key: r.get(9)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
     }
 }
 
