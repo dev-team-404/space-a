@@ -23,6 +23,8 @@ pub struct BriefFinding {
     pub evidence: serde_json::Value,
     pub est_tokens_saved: u64,
     pub prescription: Option<serde_json::Value>,
+    pub detail: String,
+    pub suggested_action: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -31,6 +33,33 @@ pub struct Brief {
     pub host: String,
     pub totals: BriefTotals,
     pub findings: Vec<BriefFinding>,
+}
+
+/// rule_id + evidence에서 사람이 읽는 근거(detail)와 개선방향(suggested_action)을 결정론적으로 생성.
+/// 정밀도의 선: 여기서 만든 사실만 서사에 인용된다.
+pub fn finding_advice(
+    rule_id: &str,
+    evidence: &serde_json::Value,
+    est_tokens_saved: u64,
+) -> (String, String) {
+    match rule_id {
+        "R5" => {
+            let path = evidence.get("path").and_then(|v| v.as_str()).unwrap_or("어떤 파일");
+            let count = evidence.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
+            (
+                format!("`{path}`를 {count}회 반복해서 읽음 (~{est_tokens_saved}토큰)"),
+                "한 번만 읽고 그 내용을 기억해 두면 다음엔 그 토큰을 아낄 수 있어요".to_string(),
+            )
+        }
+        "R1" => {
+            let server = evidence.get("server").and_then(|v| v.as_str()).unwrap_or("어떤 서버");
+            (
+                format!("MCP 서버 `{server}`가 상주하는데 호출 0회 (~{est_tokens_saved}토큰 추정)"),
+                format!("안 쓰는 `{server}`를 설정에서 제거하면 매 세션 상주 토큰을 아껴요"),
+            )
+        }
+        _ => (format!("{evidence}"), String::new()),
+    }
 }
 
 pub fn assemble_brief(store: &SqliteStore, host: &str, date: &str) -> Result<Brief> {
@@ -53,14 +82,19 @@ pub fn assemble_brief(store: &SqliteStore, host: &str, date: &str) -> Result<Bri
     let findings = store
         .findings_for_date(date)?
         .into_iter()
-        .map(|f| BriefFinding {
-            rule_id: f.rule_id,
-            severity: f.severity.as_str().to_string(),
-            evidence: f.evidence,
-            est_tokens_saved: f.est_tokens_saved,
-            prescription: f.prescription.map(|p| serde_json::json!({
-                "kind": p.kind, "payload": p.payload
-            })),
+        .map(|f| {
+            let (detail, suggested_action) = finding_advice(&f.rule_id, &f.evidence, f.est_tokens_saved);
+            BriefFinding {
+                rule_id: f.rule_id,
+                severity: f.severity.as_str().to_string(),
+                evidence: f.evidence,
+                est_tokens_saved: f.est_tokens_saved,
+                prescription: f.prescription.map(|p| serde_json::json!({
+                    "kind": p.kind, "payload": p.payload
+                })),
+                detail,
+                suggested_action,
+            }
         })
         .collect();
 
@@ -216,5 +250,26 @@ mod tests {
         let p = build_system_prompt(&cfg);
         assert!(p.contains("주인"));
         assert!(p.contains("B"));
+    }
+
+    #[test]
+    fn finding_advice_r5_and_r1() {
+        let (detail, action) = super::finding_advice(
+            "R5",
+            &serde_json::json!({"path": "report.xlsx", "count": 7}),
+            7200,
+        );
+        assert!(detail.contains("report.xlsx"));
+        assert!(detail.contains("7"));
+        assert!(detail.contains("7200"));
+        assert!(!action.is_empty());
+
+        let (d1, a1) = super::finding_advice(
+            "R1",
+            &serde_json::json!({"server": "playwright"}),
+            2500,
+        );
+        assert!(d1.contains("playwright"));
+        assert!(a1.contains("playwright"));
     }
 }
