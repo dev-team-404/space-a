@@ -346,4 +346,12 @@ mod tests {
         assert!(p.contains("suggested_action")); // 개선방향 필드 사용 지시
         assert!(p.contains("occasions")); // 기념일/명절 사용 지시
     }
+
+    #[test]
+    fn finding_advice_default_arm() {
+        let ev = serde_json::json!({"x": 1});
+        let (detail, action) = super::finding_advice("RX", &ev, 0);
+        assert_eq!(action, "");
+        assert_eq!(detail, format!("{ev}"));
+    }
 }

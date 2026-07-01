@@ -234,4 +234,13 @@ mod tests {
         assert!(!labels(&compute_occasions(d(2025, 9, 13), None, "en", false))
             .contains(&"Programmer's Day".to_string()));
     }
+
+    #[test]
+    fn lunar_2028_and_2035_pinned() {
+        // 값은 LUNAR_HOLIDAYS 상수에서 읽어 고정 — 미래 테이블 수정 시 오타 조기 검출용
+        assert!(labels(&compute_occasions(d(2028, 1, 27), None, "ko", false))
+            .contains(&"설날".to_string()));
+        assert!(labels(&compute_occasions(d(2035, 9, 16), None, "ko", false))
+            .contains(&"추석".to_string()));
+    }
 }
