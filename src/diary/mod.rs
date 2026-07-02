@@ -88,7 +88,7 @@ pub fn assemble_brief(
     )?;
 
     let findings = store
-        .findings_for_date(date)?
+        .findings_for_date(host, date)?
         .into_iter()
         .map(|f| {
             let (detail, suggested_action) = finding_advice(&f.rule_id, &f.evidence, f.est_tokens_saved);
