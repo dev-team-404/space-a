@@ -5,6 +5,8 @@ use agent_mentor::hosts::enumerate_hosts;
 use agent_mentor::inventory::collect_host_inventory;
 use agent_mentor::rules::r1_unused_mcp::R1UnusedMcp;
 use agent_mentor::rules::r5_repeated_read::R5RepeatedRead;
+use agent_mentor::rules::r7_opus_trivial::R7OpusTrivial;
+use agent_mentor::rules::r9_web_overuse::R9WebOveruse;
 use agent_mentor::rules::RuleEngine;
 use agent_mentor::store::{ingest_file, SqliteStore};
 use anyhow::Result;
@@ -69,9 +71,13 @@ fn cmd_inventory(store: &mut SqliteStore) -> Result<()> {
         };
         let cache = hs.claude_root.join("plugins").join("cache");
         let inv = collect_host_inventory(&claude_json, &settings, &cache);
-        total_servers += inv.iter().map(|(_, servers)| servers.len()).sum::<usize>();
+        if !inv.complete {
+            eprintln!("warn: host {} 중첩 .mcp.json 읽기 실패 — 인벤토리 유지, reconcile 스킵", hs.host);
+            continue;
+        }
+        total_servers += inv.entries.iter().map(|(_, servers)| servers.len()).sum::<usize>();
         // 원자 교체: 이 호스트의 기존 행 삭제 후 현재셋 삽입 → stale 제거.
-        store.replace_host_inventory(&hs.host, &inv)?;
+        store.replace_host_inventory(&hs.host, &inv.entries)?;
     }
     println!("inventory: {total_servers} servers across all hosts (reconciled)");
     Ok(())
@@ -81,6 +87,8 @@ fn cmd_rules(store: &SqliteStore) -> Result<()> {
     let engine = RuleEngine::new(vec![
         Box::new(R5RepeatedRead::default()),
         Box::new(R1UnusedMcp::default()),
+        Box::new(R7OpusTrivial::default()),
+        Box::new(R9WebOveruse::default()),
     ]);
     let findings = engine.run(store)?;
     let now = chrono::Utc::now().to_rfc3339();
