@@ -78,6 +78,14 @@ pub fn finding_advice(
                 "반복 조회는 결과를 캐싱하거나 로컬 소스(예: 로컬 문서·context7 캐시)를 쓰면 웹 왕복 토큰을 아껴요".to_string(),
             )
         }
+        "R2" => {
+            let plugin = evidence.get("plugin").and_then(|v| v.as_str()).unwrap_or("(unknown)");
+            let n = evidence.get("skill_count").and_then(|v| v.as_u64()).unwrap_or(0);
+            (
+                format!("플러그인 {plugin}의 스킬 {n}개(~{est_tokens_saved}토큰)를 한 번도 쓰지 않았어요"),
+                "안 쓰는 플러그인은 설정에서 비활성화하면 매 세션 상주 토큰을 아껴요".to_string(),
+            )
+        }
         _ => (format!("{evidence}"), String::new()),
     }
 }
@@ -388,6 +396,19 @@ mod tests {
         assert!(detail.contains("페치 6"));
         assert!(detail.contains("18"));
         assert!(action.contains("캐싱"));
+    }
+
+    #[test]
+    fn finding_advice_r2() {
+        let (detail, action) = super::finding_advice(
+            "R2",
+            &serde_json::json!({"plugin":"superpowers@mp","skill_count":12,"resident_tokens":900}),
+            900,
+        );
+        assert!(detail.contains("superpowers@mp"));
+        assert!(detail.contains("12"));
+        assert!(detail.contains("900"));
+        assert!(action.contains("비활성"));
     }
 
     #[test]
