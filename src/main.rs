@@ -71,9 +71,13 @@ fn cmd_inventory(store: &mut SqliteStore) -> Result<()> {
         };
         let cache = hs.claude_root.join("plugins").join("cache");
         let inv = collect_host_inventory(&claude_json, &settings, &cache);
-        total_servers += inv.iter().map(|(_, servers)| servers.len()).sum::<usize>();
+        if !inv.complete {
+            eprintln!("warn: host {} 중첩 .mcp.json 읽기 실패 — 인벤토리 유지, reconcile 스킵", hs.host);
+            continue;
+        }
+        total_servers += inv.entries.iter().map(|(_, servers)| servers.len()).sum::<usize>();
         // 원자 교체: 이 호스트의 기존 행 삭제 후 현재셋 삽입 → stale 제거.
-        store.replace_host_inventory(&hs.host, &inv)?;
+        store.replace_host_inventory(&hs.host, &inv.entries)?;
     }
     println!("inventory: {total_servers} servers across all hosts (reconciled)");
     Ok(())
