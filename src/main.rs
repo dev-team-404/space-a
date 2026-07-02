@@ -5,6 +5,8 @@ use agent_mentor::hosts::enumerate_hosts;
 use agent_mentor::inventory::collect_host_inventory;
 use agent_mentor::rules::r1_unused_mcp::R1UnusedMcp;
 use agent_mentor::rules::r5_repeated_read::R5RepeatedRead;
+use agent_mentor::rules::r7_opus_trivial::R7OpusTrivial;
+use agent_mentor::rules::r9_web_overuse::R9WebOveruse;
 use agent_mentor::rules::RuleEngine;
 use agent_mentor::store::{ingest_file, SqliteStore};
 use anyhow::Result;
@@ -81,6 +83,8 @@ fn cmd_rules(store: &SqliteStore) -> Result<()> {
     let engine = RuleEngine::new(vec![
         Box::new(R5RepeatedRead::default()),
         Box::new(R1UnusedMcp::default()),
+        Box::new(R7OpusTrivial::default()),
+        Box::new(R9WebOveruse::default()),
     ]);
     let findings = engine.run(store)?;
     let now = chrono::Utc::now().to_rfc3339();
