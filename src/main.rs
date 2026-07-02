@@ -46,6 +46,8 @@ fn cmd_ingest(store: &SqliteStore) -> Result<()> {
 /// 존재하나 IO/파싱 실패 → None(그 호스트 reconcile 스킵, 기존 행 유지).
 fn read_json_guarded(path: &std::path::Path) -> Option<serde_json::Value> {
     match std::fs::read_to_string(path) {
+        // 빈/공백 파일은 부재와 동일하게 정당한 빈 설정으로 취급(설정 초기화 등) → 인벤토리 정상 비움.
+        Ok(s) if s.trim().is_empty() => Some(serde_json::Value::Null),
         Ok(s) => serde_json::from_str(&s).ok(),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(serde_json::Value::Null),
         Err(_) => None,
@@ -163,5 +165,10 @@ mod tests {
         let broken = dir.path().join("broken.json");
         std::fs::write(&broken, "{not json").unwrap();
         assert_eq!(read_json_guarded(&broken), None);
+
+        // 존재하나 비어 있음/공백만 → Some(Null) (정당한 빈 설정)
+        let empty = dir.path().join("empty.json");
+        std::fs::write(&empty, "   \n").unwrap();
+        assert_eq!(read_json_guarded(&empty), Some(serde_json::Value::Null));
     }
 }
