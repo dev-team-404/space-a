@@ -115,6 +115,161 @@ fn pick_active_version(
     candidates.into_iter().max_by_key(|(_, t)| *t).map(|(p, _)| p)
 }
 
+/// SKILL.md frontmatter에서 (name, description). v0: 단일 라인, 따옴표 제거.
+/// 프론트매터(--- ... ---)가 없거나 name이 없으면 None.
+fn parse_skill_frontmatter(text: &str) -> Option<(String, String)> {
+    let mut lines = text.lines();
+    if lines.next()?.trim() != "---" {
+        return None;
+    }
+    let mut name: Option<String> = None;
+    let mut description = String::new();
+    for line in lines {
+        let t = line.trim();
+        if t == "---" {
+            break;
+        }
+        if let Some(v) = t.strip_prefix("name:") {
+            name = Some(unquote(v));
+        } else if let Some(v) = t.strip_prefix("description:") {
+            description = unquote(v);
+        }
+    }
+    name.map(|n| (n, description))
+}
+
+fn unquote(s: &str) -> String {
+    let s = s.trim();
+    let stripped = s
+        .strip_prefix('"')
+        .and_then(|x| x.strip_suffix('"'))
+        .or_else(|| s.strip_prefix('\'').and_then(|x| x.strip_suffix('\'')));
+    stripped.unwrap_or(s).to_string()
+}
+
+/// <version>/skills/*/SKILL.md → (스킬 로컬명 정렬 목록, 상주토큰 합, complete).
+/// skills/ 부재(NotFound)는 (빈, 0, true). read_dir IO 에러/파일 read·파싱 실패는 complete=false.
+/// 상주토큰 ≈ (name+description) chars / 4 (heuristic).
+fn scan_skills_dir(skills_dir: &Path) -> (Vec<String>, u64, bool) {
+    let entries = match std::fs::read_dir(skills_dir) {
+        Ok(e) => e,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (Vec::new(), 0, true),
+        Err(_) => return (Vec::new(), 0, false),
+    };
+    let mut names = Vec::new();
+    let mut resident = 0u64;
+    let mut complete = true;
+    for v in entries.flatten() {
+        let md = v.path().join("SKILL.md");
+        if !md.is_file() {
+            continue;
+        }
+        let Ok(raw) = std::fs::read_to_string(&md) else {
+            complete = false;
+            continue;
+        };
+        match parse_skill_frontmatter(&raw) {
+            Some((name, desc)) => {
+                resident += ((name.chars().count() + desc.chars().count()) / 4) as u64;
+                names.push(name);
+            }
+            None => complete = false,
+        }
+    }
+    names.sort();
+    (names, resident, complete)
+}
+
+/// 플러그인 dir의 활성 버전 dir(mtime 최신). (dir, complete).
+/// 부재(NotFound)/버전 없음은 (None, true). read_dir IO 에러는 (None, false).
+fn active_version_dir(plugin_dir: &Path) -> (Option<PathBuf>, bool) {
+    let entries = match std::fs::read_dir(plugin_dir) {
+        Ok(e) => e,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (None, true),
+        Err(_) => return (None, false),
+    };
+    let mut with_mtime: Vec<(PathBuf, std::time::SystemTime)> = Vec::new();
+    let mut all: Vec<PathBuf> = Vec::new();
+    for v in entries.flatten() {
+        let p = v.path();
+        if !p.is_dir() {
+            continue;
+        }
+        all.push(p.clone());
+        if let Ok(mtime) = v.metadata().and_then(|m| m.modified()) {
+            with_mtime.push((p, mtime));
+        }
+    }
+    if all.is_empty() {
+        return (None, true);
+    }
+    match pick_active_version(with_mtime) {
+        Some(active) => (Some(active), true),
+        None => (all.into_iter().next(), true), // mtime 전부 실패 폴백
+    }
+}
+
+/// enabled 플러그인(스킬 제공)의 per-plugin 인벤토리 + completeness.
+/// 각 플러그인: 활성버전 dir의 skills/*/SKILL.md(상주토큰) + .mcp.json(서버명) 스캔.
+/// 스킬 0개(MCP 전용)는 제외 — R2 대상 아님(R1 담당).
+pub fn scan_plugin_inventory(
+    settings: &Value,
+    plugins_cache_dir: &Path,
+) -> (Vec<PluginRecord>, bool) {
+    let mut out: Vec<PluginRecord> = Vec::new();
+    let mut complete = true;
+    let Some(plugins) = settings.get("enabledPlugins").and_then(|p| p.as_object()) else {
+        return (out, true);
+    };
+    for (id, enabled) in plugins {
+        if enabled.as_bool() != Some(true) {
+            continue;
+        }
+        let mut parts = id.splitn(2, '@');
+        let name = parts.next().unwrap_or("");
+        let marketplace = parts.next().unwrap_or("");
+        if name.is_empty() || marketplace.is_empty() {
+            continue;
+        }
+        let plugin_dir = plugins_cache_dir.join(marketplace).join(name);
+        let (active, dir_ok) = active_version_dir(&plugin_dir);
+        if !dir_ok {
+            complete = false;
+        }
+        let Some(active) = active else { continue };
+
+        let (skills, resident, skills_ok) = scan_skills_dir(&active.join("skills"));
+        if !skills_ok {
+            complete = false;
+        }
+        if skills.is_empty() {
+            continue; // MCP 전용 → R2 대상 아님
+        }
+
+        let mut mcp_servers = Vec::new();
+        let mcp_path = active.join(".mcp.json");
+        if mcp_path.is_file() {
+            match std::fs::read_to_string(&mcp_path) {
+                Ok(raw) => match serde_json::from_str::<Value>(&raw) {
+                    Ok(json) => mcp_servers = parse_mcp_json(&json),
+                    Err(_) => complete = false,
+                },
+                Err(_) => complete = false,
+            }
+        }
+
+        out.push(PluginRecord {
+            plugin_key: id.clone(),
+            namespace: name.to_string(),
+            skill_count: skills.len() as u64,
+            resident_tokens: resident,
+            skills,
+            mcp_servers,
+        });
+    }
+    (out, complete)
+}
+
 /// <marketplace>/<name>/*/.mcp.json 중 **활성 버전(mtime 최신)** 하나. (files, complete).
 /// complete=false 는 버전 dir 열거(read_dir) IO 에러일 때만; 부재(NotFound)는 complete.
 /// mtime을 하나도 못 얻으면 폴백으로 전체 반환(안전한 상위집합, 극히 드묾).
@@ -534,5 +689,86 @@ mod tests {
         let inv = collect_host_inventory(&claude_json, &settings, &cache);
         assert!(!inv.complete);
         assert!(inv.entries.iter().any(|(k, _)| k == "c--proj"), "부분셋이라도 프로젝트 항목은 수집");
+    }
+
+    #[test]
+    fn scan_plugin_inventory_reads_skills_and_mcp() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path();
+        // superpowers: 스킬 2개, MCP 없음
+        let sp = cache.join("mp").join("superpowers").join("1.0.0").join("skills");
+        std::fs::create_dir_all(sp.join("brainstorming")).unwrap();
+        std::fs::write(sp.join("brainstorming").join("SKILL.md"),
+            "---\nname: brainstorming\ndescription: \"explore ideas\"\n---\nbody").unwrap();
+        std::fs::create_dir_all(sp.join("tdd")).unwrap();
+        std::fs::write(sp.join("tdd").join("SKILL.md"),
+            "---\nname: tdd\ndescription: test first\n---\nbody").unwrap();
+        // vercel: 스킬 1개 + MCP 서버
+        let vc = cache.join("mp").join("vercel").join("2.0.0");
+        std::fs::create_dir_all(vc.join("skills").join("deploy")).unwrap();
+        std::fs::write(vc.join("skills").join("deploy").join("SKILL.md"),
+            "---\nname: deploy\ndescription: ship it\n---\nbody").unwrap();
+        std::fs::write(vc.join(".mcp.json"), r#"{"vercel":{"command":"x"}}"#).unwrap();
+        // mcponly: MCP만, 스킬 없음 → 제외
+        let mo = cache.join("mp").join("mcponly").join("1.0.0");
+        std::fs::create_dir_all(&mo).unwrap();
+        std::fs::write(mo.join(".mcp.json"), r#"{"srv":{"command":"x"}}"#).unwrap();
+
+        let settings = serde_json::json!({ "enabledPlugins": {
+            "superpowers@mp": true, "vercel@mp": true, "mcponly@mp": true, "off@mp": false
+        }});
+        let (records, complete) = scan_plugin_inventory(&settings, cache);
+        assert!(complete);
+        let mut keys: Vec<_> = records.iter().map(|r| r.plugin_key.as_str()).collect();
+        keys.sort();
+        assert_eq!(keys, vec!["superpowers@mp", "vercel@mp"], "MCP전용·off 플러그인 제외");
+
+        let sp_rec = records.iter().find(|r| r.plugin_key == "superpowers@mp").unwrap();
+        assert_eq!(sp_rec.namespace, "superpowers");
+        assert_eq!(sp_rec.skill_count, 2);
+        assert_eq!(sp_rec.skills, vec!["brainstorming", "tdd"]);
+        assert!(sp_rec.mcp_servers.is_empty());
+        assert!(sp_rec.resident_tokens > 0);
+
+        let vc_rec = records.iter().find(|r| r.plugin_key == "vercel@mp").unwrap();
+        assert_eq!(vc_rec.mcp_servers, vec!["vercel"]);
+    }
+
+    #[test]
+    fn scan_plugin_inventory_incomplete_on_corrupt_skill() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path();
+        let sp = cache.join("mp").join("p").join("1.0.0").join("skills").join("s");
+        std::fs::create_dir_all(&sp).unwrap();
+        std::fs::write(sp.join("SKILL.md"), "no frontmatter here").unwrap();
+        let settings = serde_json::json!({ "enabledPlugins": { "p@mp": true }});
+        let (_records, complete) = scan_plugin_inventory(&settings, cache);
+        assert!(!complete, "frontmatter 없는 SKILL.md → incomplete");
+    }
+
+    #[test]
+    fn scan_plugin_inventory_picks_active_version() {
+        use filetime::{set_file_mtime, FileTime};
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path();
+        let base = cache.join("mp").join("p");
+        // old: 스킬 old_skill
+        let old = base.join("0.1.0");
+        std::fs::create_dir_all(old.join("skills").join("old_skill")).unwrap();
+        std::fs::write(old.join("skills").join("old_skill").join("SKILL.md"),
+            "---\nname: old_skill\ndescription: x\n---\n").unwrap();
+        // new: 스킬 new_skill
+        let new = base.join("0.2.0");
+        std::fs::create_dir_all(new.join("skills").join("new_skill")).unwrap();
+        std::fs::write(new.join("skills").join("new_skill").join("SKILL.md"),
+            "---\nname: new_skill\ndescription: x\n---\n").unwrap();
+        set_file_mtime(&old, FileTime::from_unix_time(1000, 0)).unwrap();
+        set_file_mtime(&new, FileTime::from_unix_time(2000, 0)).unwrap();
+
+        let settings = serde_json::json!({ "enabledPlugins": { "p@mp": true }});
+        let (records, complete) = scan_plugin_inventory(&settings, cache);
+        assert!(complete);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].skills, vec!["new_skill"], "활성(최신 mtime) 버전만");
     }
 }
