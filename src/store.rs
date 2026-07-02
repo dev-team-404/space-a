@@ -43,6 +43,12 @@ CREATE TABLE IF NOT EXISTS mcp_inventory (
   probed_at TEXT, last_used_ts TEXT,
   PRIMARY KEY (host, project_id, server)
 );
+CREATE TABLE IF NOT EXISTS plugin_inventory (
+  host TEXT NOT NULL, plugin_key TEXT NOT NULL, namespace TEXT NOT NULL,
+  skill_count INTEGER DEFAULT 0, resident_tokens INTEGER DEFAULT 0,
+  skills_json TEXT NOT NULL, mcp_servers_json TEXT NOT NULL,
+  PRIMARY KEY (host, plugin_key)
+);
 CREATE TABLE IF NOT EXISTS diary_index (
   date TEXT NOT NULL, scope TEXT NOT NULL, path TEXT NOT NULL,
   tokens_used INTEGER DEFAULT 0, engine TEXT,
@@ -252,6 +258,30 @@ impl SqliteStore {
         Ok(())
     }
 
+    /// 한 호스트의 플러그인 인벤토리를 현재 셋으로 원자 교체(트랜잭션 DELETE 후 재INSERT).
+    /// events(사용 이력)는 건드리지 않는다.
+    pub fn replace_plugin_inventory(
+        &mut self,
+        host: &str,
+        records: &[crate::inventory::PluginRecord],
+    ) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM plugin_inventory WHERE host = ?1", params![host])?;
+        for r in records {
+            let skills_json = serde_json::to_string(&r.skills)?;
+            let mcp_json = serde_json::to_string(&r.mcp_servers)?;
+            tx.execute(
+                "INSERT INTO plugin_inventory
+                 (host, plugin_key, namespace, skill_count, resident_tokens, skills_json, mcp_servers_json)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7)",
+                params![host, r.plugin_key, r.namespace, r.skill_count as i64,
+                        r.resident_tokens as i64, skills_json, mcp_json],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn upsert_diary_index(
         &self,
         date: &str,
@@ -409,6 +439,7 @@ fn tool_kind_str(k: &ToolKind) -> &'static str {
         ToolKind::WebSearch => "web_search",
         ToolKind::WebFetch => "web_fetch",
         ToolKind::SubAgent => "sub_agent",
+        ToolKind::Skill { .. } => "skill",
         ToolKind::Other(_) => "other",
     }
 }
@@ -633,6 +664,39 @@ mod tests {
         assert_eq!(d1[0].scope_ref, "s1");
         // last_seen 날짜(07-02)로 조회 → 없음(s1 세션은 07-02가 아니므로) — last_seen이 아니라 행동 날짜 기준
         assert!(store.findings_for_date("Windows", "2026-07-02").unwrap().is_empty());
+    }
+
+    #[test]
+    fn replace_plugin_inventory_atomic_swap() {
+        use crate::inventory::PluginRecord;
+        let mut store = SqliteStore::open_in_memory().unwrap();
+        store.replace_plugin_inventory("Windows", &[
+            PluginRecord {
+                plugin_key: "superpowers@mp".into(), namespace: "superpowers".into(),
+                skill_count: 3, resident_tokens: 900,
+                skills: vec!["brainstorming".into(), "writing-plans".into(), "tdd".into()],
+                mcp_servers: vec![],
+            },
+        ]).unwrap();
+        // 재교체: 다른 셋 → stale 제거 확인
+        store.replace_plugin_inventory("Windows", &[
+            PluginRecord {
+                plugin_key: "vercel@mp".into(), namespace: "vercel".into(),
+                skill_count: 1, resident_tokens: 400,
+                skills: vec!["deploy".into()],
+                mcp_servers: vec!["vercel".into()],
+            },
+        ]).unwrap();
+
+        let n: i64 = store.conn.query_row(
+            "SELECT COUNT(*) FROM plugin_inventory WHERE host='Windows'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1, "원자 교체 — superpowers 행은 제거됨");
+        let (ns, skills_json, mcp_json): (String, String, String) = store.conn.query_row(
+            "SELECT namespace, skills_json, mcp_servers_json FROM plugin_inventory WHERE plugin_key='vercel@mp'",
+            [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap();
+        assert_eq!(ns, "vercel");
+        assert_eq!(serde_json::from_str::<Vec<String>>(&skills_json).unwrap(), vec!["deploy"]);
+        assert_eq!(serde_json::from_str::<Vec<String>>(&mcp_json).unwrap(), vec!["vercel"]);
     }
 
     #[test]
