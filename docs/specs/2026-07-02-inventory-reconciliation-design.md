@@ -49,12 +49,14 @@ pub fn replace_host_inventory(
 
 ### 3.2 `main.rs`
 ```rust
-/// 읽기+파싱 성공 → Value / 파일 부재(NotFound) → Null(정당한 빈 설정) / 존재하나 IO·파싱 실패 → Err(스킵 신호).
-fn read_json_guarded(path: &Path) -> Result<serde_json::Value, ()>;
+/// 읽기+파싱 성공 → Some(Value) / 파일 부재(NotFound) → Some(Null)(정당한 빈 설정)
+/// / 존재하나 IO·파싱 실패 → None(스킵 신호).
+fn read_json_guarded(path: &Path) -> Option<serde_json::Value>;
 ```
+(구현은 `Result<Value,()>` 대신 관용적인 `Option<Value>` 사용 — 의미 동일, 유닛 에러 타입 회피.)
 - `cmd_inventory`가 호스트별로 `claude.json`·`settings.json`을 `read_json_guarded`로 읽는다.
-- **둘 중 하나라도 `Err`**면 `eprintln!` 경고 후 그 호스트 스킵(reconcile·upsert 안 함, 기존 행 유지).
-- 둘 다 `Ok`(값 또는 Null)면 `collect_host_inventory` → `replace_host_inventory(host, &inv)`.
+- **둘 중 하나라도 `None`**이면 `eprintln!` 경고 후 그 호스트 스킵(reconcile·upsert 안 함, 기존 행 유지).
+- 둘 다 `Some`(값 또는 Null)이면 `collect_host_inventory` → `replace_host_inventory(host, &inv)`.
 - `SqliteStore`를 `&mut`로 넘기도록 `cmd_*`/`main` 배선 조정.
 
 ---
@@ -65,8 +67,8 @@ fn read_json_guarded(path: &Path) -> Result<serde_json::Value, ()>;
 enumerate_hosts()
   └─ 각 host:
        read_json_guarded(claude.json), read_json_guarded(settings.json)
-         ├─ 하나라도 Err → eprintln 경고 + 스킵(기존 mcp_inventory 행 유지)
-         └─ 둘 다 Ok/Null → collect_host_inventory(claude, settings, cache)
+         ├─ 하나라도 None → eprintln 경고 + 스킵(기존 mcp_inventory 행 유지)
+         └─ 둘 다 Some(값/Null) → collect_host_inventory(claude, settings, cache)
                              → replace_host_inventory(host, &inv)   // 트랜잭션: DELETE WHERE host + 재INSERT
 ```
 
