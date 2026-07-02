@@ -121,7 +121,9 @@ fn find_plugin_mcp_files(plugin_dir: &Path) -> (Vec<PathBuf>, bool) {
             continue;
         }
         all.push(mcp.clone());
-        if let Ok(mtime) = v.path().metadata().and_then(|m| m.modified()) {
+        // 버전 dir mtime: DirEntry::metadata()는 열거 시 확보된 메타데이터를 재사용해
+        // 추가 stat/PathBuf 할당을 피한다(Windows에서 특히 저렴).
+        if let Ok(mtime) = v.metadata().and_then(|m| m.modified()) {
             with_mtime.push((mcp, mtime));
         }
     }

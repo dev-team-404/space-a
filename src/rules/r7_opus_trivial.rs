@@ -34,8 +34,8 @@ impl Rule for R7OpusTrivial {
                     SUM(CASE WHEN kind='assistant_turn' AND model_family='opus' THEN 1 ELSE 0 END) AS opus_turns,
                     SUM(CASE WHEN kind='assistant_turn' AND model_family IS NOT NULL AND model_family<>'opus' THEN 1 ELSE 0 END) AS non_opus,
                     COALESCE(SUM(tok_output),0) AS out_tok,
-                    COALESCE(SUM(tok_input+tok_output+tok_cache_read+tok_cache_create),0) AS billable,
-                    COALESCE(SUM(web_search+web_fetch),0) AS web_reqs,
+                    COALESCE(SUM(tok_input),0)+COALESCE(SUM(tok_output),0)+COALESCE(SUM(tok_cache_read),0)+COALESCE(SUM(tok_cache_create),0) AS billable,
+                    COALESCE(SUM(web_search),0)+COALESCE(SUM(web_fetch),0) AS web_reqs,
                     SUM(CASE WHEN kind='tool_call' THEN 1 ELSE 0 END) AS tool_calls,
                     SUM(CASE WHEN kind='tool_call' AND tool_kind IN ('sub_agent','mcp_call','web_search','web_fetch') THEN 1 ELSE 0 END) AS heavy,
                     GROUP_CONCAT(DISTINCT CASE WHEN kind='tool_call' THEN tool_kind END) AS tool_kinds
