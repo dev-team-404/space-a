@@ -30,13 +30,13 @@ fn cmd_inventory(store: &SqliteStore) -> Result<()> {
     let path = PathBuf::from(home).join(".claude.json");
     let raw = std::fs::read_to_string(&path)?;
     let json: serde_json::Value = serde_json::from_str(&raw)?;
-    let parsed = parse_claude_json(&json);
+    let cfgs = parse_claude_json(&json);
     let mut servers = 0;
-    for (project, srvs) in &parsed {
-        servers += srvs.len();
-        store.upsert_inventory("Windows", project, srvs)?;
+    for cfg in &cfgs {
+        servers += cfg.servers.len();
+        store.upsert_inventory("Windows", &cfg.key, &cfg.servers)?;
     }
-    println!("inventory: {} projects, {servers} servers", parsed.len());
+    println!("inventory: {} projects, {servers} servers", cfgs.len());
     Ok(())
 }
 
