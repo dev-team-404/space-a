@@ -97,23 +97,41 @@ fn is_server_def(v: &Value) -> bool {
     })
 }
 
-/// <marketplace>/<name>/*/.mcp.json 후보. (files, complete).
-/// complete=false 는 버전 dir 열거(read_dir) IO 에러일 때만. 부재(NotFound)는 complete.
-/// (활성 버전 mtime 선택은 Task 6에서. 이 단계는 전체 반환 유지.)
+/// 버전 후보 (.mcp.json 경로, 버전 dir mtime) 중 mtime 최신 하나를 고른다.
+fn pick_active_version(
+    candidates: Vec<(PathBuf, std::time::SystemTime)>,
+) -> Option<PathBuf> {
+    candidates.into_iter().max_by_key(|(_, t)| *t).map(|(p, _)| p)
+}
+
+/// <marketplace>/<name>/*/.mcp.json 중 **활성 버전(mtime 최신)** 하나. (files, complete).
+/// complete=false 는 버전 dir 열거(read_dir) IO 에러일 때만; 부재(NotFound)는 complete.
+/// mtime을 하나도 못 얻으면 폴백으로 전체 반환(안전한 상위집합, 극히 드묾).
 fn find_plugin_mcp_files(plugin_dir: &Path) -> (Vec<PathBuf>, bool) {
     let entries = match std::fs::read_dir(plugin_dir) {
         Ok(e) => e,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (Vec::new(), true),
         Err(_) => return (Vec::new(), false),
     };
-    let mut out = Vec::new();
+    let mut with_mtime: Vec<(PathBuf, std::time::SystemTime)> = Vec::new();
+    let mut all: Vec<PathBuf> = Vec::new();
     for v in entries.flatten() {
-        let candidate = v.path().join(".mcp.json");
-        if candidate.is_file() {
-            out.push(candidate);
+        let mcp = v.path().join(".mcp.json");
+        if !mcp.is_file() {
+            continue;
+        }
+        all.push(mcp.clone());
+        if let Ok(mtime) = v.path().metadata().and_then(|m| m.modified()) {
+            with_mtime.push((mcp, mtime));
         }
     }
-    (out, true)
+    if all.is_empty() {
+        return (Vec::new(), true);
+    }
+    match pick_active_version(with_mtime) {
+        Some(active) => (vec![active], true),
+        None => (all, true), // mtime 전부 실패 폴백
+    }
 }
 
 /// settings.json 의 enabledPlugins(값 true) → 각 플러그인 캐시의 .mcp.json 서버.
@@ -455,6 +473,40 @@ mod tests {
         let (servers, complete) = resolve_project_servers(&cfg);
         assert_eq!(servers.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), vec!["explicit"]);
         assert!(!complete, "enable_all + 손상 .mcp.json → incomplete");
+    }
+
+    #[test]
+    fn find_plugin_mcp_files_reads_only_active_version() {
+        use filetime::{set_file_mtime, FileTime};
+        let dir = tempfile::tempdir().unwrap();
+        let plugin = dir.path();
+        let old = plugin.join("0.1.0");
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join(".mcp.json"), r#"{"old_server":{"command":"x"}}"#).unwrap();
+        let new = plugin.join("0.2.0");
+        std::fs::create_dir_all(&new).unwrap();
+        std::fs::write(new.join(".mcp.json"), r#"{"new_server":{"command":"x"}}"#).unwrap();
+        // 버전 dir mtime 명시: old < new
+        set_file_mtime(&old, FileTime::from_unix_time(1000, 0)).unwrap();
+        set_file_mtime(&new, FileTime::from_unix_time(2000, 0)).unwrap();
+
+        let (files, complete) = find_plugin_mcp_files(plugin);
+        assert!(complete);
+        assert_eq!(files.len(), 1, "활성(최신 mtime) 버전 하나만");
+        assert!(files[0].starts_with(&new));
+    }
+
+    #[test]
+    fn pick_active_version_picks_latest_mtime() {
+        use std::time::{Duration, UNIX_EPOCH};
+        let older = UNIX_EPOCH + Duration::from_secs(1000);
+        let newer = UNIX_EPOCH + Duration::from_secs(2000);
+        let chosen = pick_active_version(vec![
+            (PathBuf::from("/a/old/.mcp.json"), older),
+            (PathBuf::from("/a/new/.mcp.json"), newer),
+        ]);
+        assert_eq!(chosen, Some(PathBuf::from("/a/new/.mcp.json")));
+        assert_eq!(pick_active_version(vec![]), None);
     }
 
     #[test]
