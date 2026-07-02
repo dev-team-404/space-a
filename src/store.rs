@@ -273,9 +273,7 @@ impl SqliteStore {
             tx.execute(
                 "INSERT INTO plugin_inventory
                  (host, plugin_key, namespace, skill_count, resident_tokens, skills_json, mcp_servers_json)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7)
-                 ON CONFLICT(host, plugin_key) DO UPDATE SET
-                   namespace=?3, skill_count=?4, resident_tokens=?5, skills_json=?6, mcp_servers_json=?7",
+                 VALUES (?1,?2,?3,?4,?5,?6,?7)",
                 params![host, r.plugin_key, r.namespace, r.skill_count as i64,
                         r.resident_tokens as i64, skills_json, mcp_json],
             )?;

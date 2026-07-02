@@ -47,11 +47,13 @@ impl Rule for R2UnusedPluginSkills {
 
         let mut out = Vec::new();
         for (host, plugin_key, namespace, skill_count, resident, skills_json, mcp_json) in rows {
-            // 1) 스킬 사용?
+            // 1) 스킬 사용? (LIKE 대신 substr 접두사 비교 — ns의 `_`/`%`가 와일드카드로 오작동 방지)
+            let prefix = format!("{namespace}:");
             let skill_used: i64 = store.conn.query_row(
                 "SELECT COUNT(*) FROM events
-                 WHERE host=?1 AND kind='tool_call' AND tool_kind='skill' AND tool_target LIKE ?2",
-                params![host, format!("{namespace}:%")],
+                 WHERE host=?1 AND kind='tool_call' AND tool_kind='skill'
+                   AND substr(tool_target, 1, length(?2)) = ?2",
+                params![host, prefix],
                 |r| r.get(0),
             )?;
             if skill_used > 0 {
@@ -220,5 +222,20 @@ mod tests {
         let findings = R2UnusedPluginSkills::default().evaluate(&store).unwrap();
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].scope_ref, "Windows");
+    }
+
+    #[test]
+    fn r2_underscore_in_namespace_not_wildcard() {
+        // ns의 `_`가 SQL 와일드카드로 해석되면 "myxplugin:foo"가 my_plugin 사용으로
+        // 오매칭되어 침묵(false-negative)한다 — substr 접두사 비교로 지목되어야 함.
+        let mut store = SqliteStore::open_in_memory().unwrap();
+        store.replace_plugin_inventory("Windows", &[
+            rec("my_plugin@mp", "my_plugin", 900, &["one"], &[]),
+        ]).unwrap();
+        store.upsert_events(&[skill_call("Windows", "u1", "myxplugin:foo")]).unwrap();
+
+        let findings = R2UnusedPluginSkills::default().evaluate(&store).unwrap();
+        assert_eq!(findings.len(), 1, "다른 플러그인 이벤트에 오매칭되어 침묵하면 안 됨");
+        assert_eq!(findings[0].evidence["plugin"], "my_plugin@mp");
     }
 }
