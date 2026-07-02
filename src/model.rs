@@ -50,6 +50,7 @@ pub enum ToolKind {
     WebSearch,
     WebFetch,
     SubAgent,
+    Skill { name: String },
     Other(String),
 }
 

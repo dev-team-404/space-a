@@ -409,6 +409,7 @@ fn tool_kind_str(k: &ToolKind) -> &'static str {
         ToolKind::WebSearch => "web_search",
         ToolKind::WebFetch => "web_fetch",
         ToolKind::SubAgent => "sub_agent",
+        ToolKind::Skill { .. } => "skill",
         ToolKind::Other(_) => "other",
     }
 }

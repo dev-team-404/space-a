@@ -159,17 +159,23 @@ impl SourceAdapter for ClaudeCodeAdapter {
                         let raw_name =
                             block.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
                         let input = block.get("input").cloned().unwrap_or(Value::Null);
-                        let target = input
-                            .get("file_path")
-                            .or_else(|| input.get("command"))
-                            .and_then(|x| x.as_str())
-                            .map(String::from);
+                        let (kind, target) = if raw_name == "Skill" {
+                            let sname = input
+                                .get("skill")
+                                .and_then(|x| x.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            (ToolKind::Skill { name: sname.clone() }, Some(sname))
+                        } else {
+                            let t = input
+                                .get("file_path")
+                                .or_else(|| input.get("command"))
+                                .and_then(|x| x.as_str())
+                                .map(String::from);
+                            (ToolKind::from_raw_name(&raw_name), t)
+                        };
                         out.push(mk(
-                            EventKind::ToolCall {
-                                kind: ToolKind::from_raw_name(&raw_name),
-                                raw_name,
-                                target,
-                            },
+                            EventKind::ToolCall { kind, raw_name, target },
                             (i + 1) as u64,
                         ));
                     }
@@ -220,6 +226,25 @@ mod tests {
         }
         assert_eq!(evs[0].session_id, "s1");
         assert_eq!(evs[0].host, "Windows");
+    }
+
+    #[test]
+    fn map_skill_tool_use_captures_skill_name() {
+        let line = r#"{"type":"assistant","sessionId":"s1","uuid":"u1","parentUuid":null,
+            "isSidechain":false,"timestamp":"2026-07-01T10:00:00Z","cwd":"C:\\Users\\jibin",
+            "gitBranch":"main","message":{"model":"claude-opus-4-8",
+            "usage":{"input_tokens":1,"output_tokens":1},
+            "content":[{"type":"tool_use","name":"Skill","input":{"skill":"superpowers:brainstorming"}}]}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        // AssistantTurn + ToolCall(Skill)
+        let tool = evs.iter().find(|e| matches!(e.kind, EventKind::ToolCall { .. })).unwrap();
+        match &tool.kind {
+            EventKind::ToolCall { kind, target, .. } => {
+                assert_eq!(*kind, ToolKind::Skill { name: "superpowers:brainstorming".into() });
+                assert_eq!(target.as_deref(), Some("superpowers:brainstorming"));
+            }
+            k => panic!("expected ToolCall, got {k:?}"),
+        }
     }
 
     #[test]
