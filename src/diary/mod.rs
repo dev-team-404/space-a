@@ -61,6 +61,23 @@ pub fn finding_advice(
                 format!("안 쓰는 `{server}`를 설정에서 제거하면 매 세션 상주 토큰을 아껴요"),
             )
         }
+        "R7" => {
+            let out = evidence.get("tok_output").and_then(|v| v.as_u64()).unwrap_or(0);
+            let n = evidence.get("tool_calls").and_then(|v| v.as_u64()).unwrap_or(0);
+            (
+                format!("이 세션은 전부 Opus인데 출력 {out}토큰·도구 {n}회의 가벼운 작업이었어요 (~{est_tokens_saved}토큰 비용-등가)"),
+                "이런 잔심부름은 Haiku로 전환하면 같은 결과를 훨씬 싸게 낼 수 있어요".to_string(),
+            )
+        }
+        "R9" => {
+            let total = evidence.get("total_requests").and_then(|v| v.as_u64()).unwrap_or(0);
+            let s = evidence.get("web_search").and_then(|v| v.as_u64()).unwrap_or(0);
+            let fetch = evidence.get("web_fetch").and_then(|v| v.as_u64()).unwrap_or(0);
+            (
+                format!("이 세션에서 웹 도구를 {total}회 호출했어요 (검색 {s}+페치 {fetch}, ~{est_tokens_saved}토큰)"),
+                "반복 조회는 결과를 캐싱하거나 로컬 소스(예: 로컬 문서·context7 캐시)를 쓰면 웹 왕복 토큰을 아껴요".to_string(),
+            )
+        }
         _ => (format!("{evidence}"), String::new()),
     }
 }
@@ -345,6 +362,32 @@ mod tests {
         assert!(p.contains("detail")); // 근거 필드 사용 지시
         assert!(p.contains("suggested_action")); // 개선방향 필드 사용 지시
         assert!(p.contains("occasions")); // 기념일/명절 사용 지시
+    }
+
+    #[test]
+    fn finding_advice_r7() {
+        let (detail, action) = super::finding_advice(
+            "R7",
+            &serde_json::json!({"model":"opus","tok_output":420,"tool_calls":2}),
+            48320,
+        );
+        assert!(detail.contains("420"));
+        assert!(detail.contains("2회"));
+        assert!(detail.contains("48320"));
+        assert!(action.contains("Haiku"));
+    }
+
+    #[test]
+    fn finding_advice_r9() {
+        let (detail, action) = super::finding_advice(
+            "R9",
+            &serde_json::json!({"web_search":12,"web_fetch":6,"total_requests":18}),
+            36000,
+        );
+        assert!(detail.contains("검색 12"));
+        assert!(detail.contains("페치 6"));
+        assert!(detail.contains("18"));
+        assert!(action.contains("캐싱"));
     }
 
     #[test]
