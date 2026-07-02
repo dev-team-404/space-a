@@ -57,14 +57,17 @@ pub fn parse_wsl_distros(raw: &[u8]) -> Vec<String> {
 
 /// `wsl.exe -l -q` 를 실행해 distro 목록을 얻는다. 실패(미설치 등)는 빈 목록.
 pub fn wsl_list_distros() -> Vec<String> {
+    // status.success() 확인: 실패/미설치 시 wsl.exe가 에러 메시지를 stdout으로 낼 수 있어,
+    // 성공한 경우에만 파싱해 에러문이 distro명으로 오파싱되는 것을 막는다.
     match std::process::Command::new("wsl.exe").args(["-l", "-q"]).output() {
-        Ok(o) => parse_wsl_distros(&o.stdout),
-        Err(_) => Vec::new(),
+        Ok(o) if o.status.success() => parse_wsl_distros(&o.stdout),
+        _ => Vec::new(),
     }
 }
 
 /// home 베이스 아래 사용자 홈들을 훑어 `.claude/projects` 를 가진 .claude 루트를 반환.
 /// username 하드코딩 금지: `home\*` 를 스캔한다. 접근 불가/부재는 빈 목록.
+/// (v0 스코프: 일반 사용자 홈만 대상. root 사용자 홈(`/root/.claude`)은 미커버 — 필요 시 후속.)
 pub fn find_claude_roots_under(home_base: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let Ok(entries) = std::fs::read_dir(home_base) else {

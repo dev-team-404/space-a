@@ -75,7 +75,7 @@ impl Rule for R1UnusedMcp {
                     |r| r.get(0),
                 )?
             };
-            if (resident as u64) <= self.min_resident_tokens {
+            if resident <= self.min_resident_tokens as i64 {
                 continue;
             }
 

@@ -18,10 +18,21 @@ fn cmd_ingest(store: &SqliteStore) -> Result<()> {
     let mut file_count = 0usize;
     for hs in enumerate_hosts() {
         let adapter = hs.adapter();
-        let files = adapter.discover().unwrap_or_default();
+        // 관대한 수집: discover/파일 단위 실패는 로깅 후 계속(WSL UNC 경로는 절전·잠금으로
+        // 일시 실패할 수 있음). 파일 하나의 실패가 전 호스트 수집을 중단시키지 않는다.
+        let files = match adapter.discover() {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("warn: host {} 파일 열거 실패: {e}", hs.host);
+                Vec::new()
+            }
+        };
         file_count += files.len();
         for f in &files {
-            total += ingest_file(store, &adapter, f)?;
+            match ingest_file(store, &adapter, f) {
+                Ok(n) => total += n,
+                Err(e) => eprintln!("warn: {} 수집 실패(건너뜀): {e}", f.display()),
+            }
         }
         println!("  [{}] {} files", hs.host, files.len());
     }
