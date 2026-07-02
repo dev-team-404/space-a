@@ -89,6 +89,11 @@ mod tests {
         names.sort();
         assert_eq!(names, vec!["context7", "playwright", "vercel"]);
 
+        let vercel = parsed[0].servers.iter().find(|s| s.name == "vercel").unwrap();
+        assert_eq!(vercel.source, "mcpjson");
+        let ctx = parsed[0].servers.iter().find(|s| s.name == "context7").unwrap();
+        assert_eq!(ctx.source, "project");
+
         assert_eq!(parsed[1].key, "d--project-agent-mentor");
         assert!(parsed[1].servers.is_empty());
     }
