@@ -282,15 +282,25 @@ impl SqliteStore {
         Ok(out)
     }
 
-    /// last_seen 날짜가 주어진 날짜인 Finding들. (다이어리 브리프 재료)
-    pub fn findings_for_date(&self, date: &str) -> Result<Vec<Finding>> {
+    /// 주어진 host+날짜의 Finding들 — 그 스코프가 그날 세션을 가졌으면 포함(behavior-date 기준,
+    /// last_seen 아님). R5(session)는 세션 날짜, R1(project/host)은 그 스코프가 그날 활성일 때.
+    /// 다이어리 브리프 재료: `diary <date>`가 그날 실제 행동의 코칭을 실도록.
+    pub fn findings_for_date(&self, host: &str, date: &str) -> Result<Vec<Finding>> {
         let mut stmt = self.conn.prepare(
             "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                     evidence_json, est_tokens_saved, prescription_json, dedup_key
-             FROM findings WHERE date(last_seen) = ?1
+             FROM findings f
+             WHERE f.scope_host = ?1
+               AND EXISTS (
+                 SELECT 1 FROM sessions s
+                 WHERE s.host = ?1 AND date(s.first_ts) = ?2
+                   AND ( (f.scope_kind = 'session' AND s.session_id = f.scope_ref)
+                      OR (f.scope_kind = 'project' AND s.project_id = f.scope_project)
+                      OR (f.scope_kind = 'host') )
+               )
              ORDER BY est_tokens_saved DESC",
         )?;
-        let rows = stmt.query_map(params![date], |r| {
+        let rows = stmt.query_map(params![host, date], |r| {
             let sev = match r.get::<_, String>(1)?.as_str() {
                 "warn" => Severity::Warn,
                 "suggest" => Severity::Suggest,
@@ -584,5 +594,85 @@ mod tests {
         assert_eq!(r.tok_output, 27);
         assert_eq!(r.tok_cache_create, 55000);
         assert_eq!(r.session_count, 1);
+    }
+
+    fn sess_turn(host: &str, project: &str, session: &str, uuid: &str, ts: &str) -> NormalizedEvent {
+        NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: host.into(), project_id: project.into(), session_id: session.into(),
+            uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
+            ts: Some(ts.into()), source_file: "s.jsonl".into(), source_offset: 0,
+            kind: EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-opus-4-8"),
+                usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
+            },
+        }
+    }
+
+    #[test]
+    fn findings_for_date_scopes_r5_by_session_date_not_last_seen() {
+        use crate::finding::{Finding, Severity};
+        let store = SqliteStore::open_in_memory().unwrap();
+        // s1은 07-01, s2는 07-02 세션(upsert_events가 sessions.first_ts 채움)
+        store.upsert_events(&[
+            sess_turn("Windows", "p", "s1", "u1", "2026-07-01T10:00:00Z"),
+            sess_turn("Windows", "p", "s2", "u2", "2026-07-02T10:00:00Z"),
+        ]).unwrap();
+        // R5 finding은 s1(07-01 행동)에 대한 것이지만 last_seen은 07-02(나중에 rules 실행).
+        store.upsert_finding(&Finding {
+            rule_id: "R5".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: Some("p".into()),
+            scope_kind: "session".into(), scope_ref: "s1".into(),
+            evidence: serde_json::json!({"path":"a.txt","count":5}),
+            est_tokens_saved: 4800, prescription: None, dedup_key: "R5|s1|a.txt".into(),
+        }, "2026-07-02T09:00:00Z").unwrap();
+
+        // 행동 날짜(07-01)로 조회 → 잡힘(last_seen=07-02인데도)
+        let d1 = store.findings_for_date("Windows", "2026-07-01").unwrap();
+        assert_eq!(d1.len(), 1);
+        assert_eq!(d1[0].scope_ref, "s1");
+        // last_seen 날짜(07-02)로 조회 → 없음(s1 세션은 07-02가 아니므로) — last_seen이 아니라 행동 날짜 기준
+        assert!(store.findings_for_date("Windows", "2026-07-02").unwrap().is_empty());
+    }
+
+    #[test]
+    fn findings_for_date_includes_r1_when_scope_active_that_day() {
+        use crate::finding::{Finding, Prescription, Severity};
+        let store = SqliteStore::open_in_memory().unwrap();
+        // Windows: 07-01 세션(프로젝트 p), 07-03 세션(프로젝트 q)
+        store.upsert_events(&[
+            sess_turn("Windows", "p", "s1", "u1", "2026-07-01T10:00:00Z"),
+            sess_turn("Windows", "q", "s2", "u2", "2026-07-03T10:00:00Z"),
+        ]).unwrap();
+        // R1 host-global("*"→scope_kind=host), last_seen 07-05
+        store.upsert_finding(&Finding {
+            rule_id: "R1".into(), severity: Severity::Warn,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "host".into(), scope_ref: "Windows".into(),
+            evidence: serde_json::json!({"server":"context7"}),
+            est_tokens_saved: 2500,
+            prescription: Some(Prescription { kind: "remove_mcp".into(), payload: serde_json::json!({"server":"context7"}) }),
+            dedup_key: "R1|Windows|Windows|context7".into(),
+        }, "2026-07-05T09:00:00Z").unwrap();
+        // R1 project(p) scope
+        store.upsert_finding(&Finding {
+            rule_id: "R1".into(), severity: Severity::Warn,
+            scope_host: Some("Windows".into()), scope_project: Some("p".into()),
+            scope_kind: "project".into(), scope_ref: "p".into(),
+            evidence: serde_json::json!({"server":"playwright"}),
+            est_tokens_saved: 2500, prescription: None, dedup_key: "R1|Windows|p|playwright".into(),
+        }, "2026-07-05T09:00:00Z").unwrap();
+
+        // 07-01: host 활성(s1) + project p 활성(s1) → 둘 다 포함
+        let d1 = store.findings_for_date("Windows", "2026-07-01").unwrap();
+        assert_eq!(d1.len(), 2);
+        assert!(d1.iter().any(|f| f.scope_kind == "host"));
+        assert!(d1.iter().any(|f| f.scope_kind == "project"));
+        // 07-03: host 활성(s2)이나 프로젝트는 q만 → host-global만, project p는 제외
+        let d3 = store.findings_for_date("Windows", "2026-07-03").unwrap();
+        assert_eq!(d3.len(), 1);
+        assert_eq!(d3[0].scope_kind, "host");
+        // 07-02: 세션 없음 → 아무 finding도 없음
+        assert!(store.findings_for_date("Windows", "2026-07-02").unwrap().is_empty());
     }
 }
