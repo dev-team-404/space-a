@@ -8,6 +8,17 @@ pub struct McpServer {
     pub source: String, // "project" | "mcpjson" | "plugin"
 }
 
+/// enabled 플러그인 하나의 스캔 결과(스킬·MCP 서버). R2 대상은 skill_count>=1.
+#[derive(Debug, Clone)]
+pub struct PluginRecord {
+    pub plugin_key: String,   // "name@marketplace"
+    pub namespace: String,    // 스킬 호출 네임스페이스(v0: plugin name)
+    pub skill_count: u64,
+    pub resident_tokens: u64,
+    pub skills: Vec<String>,
+    pub mcp_servers: Vec<String>,
+}
+
 /// claude.json 한 프로젝트 항목의 활성 MCP 설정.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectMcpConfig {
