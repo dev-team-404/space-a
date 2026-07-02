@@ -2,8 +2,9 @@ use agent_mentor::adapter::SourceAdapter;
 use agent_mentor::diary::engine::{Engine, MockEngine, OpenAiCompatEngine};
 use agent_mentor::diary::{assemble_brief, generate_diary, DiaryConfig};
 use agent_mentor::hosts::enumerate_hosts;
-use agent_mentor::inventory::collect_host_inventory;
+use agent_mentor::inventory::{collect_host_inventory, scan_plugin_inventory};
 use agent_mentor::rules::r1_unused_mcp::R1UnusedMcp;
+use agent_mentor::rules::r2_unused_plugins::R2UnusedPluginSkills;
 use agent_mentor::rules::r5_repeated_read::R5RepeatedRead;
 use agent_mentor::rules::r7_opus_trivial::R7OpusTrivial;
 use agent_mentor::rules::r9_web_overuse::R9WebOveruse;
@@ -78,6 +79,15 @@ fn cmd_inventory(store: &mut SqliteStore) -> Result<()> {
         total_servers += inv.entries.iter().map(|(_, servers)| servers.len()).sum::<usize>();
         // 원자 교체: 이 호스트의 기존 행 삭제 후 현재셋 삽입 → stale 제거.
         store.replace_host_inventory(&hs.host, &inv.entries)?;
+
+        // 플러그인(스킬 제공) 인벤토리 — R2 재료. 불완전 스캔은 스킵(파괴적 부분 교체 방지).
+        let (plugins, plugins_complete) =
+            scan_plugin_inventory(&settings, &cache);
+        if !plugins_complete {
+            eprintln!("warn: host {} 플러그인 스킬 스캔 실패 — plugin_inventory 유지, R2 스킵", hs.host);
+        } else {
+            store.replace_plugin_inventory(&hs.host, &plugins)?;
+        }
     }
     println!("inventory: {total_servers} servers across all hosts (reconciled)");
     Ok(())
@@ -87,6 +97,7 @@ fn cmd_rules(store: &SqliteStore) -> Result<()> {
     let engine = RuleEngine::new(vec![
         Box::new(R5RepeatedRead::default()),
         Box::new(R1UnusedMcp::default()),
+        Box::new(R2UnusedPluginSkills::default()),
         Box::new(R7OpusTrivial::default()),
         Box::new(R9WebOveruse::default()),
     ]);
