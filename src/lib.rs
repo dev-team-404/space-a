@@ -1,6 +1,7 @@
 pub mod adapter;
 pub mod diary;
 pub mod finding;
+pub mod hosts;
 pub mod inventory;
 pub mod model;
 pub mod rules;
