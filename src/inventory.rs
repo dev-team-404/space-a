@@ -1,5 +1,6 @@
 use crate::rules::normalize_project_key;
 use serde_json::Value;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct McpServer {
@@ -76,6 +77,53 @@ pub fn parse_mcp_json(json: &Value) -> Vec<String> {
         Some(map) => map.keys().cloned().collect(),
         None => Vec::new(),
     }
+}
+
+/// <marketplace>/<name>/*/.mcp.json 을 찾는다(버전 디렉터리가 여러 개일 수 있음).
+fn find_plugin_mcp_files(plugin_dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let Ok(versions) = std::fs::read_dir(plugin_dir) else {
+        return out;
+    };
+    for v in versions.flatten() {
+        let candidate = v.path().join(".mcp.json");
+        if candidate.is_file() {
+            out.push(candidate);
+        }
+    }
+    out
+}
+
+/// settings.json 의 enabledPlugins(값 true) → 각 플러그인 캐시의 .mcp.json 서버.
+/// plugins_cache_dir = <.claude>/plugins/cache. host-global 서버(호출자가 "*"로 귀속).
+pub fn plugin_servers(settings: &Value, plugins_cache_dir: &Path) -> Vec<McpServer> {
+    let mut out: Vec<McpServer> = Vec::new();
+    let Some(plugins) = settings.get("enabledPlugins").and_then(|p| p.as_object()) else {
+        return out;
+    };
+    for (id, enabled) in plugins {
+        if enabled.as_bool() != Some(true) {
+            continue;
+        }
+        // id = "<name>@<marketplace>"
+        let mut parts = id.splitn(2, '@');
+        let name = parts.next().unwrap_or("");
+        let marketplace = parts.next().unwrap_or("");
+        if name.is_empty() || marketplace.is_empty() {
+            continue;
+        }
+        let plugin_dir = plugins_cache_dir.join(marketplace).join(name);
+        for mcp in find_plugin_mcp_files(&plugin_dir) {
+            let Ok(raw) = std::fs::read_to_string(&mcp) else { continue };
+            let Ok(json) = serde_json::from_str::<Value>(&raw) else { continue };
+            for sname in parse_mcp_json(&json) {
+                if !out.iter().any(|s| s.name == sname) {
+                    out.push(McpServer { name: sname, source: "plugin".into() });
+                }
+            }
+        }
+    }
+    out
 }
 
 /// enableAllProjectMcpServers=true 면 프로젝트 .mcp.json 의 모든 서버를 활성으로 합친다.
@@ -210,5 +258,42 @@ mod tests {
         };
         let names: Vec<_> = resolve_project_servers(&cfg).iter().map(|s| s.name.clone()).collect();
         assert_eq!(names, vec!["only"], "enableAll=false 면 .mcp.json 안 읽음");
+    }
+
+    #[test]
+    fn plugin_servers_reads_enabled_plugins_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path();
+        // context7@mp: 최상위 형태
+        let c7 = cache.join("mp").join("context7").join("unknown");
+        std::fs::create_dir_all(&c7).unwrap();
+        std::fs::write(c7.join(".mcp.json"), r#"{"context7":{"command":"npx"}}"#).unwrap();
+        // vercel@mp: 래퍼 형태
+        let vc = cache.join("mp").join("vercel").join("0.44.0");
+        std::fs::create_dir_all(&vc).unwrap();
+        std::fs::write(vc.join(".mcp.json"), r#"{"mcpServers":{"vercel":{"type":"http"}}}"#).unwrap();
+        // off@mp: 비활성 → 무시
+        let off = cache.join("mp").join("off").join("1.0.0");
+        std::fs::create_dir_all(&off).unwrap();
+        std::fs::write(off.join(".mcp.json"), r#"{"off_server":{}}"#).unwrap();
+
+        let settings = serde_json::json!({
+            "enabledPlugins": {
+                "context7@mp": true,
+                "vercel@mp": true,
+                "off@mp": false
+            }
+        });
+
+        let mut names: Vec<_> = plugin_servers(&settings, cache).iter().map(|s| s.name.clone()).collect();
+        names.sort();
+        assert_eq!(names, vec!["context7", "vercel"]);
+        assert!(plugin_servers(&settings, cache).iter().all(|s| s.source == "plugin"));
+    }
+
+    #[test]
+    fn plugin_servers_no_enabled_plugins_is_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(plugin_servers(&serde_json::json!({}), dir.path()).is_empty());
     }
 }
