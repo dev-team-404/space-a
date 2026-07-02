@@ -228,6 +228,30 @@ impl SqliteStore {
         Ok(())
     }
 
+    /// 한 호스트의 인벤토리를 현재 셋으로 원자 교체(트랜잭션: DELETE 후 재INSERT).
+    /// entries = (project_id, servers) 목록. "*" 는 host-global 플러그인 스코프.
+    /// events(사용 이력)는 건드리지 않는다.
+    pub fn replace_host_inventory(
+        &mut self,
+        host: &str,
+        entries: &[(String, Vec<crate::inventory::McpServer>)],
+    ) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM mcp_inventory WHERE host = ?1", params![host])?;
+        for (project, servers) in entries {
+            for s in servers {
+                tx.execute(
+                    "INSERT INTO mcp_inventory (host, project_id, server, source)
+                     VALUES (?1, ?2, ?3, ?4)
+                     ON CONFLICT(host, project_id, server) DO UPDATE SET source = ?4",
+                    params![host, project, s.name, s.source],
+                )?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn upsert_diary_index(
         &self,
         date: &str,
@@ -493,6 +517,41 @@ mod tests {
             mk("s1", "u1", "2026-01-05T09:00:00Z"),
         ]).unwrap();
         assert_eq!(store.earliest_session_ts().unwrap().as_deref(), Some("2026-01-05T09:00:00Z"));
+    }
+
+    #[test]
+    fn replace_host_inventory_drops_stale_keeps_other_hosts() {
+        use crate::inventory::McpServer;
+        let mut store = SqliteStore::open_in_memory().unwrap();
+        // 시드: host "H" 에 (P,"A"),(P,"stale"); host "H2" 에 (Q,"keep")
+        store.upsert_inventory("H", "P", &[
+            McpServer { name: "A".into(), source: "project".into() },
+            McpServer { name: "stale".into(), source: "project".into() },
+        ]).unwrap();
+        store.upsert_inventory("H2", "Q", &[
+            McpServer { name: "keep".into(), source: "project".into() },
+        ]).unwrap();
+
+        // 현재셋 = (P,[A]) 로 교체 → stale 제거
+        store.replace_host_inventory("H", &[
+            ("P".to_string(), vec![McpServer { name: "A".into(), source: "project".into() }]),
+        ]).unwrap();
+
+        let mut h = store.active_servers("H", "P").unwrap();
+        h.sort();
+        assert_eq!(h, vec!["A"], "stale 서버는 제거, 현재 서버는 유지");
+        assert_eq!(store.active_servers("H2", "Q").unwrap(), vec!["keep"], "다른 호스트 불변");
+    }
+
+    #[test]
+    fn replace_host_inventory_empty_clears_host() {
+        use crate::inventory::McpServer;
+        let mut store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_inventory("H", "P", &[
+            McpServer { name: "A".into(), source: "project".into() },
+        ]).unwrap();
+        store.replace_host_inventory("H", &[]).unwrap();
+        assert!(store.active_servers("H", "P").unwrap().is_empty(), "빈 셋이면 호스트 행 전부 제거");
     }
 
     #[test]
