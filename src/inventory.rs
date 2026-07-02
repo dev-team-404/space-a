@@ -126,6 +126,24 @@ pub fn plugin_servers(settings: &Value, plugins_cache_dir: &Path) -> Vec<McpServ
     out
 }
 
+/// 한 호스트의 전체 인벤토리를 (project_key, servers) 목록으로 조립.
+/// "*" 키 = host-global 플러그인 MCP.
+pub fn collect_host_inventory(
+    claude_json: &Value,
+    settings: &Value,
+    plugins_cache_dir: &Path,
+) -> Vec<(String, Vec<McpServer>)> {
+    let mut out = Vec::new();
+    for cfg in parse_claude_json(claude_json) {
+        out.push((cfg.key.clone(), resolve_project_servers(&cfg)));
+    }
+    let plugins = plugin_servers(settings, plugins_cache_dir);
+    if !plugins.is_empty() {
+        out.push(("*".to_string(), plugins));
+    }
+    out
+}
+
 /// enableAllProjectMcpServers=true 면 프로젝트 .mcp.json 의 모든 서버를 활성으로 합친다.
 /// 파일 부재/접근 불가/파싱 실패는 조용히 무시(관대한 파싱).
 pub fn resolve_project_servers(cfg: &ProjectMcpConfig) -> Vec<McpServer> {
@@ -295,5 +313,37 @@ mod tests {
     fn plugin_servers_no_enabled_plugins_is_empty() {
         let dir = tempfile::tempdir().unwrap();
         assert!(plugin_servers(&serde_json::json!({}), dir.path()).is_empty());
+    }
+
+    #[test]
+    fn collect_host_inventory_merges_project_and_global() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = dir.path().join("plugins").join("cache");
+        let c7 = cache.join("mp").join("context7").join("unknown");
+        std::fs::create_dir_all(&c7).unwrap();
+        std::fs::write(c7.join(".mcp.json"), r#"{"context7":{}}"#).unwrap();
+
+        let claude_json = serde_json::json!({
+            "projects": { "C:\\proj": { "mcpServers": { "local1": {} } } }
+        });
+        let settings = serde_json::json!({ "enabledPlugins": { "context7@mp": true } });
+
+        let inv = collect_host_inventory(&claude_json, &settings, &cache);
+        // 프로젝트 항목
+        let proj = inv.iter().find(|(k, _)| k == "c--proj").unwrap();
+        assert_eq!(proj.1.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), vec!["local1"]);
+        // 글로벌 항목
+        let glob = inv.iter().find(|(k, _)| k == "*").unwrap();
+        assert_eq!(glob.1.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), vec!["context7"]);
+    }
+
+    #[test]
+    fn collect_host_inventory_omits_global_when_no_plugins() {
+        let inv = collect_host_inventory(
+            &serde_json::json!({ "projects": { "C:\\p": {} } }),
+            &serde_json::json!({}),
+            std::path::Path::new(r"Z:\none"),
+        );
+        assert!(inv.iter().all(|(k, _)| k != "*"), "플러그인 서버 없으면 '*' 항목 없음");
     }
 }
