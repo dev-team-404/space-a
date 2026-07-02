@@ -1,42 +1,65 @@
-use agent_mentor::adapter::{ClaudeCodeAdapter, SourceAdapter};
+use agent_mentor::adapter::SourceAdapter;
 use agent_mentor::diary::engine::{Engine, MockEngine, OpenAiCompatEngine};
 use agent_mentor::diary::{assemble_brief, generate_diary, DiaryConfig};
-use agent_mentor::inventory::parse_claude_json;
+use agent_mentor::hosts::enumerate_hosts;
+use agent_mentor::inventory::collect_host_inventory;
 use agent_mentor::rules::r1_unused_mcp::R1UnusedMcp;
 use agent_mentor::rules::r5_repeated_read::R5RepeatedRead;
 use agent_mentor::rules::RuleEngine;
 use agent_mentor::store::{ingest_file, SqliteStore};
 use anyhow::Result;
-use std::path::PathBuf;
 
 fn db() -> Result<SqliteStore> {
     SqliteStore::open(std::path::Path::new("./agent-mentor.db"))
 }
 
 fn cmd_ingest(store: &SqliteStore) -> Result<()> {
-    let adapter = ClaudeCodeAdapter::windows();
-    let files = adapter.discover()?;
     let mut total = 0usize;
-    for f in &files {
-        total += ingest_file(store, &adapter, f)?;
+    let mut file_count = 0usize;
+    for hs in enumerate_hosts() {
+        let adapter = hs.adapter();
+        // 관대한 수집: discover/파일 단위 실패는 로깅 후 계속(WSL UNC 경로는 절전·잠금으로
+        // 일시 실패할 수 있음). 파일 하나의 실패가 전 호스트 수집을 중단시키지 않는다.
+        let files = match adapter.discover() {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("warn: host {} 파일 열거 실패: {e}", hs.host);
+                Vec::new()
+            }
+        };
+        file_count += files.len();
+        for f in &files {
+            match ingest_file(store, &adapter, f) {
+                Ok(n) => total += n,
+                Err(e) => eprintln!("warn: {} 수집 실패(건너뜀): {e}", f.display()),
+            }
+        }
+        println!("  [{}] {} files", hs.host, files.len());
     }
     store.rebuild_rollup()?;
-    println!("ingested {total} new events from {} files", files.len());
+    println!("ingested {total} new events from {file_count} files across all hosts");
     Ok(())
 }
 
 fn cmd_inventory(store: &SqliteStore) -> Result<()> {
-    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap_or_default();
-    let path = PathBuf::from(home).join(".claude.json");
-    let raw = std::fs::read_to_string(&path)?;
-    let json: serde_json::Value = serde_json::from_str(&raw)?;
-    let parsed = parse_claude_json(&json);
-    let mut servers = 0;
-    for (project, srvs) in &parsed {
-        servers += srvs.len();
-        store.upsert_inventory("Windows", project, srvs)?;
+    let mut total_servers = 0usize;
+    for hs in enumerate_hosts() {
+        let claude_json = std::fs::read_to_string(hs.claude_json())
+            .ok()
+            .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+            .unwrap_or(serde_json::Value::Null);
+        let settings = std::fs::read_to_string(hs.settings_json())
+            .ok()
+            .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+            .unwrap_or(serde_json::Value::Null);
+        let cache = hs.claude_root.join("plugins").join("cache");
+
+        for (project, servers) in collect_host_inventory(&claude_json, &settings, &cache) {
+            total_servers += servers.len();
+            store.upsert_inventory(&hs.host, &project, &servers)?;
+        }
     }
-    println!("inventory: {} projects, {servers} servers", parsed.len());
+    println!("inventory: {total_servers} servers across all hosts");
     Ok(())
 }
 
