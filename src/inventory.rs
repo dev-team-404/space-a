@@ -65,6 +65,41 @@ pub fn parse_claude_json(json: &Value) -> Vec<ProjectMcpConfig> {
     out
 }
 
+/// .mcp.json(프로젝트 로컬 또는 플러그인)에서 서버 이름을 뽑는다.
+/// 두 형태 지원: {"mcpServers":{...}} 래퍼 / 최상위에 서버명 직접.
+pub fn parse_mcp_json(json: &Value) -> Vec<String> {
+    let obj = json
+        .get("mcpServers")
+        .and_then(|m| m.as_object())
+        .or_else(|| json.as_object());
+    match obj {
+        Some(map) => map.keys().cloned().collect(),
+        None => Vec::new(),
+    }
+}
+
+/// enableAllProjectMcpServers=true 면 프로젝트 .mcp.json 의 모든 서버를 활성으로 합친다.
+/// 파일 부재/접근 불가/파싱 실패는 조용히 무시(관대한 파싱).
+pub fn resolve_project_servers(cfg: &ProjectMcpConfig) -> Vec<McpServer> {
+    let mut servers = cfg.servers.clone();
+    if !cfg.enable_all_project {
+        return servers;
+    }
+    let mcp_path = std::path::Path::new(&cfg.real_path).join(".mcp.json");
+    let Ok(raw) = std::fs::read_to_string(&mcp_path) else {
+        return servers;
+    };
+    let Ok(json) = serde_json::from_str::<Value>(&raw) else {
+        return servers;
+    };
+    for name in parse_mcp_json(&json) {
+        if !cfg.disabled.contains(&name) && !servers.iter().any(|s| s.name == name) {
+            servers.push(McpServer { name, source: "mcpjson".into() });
+        }
+    }
+    servers
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,5 +161,54 @@ mod tests {
     #[test]
     fn parse_claude_json_no_projects_is_empty() {
         assert!(parse_claude_json(&serde_json::json!({})).is_empty());
+    }
+
+    #[test]
+    fn parse_mcp_json_handles_wrapper_shape() {
+        // vercel 형태: {"mcpServers": {...}}
+        let json = serde_json::json!({ "mcpServers": { "vercel": { "type": "http" } } });
+        assert_eq!(parse_mcp_json(&json), vec!["vercel"]);
+    }
+
+    #[test]
+    fn parse_mcp_json_handles_toplevel_shape() {
+        // context7 형태: 최상위에 서버명 직접
+        let json = serde_json::json!({ "context7": { "command": "npx", "args": [] } });
+        assert_eq!(parse_mcp_json(&json), vec!["context7"]);
+    }
+
+    #[test]
+    fn resolve_project_servers_reads_mcp_json_when_enable_all() {
+        let dir = tempfile::tempdir().unwrap();
+        let proj = dir.path();
+        std::fs::write(
+            proj.join(".mcp.json"),
+            r#"{"mcpServers":{"local_a":{},"local_b":{}}}"#,
+        )
+        .unwrap();
+
+        let cfg = ProjectMcpConfig {
+            key: "k".into(),
+            real_path: proj.to_string_lossy().to_string(),
+            servers: vec![McpServer { name: "explicit".into(), source: "project".into() }],
+            enable_all_project: true,
+            disabled: vec!["local_b".into()], // disabled 는 .mcp.json 서버도 제외
+        };
+        let mut names: Vec<_> = resolve_project_servers(&cfg).iter().map(|s| s.name.clone()).collect();
+        names.sort();
+        assert_eq!(names, vec!["explicit", "local_a"]);
+    }
+
+    #[test]
+    fn resolve_project_servers_noop_when_not_enable_all() {
+        let cfg = ProjectMcpConfig {
+            key: "k".into(),
+            real_path: r"Z:\nonexistent".into(),
+            servers: vec![McpServer { name: "only".into(), source: "project".into() }],
+            enable_all_project: false,
+            disabled: vec![],
+        };
+        let names: Vec<_> = resolve_project_servers(&cfg).iter().map(|s| s.name.clone()).collect();
+        assert_eq!(names, vec!["only"], "enableAll=false 면 .mcp.json 안 읽음");
     }
 }
