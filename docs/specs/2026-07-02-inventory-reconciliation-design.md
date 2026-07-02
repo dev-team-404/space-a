@@ -77,7 +77,7 @@ enumerate_hosts()
 ## 5. 에러 처리
 
 - **설정 읽기 실패(존재하나 IO/파싱)** → 그 호스트 스킵, 기존 행 유지, `eprintln!` 경고. (관대: 하드 실패 금지.)
-- **파일 부재(NotFound)** → `Value::Null` → 빈 설정으로 정당 처리(그 스코프는 비게 됨).
+- **파일 부재(NotFound) 또는 빈/공백 파일** → `Value::Null` → 빈 설정으로 정당 처리(그 스코프는 비게 됨). (빈/공백은 설정 초기화 등 정당한 케이스로, `read_to_string`은 성공하나 파싱은 실패하므로 명시적으로 Null 처리.)
 - **트랜잭션/DB 오류** → `?`로 전파. 인프라 오류는 전파(데이터 파운데이션의 "파싱은 관대, DB는 전파" 철학과 일치).
 
 ---
@@ -97,6 +97,14 @@ enumerate_hosts()
 - 설정 변경 히스토리·"주인이 X를 뺐다" 코칭 신호 (별도 스코프; 파괴적 삭제 대신 generation 마커가 필요).
 - mark-and-sweep 방식의 행별 컬럼 보존 (프로브 도입 전까지 불필요).
 - `find_plugin_mcp_files`의 다중 버전 디렉터리 중 "활성 버전" 선택 — 이는 **현재셋 계산 정확도** 문제이지 삭제 로직 문제가 아니라 snapshot-replace로 고쳐지지 않는다(구버전 dir의 서버가 현재셋에 포함되어 그대로 유지됨). 드물고("플러그인이 버전 간 MCP 서버를 드롭 + 두 캐시 dir 잔존") "최신 버전" 판별이 비-semver(`unknown`/`0.44.0`/해시 혼재)라 비자명 → 별도 유예. 필요 시 mtime 최신 dir로 별도 처리.
+
+---
+
+## 7.1 알려진 한계 · 후속 (플러그인 캐시 읽기 견고성)
+
+읽기 성공 가드(§2.3)는 **최상위** 설정 파일(`claude.json`·`settings.json`)만 커버한다. 그러나 `collect_host_inventory`는 내부적으로 **중첩** `.mcp.json`을 더 읽는다 — `plugin_servers`가 플러그인 캐시 `.mcp.json`을, `resolve_project_servers`가 `enableAllProjectMcpServers=true`일 때 프로젝트 `.mcp.json`을. 이 중첩 읽기는 실패 시 **조용히 스킵**한다. 따라서 최상위 파일은 읽혔는데 중첩 `.mcp.json` 하나가 일시 실패/손상되면 `collect_host_inventory`가 **부분셋**을 반환하고, `replace_host_inventory`가 그 부분셋으로 파괴적 교체 → 여전히 활성인 서버가 사라져 R1 false-negative(다음 성공 실행까지).
+
+**판정: 후속 유예**(Codex 리뷰 지목). 근거: (a) 저확률 — 중첩 파일은 `settings.json`과 같은 `.claude` 마운트라 마운트 하이컵 시 최상위 가드가 먼저 잡음; 부모 성공+자식만 실패는 드묾. (b) 자가치유 — 다음 성공 실행 시 복구. (c) `enableAllProjectMcpServers` 경로는 현재 실측상 항상 false(휴면). (d) P2. **수정 방향**(후속): `plugin_servers`/`resolve_project_servers`/`collect_host_inventory`에 completeness 신호를 전파하고 `cmd_inventory`가 불완전 호스트를 스킵. `find_plugin_mcp_files` 다중 버전 이슈(§7)와 함께 "플러그인 캐시 읽기 견고성" 후속 티켓으로 묶는다.
 
 ---
 
