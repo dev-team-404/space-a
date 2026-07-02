@@ -37,39 +37,62 @@ impl Rule for R1UnusedMcp {
 
         let mut out = Vec::new();
         for (host, project, server) in inv {
-            // 2) 이 서버가 해당 project에서 호출된 횟수
-            let calls: i64 = store.conn.query_row(
-                "SELECT COUNT(*) FROM events
-                 WHERE project_id=?1 AND kind='tool_call' AND tool_kind='mcp_call' AND tool_server=?2",
-                params![project, server],
-                |r| r.get(0),
-            )?;
+            let is_global = project == "*";
+
+            // 2) 호출 횟수 — host 필터 필수. 글로벌은 host 전체, 프로젝트는 host+project.
+            let calls: i64 = if is_global {
+                store.conn.query_row(
+                    "SELECT COUNT(*) FROM events
+                     WHERE host=?1 AND kind='tool_call' AND tool_kind='mcp_call' AND tool_server=?2",
+                    params![host, server],
+                    |r| r.get(0),
+                )?
+            } else {
+                store.conn.query_row(
+                    "SELECT COUNT(*) FROM events
+                     WHERE host=?1 AND project_id=?2 AND kind='tool_call' AND tool_kind='mcp_call' AND tool_server=?3",
+                    params![host, project, server],
+                    |r| r.get(0),
+                )?
+            };
             if calls > 0 {
                 continue;
             }
 
-            // 3) 해당 project의 대표 상주 비용(첫 턴 cache_create 최댓값)
-            let resident: i64 = store.conn.query_row(
-                "SELECT COALESCE(MAX(tok_cache_create), 0) FROM events
-                 WHERE project_id=?1 AND kind='assistant_turn'",
-                params![project],
-                |r| r.get(0),
-            )?;
+            // 3) 대표 상주 비용(첫 턴 cache_create 근사 = MAX). 글로벌은 host 전체, 프로젝트는 host+project.
+            let resident: i64 = if is_global {
+                store.conn.query_row(
+                    "SELECT COALESCE(MAX(tok_cache_create), 0) FROM events
+                     WHERE host=?1 AND kind='assistant_turn'",
+                    params![host],
+                    |r| r.get(0),
+                )?
+            } else {
+                store.conn.query_row(
+                    "SELECT COALESCE(MAX(tok_cache_create), 0) FROM events
+                     WHERE host=?1 AND project_id=?2 AND kind='assistant_turn'",
+                    params![host, project],
+                    |r| r.get(0),
+                )?
+            };
             if (resident as u64) <= self.min_resident_tokens {
                 continue;
             }
 
+            let scope_kind = if is_global { "host" } else { "project" };
+            let scope_ref = if is_global { host.clone() } else { project.clone() };
             out.push(Finding {
                 rule_id: "R1".into(),
                 severity: Severity::Warn,
                 scope_host: Some(host.clone()),
-                scope_project: Some(project.clone()),
-                scope_kind: "project".into(),
-                scope_ref: project.clone(),
+                scope_project: if is_global { None } else { Some(project.clone()) },
+                scope_kind: scope_kind.into(),
+                scope_ref: scope_ref.clone(),
                 evidence: serde_json::json!({
                     "server": server,
                     "resident_tokens_total": resident,
                     "calls": 0,
+                    "scope": scope_kind,
                     "note": "약(~) 추정 — 서버별 정확 귀속은 옵트인 프로브(유예)"
                 }),
                 est_tokens_saved: self.heuristic_tokens_per_server,
@@ -77,7 +100,7 @@ impl Rule for R1UnusedMcp {
                     kind: "remove_mcp".into(),
                     payload: serde_json::json!({ "server": server }),
                 }),
-                dedup_key: format!("R1|{project}|{server}"),
+                dedup_key: format!("R1|{host}|{scope_ref}|{server}"),
             });
         }
         Ok(out)
@@ -151,6 +174,69 @@ mod tests {
         store.upsert_events(&[first_turn(proj, 100)]).unwrap(); // 상주 비용 미미
         store.upsert_inventory("Windows", proj, &[
             McpServer { name: "playwright".into(), source: "project".into() },
+        ]).unwrap();
+        assert!(R1UnusedMcp::default().evaluate(&store).unwrap().is_empty());
+    }
+
+    // host 필터가 없으면 wsl 세션 호출이 Windows 인벤토리를 잘못 "사용됨"으로 만든다.
+    #[test]
+    fn r1_does_not_cross_contaminate_across_hosts() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let proj = "shared-proj";
+
+        // Windows: playwright 호출됨(사용). 상주 55k.
+        store.upsert_events(&[
+            first_turn(proj, 55000),
+            mcp_call(proj, "w1", "playwright"),
+        ]).unwrap();
+        // wsl: 같은 project_id, 하지만 playwright 호출 없음. 상주 55k.
+        let mut wsl_turn = first_turn(proj, 55000);
+        wsl_turn.host = "wsl:Ubuntu-22.04".into();
+        wsl_turn.uuid = Some("wsl_turn".into());
+        store.upsert_events(&[wsl_turn]).unwrap();
+
+        // 두 호스트 모두 playwright 인벤토리 보유.
+        store.upsert_inventory("Windows", proj, &[
+            McpServer { name: "playwright".into(), source: "project".into() },
+        ]).unwrap();
+        store.upsert_inventory("wsl:Ubuntu-22.04", proj, &[
+            McpServer { name: "playwright".into(), source: "project".into() },
+        ]).unwrap();
+
+        let findings = R1UnusedMcp::default().evaluate(&store).unwrap();
+        assert_eq!(findings.len(), 1, "wsl 호스트에서만 미사용으로 잡혀야 함");
+        assert_eq!(findings[0].scope_host.as_deref(), Some("wsl:Ubuntu-22.04"));
+        assert_eq!(findings[0].evidence["server"], "playwright");
+    }
+
+    #[test]
+    fn r1_flags_host_global_plugin_server_unused_across_host() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 상주 55k 세션이 프로젝트 p1 에 존재, context7(글로벌)은 어디서도 호출 안 됨.
+        store.upsert_events(&[first_turn("p1", 55000)]).unwrap();
+        store.upsert_inventory("Windows", "*", &[
+            McpServer { name: "context7".into(), source: "plugin".into() },
+        ]).unwrap();
+
+        let findings = R1UnusedMcp::default().evaluate(&store).unwrap();
+        assert_eq!(findings.len(), 1);
+        let f = &findings[0];
+        assert_eq!(f.scope_kind, "host");
+        assert_eq!(f.scope_project, None);
+        assert_eq!(f.scope_ref, "Windows");
+        assert_eq!(f.evidence["server"], "context7");
+    }
+
+    #[test]
+    fn r1_host_global_silent_when_called_anywhere_on_host() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // context7 이 다른 프로젝트 p2 에서 호출됨 → 글로벌 미사용 아님.
+        store.upsert_events(&[
+            first_turn("p1", 55000),
+            mcp_call("p2", "c1", "context7"),
+        ]).unwrap();
+        store.upsert_inventory("Windows", "*", &[
+            McpServer { name: "context7".into(), source: "plugin".into() },
         ]).unwrap();
         assert!(R1UnusedMcp::default().evaluate(&store).unwrap().is_empty());
     }
