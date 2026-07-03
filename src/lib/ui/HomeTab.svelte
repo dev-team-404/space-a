@@ -1,16 +1,20 @@
 <script lang="ts">
-  import { runScanNow, type Summary } from '../api';
+  import { onScanDone, runScanNow, type Summary } from '../api';
 
   let { summary }: { summary: Summary | null } = $props();
 
   const fmt = (n: number | undefined) => (n ?? 0).toLocaleString();
   let scanning = $state(false);
 
+  $effect(() => {
+    const p = onScanDone(() => (scanning = false));
+    return () => { p.then((u) => u()); };
+  });
+
   async function scan() {
     scanning = true;
     try {
-      await runScanNow();
-      setTimeout(() => (scanning = false), 3000); // 갱신 자체는 App의 scan:done 리스너가 수행
+      await runScanNow(); // 완료 신호(scanning 해제·데이터 갱신)는 scan:done 이벤트가 담당
     } catch {
       scanning = false;
     }
@@ -27,7 +31,13 @@
     <div class="card save">절약 가능 <b>{fmt(summary?.est_tokens_saved_total)}</b> tok</div>
   </div>
   <footer class="status">
-    마지막 스캔: {summary?.last_scan ? new Date(summary.last_scan).toLocaleString() : '아직 없음'}
+    {#if scanning}
+      <span class="scanning">스캔 중…</span>
+    {:else if summary?.last_scan}
+      마지막 스캔: {new Date(summary.last_scan).toLocaleString()}
+    {:else}
+      첫 수집 진행 중… (트랜스크립트 양에 따라 몇 분 걸릴 수 있어요)
+    {/if}
     <button onclick={scan} disabled={scanning}>{scanning ? '스캔 중…' : '지금 스캔'}</button>
   </footer>
 </section>
@@ -42,4 +52,6 @@
   .card.save { background: #fdf1c7; }
   .status { margin-top: auto; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
   .status button { border: 3px solid #33325a; background: #d9d4e8; font: inherit; padding: 4px 10px; cursor: pointer; }
+  .scanning { animation: blink 1.2s ease-in-out infinite; }
+  @keyframes blink { 50% { opacity: 0.35; } }
 </style>
