@@ -12,7 +12,10 @@ export default defineConfig({
     emptyOutDir: true,
     // 멀티페이지: 2단계에서 mascot.html 엔트리 추가 (ESM 설정파일 — __dirname 없음)
     rollupOptions: {
-      input: { chat: fileURLToPath(new URL('./src/chat.html', import.meta.url)) },
+      input: {
+        chat: fileURLToPath(new URL('./src/chat.html', import.meta.url)),
+        mascot: fileURLToPath(new URL('./src/mascot.html', import.meta.url)),
+      },
     },
   },
 });
