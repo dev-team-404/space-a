@@ -17,10 +17,10 @@
         "title": "agent mentor",
         "width": 900,
         "height": 640,
-        "visible": true
+        "visible": false
       }
     ],
     "security": { "csp": null }
   },
-  "bundle": { "active": false, "icon": [] }
+  "bundle": { "active": false, "icon": ["icons/icon.ico", "icons/128x128.png"] }
 }

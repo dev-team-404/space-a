@@ -1,5 +1,6 @@
 mod commands;
 mod pipeline;
+mod tray;
 
 use agent_mentor::store::SqliteStore;
 use std::sync::Mutex;
@@ -14,6 +15,18 @@ pub fn run() {
     {
         use tauri::Manager;
         tauri::Builder::default()
+            .plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::LaunchAgent, // Windows에선 무시되는 인자
+                None,
+            ))
+            .on_window_event(|window, event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    if window.label() == "chat" {
+                        let _ = window.hide(); // 상주: destroy 대신 hide (스펙 §3)
+                        api.prevent_close();
+                    }
+                }
+            })
             .setup(|app| {
                 let dir = app.path().app_data_dir()?;
                 std::fs::create_dir_all(&dir)?;
@@ -21,6 +34,7 @@ pub fn run() {
                 let (tx, rx) = std::sync::mpsc::channel();
                 app.manage(AppState { store: Mutex::new(store), scan_tx: tx.clone() });
                 pipeline::start(app.handle().clone(), rx, tx);
+                tray::setup_tray(app.handle())?;
                 Ok(())
             })
             .invoke_handler(tauri::generate_handler![
