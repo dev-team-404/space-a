@@ -4,3 +4,5 @@
 /diary/
 .env
 .env.ref
+node_modules/
+dist/
