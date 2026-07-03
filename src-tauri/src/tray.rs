@@ -24,6 +24,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&open, &mascot, &scan, &autostart, &quit])?;
 
     let autostart_item = autostart.clone();
+    let mascot_item = mascot.clone();
     TrayIconBuilder::with_id("main")
         .icon(
             app.default_window_icon()
@@ -37,15 +38,17 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             "open" => show_chat(app),
             "mascot" => {
                 use tauri::Manager;
-                let visible = app
-                    .get_webview_window("mascot")
-                    .map(|w| w.is_visible().unwrap_or(false))
-                    .unwrap_or(false);
                 if let Some(w) = app.get_webview_window("mascot") {
+                    let visible = w.is_visible().unwrap_or(false);
                     let _ = if visible { w.hide() } else { w.show() };
+                    let _ = mascot_item.set_checked(!visible);
                 }
                 if let Ok(store) = app.state::<AppState>().store.lock() {
-                    let _ = store.set_setting("mascot_visible", if visible { "false" } else { "true" });
+                    let visible = app
+                        .get_webview_window("mascot")
+                        .map(|w| w.is_visible().unwrap_or(false))
+                        .unwrap_or(false);
+                    let _ = store.set_setting("mascot_visible", if visible { "true" } else { "false" });
                 }
             }
             "scan" => {
