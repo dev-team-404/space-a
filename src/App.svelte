@@ -1,7 +1,7 @@
 <script lang="ts">
   import HomeTab from './lib/ui/HomeTab.svelte';
   import CoachTab from './lib/ui/CoachTab.svelte';
-  import { getSummary, onScanDone, type Summary } from './lib/api';
+  import { getSummary, onScanDone, onGotoTab, type Summary } from './lib/api';
 
   let tab = $state<'home' | 'diary' | 'coach' | 'chat'>('home');
   let summary = $state<Summary | null>(null);
@@ -11,6 +11,9 @@
   }
   refresh();
   onScanDone(() => refresh());
+  onGotoTab((t) => {
+    if (t === 'home' || t === 'diary' || t === 'coach' || t === 'chat') tab = t;
+  });
 
   const mood = $derived(
     summary && summary.est_tokens_saved_total > 0 ? '절약할 게 보여요…' : '평화로워요'
