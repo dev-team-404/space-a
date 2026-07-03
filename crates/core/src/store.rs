@@ -1,7 +1,7 @@
 use crate::finding::{Finding, Prescription, Severity};
 use crate::model::{EventKind, NormalizedEvent, ToolKind};
 use anyhow::Result;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 
 const SCHEMA: &str = r#"
@@ -56,6 +56,9 @@ CREATE TABLE IF NOT EXISTS diary_index (
 );
 CREATE TABLE IF NOT EXISTS ingest_state (
   source_file TEXT PRIMARY KEY, last_offset INTEGER NOT NULL DEFAULT 0, last_mtime INTEGER
+);
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY, value TEXT NOT NULL
 );
 "#;
 
@@ -360,6 +363,112 @@ impl SqliteStore {
         }
         Ok(out)
     }
+
+    pub fn summary_for_date(&self, date: &str) -> Result<DaySummary> {
+        let row = self.conn.query_row(
+            "SELECT COALESCE(SUM(session_count),0), COALESCE(SUM(tok_input),0),
+                    COALESCE(SUM(tok_output),0), COALESCE(SUM(tok_cache_read),0),
+                    COALESCE(SUM(tok_cache_create),0)
+             FROM daily_rollup WHERE date=?1",
+            params![date],
+            |r| Ok(DaySummary {
+                session_count: r.get::<_, i64>(0)? as u64,
+                tok_input: r.get::<_, i64>(1)? as u64,
+                tok_output: r.get::<_, i64>(2)? as u64,
+                tok_cache_read: r.get::<_, i64>(3)? as u64,
+                tok_cache_create: r.get::<_, i64>(4)? as u64,
+            }),
+        )?;
+        Ok(row)
+    }
+
+    pub fn total_sessions(&self) -> Result<u64> {
+        let n: i64 = self.conn.query_row("SELECT COUNT(*) FROM sessions", [], |r| r.get(0))?;
+        Ok(n as u64)
+    }
+
+    pub fn sum_est_tokens_saved(&self) -> Result<u64> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COALESCE(SUM(est_tokens_saved),0) FROM findings", [], |r| r.get(0))?;
+        Ok(n as u64)
+    }
+
+    pub fn list_findings_current(&self) -> Result<Vec<FindingRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
+                    evidence_json, est_tokens_saved, prescription_json, dedup_key,
+                    last_seen, occurrences
+             FROM findings ORDER BY est_tokens_saved DESC, dedup_key",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?, r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?, r.get::<_, Option<String>>(3)?,
+                r.get::<_, String>(4)?, r.get::<_, String>(5)?,
+                r.get::<_, String>(6)?, r.get::<_, i64>(7)?,
+                r.get::<_, Option<String>>(8)?, r.get::<_, String>(9)?,
+                r.get::<_, Option<String>>(10)?, r.get::<_, i64>(11)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
+                 evidence_json, est, prescription_json, dedup_key, last_seen, occ) = row?;
+            out.push(FindingRow {
+                rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
+                evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
+                est_tokens_saved: est as u64,
+                prescription: prescription_json
+                    .and_then(|s| serde_json::from_str(&s).ok()),
+                dedup_key, last_seen,
+                occurrences: occ as u64,
+            });
+        }
+        Ok(out)
+    }
+
+    pub fn finding_severities(&self) -> Result<Vec<(String, String)>> {
+        let mut stmt = self.conn.prepare("SELECT dedup_key, severity FROM findings")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn diary_dates(&self) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT DISTINCT date FROM diary_index ORDER BY date")?;
+        let rows = stmt.query_map([], |r| r.get(0))?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn diary_path_for(&self, date: &str) -> Result<Option<String>> {
+        let v: Option<String> = self
+            .conn
+            .query_row("SELECT path FROM diary_index WHERE date=?1 LIMIT 1", params![date], |r| r.get(0))
+            .optional()?;
+        Ok(v)
+    }
+
+    pub fn get_setting(&self, key: &str) -> Result<Option<String>> {
+        let v: Option<String> = self
+            .conn
+            .query_row("SELECT value FROM settings WHERE key=?1", params![key], |r| r.get(0))
+            .optional()?;
+        Ok(v)
+    }
+
+    pub fn set_setting(&self, key: &str, value: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value=?2",
+            params![key, value],
+        )?;
+        Ok(())
+    }
+
+    pub fn all_settings(&self) -> Result<Vec<(String, String)>> {
+        let mut stmt = self.conn.prepare("SELECT key, value FROM settings ORDER BY key")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -369,6 +478,31 @@ pub struct RollupRow {
     pub tok_cache_read: u64,
     pub tok_cache_create: u64,
     pub session_count: u64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DaySummary {
+    pub session_count: u64,
+    pub tok_input: u64,
+    pub tok_output: u64,
+    pub tok_cache_read: u64,
+    pub tok_cache_create: u64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FindingRow {
+    pub rule_id: String,
+    pub severity: String,
+    pub scope_host: Option<String>,
+    pub scope_project: Option<String>,
+    pub scope_kind: String,
+    pub scope_ref: String,
+    pub evidence: serde_json::Value,
+    pub est_tokens_saved: u64,
+    pub prescription: Option<serde_json::Value>,
+    pub dedup_key: String,
+    pub last_seen: Option<String>,
+    pub occurrences: u64,
 }
 
 /// 한 파일을 offset부터 증분 수집. 반환값 = 신규 삽입 이벤트 수.
@@ -738,5 +872,71 @@ mod tests {
         assert_eq!(d3[0].scope_kind, "host");
         // 07-02: 세션 없음 → 아무 finding도 없음
         assert!(store.findings_for_date("Windows", "2026-07-02").unwrap().is_empty());
+    }
+
+    #[test]
+    fn summary_and_settings_queries() {
+        use crate::model::{EventKind, NormModel, NormalizedEvent, TokenUsage};
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_events(&[NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p1".into(),
+            session_id: "s1".into(), uuid: Some("u1".into()), parent_uuid: None,
+            is_sidechain: false, ts: Some("2026-07-02T10:00:00Z".into()),
+            source_file: "s.jsonl".into(), source_offset: 0,
+            kind: EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-opus-4-8"),
+                usage: TokenUsage { input: 100, output: 50, cache_read: 10, cache_creation: 5, eph_1h: 0, eph_5m: 0 },
+                web_search: 0, web_fetch: 0,
+            },
+        }]).unwrap();
+        store.rebuild_rollup().unwrap();
+
+        let day = store.summary_for_date("2026-07-02").unwrap();
+        assert_eq!(day.session_count, 1);
+        assert_eq!(day.tok_input, 100);
+        assert_eq!(store.summary_for_date("2099-01-01").unwrap().session_count, 0);
+        assert_eq!(store.total_sessions().unwrap(), 1);
+
+        // settings 라운드트립
+        assert_eq!(store.get_setting("k").unwrap(), None);
+        store.set_setting("k", "v1").unwrap();
+        store.set_setting("k", "v2").unwrap(); // upsert
+        assert_eq!(store.get_setting("k").unwrap(), Some("v2".into()));
+        assert_eq!(store.all_settings().unwrap(), vec![("k".to_string(), "v2".to_string())]);
+    }
+
+    #[test]
+    fn findings_and_diary_queries() {
+        use crate::finding::{Finding, Severity};
+        let store = SqliteStore::open_in_memory().unwrap();
+        let base = Finding {
+            rule_id: "R5".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: Some("p".into()),
+            scope_kind: "session".into(), scope_ref: "s1".into(),
+            evidence: serde_json::json!({"path":"a.txt","count":5}),
+            est_tokens_saved: 7200, prescription: None, dedup_key: "R5|s1|a.txt".into(),
+        };
+        store.upsert_finding(&base, "2026-07-01T10:00:00Z").unwrap();
+        store.upsert_finding(&Finding {
+            rule_id: "R1".into(), severity: Severity::Warn,
+            est_tokens_saved: 99000, dedup_key: "R1|global|ctx".into(),
+            ..base
+        }, "2026-07-01T11:00:00Z").unwrap();
+
+        let rows = store.list_findings_current().unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].rule_id, "R1", "est_tokens_saved DESC 정렬");
+        assert_eq!(rows[0].occurrences, 1);
+        assert_eq!(store.sum_est_tokens_saved().unwrap(), 99000 + 7200);
+
+        let sevs = store.finding_severities().unwrap();
+        assert!(sevs.contains(&("R1|global|ctx".to_string(), "warn".to_string())));
+
+        store.upsert_diary_index("2026-07-01", "Windows", "/tmp/d1.md", 100, "mock").unwrap();
+        store.upsert_diary_index("2026-07-02", "Windows", "/tmp/d2.md", 100, "mock").unwrap();
+        assert_eq!(store.diary_dates().unwrap(), vec!["2026-07-01", "2026-07-02"]);
+        assert_eq!(store.diary_path_for("2026-07-02").unwrap(), Some("/tmp/d2.md".into()));
+        assert_eq!(store.diary_path_for("2099-01-01").unwrap(), None);
     }
 }
