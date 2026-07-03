@@ -726,7 +726,9 @@ edition = "2021"
 
 [lib]
 name = "agent_mentor_app"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# Windows 데스크톱 전용: cdylib/staticlib(모바일용)을 넣으면 GNU ld의
+# DLL export ordinal 한계(~65535)에 걸려 링크가 실패한다. rlib만 사용.
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
