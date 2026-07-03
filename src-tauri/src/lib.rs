@@ -1,5 +1,8 @@
+#[cfg_attr(test, allow(dead_code, unused_imports))]
 mod commands;
+#[cfg_attr(test, allow(dead_code, unused_imports))]
 mod pipeline;
+#[cfg_attr(test, allow(dead_code, unused_imports))]
 mod tray;
 
 use agent_mentor::store::SqliteStore;
