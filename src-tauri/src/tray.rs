@@ -16,7 +16,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
 
     let autostart_item = autostart.clone();
     TrayIconBuilder::with_id("main")
-        .icon(app.default_window_icon().cloned().expect("window icon"))
+        .icon(app.default_window_icon().cloned().ok_or_else(|| tauri::Error::AssetNotFound("window icon".into()))?)
         .tooltip("Agent Mentor")
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -41,11 +41,21 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
-                show_chat(tray.app_handle());
+                toggle_chat(tray.app_handle());
             }
         })
         .build(app)?;
     Ok(())
+}
+
+fn toggle_chat(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("chat") {
+        if w.is_visible().unwrap_or(false) {
+            let _ = w.hide();
+        } else {
+            show_chat(app);
+        }
+    }
 }
 
 fn show_chat(app: &AppHandle) {

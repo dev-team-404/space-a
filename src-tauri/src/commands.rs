@@ -45,25 +45,25 @@ fn lock<'a>(state: &'a State<AppState>) -> Result<std::sync::MutexGuard<'a, Sqli
     state.store.lock().map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_summary(state: State<AppState>) -> Result<Summary, String> {
     let guard = lock(&state)?;
     summary_inner(&*guard).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_findings(state: State<AppState>) -> Result<Vec<FindingRow>, String> {
     let guard = lock(&state)?;
     guard.list_findings_current().map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_diary_dates(state: State<AppState>) -> Result<Vec<String>, String> {
     let guard = lock(&state)?;
     guard.diary_dates().map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_diary(state: State<AppState>, date: String) -> Result<Option<String>, String> {
     let guard = lock(&state)?;
     diary_inner(&*guard, &date).map_err(|e| e.to_string())
@@ -74,7 +74,7 @@ pub fn get_mascot_seed() -> RobotSpec {
     robot_spec_for(&stable_identity())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_settings(state: State<AppState>) -> Result<HashMap<String, String>, String> {
     let guard = lock(&state)?;
     Ok(guard
@@ -84,7 +84,7 @@ pub fn get_settings(state: State<AppState>) -> Result<HashMap<String, String>, S
         .collect())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn set_setting(state: State<AppState>, key: String, value: String) -> Result<(), String> {
     const ALLOWED: &[&str] = &["mascot_visible", "chatter_level", "content_protected"];
     if !ALLOWED.contains(&key.as_str()) {

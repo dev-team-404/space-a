@@ -1,4 +1,4 @@
-﻿//! notify 감시 → 디바운스 배치 → ingest→inventory→rules → finding diff → 이벤트.
+//! notify 감시 → 디바운스 배치 → ingest→inventory→rules → finding diff → 이벤트.
 //! 순수 함수(diff/debounce/missing_dates)는 agent_mentor::pipeline 에 있고 단위 테스트도 거기서 수행.
 //! 이 파일은 Tauri 런타임 코드만 담당.
 
@@ -64,7 +64,7 @@ mod runtime {
 
     pub fn run_pipeline_once(app: &AppHandle) {
         let state = app.state::<AppState>();
-        let result = (|| -> anyhow::Result<()> {
+        let scan_result = (|| -> anyhow::Result<String> {
             // ── 스캔·diff·emit: 락을 잡는 범위 ──────────────────────────────────
             let (now, _fresh_findings) = {
                 let mut store = state.store.lock()
@@ -89,55 +89,70 @@ mod runtime {
                 (now, fresh)
                 // guard drops here — 다이어리 생성(LLM 네트워크 I/O) 전에 락 해제
             };
-
-            maybe_generate_diaries(app, &state.store)?;
-            app.emit("scan:done", &now)?;
-            Ok(())
+            Ok(now)
         })();
-        if let Err(e) = result { eprintln!("pipeline error: {e}"); }
+
+        match scan_result {
+            Ok(now) => {
+                // scan:done은 스캔 성공 시 다이어리 결과와 무관하게 emit (§7)
+                if let Err(e) = app.emit("scan:done", &now) {
+                    eprintln!("pipeline error: scan:done emit 실패: {e}");
+                }
+                // 다이어리 실패는 조용히 — 다음 사이클에서 재시도
+                maybe_generate_diaries(app, &state.store);
+            }
+            Err(e) => eprintln!("pipeline error: {e}"),
+        }
     }
 
     fn maybe_generate_diaries(
         app: &AppHandle,
         store_mutex: &std::sync::Mutex<SqliteStore>,
-    ) -> anyhow::Result<()> {
-        let Some(engine) = OpenAiCompatEngine::from_env() else { return Ok(()); };
-        let vault = app.path().app_data_dir()?.join("diary");
+    ) {
+        let Some(engine) = OpenAiCompatEngine::from_env() else { return; };
+        let vault = match app.path().app_data_dir() {
+            Ok(d) => d.join("diary"),
+            Err(e) => { eprintln!("warn: diary vault 경로 실패: {e}"); return; }
+        };
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
         // 락을 짧게 잡아 missing dates 목록만 조회 후 즉시 해제
-        let dates = {
-            let store = store_mutex.lock()
-                .map_err(|_| anyhow::anyhow!("store lock poisoned"))?;
-            let existing = store.diary_dates()?;
-            missing_diary_dates(&existing, &today, 7)
+        let dates = match store_mutex.lock() {
+            Ok(store) => match store.diary_dates() {
+                Ok(existing) => missing_diary_dates(&existing, &today, 7),
+                Err(e) => { eprintln!("warn: diary_dates 실패: {e}"); return; }
+            },
+            Err(e) => { eprintln!("warn: store lock poisoned: {e}"); return; }
         };
 
         for date in dates {
             // 날짜별로 락을 짧게 획득 → assemble_brief → 즉시 해제
             // TODO(후속): generate_diary 자체가 네트워크 I/O를 락 없이 실행하도록
             //   core `generate_diary`를 순수 함수로 분리하면 단건 생성 중 블로킹도 제거 가능.
-            let (brief, cfg) = {
-                let store = store_mutex.lock()
-                    .map_err(|_| anyhow::anyhow!("store lock poisoned"))?;
-                let cfg = DiaryConfig { vault_dir: vault.clone(), ..DiaryConfig::default() };
-                let brief = assemble_brief(&store, "Windows", &date, &cfg)?;
-                (brief, cfg)
+            let (brief, cfg) = match store_mutex.lock() {
+                Ok(store) => {
+                    let cfg = DiaryConfig { vault_dir: vault.clone(), ..DiaryConfig::default() };
+                    match assemble_brief(&store, "Windows", &date, &cfg) {
+                        Ok(brief) => (brief, cfg),
+                        Err(e) => { eprintln!("warn: assemble_brief({date}) 실패: {e}"); continue; }
+                    }
+                }
+                Err(e) => { eprintln!("warn: store lock poisoned: {e}"); return; }
             }; // guard drops here
 
             if brief.totals.session_count == 0 { continue; }
 
             // generate_diary도 store 접근이 필요하므로 락을 다시 잡되, 이 스코프가 끝나면 즉시 해제.
             // 이 단계의 블로킹(네트워크 포함)은 후속 과제(위 TODO 참고)로 남긴다.
-            {
-                let store = store_mutex.lock()
-                    .map_err(|_| anyhow::anyhow!("store lock poisoned"))?;
-                generate_diary(&store, &engine, &brief, &cfg)?;
-            } // guard drops here
-
-            app.emit("diary:ready", &date)?;
+            let gen_result = match store_mutex.lock() {
+                Ok(store) => generate_diary(&store, &engine, &brief, &cfg),
+                Err(e) => { eprintln!("warn: store lock poisoned: {e}"); return; }
+            }; // guard drops here
+            match gen_result {
+                Ok(_) => { let _ = app.emit("diary:ready", &date); }
+                Err(e) => eprintln!("warn: generate_diary({date}) 실패: {e}"),
+            }
         }
-        Ok(())
     }
 }
 

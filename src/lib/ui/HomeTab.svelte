@@ -8,8 +8,12 @@
 
   async function scan() {
     scanning = true;
-    await runScanNow();
-    setTimeout(() => (scanning = false), 3000); // 갱신 자체는 App의 scan:done 리스너가 수행
+    try {
+      await runScanNow();
+      setTimeout(() => (scanning = false), 3000); // 갱신 자체는 App의 scan:done 리스너가 수행
+    } catch {
+      scanning = false;
+    }
   }
 </script>
 

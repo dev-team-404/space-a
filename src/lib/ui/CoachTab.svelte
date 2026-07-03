@@ -8,7 +8,10 @@
     findings = await listFindings();
   }
   refresh();
-  onNewFindings(() => refresh());
+  $effect(() => {
+    const p = onNewFindings(() => refresh());
+    return () => { p.then((u) => u()); };
+  });
 
   const icon = (s: Finding['severity']) => (s === 'warn' ? '⚠' : s === 'suggest' ? '💡' : 'ℹ');
 </script>
