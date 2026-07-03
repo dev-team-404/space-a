@@ -8,11 +8,20 @@ use tauri_plugin_autostart::ManagerExt;
 
 pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "열기", true, None::<&str>)?;
+    let mascot_on = {
+        let state = app.state::<AppState>();
+        let guard = state.store.lock().ok();
+        guard
+            .and_then(|s| s.get_setting("mascot_visible").ok().flatten())
+            .map(|v| v == "true")
+            .unwrap_or(true)
+    };
+    let mascot = CheckMenuItem::with_id(app, "mascot", "마스코트 표시", true, mascot_on, None::<&str>)?;
     let scan = MenuItem::with_id(app, "scan", "지금 스캔", true, None::<&str>)?;
     let auto_on = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart = CheckMenuItem::with_id(app, "autostart", "시작 시 실행", true, auto_on, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &scan, &autostart, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &mascot, &scan, &autostart, &quit])?;
 
     let autostart_item = autostart.clone();
     TrayIconBuilder::with_id("main")
@@ -26,6 +35,19 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, e| match e.id().as_ref() {
             "open" => show_chat(app),
+            "mascot" => {
+                use tauri::Manager;
+                let visible = app
+                    .get_webview_window("mascot")
+                    .map(|w| w.is_visible().unwrap_or(false))
+                    .unwrap_or(false);
+                if let Some(w) = app.get_webview_window("mascot") {
+                    let _ = if visible { w.hide() } else { w.show() };
+                }
+                if let Ok(store) = app.state::<AppState>().store.lock() {
+                    let _ = store.set_setting("mascot_visible", if visible { "false" } else { "true" });
+                }
+            }
             "scan" => {
                 let _ = app.state::<AppState>().scan_tx.send(PipelineMsg::RunNow);
             }

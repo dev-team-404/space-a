@@ -38,6 +38,29 @@ pub fn run() {
                 app.manage(AppState { store: Mutex::new(store), scan_tx: tx.clone() });
                 pipeline::start(app.handle().clone(), rx, tx);
                 tray::setup_tray(app.handle())?;
+                // mascot 창: 설정 보고 표시 + 위치 복원
+                {
+                    let state = app.state::<AppState>();
+                    let (visible, pos) = {
+                        let store = state.store.lock().map_err(|_| anyhow::anyhow!("store lock"))?;
+                        (
+                            store.get_setting("mascot_visible")?.map(|v| v == "true").unwrap_or(true),
+                            store.get_setting("mascot_pos")?,
+                        )
+                    };
+                    if let Some(w) = app.get_webview_window("mascot") {
+                        if let Some(p) = pos {
+                            if let Some((x, y)) = p.split_once(',') {
+                                if let (Ok(x), Ok(y)) = (x.parse::<i32>(), y.parse::<i32>()) {
+                                    let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
+                                }
+                            }
+                        }
+                        if visible {
+                            let _ = w.show();
+                        }
+                    }
+                }
                 Ok(())
             })
             .invoke_handler(tauri::generate_handler![
@@ -49,6 +72,7 @@ pub fn run() {
                 commands::get_settings,
                 commands::set_setting,
                 commands::run_scan_now,
+                commands::open_chat_tab,
             ])
             .run(tauri::generate_context!())
             .expect("tauri 실행 실패");
