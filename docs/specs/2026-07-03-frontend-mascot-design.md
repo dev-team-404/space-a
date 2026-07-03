@@ -34,7 +34,7 @@
 | `idle` | 기본 | 1.6초 주기 바운스(±1px), 3~6초 랜덤 깜빡임(eyes 스왑 2프레임) |
 | `talk` | 말풍선 표시 중 | 눈 LED 점멸 + 바운스 짧게 |
 | `happy` | diary:ready·occasion 말풍선 | 점프 2회 + 눈 ^^ 스왑, 3초 후 idle |
-| `alert` | warn 포함 finding 말풍선 | 안테나 점멸(accent색 토글), 말풍선 종료까지 |
+| `alert` | finding 말풍선 표시 중 | 안테나 점멸(accent색 토글), 말풍선 종료까지 (severity 무관 — 상태 머신은 말풍선 종류만 본다) |
 | `sleep` | 로컬 01:00–07:00 & 말풍선 없음 | 눈 감김 스왑 + zZ 픽셀, 잡담 금지 |
 
 구현: `requestAnimationFrame` 단일 루프, 상태는 `$state`, 프레임 계산은 순수 함수 `frameAt(state, tMs)` (vitest 테스트 대상).
