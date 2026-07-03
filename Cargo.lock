@@ -37,6 +37,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",
+ "tempfile",
 ]
 
 [[package]]

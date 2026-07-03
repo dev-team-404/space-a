@@ -94,6 +94,14 @@ pub fn set_setting(state: State<AppState>, key: String, value: String) -> Result
     guard.set_setting(&key, &value).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn run_scan_now(state: State<AppState>) -> Result<(), String> {
+    state
+        .scan_tx
+        .send(crate::pipeline::PipelineMsg::RunNow)
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
