@@ -21,12 +21,18 @@ export function buildRobotPixels(spec: RobotSpec, eyesOverride?: Px[]): Px[] {
 export function drawRobot(
   ctx: CanvasRenderingContext2D,
   spec: RobotSpec,
-  opts: { eyesOverride?: Px[]; offsetY?: number } = {},
+  opts: { eyesOverride?: Px[]; offsetY?: number; antennaBlink?: boolean } = {},
 ): void {
   const palette = PALETTES[spec.palette];
   ctx.clearRect(0, 0, 16, 16);
   for (const [x, y, c] of buildRobotPixels(spec, opts.eyesOverride)) {
     ctx.fillStyle = palette[c];
     ctx.fillRect(x, y + (opts.offsetY ?? 0), 1, 1);
+  }
+  if (opts.antennaBlink) {
+    ctx.fillStyle = palette[1];
+    for (const [x, y] of PARTS.antenna[spec.antenna]) {
+      ctx.fillRect(x, y + (opts.offsetY ?? 0), 1, 1);
+    }
   }
 }

@@ -100,7 +100,7 @@
     const loop = (t: number) => {
       const state = resolveState({ bubbleKind: (bubble?.kind ?? null) as BubbleKind | null, hour: new Date().getHours() });
       const f = frameAt(state, t);
-      drawRobot(ctx, spec!, { eyesOverride: f.eyesOverride, offsetY: f.offsetY });
+      drawRobot(ctx, spec!, { eyesOverride: f.eyesOverride, offsetY: f.offsetY, antennaBlink: f.antennaBlink });
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
