@@ -3,6 +3,7 @@ pub mod diary;
 pub mod finding;
 pub mod hosts;
 pub mod inventory;
+pub mod mascot;
 pub mod model;
 pub mod ops;
 pub mod rules;
