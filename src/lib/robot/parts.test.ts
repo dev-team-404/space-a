@@ -1,79 +1,130 @@
 import { describe, expect, it } from 'vitest';
-import { EYES_BLINK, EYES_HAPPY, EYES_SLEEP, GRID, PALETTES, PARTS, VARIANTS } from './parts';
-import { buildRobotPixels, type RobotSpec } from './render';
+import { GRID, PALETTES, VARIANTS } from './parts';
+import { buildRobotShapes, type RobotSpec, type Frame } from './render';
 
-const SLOTS = ['antenna', 'head', 'eyes', 'body', 'arms'] as const;
+const baseSpec: RobotSpec = { antenna: 0, head: 0, eyes: 0, body: 0, arms: 0, palette: 0 };
+const baseFrame: Frame = { offsetY: 0, expression: 'normal', antennaBlink: false };
 
-describe('parts 불변식', () => {
-  it('변형 개수가 Rust 상수와 일치한다', () => {
-    for (const s of SLOTS) expect(PARTS[s]).toHaveLength(VARIANTS[s]);
-    expect(PALETTES).toHaveLength(VARIANTS.palette);
+describe('VARIANTS', () => {
+  it('각 슬롯이 6종, 팔레트 8종', () => {
+    expect(VARIANTS.antenna).toBe(6);
+    expect(VARIANTS.head).toBe(6);
+    expect(VARIANTS.eyes).toBe(6);
+    expect(VARIANTS.body).toBe(6);
+    expect(VARIANTS.arms).toBe(6);
+    expect(VARIANTS.palette).toBe(8);
   });
+});
 
-  it('모든 픽셀이 32×32 경계·색인덱스 0..7 안이다', () => {
-    const all = [...SLOTS.flatMap((s) => PARTS[s].flat()), ...EYES_BLINK, ...EYES_HAPPY, ...EYES_SLEEP];
-    for (const [x, y, c] of all) {
-      expect(x).toBeGreaterThanOrEqual(0); expect(x).toBeLessThan(GRID);
-      expect(y).toBeGreaterThanOrEqual(0); expect(y).toBeLessThan(GRID);
-      expect(c).toBeGreaterThanOrEqual(0); expect(c).toBeLessThan(8);
-    }
-  });
-
-  it('변형은 비어있지 않고 같은 슬롯 안에서 서로 다르다', () => {
-    for (const s of SLOTS) {
-      const seen = new Set<string>();
-      for (const v of PARTS[s]) {
-        expect(v.length).toBeGreaterThan(0);
-        const key = JSON.stringify([...v].sort());
-        expect(seen.has(key)).toBe(false);
-        seen.add(key);
-      }
-    }
-  });
-
-  it('팔레트는 8색 hex다', () => {
+describe('PALETTES', () => {
+  it('8팔레트 × 8색 hex', () => {
+    expect(PALETTES).toHaveLength(8);
     for (const p of PALETTES) {
       expect(p).toHaveLength(8);
       for (const c of p) expect(c).toMatch(/^#[0-9a-f]{6}$/i);
     }
   });
-
-  it('눈 파츠(변형·표정 전부)는 눈 존(x 10–21, y 9–15) 안이다', () => {
-    const allEyes = [...PARTS.eyes.flat(), ...EYES_BLINK, ...EYES_HAPPY, ...EYES_SLEEP];
-    for (const [x, y] of allEyes) {
-      expect(x).toBeGreaterThanOrEqual(10); expect(x).toBeLessThanOrEqual(21);
-      expect(y).toBeGreaterThanOrEqual(9); expect(y).toBeLessThanOrEqual(15);
-    }
-  });
-
-  it('모든 파츠 변형은 음영(1)과 하이라이트(6)를 사용한다 — 입체감 강제', () => {
-    for (const v of [...PARTS.head, ...PARTS.body]) {
-      const colors = new Set(v.map(([, , c]) => c));
-      expect(colors.has(1) || colors.has(3)).toBe(true); // shade 계열
-      expect(colors.has(6)).toBe(true); // highlight
-    }
-  });
-
-  it('파츠 픽셀 밀도 — 32×32 리메이크가 실제로 조밀한지 (head·body 변형당 최소 60px)', () => {
-    for (const v of [...PARTS.head, ...PARTS.body]) expect(v.length).toBeGreaterThanOrEqual(60);
-  });
 });
 
-describe('buildRobotPixels', () => {
-  const spec: RobotSpec = { antenna: 1, head: 2, eyes: 3, body: 4, arms: 5, palette: 6 };
+describe('GRID', () => {
+  it('128', () => { expect(GRID).toBe(128); });
+});
 
-  it('결정적이다', () => {
-    expect(buildRobotPixels(spec)).toEqual(buildRobotPixels(spec));
+describe('buildRobotShapes', () => {
+  it('결정적이다 — 같은 입력은 deep equal 결과', () => {
+    expect(buildRobotShapes(baseSpec, baseFrame)).toEqual(buildRobotShapes(baseSpec, baseFrame));
   });
 
-  it('eyesOverride가 기본 눈을 대체한다', () => {
-    const a = buildRobotPixels(spec);
-    const b = buildRobotPixels(spec, EYES_SLEEP);
-    expect(a).not.toEqual(b);
+  it('도형 극값이 0..128 경계 안', () => {
+    for (let a = 0; a < 6; a++) {
+      for (let h = 0; h < 6; h++) {
+        const spec = { ...baseSpec, antenna: a, head: h };
+        for (const s of buildRobotShapes(spec, baseFrame)) {
+          if (s.kind === 'ellipse' || s.kind === 'stroke-ellipse') {
+            expect(s.cx - s.rx).toBeGreaterThanOrEqual(-1); // 1px leeway for outline
+            expect(s.cx + s.rx).toBeLessThanOrEqual(129);
+            expect(s.cy - s.ry).toBeGreaterThanOrEqual(-1);
+            expect(s.cy + s.ry).toBeLessThanOrEqual(129);
+          } else if (s.kind === 'rrect' || s.kind === 'stroke-rrect') {
+            expect(s.x).toBeGreaterThanOrEqual(-1);
+            expect(s.x + s.w).toBeLessThanOrEqual(129);
+            expect(s.y).toBeGreaterThanOrEqual(-1);
+            expect(s.y + s.h).toBeLessThanOrEqual(129);
+          }
+        }
+      }
+    }
   });
 
-  it('스펙이 다르면 결과가 다르다 (샘플 페어)', () => {
-    const other: RobotSpec = { antenna: 0, head: 0, eyes: 0, body: 0, arms: 0, palette: 0 };
-    expect(buildRobotPixels(spec)).not.toEqual(buildRobotPixels(other));
+  it('color 인덱스가 0..7 범위', () => {
+    for (const s of buildRobotShapes(baseSpec, baseFrame)) {
+      expect(s.color).toBeGreaterThanOrEqual(0);
+      expect(s.color).toBeLessThan(8);
+    }
+  });
+
+  it('밀도 게이트 — shapes >= 25개', () => {
+    const shapes = buildRobotShapes(baseSpec, baseFrame);
+    expect(shapes.length).toBeGreaterThanOrEqual(25);
+  });
+
+  it('cheek(7)과 highlight(6)이 각각 1개 이상', () => {
+    const shapes = buildRobotShapes(baseSpec, baseFrame);
+    expect(shapes.some(s => s.color === 7)).toBe(true);
+    expect(shapes.some(s => s.color === 6)).toBe(true);
+  });
+
+  it('변형 상이 — antenna 슬롯', () => {
+    const s0 = buildRobotShapes({ ...baseSpec, antenna: 0 }, baseFrame);
+    const s1 = buildRobotShapes({ ...baseSpec, antenna: 1 }, baseFrame);
+    expect(s0).not.toEqual(s1);
+  });
+
+  it('변형 상이 — head 슬롯', () => {
+    const s0 = buildRobotShapes({ ...baseSpec, head: 0 }, baseFrame);
+    const s1 = buildRobotShapes({ ...baseSpec, head: 1 }, baseFrame);
+    expect(s0).not.toEqual(s1);
+  });
+
+  it('변형 상이 — eyes 슬롯', () => {
+    const s0 = buildRobotShapes({ ...baseSpec, eyes: 0 }, baseFrame);
+    const s1 = buildRobotShapes({ ...baseSpec, eyes: 1 }, baseFrame);
+    expect(s0).not.toEqual(s1);
+  });
+
+  it('변형 상이 — body 슬롯', () => {
+    const s0 = buildRobotShapes({ ...baseSpec, body: 0 }, baseFrame);
+    const s1 = buildRobotShapes({ ...baseSpec, body: 1 }, baseFrame);
+    expect(s0).not.toEqual(s1);
+  });
+
+  it('변형 상이 — arms 슬롯', () => {
+    const s0 = buildRobotShapes({ ...baseSpec, arms: 0 }, baseFrame);
+    const s1 = buildRobotShapes({ ...baseSpec, arms: 1 }, baseFrame);
+    expect(s0).not.toEqual(s1);
+  });
+
+  it('표정 blink ≠ normal', () => {
+    const normal = buildRobotShapes(baseSpec, { ...baseFrame, expression: 'normal' });
+    const blink  = buildRobotShapes(baseSpec, { ...baseFrame, expression: 'blink' });
+    expect(normal).not.toEqual(blink);
+  });
+
+  it('표정 sleep ≠ normal', () => {
+    const normal = buildRobotShapes(baseSpec, { ...baseFrame, expression: 'normal' });
+    const sleep  = buildRobotShapes(baseSpec, { ...baseFrame, expression: 'sleep' });
+    expect(normal).not.toEqual(sleep);
+  });
+
+  it('표정 happy ≠ normal', () => {
+    const normal = buildRobotShapes(baseSpec, { ...baseFrame, expression: 'normal' });
+    const happy  = buildRobotShapes(baseSpec, { ...baseFrame, expression: 'happy' });
+    expect(normal).not.toEqual(happy);
+  });
+
+  it('antennaBlink true/false가 shapes를 변경', () => {
+    const off = buildRobotShapes(baseSpec, { ...baseFrame, antennaBlink: false });
+    const on  = buildRobotShapes(baseSpec, { ...baseFrame, antennaBlink: true });
+    expect(off).not.toEqual(on);
   });
 });

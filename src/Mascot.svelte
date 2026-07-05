@@ -119,7 +119,7 @@
     const loop = (t: number) => {
       const state = resolveState({ bubbleKind: (bubble?.kind ?? null) as BubbleKind | null, hour: new Date().getHours() });
       const f = frameAt(state, t);
-      drawRobot(ctx, spec!, { eyesOverride: f.eyesOverride, offsetY: f.offsetY, antennaBlink: f.antennaBlink });
+      drawRobot(ctx, spec!, f);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -137,7 +137,7 @@
     </button>
   {/if}
   <div class="robot" data-tauri-drag-region>
-    <canvas bind:this={canvas} width="32" height="32" data-tauri-drag-region></canvas>
+    <canvas bind:this={canvas} width="128" height="128" data-tauri-drag-region></canvas>
   </div>
 </div>
 
