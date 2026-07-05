@@ -30,9 +30,9 @@ export function drawRobot(
     ctx.fillRect(x, y + (opts.offsetY ?? 0), 1, 1);
   }
   if (opts.antennaBlink) {
-    ctx.fillStyle = palette[1];
+    ctx.fillStyle = palette[2]; // accent
     for (const [x, y, c] of PARTS.antenna[spec.antenna]) {
-      if (c === 3) continue; // 외곽선은 유지
+      if (c === 5) continue; // 외곽선(outline=5)은 유지
       ctx.fillRect(x, y + (opts.offsetY ?? 0), 1, 1);
     }
   }
