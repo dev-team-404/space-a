@@ -63,6 +63,8 @@ export const getMascotSeed = () => invoke<RobotSpec>('get_mascot_seed');
 export const openChatTab = (tab: string) => invoke<void>('open_chat_tab', { tab });
 export const getSettings = () => invoke<Record<string, string>>('get_settings');
 export const setSetting = (key: string, value: string) => invoke<void>('set_setting', { key, value });
+export const listDiaryDates = () => invoke<string[]>('list_diary_dates');
+export const getDiary = (date: string) => invoke<string | null>('get_diary', { date });
 
 export const onScanDone = (cb: (ts: string) => void): Promise<UnlistenFn> =>
   listen<string>('scan:done', (e) => cb(e.payload));
