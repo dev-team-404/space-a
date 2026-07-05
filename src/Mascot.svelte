@@ -123,7 +123,7 @@
     </button>
   {/if}
   <div class="robot" data-tauri-drag-region>
-    <canvas bind:this={canvas} width="16" height="16" data-tauri-drag-region></canvas>
+    <canvas bind:this={canvas} width="32" height="32" data-tauri-drag-region></canvas>
   </div>
 </div>
 

@@ -1,4 +1,4 @@
-import { PALETTES, PARTS, type Px } from './parts';
+import { GRID, PALETTES, PARTS, type Px } from './parts';
 
 export interface RobotSpec {
   antenna: number; head: number; eyes: number; body: number; arms: number; palette: number;
@@ -24,7 +24,7 @@ export function drawRobot(
   opts: { eyesOverride?: Px[]; offsetY?: number; antennaBlink?: boolean } = {},
 ): void {
   const palette = PALETTES[spec.palette];
-  ctx.clearRect(0, 0, 16, 16);
+  ctx.clearRect(0, 0, GRID, GRID);
   for (const [x, y, c] of buildRobotPixels(spec, opts.eyesOverride)) {
     ctx.fillStyle = palette[c];
     ctx.fillRect(x, y + (opts.offsetY ?? 0), 1, 1);
