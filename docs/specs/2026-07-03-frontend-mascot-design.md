@@ -23,9 +23,11 @@
 
 ## 2. 로봇 렌더 (파츠 라이브러리)
 
-- **데이터** (`src/lib/robot/parts.ts`): 슬롯은 RobotSpec과 동일(antenna/head/eyes/body/arms + palette). 각 슬롯 변형 6종, 팔레트 8종 — **Rust 상수(ANTENNA_VARIANTS=6 … PALETTE_VARIANTS=8)와 개수가 일치해야 하며 vitest가 이를 단언**한다. 파츠는 **32×32 그리드**(`GRID` 상수) 위 `[x, y, colorIndex][]` 배열. 팔레트는 **8색**(`body`, `bodyShade`, `accent`, `accentShade`, `eye`, `outline`, `highlight`, `cheek`) × 8종 레트로 톤 — 음영·하이라이트·볼터치로 싸이월드 미니미 수준의 입체감을 낸다. 비례는 2등신(머리 크게, 몸통 짧게)이 기본.
-  - *이력: E2E 피드백(픽셀이 크고 밋밋함)으로 16×16·4색에서 상향 (2026-07-05).*
-- **조립** (`src/lib/robot/render.ts`): `buildRobotPixels(spec: RobotSpec, frame: Frame): Pixel[]` 순수 함수 — canvas 무관, vitest로 결정성·경계(0≤x,y<GRID) 테스트. `drawRobot(ctx, spec, frame)`이 canvas에 32×32 → CSS `image-rendering: pixelated` **4배**(128px, 화면 크기 불변) 표시.
+- **방식: 128×128 프로시저럴 드로잉** (도트 배열 아님). 파츠는 `src/lib/robot/parts.ts`의 **파라미터화된 도형 정의**(변형별 레코드: 형태 종류·치수·장식 플래그), `src/lib/robot/render.ts`의 순수 함수 `buildRobotShapes(spec, frame): Shape[]`가 도형 리스트(rrect/ellipse/capsule + 색·좌표)를 결정하고, `drawRobot(ctx, ...)`은 그 리스트를 canvas에 그리기만 한다. 질감: 셀 셰이딩(면 색 + 하단·우측 bodyShade 초승달 + 좌상단 highlight 스팟, 포스터라이즈), 2px outline 실루엣, cheek 볼터치 — 싸이월드 미니미의 "매끈한 소형 스프라이트" 질감.
+  - 슬롯은 RobotSpec과 동일(antenna/head/eyes/body/arms + palette), 변형 6종·팔레트 8종 — **Rust 상수와 개수 일치를 vitest가 단언**. 팔레트 8색(`body`, `bodyShade`, `accent`, `accentShade`, `eye`, `outline`, `highlight`, `cheek`). 비례 2등신.
+  - 테스트는 `buildRobotShapes`의 결정성·경계(0≤좌표<128)·변형 개수·변형 간 상이를 단언 (canvas 무관).
+  - *이력: 16×16·4색 → 32×32·8색(도트) → **128 프로시저럴**(2026-07-05, E2E "여전히 투박" 피드백 — 미니미는 뚜뚜한 도트가 아니라 매끈한 스프라이트라는 결론).*
+- **표시**: canvas 128×128 네이티브(1:1, CSS 128px). 눈 표정은 픽셀 스왑 대신 **표정 enum**(`normal|blink|happy|sleep`)으로 도형 분기.
 - **시드**: 기존 커맨드 `get_mascot_seed` → RobotSpec 재사용 (백엔드 변경 없음).
 
 ## 3. 애니메이션 상태 머신 (`src/lib/robot/anim.ts`)
