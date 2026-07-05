@@ -389,17 +389,21 @@ impl SqliteStore {
 
     pub fn sum_est_tokens_saved(&self) -> Result<u64> {
         let n: i64 = self.conn.query_row(
-            "SELECT COALESCE(SUM(est_tokens_saved),0) FROM findings", [], |r| r.get(0))?;
+            "SELECT COALESCE(SUM(est_tokens_saved),0) FROM findings WHERE status='new'",
+            [], |r| r.get(0))?;
         Ok(n as u64)
     }
 
-    pub fn list_findings_current(&self) -> Result<Vec<FindingRow>> {
-        let mut stmt = self.conn.prepare(
+    pub fn list_findings_current(&self, include_hidden: bool) -> Result<Vec<FindingRow>> {
+        let sql = format!(
             "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                     evidence_json, est_tokens_saved, prescription_json, dedup_key,
-                    last_seen, occurrences
-             FROM findings ORDER BY est_tokens_saved DESC, dedup_key",
-        )?;
+                    last_seen, occurrences, status
+             FROM findings {}
+             ORDER BY est_tokens_saved DESC, dedup_key",
+            if include_hidden { "" } else { "WHERE status='new'" }
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map([], |r| {
             Ok((
                 r.get::<_, String>(0)?, r.get::<_, String>(1)?,
@@ -408,23 +412,48 @@ impl SqliteStore {
                 r.get::<_, String>(6)?, r.get::<_, i64>(7)?,
                 r.get::<_, Option<String>>(8)?, r.get::<_, String>(9)?,
                 r.get::<_, Option<String>>(10)?, r.get::<_, i64>(11)?,
+                r.get::<_, String>(12)?,
             ))
         })?;
         let mut out = Vec::new();
         for row in rows {
             let (rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
-                 evidence_json, est, prescription_json, dedup_key, last_seen, occ) = row?;
+                 evidence_json, est, prescription_json, dedup_key, last_seen, occ, status) = row?;
             out.push(FindingRow {
                 rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                 evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
                 est_tokens_saved: est as u64,
-                prescription: prescription_json
-                    .and_then(|s| serde_json::from_str(&s).ok()),
+                prescription: prescription_json.and_then(|s| serde_json::from_str(&s).ok()),
                 dedup_key, last_seen,
                 occurrences: occ as u64,
+                status,
             });
         }
         Ok(out)
+    }
+
+    /// status: 'new' | 'resolved' | 'dismissed' (검증은 커맨드 층). 반환 = 해당 행 존재 여부.
+    pub fn set_finding_status(&self, dedup_key: &str, status: &str) -> Result<bool> {
+        let n = self.conn.execute(
+            "UPDATE findings SET status=?2 WHERE dedup_key=?1",
+            params![dedup_key, status],
+        )?;
+        Ok(n > 0)
+    }
+
+    /// 오늘 tier별 토큰(입력+출력) 합. 내림차순.
+    pub fn model_mix_for_date(&self, date: &str) -> Result<Vec<(String, u64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT model_family,
+                    COALESCE(SUM(tok_input),0) + COALESCE(SUM(tok_output),0) AS toks
+             FROM events
+             WHERE substr(ts,1,10)=?1 AND model_family IS NOT NULL
+             GROUP BY model_family ORDER BY toks DESC",
+        )?;
+        let rows = stmt.query_map(params![date], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     pub fn finding_severities(&self) -> Result<Vec<(String, String)>> {
@@ -503,6 +532,7 @@ pub struct FindingRow {
     pub dedup_key: String,
     pub last_seen: Option<String>,
     pub occurrences: u64,
+    pub status: String,
 }
 
 /// 한 파일을 offset부터 증분 수집. 반환값 = 신규 삽입 이벤트 수.
@@ -924,7 +954,7 @@ mod tests {
             ..base
         }, "2026-07-01T11:00:00Z").unwrap();
 
-        let rows = store.list_findings_current().unwrap();
+        let rows = store.list_findings_current(false).unwrap();
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].rule_id, "R1", "est_tokens_saved DESC 정렬");
         assert_eq!(rows[0].occurrences, 1);
@@ -938,5 +968,68 @@ mod tests {
         assert_eq!(store.diary_dates().unwrap(), vec!["2026-07-01", "2026-07-02"]);
         assert_eq!(store.diary_path_for("2026-07-02").unwrap(), Some("/tmp/d2.md".into()));
         assert_eq!(store.diary_path_for("2099-01-01").unwrap(), None);
+    }
+
+    #[test]
+    fn finding_status_roundtrip_and_filter() {
+        use crate::finding::{Finding, Severity};
+        let store = SqliteStore::open_in_memory().unwrap();
+        let f = |key: &str| Finding {
+            rule_id: "R1".into(), severity: Severity::Warn,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "host".into(), scope_ref: "srv".into(),
+            evidence: serde_json::json!({"server": "srv"}),
+            est_tokens_saved: 100, prescription: None, dedup_key: key.into(),
+        };
+        store.upsert_finding(&f("k1"), "2026-07-05T00:00:00Z").unwrap();
+        store.upsert_finding(&f("k2"), "2026-07-05T00:00:00Z").unwrap();
+
+        // 기본: 둘 다 new
+        assert_eq!(store.list_findings_current(false).unwrap().len(), 2);
+        assert_eq!(store.list_findings_current(false).unwrap()[0].status, "new");
+
+        // dismiss → active에서 빠지고 include_hidden엔 남음
+        assert!(store.set_finding_status("k1", "dismissed").unwrap());
+        assert_eq!(store.list_findings_current(false).unwrap().len(), 1);
+        assert_eq!(store.list_findings_current(true).unwrap().len(), 2);
+        // 없는 키는 false
+        assert!(!store.set_finding_status("nope", "resolved").unwrap());
+
+        // 재관측(upsert)돼도 status 유지
+        store.upsert_finding(&f("k1"), "2026-07-05T01:00:00Z").unwrap();
+        let all = store.list_findings_current(true).unwrap();
+        let k1 = all.iter().find(|r| r.dedup_key == "k1").unwrap();
+        assert_eq!(k1.status, "dismissed");
+        assert_eq!(k1.occurrences, 2);
+
+        // 절약가능 합계는 active만
+        assert_eq!(store.sum_est_tokens_saved().unwrap(), 100);
+    }
+
+    #[test]
+    fn model_mix_for_date_groups_by_tier() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let ev = |uuid: &str, model: &str, inp: u64, out: u64| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "1".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+            uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-05T10:00:00Z".into()),
+            source_file: "f.jsonl".into(), source_offset: 0,
+            kind: EventKind::AssistantTurn {
+                model: NormModel::from_raw_id(model),
+                usage: TokenUsage { input: inp, output: out, ..Default::default() },
+                web_search: 0, web_fetch: 0,
+            },
+        };
+        store.upsert_events(&[
+            ev("u1", "claude-opus-4-8", 100, 50),
+            ev("u2", "claude-opus-4-8", 10, 5),
+            ev("u3", "claude-haiku-4-5-20251001", 20, 10),
+        ]).unwrap();
+        let mix = store.model_mix_for_date("2026-07-05").unwrap();
+        assert_eq!(mix[0], ("opus".to_string(), 165)); // 100+50+10+5, 내림차순 첫 항목
+        assert_eq!(mix[1], ("haiku".to_string(), 30));
+        assert!(store.model_mix_for_date("2099-01-01").unwrap().is_empty());
     }
 }

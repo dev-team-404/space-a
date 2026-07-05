@@ -54,7 +54,7 @@ pub fn get_summary(state: State<AppState>) -> Result<Summary, String> {
 #[tauri::command(async)]
 pub fn list_findings(state: State<AppState>) -> Result<Vec<FindingRow>, String> {
     let guard = lock(&state)?;
-    guard.list_findings_current().map_err(|e| e.to_string())
+    guard.list_findings_current(false).map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]

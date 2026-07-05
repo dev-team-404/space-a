@@ -82,7 +82,7 @@ mod runtime {
                 store.set_setting("last_scan_ts", &now)?;
 
                 if !fresh.is_empty() {
-                    let rows: Vec<_> = store.list_findings_current()?.into_iter()
+                    let rows: Vec<_> = store.list_findings_current(false)?.into_iter()
                         .filter(|f| fresh.contains(&f.dedup_key)).collect();
                     app.emit("coach:finding", &rows)?;
                 }
