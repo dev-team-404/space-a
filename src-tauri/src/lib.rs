@@ -55,6 +55,13 @@ pub fn run() {
                                     let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
                                 }
                             }
+                        } else if let Ok(Some(mon)) = w.primary_monitor() {
+                            let size = mon.size();
+                            let mpos = mon.position();
+                            // 창 160×160 + 여백 16px, 작업표시줄(대략 하단 48px) 위 (스펙 §1)
+                            let x = mpos.x + size.width as i32 - 160 - 16;
+                            let y = mpos.y + size.height as i32 - 160 - 64;
+                            let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
                         }
                         if visible {
                             let _ = w.show();

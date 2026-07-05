@@ -37,6 +37,14 @@ describe('parts 불변식', () => {
       for (const c of p) expect(c).toMatch(/^#[0-9a-f]{6}$/i);
     }
   });
+
+  it('눈 파츠(변형·표정 전부)는 눈 존(x 5–10, y 5–7) 안이다', () => {
+    const allEyes = [...PARTS.eyes.flat(), ...EYES_BLINK, ...EYES_HAPPY, ...EYES_SLEEP];
+    for (const [x, y] of allEyes) {
+      expect(x).toBeGreaterThanOrEqual(5); expect(x).toBeLessThanOrEqual(10);
+      expect(y).toBeGreaterThanOrEqual(5); expect(y).toBeLessThanOrEqual(7);
+    }
+  });
 });
 
 describe('buildRobotPixels', () => {
