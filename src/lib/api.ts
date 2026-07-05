@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { RobotSpec } from './robot/render';
 
 export interface Summary {
@@ -65,6 +65,9 @@ export const getSettings = () => invoke<Record<string, string>>('get_settings');
 export const setSetting = (key: string, value: string) => invoke<void>('set_setting', { key, value });
 export const listDiaryDates = () => invoke<string[]>('list_diary_dates');
 export const getDiary = (date: string) => invoke<string | null>('get_diary', { date });
+
+// 마스코트가 pull한 occasion을 chat 창 알림 로그용으로 재방송 (pull 단일화 — 플랜 Task 2 Step 5)
+export const emitOccasionToday = (labels: string[]) => emit('occasion:today', labels);
 
 export const onScanDone = (cb: (ts: string) => void): Promise<UnlistenFn> =>
   listen<string>('scan:done', (e) => cb(e.payload));

@@ -1,25 +1,10 @@
-export type BubbleKind = 'finding' | 'diary' | 'occasion' | 'chatter' | 'scan';
+export type BubbleKind = 'finding' | 'diary' | 'occasion' | 'chatter';
 
 export interface Bubble {
   kind: BubbleKind;
   text: string;
   tab: 'home' | 'diary' | 'coach';
-}
-
-const MAX_QUEUE = 5;
-
-export class BubbleQueue {
-  private items: Bubble[] = [];
-  push(b: Bubble): void {
-    this.items.push(b);
-    if (this.items.length > MAX_QUEUE) this.items.shift();
-  }
-  next(): Bubble | null {
-    return this.items.shift() ?? null;
-  }
-  get size(): number {
-    return this.items.length;
-  }
+  key?: string;
 }
 
 const RULE_LINE: Record<string, string> = {
@@ -64,12 +49,10 @@ const CHATTER: ((n: number | null) => string)[] = [
   () => 'zzz… 아 깨어있어요!',
 ];
 
-export function scanBubble(summary: { session_count: number; est_tokens_saved_total: number } | null): Bubble {
-  if (!summary) return { kind: 'scan', tab: 'home', text: '방금 활동을 반영했어요!' };
-  const save = summary.est_tokens_saved_total > 0
-    ? ` 절약 후보 ~${summary.est_tokens_saved_total.toLocaleString()} tok 있어요.`
-    : '';
-  return { kind: 'scan', tab: 'home', text: `방금 세션 반영 — 오늘 ${summary.session_count}세션.${save}` };
+/** realtime_advice 옵트인: 스캔 후 최상위 활성 advice를 말풍선으로 (스펙 §6).
+ *  key(dedup_key)로 직전과 같은 조언 반복을 호출측에서 방지한다. */
+export function adviceBubble(f: { dedup_key: string; detail: string }): Bubble {
+  return { kind: 'finding', tab: 'coach', text: `주인, ${f.detail}`, key: f.dedup_key };
 }
 
 export function chatterBubble(pick: number, summary: { session_count: number } | null): Bubble {
