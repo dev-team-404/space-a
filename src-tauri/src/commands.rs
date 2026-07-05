@@ -1,6 +1,6 @@
 use crate::AppState;
 use agent_mentor::mascot::{robot_spec_for, stable_identity, RobotSpec};
-use agent_mentor::store::{FindingRow, SqliteStore};
+use agent_mentor::store::SqliteStore;
 use serde::Serialize;
 use std::collections::HashMap;
 use tauri::State;
@@ -8,6 +8,7 @@ use tauri::State;
 #[derive(Debug, Serialize)]
 pub struct Summary {
     pub date: String,
+    pub user_name: String,
     pub session_count: u64,
     pub tok_input: u64,
     pub tok_output: u64,
@@ -23,6 +24,7 @@ pub fn summary_inner(store: &SqliteStore) -> anyhow::Result<Summary> {
     let day = store.summary_for_date(&date)?;
     Ok(Summary {
         date,
+        user_name: std::env::var("USERNAME").unwrap_or_else(|_| "user".into()),
         session_count: day.session_count,
         tok_input: day.tok_input,
         tok_output: day.tok_output,
@@ -41,6 +43,85 @@ pub fn diary_inner(store: &SqliteStore, date: &str) -> anyhow::Result<Option<Str
     }
 }
 
+#[derive(Debug, Serialize)]
+pub struct CoachFinding {
+    #[serde(flatten)]
+    pub row: agent_mentor::store::FindingRow,
+    pub detail: String,
+    pub suggested_action: String,
+    pub fix_command: Option<String>,
+}
+
+pub fn coach_findings_inner(store: &SqliteStore, include_hidden: bool) -> anyhow::Result<Vec<CoachFinding>> {
+    Ok(store
+        .list_findings_current(include_hidden)?
+        .into_iter()
+        .map(|row| {
+            let (detail, suggested_action) =
+                agent_mentor::diary::finding_advice(&row.rule_id, &row.evidence, row.est_tokens_saved);
+            let fix_command = agent_mentor::coach::fix_command(&row.rule_id, &row.evidence);
+            CoachFinding { row, detail, suggested_action, fix_command }
+        })
+        .collect())
+}
+
+#[derive(Debug, Serialize)]
+pub struct DayStat {
+    pub date: String,
+    pub tok_input: u64,
+    pub tok_output: u64,
+    pub session_count: u64,
+}
+
+pub fn week_summary_inner(store: &SqliteStore) -> anyhow::Result<Vec<DayStat>> {
+    let today = chrono::Utc::now().date_naive();
+    let mut out = Vec::with_capacity(7);
+    for i in (0..7).rev() {
+        let date = (today - chrono::Duration::days(i)).format("%Y-%m-%d").to_string();
+        let d = store.summary_for_date(&date)?;
+        out.push(DayStat {
+            date,
+            tok_input: d.tok_input,
+            tok_output: d.tok_output,
+            session_count: d.session_count,
+        });
+    }
+    Ok(out)
+}
+
+#[derive(Debug, Serialize)]
+pub struct ModelMixEntry {
+    pub tier: String,
+    pub tokens: u64,
+}
+
+pub(crate) fn valid_finding_status(s: &str) -> bool {
+    matches!(s, "new" | "resolved" | "dismissed")
+}
+
+/// 오늘 occasions — 하루 1회 게이트 포함. 반환하는 순간 통지된 것으로 마킹한다
+/// (호출자는 mascot 웹뷰 = 표시 주체). 이미 통지됐으면 빈 벡터.
+pub fn today_occasions_inner(store: &SqliteStore) -> anyhow::Result<Vec<String>> {
+    use agent_mentor::diary::occasions::compute_occasions;
+    use agent_mentor::diary::{resolve_locale, DiaryConfig};
+
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    if store.get_setting("occasion_notified_date")?.as_deref() == Some(today.as_str()) {
+        return Ok(vec![]);
+    }
+    let Ok(date) = chrono::NaiveDate::parse_from_str(&today, "%Y-%m-%d") else { return Ok(vec![]) };
+    let anchor = store.earliest_session_ts()?.and_then(|ts| {
+        ts.get(..10).and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+    });
+    let locale = resolve_locale(&DiaryConfig::default());
+    let labels: Vec<String> = compute_occasions(date, anchor, &locale, true)
+        .into_iter().map(|o| o.label).collect();
+    if !labels.is_empty() {
+        store.set_setting("occasion_notified_date", &today)?;
+    }
+    Ok(labels)
+}
+
 fn lock<'a>(state: &'a State<AppState>) -> Result<std::sync::MutexGuard<'a, SqliteStore>, String> {
     state.store.lock().map_err(|e| e.to_string())
 }
@@ -52,9 +133,40 @@ pub fn get_summary(state: State<AppState>) -> Result<Summary, String> {
 }
 
 #[tauri::command(async)]
-pub fn list_findings(state: State<AppState>) -> Result<Vec<FindingRow>, String> {
+pub fn list_findings(state: State<AppState>, include_hidden: Option<bool>) -> Result<Vec<CoachFinding>, String> {
     let guard = lock(&state)?;
-    guard.list_findings_current(false).map_err(|e| e.to_string())
+    coach_findings_inner(&*guard, include_hidden.unwrap_or(false)).map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+pub fn set_finding_status(state: State<AppState>, dedup_key: String, status: String) -> Result<(), String> {
+    if !valid_finding_status(&status) {
+        return Err(format!("허용되지 않은 상태: {status}"));
+    }
+    let guard = lock(&state)?;
+    guard.set_finding_status(&dedup_key, &status)
+        .map_err(|e| e.to_string())
+        .and_then(|found| if found { Ok(()) } else { Err(format!("finding 없음: {dedup_key}")) })
+}
+
+#[tauri::command(async)]
+pub fn get_week_summary(state: State<AppState>) -> Result<Vec<DayStat>, String> {
+    let guard = lock(&state)?;
+    week_summary_inner(&*guard).map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+pub fn get_model_mix(state: State<AppState>) -> Result<Vec<ModelMixEntry>, String> {
+    let guard = lock(&state)?;
+    let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    Ok(guard.model_mix_for_date(&date).map_err(|e| e.to_string())?
+        .into_iter().map(|(tier, tokens)| ModelMixEntry { tier, tokens }).collect())
+}
+
+#[tauri::command(async)]
+pub fn get_today_occasions(state: State<AppState>) -> Result<Vec<String>, String> {
+    let guard = lock(&state)?;
+    today_occasions_inner(&*guard).map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]
@@ -152,5 +264,55 @@ mod tests {
         store.upsert_diary_index("2026-07-02", "Windows", p.to_str().unwrap(), 10, "mock").unwrap();
         assert_eq!(diary_inner(&store, "2026-07-02").unwrap(), Some("일기 본문".into()));
         assert_eq!(diary_inner(&store, "2099-01-01").unwrap(), None);
+    }
+
+    #[test]
+    fn summary_includes_user_name() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let s = summary_inner(&store).unwrap();
+        assert!(!s.user_name.is_empty()); // USERNAME env 또는 "user" 폴백
+    }
+
+    #[test]
+    fn week_summary_is_7_days_oldest_first() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let days = week_summary_inner(&store).unwrap();
+        assert_eq!(days.len(), 7);
+        assert!(days[0].date < days[6].date);
+        assert_eq!(days[6].date, chrono::Utc::now().format("%Y-%m-%d").to_string());
+        assert_eq!(days[0].session_count, 0); // 빈 store는 0 채움
+    }
+
+    #[test]
+    fn coach_findings_carry_advice_and_command() {
+        use agent_mentor::finding::{Finding, Severity};
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_finding(&Finding {
+            rule_id: "R1".into(), severity: Severity::Warn,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "host".into(), scope_ref: "playwright".into(),
+            evidence: serde_json::json!({"server": "playwright"}),
+            est_tokens_saved: 4200, prescription: None, dedup_key: "k1".into(),
+        }, "2026-07-05T00:00:00Z").unwrap();
+        let rows = coach_findings_inner(&store, true).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].detail.contains("playwright"));
+        assert!(!rows[0].suggested_action.is_empty());
+        assert_eq!(rows[0].fix_command.as_deref(), Some("claude mcp remove playwright"));
+        assert_eq!(rows[0].row.status, "new");
+    }
+
+    #[test]
+    fn set_finding_status_validates() {
+        assert!(valid_finding_status("new") && valid_finding_status("resolved") && valid_finding_status("dismissed"));
+        assert!(!valid_finding_status("gone") && !valid_finding_status(""));
+    }
+
+    #[test]
+    fn occasions_gate_returns_empty_when_already_notified() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        store.set_setting("occasion_notified_date", &today).unwrap();
+        assert!(today_occasions_inner(&store).unwrap().is_empty());
     }
 }

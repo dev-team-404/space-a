@@ -1,5 +1,7 @@
 #[cfg_attr(test, allow(dead_code, unused_imports))]
 mod commands;
+#[cfg_attr(test, allow(dead_code))]
+mod geometry;
 #[cfg_attr(test, allow(dead_code, unused_imports))]
 mod pipeline;
 #[cfg_attr(test, allow(dead_code, unused_imports))]
@@ -49,19 +51,36 @@ pub fn run() {
                         )
                     };
                     if let Some(w) = app.get_webview_window("mascot") {
+                        let mut restored = false;
                         if let Some(p) = pos {
                             if let Some((x, y)) = p.split_once(',') {
                                 if let (Ok(x), Ok(y)) = (x.parse::<i32>(), y.parse::<i32>()) {
-                                    let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
+                                    let monitors: Vec<(i32, i32, i32, i32)> = w
+                                        .available_monitors()
+                                        .map(|ms| ms.iter().map(|m| {
+                                            let p = m.position();
+                                            let s = m.size();
+                                            (p.x, p.y, s.width as i32, s.height as i32)
+                                        }).collect())
+                                        .unwrap_or_default();
+                                    let scale = w.scale_factor().unwrap_or(1.0);
+                                    let side = (160.0 * scale) as i32;
+                                    if geometry::sanitize_pos(x, y, side, side, &monitors) {
+                                        let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
+                                        restored = true;
+                                    }
                                 }
                             }
-                        } else if let Ok(Some(mon)) = w.primary_monitor() {
-                            let size = mon.size();
-                            let mpos = mon.position();
-                            // 창 160×160 + 여백 16px, 작업표시줄(대략 하단 48px) 위 (스펙 §1)
-                            let x = mpos.x + size.width as i32 - 160 - 16;
-                            let y = mpos.y + size.height as i32 - 160 - 64;
-                            let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
+                        }
+                        if !restored {
+                            if let Ok(Some(mon)) = w.primary_monitor() {
+                                let size = mon.size();
+                                let mpos = mon.position();
+                                // 창 160×160 + 여백 16px, 작업표시줄(대략 하단 48px) 위 (스펙 §1)
+                                let x = mpos.x + size.width as i32 - 160 - 16;
+                                let y = mpos.y + size.height as i32 - 160 - 64;
+                                let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
+                            }
                         }
                         if visible {
                             let _ = w.show();
@@ -80,6 +99,10 @@ pub fn run() {
                 commands::set_setting,
                 commands::run_scan_now,
                 commands::open_chat_tab,
+                commands::set_finding_status,
+                commands::get_week_summary,
+                commands::get_model_mix,
+                commands::get_today_occasions,
             ])
             .run(tauri::generate_context!())
             .expect("tauri 실행 실패");
