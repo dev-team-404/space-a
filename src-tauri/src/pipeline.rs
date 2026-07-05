@@ -100,6 +100,7 @@ mod runtime {
                 }
                 // 다이어리 실패는 조용히 — 다음 사이클에서 재시도
                 maybe_generate_diaries(app, &state.store);
+                maybe_notify_occasions(app, &state.store);
             }
             Err(e) => eprintln!("pipeline error: {e}"),
         }
@@ -157,7 +158,68 @@ mod runtime {
             }
         }
     }
+
+    fn maybe_notify_occasions(
+        app: &AppHandle,
+        store_mutex: &std::sync::Mutex<agent_mentor::store::SqliteStore>,
+    ) {
+        use agent_mentor::diary::occasions::compute_occasions;
+        use agent_mentor::diary::{resolve_locale, DiaryConfig};
+
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let labels: Option<Vec<String>> = {
+            let Ok(store) = store_mutex.lock() else { return };
+            let last = store.get_setting("occasion_notified_date").ok().flatten();
+            if !super::should_notify_occasion(&today, last.as_deref()) {
+                return;
+            }
+            let Ok(date) = chrono::NaiveDate::parse_from_str(&today, "%Y-%m-%d") else { return };
+            let anchor = store
+                .earliest_session_ts()
+                .ok()
+                .flatten()
+                .and_then(|ts| {
+                    ts.get(..10)
+                        .and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+                });
+            let locale = resolve_locale(&DiaryConfig::default());
+            let occ = compute_occasions(date, anchor, &locale, true);
+            if occ.is_empty() {
+                None
+            } else {
+                Some(occ.into_iter().map(|o| o.label).collect())
+            }
+        };
+        if let Some(labels) = labels {
+            match app.emit("occasion:today", &labels) {
+                Ok(()) => {
+                    if let Ok(store) = store_mutex.lock() {
+                        let _ = store.set_setting("occasion_notified_date", &today);
+                    }
+                }
+                Err(e) => eprintln!("warn: occasion emit 실패: {e}"),
+            }
+        }
+    }
+}
+
+/// 오늘 occasions를 하루 1회만 알린다.
+#[cfg_attr(test, allow(dead_code))]
+pub fn should_notify_occasion(today: &str, last_notified: Option<&str>) -> bool {
+    last_notified != Some(today)
 }
 
 #[cfg(not(test))]
 pub use runtime::start;
+
+#[cfg(test)]
+mod tests {
+    use super::should_notify_occasion;
+
+    #[test]
+    fn occasion_notifies_once_per_day() {
+        assert!(should_notify_occasion("2026-07-03", None));
+        assert!(should_notify_occasion("2026-07-03", Some("2026-07-02")));
+        assert!(!should_notify_occasion("2026-07-03", Some("2026-07-03")));
+    }
+}

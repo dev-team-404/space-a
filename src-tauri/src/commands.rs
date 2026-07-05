@@ -86,7 +86,7 @@ pub fn get_settings(state: State<AppState>) -> Result<HashMap<String, String>, S
 
 #[tauri::command(async)]
 pub fn set_setting(state: State<AppState>, key: String, value: String) -> Result<(), String> {
-    const ALLOWED: &[&str] = &["mascot_visible", "chatter_level", "content_protected"];
+    const ALLOWED: &[&str] = &["mascot_visible", "chatter_level", "content_protected", "mascot_pos", "realtime_advice"];
     if !ALLOWED.contains(&key.as_str()) {
         return Err(format!("허용되지 않은 설정 키: {key}"));
     }
@@ -102,10 +102,36 @@ pub fn run_scan_now(state: State<AppState>) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+#[cfg_attr(test, allow(dead_code))]
+pub(crate) fn valid_tab(tab: &str) -> bool {
+    matches!(tab, "home" | "diary" | "coach" | "chat")
+}
+
+#[cfg_attr(test, allow(dead_code))]
+#[tauri::command]
+pub fn open_chat_tab(app: tauri::AppHandle, tab: String) -> Result<(), String> {
+    use tauri::{Emitter, Manager};
+    if !valid_tab(&tab) {
+        return Err(format!("허용되지 않은 탭: {tab}"));
+    }
+    if let Some(w) = app.get_webview_window("chat") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+    app.emit("chat:goto-tab", &tab).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use agent_mentor::store::SqliteStore;
+
+    #[test]
+    fn open_chat_tab_validates_tab() {
+        assert!(valid_tab("home") && valid_tab("diary") && valid_tab("coach") && valid_tab("chat"));
+        assert!(!valid_tab("etc") && !valid_tab(""));
+    }
 
     #[test]
     fn summary_inner_on_empty_store() {

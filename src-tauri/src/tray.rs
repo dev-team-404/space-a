@@ -8,13 +8,33 @@ use tauri_plugin_autostart::ManagerExt;
 
 pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "열기", true, None::<&str>)?;
+    let mascot_on = {
+        let state = app.state::<AppState>();
+        let guard = state.store.lock().ok();
+        guard
+            .and_then(|s| s.get_setting("mascot_visible").ok().flatten())
+            .map(|v| v == "true")
+            .unwrap_or(true)
+    };
+    let mascot = CheckMenuItem::with_id(app, "mascot", "마스코트 표시", true, mascot_on, None::<&str>)?;
+    let realtime_on = {
+        let state = app.state::<AppState>();
+        let guard = state.store.lock().ok();
+        guard
+            .and_then(|s| s.get_setting("realtime_advice").ok().flatten())
+            .map(|v| v == "on")
+            .unwrap_or(false)
+    };
+    let realtime = CheckMenuItem::with_id(app, "realtime", "실시간 조언", true, realtime_on, None::<&str>)?;
     let scan = MenuItem::with_id(app, "scan", "지금 스캔", true, None::<&str>)?;
     let auto_on = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart = CheckMenuItem::with_id(app, "autostart", "시작 시 실행", true, auto_on, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &scan, &autostart, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &mascot, &realtime, &scan, &autostart, &quit])?;
 
     let autostart_item = autostart.clone();
+    let mascot_item = mascot.clone();
+    let realtime_item = realtime.clone();
     TrayIconBuilder::with_id("main")
         .icon(
             app.default_window_icon()
@@ -26,6 +46,34 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, e| match e.id().as_ref() {
             "open" => show_chat(app),
+            "mascot" => {
+                use tauri::Manager;
+                if let Some(w) = app.get_webview_window("mascot") {
+                    let was_visible = w.is_visible().unwrap_or(false);
+                    let _ = if was_visible { w.hide() } else { w.show() };
+                    let _ = mascot_item.set_checked(!was_visible);
+                    if let Ok(store) = app.state::<AppState>().store.lock() {
+                        let _ = store.set_setting("mascot_visible", if was_visible { "false" } else { "true" });
+                    }
+                }
+            }
+            "realtime" => {
+                use tauri::Emitter;
+                // 주의: muda CheckMenuItem은 클릭 시 checked를 자동 토글하므로
+                // is_checked()는 이미 새 값 — 설정(store)을 소스오브트루스로 파생한다.
+                if let Ok(store) = app.state::<AppState>().store.lock() {
+                    let cur = store
+                        .get_setting("realtime_advice")
+                        .ok()
+                        .flatten()
+                        .map(|v| v == "on")
+                        .unwrap_or(false);
+                    let next = !cur;
+                    let _ = store.set_setting("realtime_advice", if next { "on" } else { "off" });
+                    let _ = realtime_item.set_checked(next);
+                }
+                let _ = app.emit("settings:changed", ());
+            }
             "scan" => {
                 let _ = app.state::<AppState>().scan_tx.send(PipelineMsg::RunNow);
             }

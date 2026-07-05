@@ -18,6 +18,20 @@
         "width": 900,
         "height": 640,
         "visible": false
+      },
+      {
+        "label": "mascot",
+        "url": "mascot.html",
+        "title": "mentor",
+        "width": 160,
+        "height": 160,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "shadow": false,
+        "visible": false
       }
     ],
     "security": { "csp": null }
