@@ -441,7 +441,7 @@ impl SqliteStore {
         Ok(n > 0)
     }
 
-    /// 오늘 tier별 토큰(입력+출력) 합. 내림차순.
+    /// 오늘 모델 family별 토큰(입력+출력) 합. 내림차순.
     pub fn model_mix_for_date(&self, date: &str) -> Result<Vec<(String, u64)>> {
         let mut stmt = self.conn.prepare(
             "SELECT model_family,
@@ -1007,7 +1007,7 @@ mod tests {
     }
 
     #[test]
-    fn model_mix_for_date_groups_by_tier() {
+    fn model_mix_for_date_groups_by_family() {
         use crate::model::*;
         let store = SqliteStore::open_in_memory().unwrap();
         let ev = |uuid: &str, model: &str, inp: u64, out: u64| NormalizedEvent {

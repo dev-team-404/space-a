@@ -128,6 +128,7 @@
     downAt = { x: e.screenX, y: e.screenY };
   }
   function onPointerMove(e: PointerEvent) {
+    if (e.buttons === 0) { downAt = null; return; }
     if (!downAt) return;
     if (isDrag(downAt.x, downAt.y, e.screenX, e.screenY)) {
       downAt = null;

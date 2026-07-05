@@ -26,6 +26,7 @@
     if (!dates.has(date)) return;
     selected = date;
     const text = await getDiary(date).catch(() => null);
+    if (selected !== date) return;
     // 일기는 우리 엔진(LLM) 산출물 — 웹뷰 주입 전 반드시 살균 (스펙 §4)
     html = text ? DOMPurify.sanitize(await marked.parse(text)) : null;
   }
