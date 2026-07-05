@@ -59,11 +59,18 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             }
             "realtime" => {
                 use tauri::Emitter;
-                let cur = realtime_item.is_checked().unwrap_or(false);
-                let next = !cur;
-                let _ = realtime_item.set_checked(next);
+                // 주의: muda CheckMenuItem은 클릭 시 checked를 자동 토글하므로
+                // is_checked()는 이미 새 값 — 설정(store)을 소스오브트루스로 파생한다.
                 if let Ok(store) = app.state::<AppState>().store.lock() {
+                    let cur = store
+                        .get_setting("realtime_advice")
+                        .ok()
+                        .flatten()
+                        .map(|v| v == "on")
+                        .unwrap_or(false);
+                    let next = !cur;
                     let _ = store.set_setting("realtime_advice", if next { "on" } else { "off" });
+                    let _ = realtime_item.set_checked(next);
                 }
                 let _ = app.emit("settings:changed", ());
             }
