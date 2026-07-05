@@ -39,16 +39,12 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             "mascot" => {
                 use tauri::Manager;
                 if let Some(w) = app.get_webview_window("mascot") {
-                    let visible = w.is_visible().unwrap_or(false);
-                    let _ = if visible { w.hide() } else { w.show() };
-                    let _ = mascot_item.set_checked(!visible);
-                }
-                if let Ok(store) = app.state::<AppState>().store.lock() {
-                    let visible = app
-                        .get_webview_window("mascot")
-                        .map(|w| w.is_visible().unwrap_or(false))
-                        .unwrap_or(false);
-                    let _ = store.set_setting("mascot_visible", if visible { "true" } else { "false" });
+                    let was_visible = w.is_visible().unwrap_or(false);
+                    let _ = if was_visible { w.hide() } else { w.show() };
+                    let _ = mascot_item.set_checked(!was_visible);
+                    if let Ok(store) = app.state::<AppState>().store.lock() {
+                        let _ = store.set_setting("mascot_visible", if was_visible { "false" } else { "true" });
+                    }
                 }
             }
             "scan" => {

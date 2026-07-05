@@ -31,7 +31,8 @@ export function drawRobot(
   }
   if (opts.antennaBlink) {
     ctx.fillStyle = palette[1];
-    for (const [x, y] of PARTS.antenna[spec.antenna]) {
+    for (const [x, y, c] of PARTS.antenna[spec.antenna]) {
+      if (c === 3) continue; // 외곽선은 유지
       ctx.fillRect(x, y + (opts.offsetY ?? 0), 1, 1);
     }
   }

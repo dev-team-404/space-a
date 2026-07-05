@@ -185,16 +185,19 @@ mod runtime {
             let locale = resolve_locale(&DiaryConfig::default());
             let occ = compute_occasions(date, anchor, &locale, true);
             if occ.is_empty() {
-                let _ = store.set_setting("occasion_notified_date", &today);
                 None
             } else {
-                let _ = store.set_setting("occasion_notified_date", &today);
                 Some(occ.into_iter().map(|o| o.label).collect())
             }
         };
         if let Some(labels) = labels {
-            if let Err(e) = app.emit("occasion:today", &labels) {
-                eprintln!("warn: occasion emit 실패: {e}");
+            match app.emit("occasion:today", &labels) {
+                Ok(()) => {
+                    if let Ok(store) = store_mutex.lock() {
+                        let _ = store.set_setting("occasion_notified_date", &today);
+                    }
+                }
+                Err(e) => eprintln!("warn: occasion emit 실패: {e}"),
             }
         }
     }

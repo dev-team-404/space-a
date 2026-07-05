@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getCurrentWindow, PhysicalPosition, PhysicalSize } from '@tauri-apps/api/window';
+  import { getCurrentWindow, PhysicalPosition, LogicalSize } from '@tauri-apps/api/window';
   import {
     getMascotSeed, getSummary, getSettings, setSetting,
     onDiaryReady, onNewFindings, onOccasionToday, openChatTab,
@@ -36,14 +36,16 @@
   }
 
   async function expand(on: boolean) {
-    // 캐릭터(창 우하단 고정)가 화면상 제자리를 지키도록 위치 보정
+    // 캐릭터(창 우하단 고정)가 화면상 제자리를 지키도록 위치 보정 (델타는 물리 픽셀로 환산)
+    const scale = await win.scaleFactor();
     const pos = await win.outerPosition();
-    const dw = EXPANDED.w - BASE.w, dh = EXPANDED.h - BASE.h;
+    const dw = Math.round((EXPANDED.w - BASE.w) * scale);
+    const dh = Math.round((EXPANDED.h - BASE.h) * scale);
     if (on) {
       await win.setPosition(new PhysicalPosition(pos.x - dw, pos.y - dh));
-      await win.setSize(new PhysicalSize(EXPANDED.w, EXPANDED.h));
+      await win.setSize(new LogicalSize(EXPANDED.w, EXPANDED.h));
     } else {
-      await win.setSize(new PhysicalSize(BASE.w, BASE.h));
+      await win.setSize(new LogicalSize(BASE.w, BASE.h));
       await win.setPosition(new PhysicalPosition(pos.x + dw, pos.y + dh));
     }
   }
@@ -87,7 +89,10 @@
     let t: ReturnType<typeof setTimeout>;
     const p = win.onMoved(({ payload }) => {
       clearTimeout(t);
-      t = setTimeout(() => setSetting('mascot_pos', `${payload.x},${payload.y}`).catch(() => {}), 1000);
+      t = setTimeout(() => {
+        if (showing) return; // 말풍선 확장 중 임시 좌표는 저장하지 않음 (복원 시 onMoved가 다시 온다)
+        setSetting('mascot_pos', `${payload.x},${payload.y}`).catch(() => {});
+      }, 1000);
     });
     return () => { clearTimeout(t); p.then((u) => u()); };
   });
@@ -118,7 +123,7 @@
     </button>
   {/if}
   <div class="robot" data-tauri-drag-region>
-    <canvas bind:this={canvas} width="16" height="16"></canvas>
+    <canvas bind:this={canvas} width="16" height="16" data-tauri-drag-region></canvas>
   </div>
 </div>
 
