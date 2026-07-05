@@ -1,0 +1,26 @@
+[package]
+name = "agent-mentor-app"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "agent_mentor_app"
+# Windows 데스크톱 전용: cdylib/staticlib(모바일용)을 빼야 GNU ld의
+# DLL export ordinal 한계(~65535)에 걸리지 않는다.
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
+agent-mentor = { path = "../crates/core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+chrono = "0.4"
+notify = "6"
+
+[dev-dependencies]
+tempfile = "3"

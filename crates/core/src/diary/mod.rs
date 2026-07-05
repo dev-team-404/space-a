@@ -200,15 +200,16 @@ pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
     )
 }
 
-pub fn generate_diary(
-    store: &SqliteStore,
-    engine: &dyn Engine,
-    brief: &Brief,
-    cfg: &DiaryConfig,
-) -> Result<DiaryOutput> {
+pub struct RenderedDiary {
+    pub body: String,
+    pub tokens_used: u64,
+    pub engine_name: String,
+}
+
+/// 네트워크(LLM)만 — store 접근 없음. 락 밖에서 호출 가능.
+pub fn render_diary(engine: &dyn Engine, brief: &Brief, cfg: &DiaryConfig) -> Result<RenderedDiary> {
     let system = build_system_prompt(cfg);
     let user = serde_json::to_string_pretty(brief)?;
-
     let out = engine.generate(&system, &user)?;
     let body = format!(
         "{narrative}\n\n*— 이 일기 ~{tokens} 토큰 (엔진: {engine})*\n",
@@ -216,20 +217,32 @@ pub fn generate_diary(
         tokens = out.tokens_used,
         engine = engine.name(),
     );
+    Ok(RenderedDiary { body, tokens_used: out.tokens_used, engine_name: engine.name() })
+}
 
+/// 파일 쓰기 + diary_index upsert — 빠른 로컬 작업만.
+pub fn persist_diary(
+    store: &SqliteStore,
+    date: &str,
+    host: &str,
+    rendered: &RenderedDiary,
+    cfg: &DiaryConfig,
+) -> Result<DiaryOutput> {
     std::fs::create_dir_all(&cfg.vault_dir)?;
-    let path = cfg.vault_dir.join(format!("{}.md", brief.date));
-    std::fs::write(&path, body)?;
+    let path = cfg.vault_dir.join(format!("{date}.md"));
+    std::fs::write(&path, &rendered.body)?;
+    store.upsert_diary_index(date, host, &path.to_string_lossy(), rendered.tokens_used, &rendered.engine_name)?;
+    Ok(DiaryOutput { path, tokens_used: rendered.tokens_used })
+}
 
-    store.upsert_diary_index(
-        &brief.date,
-        &brief.host,
-        &path.to_string_lossy(),
-        out.tokens_used,
-        &engine.name(),
-    )?;
-
-    Ok(DiaryOutput { path, tokens_used: out.tokens_used })
+pub fn generate_diary(
+    store: &SqliteStore,
+    engine: &dyn Engine,
+    brief: &Brief,
+    cfg: &DiaryConfig,
+) -> Result<DiaryOutput> {
+    let rendered = render_diary(engine, brief, cfg)?;
+    persist_diary(store, &brief.date, &brief.host, &rendered, cfg)
 }
 
 #[cfg(test)]
@@ -417,5 +430,23 @@ mod tests {
         let (detail, action) = super::finding_advice("RX", &ev, 0);
         assert_eq!(action, "");
         assert_eq!(detail, format!("{ev}"));
+    }
+
+    #[test]
+    fn render_and_persist_split_matches_generate() {
+        use crate::diary::engine::MockEngine;
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        let brief = assemble_brief(&store, "Windows", "2026-07-04", &cfg).unwrap();
+        let engine = MockEngine { canned: "분리 테스트 일기".into() };
+        let rendered = render_diary(&engine, &brief, &cfg).unwrap();
+        assert!(rendered.body.contains("분리 테스트 일기"));
+        let out = persist_diary(&store, &brief.date, &brief.host, &rendered, &cfg).unwrap();
+        assert!(out.path.exists());
+        assert_eq!(
+            store.diary_path_for("2026-07-04").unwrap(),
+            Some(out.path.to_string_lossy().to_string()),
+        );
     }
 }

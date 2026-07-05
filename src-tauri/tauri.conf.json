@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Agent Mentor",
+  "version": "0.1.0",
+  "identifier": "dev.agentmentor.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "chat",
+        "url": "chat.html",
+        "title": "agent mentor",
+        "width": 900,
+        "height": 640,
+        "visible": false
+      }
+    ],
+    "security": { "csp": null }
+  },
+  "bundle": { "active": false, "icon": ["icons/icon.ico", "icons/128x128.png"] }
+}
