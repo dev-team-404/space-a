@@ -3,10 +3,11 @@
   import {
     getMascotSeed, getSummary, getSettings, setSetting,
     onDiaryReady, onNewFindings, onOccasionToday, openChatTab,
+    onScanDone, onSettingsChanged,
   } from './lib/api';
   import { drawRobot, type RobotSpec } from './lib/robot/render';
   import { frameAt, resolveState, type BubbleKind } from './lib/robot/anim';
-  import { BubbleQueue, chatterBubble, diaryBubble, findingBubble, occasionBubble, type Bubble } from './lib/robot/bubble';
+  import { BubbleQueue, chatterBubble, diaryBubble, findingBubble, occasionBubble, scanBubble, type Bubble } from './lib/robot/bubble';
 
   const win = getCurrentWindow();
   const BASE = { w: 160, h: 160 };
@@ -16,6 +17,7 @@
   let spec = $state<RobotSpec | null>(null);
   let bubble = $state<Bubble | null>(null);
   let chatterLevel = $state('low');
+  let realtimeAdvice = $state(false);
 
   const queue = new BubbleQueue();
   let showing = false;
@@ -55,12 +57,24 @@
     pump();
   }
 
+  async function loadSettings() {
+    const s = await getSettings().catch(() => ({} as Record<string, string>));
+    chatterLevel = s['chatter_level'] ?? 'low';
+    realtimeAdvice = s['realtime_advice'] === 'on';
+  }
+
   // 트리거 배선
   $effect(() => {
     const subs = [
       onNewFindings((rows) => rows.length && enqueue(findingBubble(rows))),
       onDiaryReady((date) => enqueue(diaryBubble(date))),
       onOccasionToday((labels) => labels.length && enqueue(occasionBubble(labels))),
+      onScanDone(async () => {
+        if (!realtimeAdvice) return;
+        const summary = await getSummary().catch(() => null);
+        enqueue(scanBubble(summary));
+      }),
+      onSettingsChanged(() => loadSettings()),
     ];
     return () => { subs.forEach((p) => p.then((u) => u())); };
   });
@@ -113,7 +127,7 @@
   });
 
   getMascotSeed().then((s) => (spec = s));
-  getSettings().then((s) => (chatterLevel = s['chatter_level'] ?? 'low')).catch(() => {});
+  loadSettings();
 </script>
 
 <div class="stage" class:expanded={bubble !== null}>

@@ -86,7 +86,7 @@ pub fn get_settings(state: State<AppState>) -> Result<HashMap<String, String>, S
 
 #[tauri::command(async)]
 pub fn set_setting(state: State<AppState>, key: String, value: String) -> Result<(), String> {
-    const ALLOWED: &[&str] = &["mascot_visible", "chatter_level", "content_protected", "mascot_pos"];
+    const ALLOWED: &[&str] = &["mascot_visible", "chatter_level", "content_protected", "mascot_pos", "realtime_advice"];
     if !ALLOWED.contains(&key.as_str()) {
         return Err(format!("허용되지 않은 설정 키: {key}"));
     }

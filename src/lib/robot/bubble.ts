@@ -1,4 +1,4 @@
-export type BubbleKind = 'finding' | 'diary' | 'occasion' | 'chatter';
+export type BubbleKind = 'finding' | 'diary' | 'occasion' | 'chatter' | 'scan';
 
 export interface Bubble {
   kind: BubbleKind;
@@ -63,6 +63,14 @@ const CHATTER: ((n: number | null) => string)[] = [
   () => '레지스트리에 새 스킬 구경 갈까요',
   () => 'zzz… 아 깨어있어요!',
 ];
+
+export function scanBubble(summary: { session_count: number; est_tokens_saved_total: number } | null): Bubble {
+  if (!summary) return { kind: 'scan', tab: 'home', text: '방금 활동을 반영했어요!' };
+  const save = summary.est_tokens_saved_total > 0
+    ? ` 절약 후보 ~${summary.est_tokens_saved_total.toLocaleString()} tok 있어요.`
+    : '';
+  return { kind: 'scan', tab: 'home', text: `방금 세션 반영 — 오늘 ${summary.session_count}세션.${save}` };
+}
 
 export function chatterBubble(pick: number, summary: { session_count: number } | null): Bubble {
   const f = CHATTER[((pick % CHATTER.length) + CHATTER.length) % CHATTER.length];

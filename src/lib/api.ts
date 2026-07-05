@@ -47,3 +47,5 @@ export const onOccasionToday = (cb: (labels: string[]) => void): Promise<Unliste
   listen<string[]>('occasion:today', (e) => cb(e.payload));
 export const onGotoTab = (cb: (tab: string) => void): Promise<UnlistenFn> =>
   listen<string>('chat:goto-tab', (e) => cb(e.payload));
+export const onSettingsChanged = (cb: () => void): Promise<UnlistenFn> =>
+  listen('settings:changed', () => cb());

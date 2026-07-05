@@ -8,6 +8,9 @@ describe('resolveState', () => {
     expect(resolveState({ bubbleKind: 'occasion', hour: 12 })).toBe('happy');
     expect(resolveState({ bubbleKind: 'chatter', hour: 12 })).toBe('talk');
   });
+  it("resolveState: scan 말풍선은 talk", () => {
+    expect(resolveState({ bubbleKind: 'scan', hour: 12 })).toBe('talk');
+  });
   it('01~07시 무풍선이면 sleep, 그 외 idle', () => {
     expect(resolveState({ bubbleKind: null, hour: 1 })).toBe('sleep');
     expect(resolveState({ bubbleKind: null, hour: 6 })).toBe('sleep');
