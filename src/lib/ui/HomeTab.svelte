@@ -8,6 +8,7 @@
   import ModelMix from './home/ModelMix.svelte';
   import SaveTop3 from './home/SaveTop3.svelte';
   import NoticeLog from './home/NoticeLog.svelte';
+  import MiniRoom from './MiniRoom.svelte';
 
   let { summary, onGotoCoach }: { summary: Summary | null; onGotoCoach: (k: string) => void } = $props();
 
@@ -17,6 +18,7 @@
   let mix = $state<ModelMixEntry[]>([]);
   let findings = $state<CoachFinding[]>([]);
   let notices = $state<Notice[]>([]);
+  const topAdvice = $derived(findings.length > 0 ? findings[0].suggested_action : null);
 
   async function load() {
     [days, mix, findings] = await Promise.all([
@@ -58,7 +60,7 @@
     <NoticeLog {notices} />
   </div>
 
-  <!-- miniroom : Task 5에서 <MiniRoom> 배치 -->
+  <MiniRoom advice={topAdvice} />
 
   <footer class="status">
     {#if scanning}
