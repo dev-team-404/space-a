@@ -16,7 +16,11 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
 
     let autostart_item = autostart.clone();
     TrayIconBuilder::with_id("main")
-        .icon(app.default_window_icon().cloned().ok_or_else(|| tauri::Error::AssetNotFound("window icon".into()))?)
+        .icon(
+            app.default_window_icon()
+                .cloned()
+                .unwrap_or_else(|| tauri::image::Image::new_owned(vec![0, 0, 0, 0], 1, 1)),
+        )
         .tooltip("Agent Mentor")
         .menu(&menu)
         .show_menu_on_left_click(false)

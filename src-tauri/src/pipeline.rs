@@ -10,7 +10,7 @@ mod runtime {
     use super::*;
     use crate::AppState;
     use agent_mentor::diary::engine::OpenAiCompatEngine;
-    use agent_mentor::diary::{assemble_brief, generate_diary, DiaryConfig};
+    use agent_mentor::diary::{assemble_brief, persist_diary, render_diary, DiaryConfig};
     use agent_mentor::hosts::enumerate_hosts;
     use agent_mentor::store::SqliteStore;
     use notify::Watcher;
@@ -126,9 +126,7 @@ mod runtime {
         };
 
         for date in dates {
-            // 날짜별로 락을 짧게 획득 → assemble_brief → 즉시 해제
-            // TODO(후속): generate_diary 자체가 네트워크 I/O를 락 없이 실행하도록
-            //   core `generate_diary`를 순수 함수로 분리하면 단건 생성 중 블로킹도 제거 가능.
+            // ① 락 획득 → assemble_brief + session_count 체크 → 즉시 해제
             let (brief, cfg) = match store_mutex.lock() {
                 Ok(store) => {
                     let cfg = DiaryConfig { vault_dir: vault.clone(), ..DiaryConfig::default() };
@@ -142,15 +140,20 @@ mod runtime {
 
             if brief.totals.session_count == 0 { continue; }
 
-            // generate_diary도 store 접근이 필요하므로 락을 다시 잡되, 이 스코프가 끝나면 즉시 해제.
-            // 이 단계의 블로킹(네트워크 포함)은 후속 과제(위 TODO 참고)로 남긴다.
-            let gen_result = match store_mutex.lock() {
-                Ok(store) => generate_diary(&store, &engine, &brief, &cfg),
+            // ② 락 없이 render_diary (네트워크 I/O)
+            let rendered = match render_diary(&engine, &brief, &cfg) {
+                Ok(r) => r,
+                Err(e) => { eprintln!("warn: render_diary({date}) 실패: {e}"); continue; }
+            };
+
+            // ③ 락 획득 → persist_diary (로컬 파일·DB) → 즉시 해제
+            let persist_result = match store_mutex.lock() {
+                Ok(store) => persist_diary(&store, &date, &brief.host, &rendered, &cfg),
                 Err(e) => { eprintln!("warn: store lock poisoned: {e}"); return; }
             }; // guard drops here
-            match gen_result {
+            match persist_result {
                 Ok(_) => { let _ = app.emit("diary:ready", &date); }
-                Err(e) => eprintln!("warn: generate_diary({date}) 실패: {e}"),
+                Err(e) => eprintln!("warn: persist_diary({date}) 실패: {e}"),
             }
         }
     }

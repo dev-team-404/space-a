@@ -89,9 +89,11 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     ]);
     let findings = engine.run(store)?;
     let now = chrono::Utc::now().to_rfc3339();
+    let tx = store.conn.unchecked_transaction()?;
     for f in &findings {
         store.upsert_finding(f, &now)?;
     }
+    tx.commit()?;
     Ok(findings)
 }
 
