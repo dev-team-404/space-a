@@ -1,13 +1,32 @@
 <script lang="ts">
+  import './lib/theme.css';
   import HomeTab from './lib/ui/HomeTab.svelte';
   import CoachTab from './lib/ui/CoachTab.svelte';
-  import { getSummary, onScanDone, onGotoTab, type Summary } from './lib/api';
+  import DiaryTab from './lib/ui/DiaryTab.svelte';
+  import RobotPortrait from './lib/ui/RobotPortrait.svelte';
+  import {
+    getSummary, listFindings, onScanDone, onGotoTab,
+    onNewFindings, onDiaryReady, onOccasionToday, type Summary,
+  } from './lib/api';
+  import { loadNotices, pushNotice, saveNotices, type Notice } from './lib/notices';
 
-  let tab = $state<'home' | 'diary' | 'coach' | 'chat'>('home');
+  type Tab = 'home' | 'diary' | 'coach' | 'chat';
+  const TABS: { id: Tab; label: string }[] = [
+    { id: 'home', label: '홈' },
+    { id: 'diary', label: '다이어리' },
+    { id: 'coach', label: '코칭' },
+    { id: 'chat', label: '채팅' },
+  ];
+
+  let tab = $state<Tab>('home');
   let summary = $state<Summary | null>(null);
+  let activeCount = $state(0);
+  let coachFocus = $state<string | null>(null);
+  let notices = $state<Notice[]>(loadNotices());
 
   async function refresh() {
-    summary = await getSummary();
+    summary = await getSummary().catch(() => null);
+    activeCount = (await listFindings(false).catch(() => [])).length;
   }
   refresh();
   onScanDone(() => refresh());
@@ -15,62 +34,115 @@
     if (t === 'home' || t === 'diary' || t === 'coach' || t === 'chat') tab = t;
   });
 
+  // 알림 히스토리 기록 (스펙 §2 — 창이 숨김이어도 수신됨)
+  function record(kind: Notice['kind'], text: string) {
+    notices = pushNotice(notices, { ts: new Date().toISOString(), kind, text });
+    saveNotices(notices);
+  }
+  $effect(() => {
+    const subs = [
+      onNewFindings((rows) => rows.length && record('finding', `코칭 지적 ${rows.length}건이 도착했어요`)),
+      onDiaryReady((date) => record('diary', `${date} 일기가 나왔어요`)),
+      onOccasionToday((labels) => labels.length && record('occasion', `오늘은 ${labels[0]}!`)),
+    ];
+    return () => { subs.forEach((p) => p.then((u) => u())); };
+  });
+
+  function gotoCoach(dedupKey: string) {
+    coachFocus = dedupKey;
+    tab = 'coach';
+  }
+
   const mood = $derived(
     summary && summary.est_tokens_saved_total > 0 ? '절약할 게 보여요…' : '평화로워요'
   );
 </script>
 
-<div class="shell">
-  <aside class="side">
-    <div class="counter">
-      TODAY <b>{summary?.session_count ?? '–'}</b> · TOTAL <b>{summary?.total_sessions ?? '–'}</b>
+<div class="wall">
+  <div class="homepy">
+    <header class="titlebar">
+      <h1>{summary?.user_name ?? '주인'}님의 미니홈피</h1>
+      <div class="counter">
+        TODAY <b>{summary?.session_count ?? '–'}</b> · TOTAL <b>{summary?.total_sessions ?? '–'}</b>
+      </div>
+    </header>
+    <div class="body">
+      <aside class="profile">
+        <RobotPortrait />
+        <p class="mood">“{mood}”</p>
+      </aside>
+      <main class="content">
+        {#if tab === 'home'}
+          <HomeTab {summary} onGotoCoach={gotoCoach} />
+        {:else if tab === 'coach'}
+          <CoachTab focusKey={coachFocus} />
+        {:else if tab === 'diary'}
+          <DiaryTab />
+        {:else}
+          <section class="placeholder">채팅은 준비 중이에요, 주인. (다음 PR에서 열려요)</section>
+        {/if}
+      </main>
+      <nav class="tabs">
+        {#each TABS as t (t.id)}
+          <button class:active={tab === t.id} onclick={() => (tab = t.id)}>
+            <span class="label">{t.label}</span>
+            {#if t.id === 'coach' && activeCount > 0}<span class="badge">{activeCount}</span>{/if}
+          </button>
+        {/each}
+      </nav>
     </div>
-    <div class="miniroom">미니룸<br /><span class="robot">🤖</span><br /><small>(2단계 입주 예정)</small></div>
-    <div class="mood">오늘의 기분: {mood}</div>
-  </aside>
-  <main class="main">
-    <nav class="tabs">
-      <button class:active={tab === 'home'} onclick={() => (tab = 'home')}>홈</button>
-      <button class:active={tab === 'diary'} onclick={() => (tab = 'diary')}>다이어리</button>
-      <button class:active={tab === 'coach'} onclick={() => (tab = 'coach')}>코칭</button>
-      <button class:active={tab === 'chat'} onclick={() => (tab = 'chat')}>채팅</button>
-    </nav>
-    {#if tab === 'home'}
-      <HomeTab {summary} />
-    {:else if tab === 'coach'}
-      <CoachTab />
-    {:else}
-      <section class="placeholder">준비 중이에요, 주인. (다음 단계에서 열려요)</section>
-    {/if}
-  </main>
+  </div>
 </div>
 
 <style>
+  :global(html, body) { margin: 0; height: 100%; }
   :global(body) {
-    margin: 0;
-    background: #f3f0e6;
-    color: #33325a;
-    font-family: 'Galmuri11', 'DungGeunMo', 'Courier New', monospace;
+    background: var(--bg-grad);
+    color: var(--ink);
+    font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
     font-size: 14px;
   }
-  .shell { display: flex; height: 100vh; }
-  .side {
-    width: 200px; padding: 12px; background: #e8e4f0;
-    border-right: 3px solid #33325a; display: flex; flex-direction: column; gap: 12px;
+  .wall { height: 100vh; padding: 18px 34px 18px 18px; box-sizing: border-box; }
+  .homepy {
+    height: 100%; display: flex; flex-direction: column;
+    background: var(--frame-bg);
+    border-radius: var(--radius-l);
+    box-shadow: var(--shadow-soft);
   }
-  .counter { font-size: 12px; }
-  .miniroom {
-    border: 3px solid #33325a; background: #fffdf5; text-align: center;
-    padding: 16px 8px; box-shadow: 4px 4px 0 #c9c3dd;
+  .titlebar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--pastel-lav);
   }
-  .robot { font-size: 40px; }
-  .mood { font-size: 12px; margin-top: auto; }
-  .main { flex: 1; display: flex; flex-direction: column; }
-  .tabs { display: flex; gap: 4px; padding: 8px 8px 0; border-bottom: 3px solid #33325a; }
+  .titlebar h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  .counter { font-size: 12px; color: var(--ink-soft); }
+  .counter b { color: var(--accent); }
+  .body { flex: 1; display: flex; min-height: 0; position: relative; }
+  .profile {
+    width: 168px; padding: 16px 14px;
+    border-right: 1px solid var(--pastel-lav);
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .mood { margin: 0; font-size: 12px; color: var(--ink-soft); text-align: center; }
+  .content { flex: 1; min-width: 0; overflow-y: auto; display: flex; flex-direction: column; }
+  .tabs {
+    position: absolute; right: -30px; top: 24px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
   .tabs button {
-    border: 3px solid #33325a; border-bottom: none; background: #d9d4e8;
-    padding: 6px 14px; font: inherit; cursor: pointer;
+    writing-mode: vertical-rl;
+    border: none; cursor: pointer; font: inherit; font-size: 12px;
+    padding: 12px 7px;
+    background: var(--pastel-lav); color: var(--ink);
+    border-radius: 0 var(--radius-s) var(--radius-s) 0;
+    box-shadow: var(--shadow-soft);
+    display: flex; align-items: center; gap: 4px;
   }
-  .tabs button.active { background: #fffdf5; }
+  .tabs button.active { background: var(--frame-bg); font-weight: 600; color: var(--accent); }
+  .badge {
+    writing-mode: horizontal-tb;
+    background: var(--pastel-coral); color: var(--ink);
+    border-radius: 999px; font-size: 10px; padding: 1px 5px;
+  }
   .placeholder { padding: 24px; }
 </style>

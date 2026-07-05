@@ -1,6 +1,9 @@
 <script lang="ts">
   import { listFindings, onNewFindings, type Finding } from '../api';
 
+  let { focusKey = null }: { focusKey?: string | null } = $props();
+  void focusKey;
+
   let findings = $state<Finding[]>([]);
   let open = $state<string | null>(null);
 

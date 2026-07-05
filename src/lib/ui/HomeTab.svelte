@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onScanDone, runScanNow, type Summary } from '../api';
 
-  let { summary }: { summary: Summary | null } = $props();
+  let { summary, onGotoCoach }: { summary: Summary | null; onGotoCoach: (k: string) => void } = $props();
+  void onGotoCoach;
 
   const fmt = (n: number | undefined) => (n ?? 0).toLocaleString();
   let scanning = $state(false);

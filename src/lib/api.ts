@@ -4,6 +4,7 @@ import type { RobotSpec } from './robot/render';
 
 export interface Summary {
   date: string;
+  user_name: string;
   session_count: number;
   tok_input: number;
   tok_output: number;
@@ -27,10 +28,36 @@ export interface Finding {
   dedup_key: string;
   last_seen: string | null;
   occurrences: number;
+  status: string;
+}
+
+export interface CoachFinding extends Finding {
+  status: 'new' | 'resolved' | 'dismissed';
+  detail: string;
+  suggested_action: string;
+  fix_command: string | null;
+}
+
+export interface DayStat {
+  date: string;
+  tok_input: number;
+  tok_output: number;
+  session_count: number;
+}
+
+export interface ModelMixEntry {
+  tier: string;
+  tokens: number;
 }
 
 export const getSummary = () => invoke<Summary>('get_summary');
-export const listFindings = () => invoke<Finding[]>('list_findings');
+export const listFindings = (includeHidden = false) =>
+  invoke<CoachFinding[]>('list_findings', { includeHidden });
+export const setFindingStatus = (dedupKey: string, status: 'new' | 'resolved' | 'dismissed') =>
+  invoke<void>('set_finding_status', { dedupKey, status });
+export const getWeekSummary = () => invoke<DayStat[]>('get_week_summary');
+export const getModelMix = () => invoke<ModelMixEntry[]>('get_model_mix');
+export const getTodayOccasions = () => invoke<string[]>('get_today_occasions');
 export const runScanNow = () => invoke<void>('run_scan_now');
 export const getMascotSeed = () => invoke<RobotSpec>('get_mascot_seed');
 export const openChatTab = (tab: string) => invoke<void>('open_chat_tab', { tab });
