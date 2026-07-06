@@ -1,4 +1,5 @@
 pub mod adapter;
+pub mod coach;
 pub mod diary;
 pub mod finding;
 pub mod hosts;
@@ -9,6 +10,7 @@ pub mod ops;
 pub mod pipeline;
 pub mod rules;
 pub mod store;
+pub mod transcript;
 
 #[cfg(test)]
 mod smoke {

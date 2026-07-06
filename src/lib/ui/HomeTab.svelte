@@ -1,20 +1,44 @@
 <script lang="ts">
-  import { onScanDone, runScanNow, type Summary } from '../api';
+  import {
+    getModelMix, getWeekSummary, listFindings, onScanDone, runScanNow,
+    type CoachFinding, type DayStat, type ModelMixEntry, type Summary,
+  } from '../api';
+  import { loadNotices, type Notice } from '../notices';
+  import WeekTrend from './home/WeekTrend.svelte';
+  import ModelMix from './home/ModelMix.svelte';
+  import SaveTop3 from './home/SaveTop3.svelte';
+  import NoticeLog from './home/NoticeLog.svelte';
+  import MiniRoom from './MiniRoom.svelte';
 
-  let { summary }: { summary: Summary | null } = $props();
+  let { summary, onGotoCoach }: { summary: Summary | null; onGotoCoach: (k: string) => void } = $props();
 
   const fmt = (n: number | undefined) => (n ?? 0).toLocaleString();
   let scanning = $state(false);
+  let days = $state<DayStat[]>([]);
+  let mix = $state<ModelMixEntry[]>([]);
+  let findings = $state<CoachFinding[]>([]);
+  let notices = $state<Notice[]>([]);
+  const topAdvice = $derived(findings.length > 0 ? findings[0].suggested_action : null);
+
+  async function load() {
+    [days, mix, findings] = await Promise.all([
+      getWeekSummary().catch(() => [] as DayStat[]),
+      getModelMix().catch(() => [] as ModelMixEntry[]),
+      listFindings(false).catch(() => [] as CoachFinding[]),
+    ]);
+    notices = loadNotices();
+  }
+  load();
 
   $effect(() => {
-    const p = onScanDone(() => (scanning = false));
+    const p = onScanDone(() => { scanning = false; load(); });
     return () => { p.then((u) => u()); };
   });
 
   async function scan() {
     scanning = true;
     try {
-      await runScanNow(); // 완료 신호(scanning 해제·데이터 갱신)는 scan:done 이벤트가 담당
+      await runScanNow(); // 완료 신호는 scan:done 이벤트가 담당
     } catch {
       scanning = false;
     }
@@ -22,36 +46,54 @@
 </script>
 
 <section class="home">
-  <h2>{summary?.date ?? ''} 오늘 요약</h2>
-  <div class="cards">
-    <div class="card">세션 <b>{fmt(summary?.session_count)}</b></div>
-    <div class="card">입력 <b>{fmt(summary?.tok_input)}</b> tok</div>
-    <div class="card">출력 <b>{fmt(summary?.tok_output)}</b> tok</div>
-    <div class="card">캐시 읽기 <b>{fmt(summary?.tok_cache_read)}</b> tok</div>
-    <div class="card save">절약 가능 <b>{fmt(summary?.est_tokens_saved_total)}</b> tok</div>
+  <div class="strip">
+    <span>세션 <b>{fmt(summary?.session_count)}</b></span>
+    <span>입력 <b>{fmt(summary?.tok_input)}</b></span>
+    <span>출력 <b>{fmt(summary?.tok_output)}</b></span>
+    <span class="save">절약 가능 <b>{fmt(summary?.est_tokens_saved_total)}</b> tok</span>
   </div>
+
+  <div class="grid">
+    <WeekTrend {days} />
+    <ModelMix {mix} />
+    <SaveTop3 {findings} onGoto={onGotoCoach} />
+    <NoticeLog {notices} />
+  </div>
+
+  <MiniRoom advice={topAdvice} />
+
   <footer class="status">
     {#if scanning}
       <span class="scanning">스캔 중…</span>
     {:else if summary?.last_scan}
-      마지막 스캔: {new Date(summary.last_scan).toLocaleString()}
+      <span>마지막 스캔: {new Date(summary.last_scan).toLocaleString()}</span>
     {:else}
-      첫 수집 진행 중… (트랜스크립트 양에 따라 몇 분 걸릴 수 있어요)
+      <span>첫 수집 진행 중… (트랜스크립트 양에 따라 몇 분 걸릴 수 있어요)</span>
     {/if}
     <button onclick={scan} disabled={scanning}>{scanning ? '스캔 중…' : '지금 스캔'}</button>
   </footer>
 </section>
 
 <style>
-  .home { padding: 16px; display: flex; flex-direction: column; flex: 1; }
-  .cards { display: flex; flex-wrap: wrap; gap: 10px; }
-  .card {
-    border: 3px solid #33325a; background: #fffdf5; padding: 12px 16px;
-    box-shadow: 4px 4px 0 #c9c3dd;
+  .home { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+  .strip {
+    display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--ink-soft);
+    background: var(--frame-bg); border-radius: var(--radius-m); box-shadow: var(--shadow-soft);
+    padding: 9px 14px;
   }
-  .card.save { background: #fdf1c7; }
-  .status { margin-top: auto; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
-  .status button { border: 3px solid #33325a; background: #d9d4e8; font: inherit; padding: 4px 10px; cursor: pointer; }
+  .strip b { color: var(--ink); }
+  .strip .save b { color: var(--accent); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .status {
+    margin-top: auto; display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px; color: var(--ink-soft);
+  }
+  .status button {
+    border: none; cursor: pointer; font: inherit; font-size: 12px;
+    background: var(--pastel-lav); color: var(--ink);
+    border-radius: var(--radius-s); padding: 6px 12px;
+  }
+  .status button:disabled { opacity: 0.6; cursor: default; }
   .scanning { animation: blink 1.2s ease-in-out infinite; }
   @keyframes blink { 50% { opacity: 0.35; } }
 </style>
