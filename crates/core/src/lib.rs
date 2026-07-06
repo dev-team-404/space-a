@@ -1,5 +1,6 @@
 pub mod adapter;
 pub mod coach;
+pub mod curation;
 pub mod diary;
 pub mod finding;
 pub mod hosts;

@@ -75,7 +75,7 @@
         {#if tab === 'home'}
           <HomeTab {summary} onGotoCoach={gotoCoach} />
         {:else if tab === 'coach'}
-          <CoachTab focusKey={coachFocus} />
+          <CoachTab focusKey={coachFocus} onChanged={refresh} />
         {:else if tab === 'diary'}
           <DiaryTab />
         {:else}

@@ -3,6 +3,10 @@ pub mod r2_unused_plugins;
 pub mod r5_repeated_read;
 pub mod r7_opus_trivial;
 pub mod r9_web_overuse;
+pub mod r10_automation_burst;
+pub mod r11_permission_friction;
+pub mod r12_unused_skills;
+pub mod session_stats;
 
 use crate::finding::Finding;
 use crate::store::SqliteStore;

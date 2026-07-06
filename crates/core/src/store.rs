@@ -459,6 +459,15 @@ impl SqliteStore {
         Ok(n > 0)
     }
 
+    /// v2 이행: 특정 룰의 특정 스코프 finding 일괄 삭제 (예: R7 세션 스코프 폐기 — 스펙 §3).
+    pub fn delete_findings_by_rule_and_scope(&self, rule_id: &str, scope_kind: &str) -> Result<usize> {
+        let n = self.conn.execute(
+            "DELETE FROM findings WHERE rule_id=?1 AND scope_kind=?2",
+            params![rule_id, scope_kind],
+        )?;
+        Ok(n)
+    }
+
     /// 오늘 모델별(raw id 기준, 구 데이터는 family 폴백) 토큰(입력+출력) 합. 내림차순.
     pub fn model_mix_for_date(&self, date: &str) -> Result<Vec<(String, u64)>> {
         let mut stmt = self.conn.prepare(
@@ -1068,6 +1077,25 @@ mod tests {
         assert_eq!(ctx.0, "p");
         assert_eq!(ctx.1.as_deref(), Some("2026-07-05T10:00:00Z"));
         assert!(store.session_ctx("nope").unwrap().is_none());
+    }
+
+    #[test]
+    fn delete_findings_by_rule_and_scope_removes_only_matching() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |rule: &str, kind: &str, key: &str| crate::finding::Finding {
+            rule_id: rule.into(), severity: crate::finding::Severity::Suggest,
+            scope_host: None, scope_project: None,
+            scope_kind: kind.into(), scope_ref: "x".into(),
+            evidence: serde_json::json!({}), est_tokens_saved: 0,
+            prescription: None, dedup_key: key.into(),
+        };
+        store.upsert_finding(&mk("R7", "session", "R7|s1"), "2026-07-06T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R7", "project", "R7|W|p"), "2026-07-06T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R5", "session", "R5|s1|a"), "2026-07-06T00:00:00Z").unwrap();
+
+        let n = store.delete_findings_by_rule_and_scope("R7", "session").unwrap();
+        assert_eq!(n, 1);
+        assert_eq!(store.count_findings().unwrap(), 2);
     }
 
     #[test]

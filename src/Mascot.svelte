@@ -55,6 +55,8 @@
     const s = await getSettings().catch(() => ({}) as Record<string, string>);
     chatterLevel = s['chatter_level'] ?? 'low';
     realtimeAdvice = s['realtime_advice'] === 'on';
+    // 재시작 후에도 같은 조언을 반복하지 않도록 영속화된 키 복원 (집계 카드는 계속 1위로 상주함)
+    lastAdviceKey = s['last_advice_key'] ?? lastAdviceKey;
   }
 
   // occasion: pull 단일 경로 (시작 레이스 방어 — 스펙 §6). 게이트(하루 1회)는 백엔드가 가짐.
@@ -79,6 +81,7 @@
         const top = rows[0];
         if (top && top.dedup_key !== lastAdviceKey) {
           lastAdviceKey = top.dedup_key;
+          setSetting('last_advice_key', top.dedup_key).catch(() => {});
           showBubble(adviceBubble(top));
         }
       }),
