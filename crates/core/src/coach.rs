@@ -14,7 +14,8 @@ pub fn fix_command(rule_id: &str, evidence: &Value) -> Option<String> {
             .get("plugin")
             .and_then(|v| v.as_str())
             .map(|p| format!("claude plugin disable {p}")),
-        "R7" => Some("/model haiku".to_string()),
+        // v2: 세션 중 전환은 실제 레버가 아님 — "다음 세션의 선택"으로 처방 (스펙 §4.3)
+        "R7" => Some("claude --model sonnet".to_string()),
         _ => None,
     }
 }
@@ -34,7 +35,18 @@ mod tests {
             fix_command("R2", &json!({"plugin": "vercel@claude-plugins-official"})).as_deref(),
             Some("claude plugin disable vercel@claude-plugins-official")
         );
-        assert_eq!(fix_command("R7", &json!({})).as_deref(), Some("/model haiku"));
+    }
+
+    #[test]
+    fn r7_v2_suggests_next_session_start_command() {
+        assert_eq!(fix_command("R7", &json!({})).as_deref(), Some("claude --model sonnet"));
+    }
+
+    #[test]
+    fn v2_aggregate_rules_have_no_fix_command() {
+        assert_eq!(fix_command("R10", &json!({})), None);
+        assert_eq!(fix_command("R11", &json!({})), None);
+        assert_eq!(fix_command("R12", &json!({})), None);
     }
 
     #[test]

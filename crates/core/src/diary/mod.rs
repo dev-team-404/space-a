@@ -56,17 +56,20 @@ pub fn finding_advice(
         }
         "R1" => {
             let server = evidence.get("server").and_then(|v| v.as_str()).unwrap_or("어떤 서버");
-            (
-                format!("MCP 서버 `{server}`가 상주하는데 호출 0회 (~{est_tokens_saved}토큰 추정)"),
-                format!("안 쓰는 `{server}`를 설정에서 제거하면 매 세션 상주 토큰을 아껴요"),
-            )
+            let detail = match crate::curation::mcp_server_purpose(server) {
+                Some(p) => format!(
+                    "MCP 서버 `{server}`는 {p}에 유용해요. 하지만 호출 0회 — 상주 토큰만 소비 중이에요 (~{est_tokens_saved}토큰 추정)"
+                ),
+                None => format!("MCP 서버 `{server}`가 상주하는데 호출 0회 (~{est_tokens_saved}토큰 추정)"),
+            };
+            (detail, format!("안 쓰는 `{server}`를 설정에서 제거하면 매 세션 상주 토큰을 아껴요"))
         }
         "R7" => {
-            let out = evidence.get("tok_output").and_then(|v| v.as_u64()).unwrap_or(0);
-            let n = evidence.get("tool_calls").and_then(|v| v.as_u64()).unwrap_or(0);
+            let ratio = evidence.get("ratio_pct").and_then(|v| v.as_u64()).unwrap_or(0);
+            let n = evidence.get("total_sessions").and_then(|v| v.as_u64()).unwrap_or(0);
             (
-                format!("이 세션은 전부 Opus인데 출력 {out}토큰·도구 {n}회의 가벼운 작업이었어요 (~{est_tokens_saved}토큰 비용-등가)"),
-                "이런 잔심부름은 Haiku로 전환하면 같은 결과를 훨씬 싸게 낼 수 있어요".to_string(),
+                format!("이 프로젝트 세션의 {ratio}%({n}건)가 Opus로 처리한 가벼운 잔심부름이었어요 (~{est_tokens_saved}토큰 비용-등가)"),
+                "다음엔 `claude --model sonnet`으로 시작하거나 settings.json에서 기본 모델을 낮춰보세요".to_string(),
             )
         }
         "R9" => {
@@ -81,9 +84,56 @@ pub fn finding_advice(
         "R2" => {
             let plugin = evidence.get("plugin").and_then(|v| v.as_str()).unwrap_or("(unknown)");
             let n = evidence.get("skill_count").and_then(|v| v.as_u64()).unwrap_or(0);
+            let detail = match crate::curation::plugin_purpose(plugin) {
+                Some(p) => format!(
+                    "플러그인 {plugin}은 {p}에 유용해요. 하지만 스킬 {n}개(~{est_tokens_saved}토큰)를 한 번도 쓰지 않았어요"
+                ),
+                None => format!("플러그인 {plugin}의 스킬 {n}개(~{est_tokens_saved}토큰)를 한 번도 쓰지 않았어요"),
+            };
+            (detail, "안 쓰는 플러그인은 설정에서 비활성화하면 매 세션 상주 토큰을 아껴요".to_string())
+        }
+        "R10" => {
+            let n = evidence.get("total_sessions").and_then(|v| v.as_u64()).unwrap_or(0);
+            let opus_n = evidence.get("opus_session_count").and_then(|v| v.as_u64()).unwrap_or(0);
+            let temp = evidence.get("temp_hit_ratio_pct").and_then(|v| v.as_u64()).unwrap_or(0);
+            let mut detail = format!(
+                "초단기 세션 {n}건이 짧은 간격으로 반복됐고 그중 {opus_n}건이 Opus 전용이었어요 (~{est_tokens_saved}토큰 비용-등가)"
+            );
+            if temp > 0 {
+                detail.push_str(&format!(" · temp 경로 흔적 {temp}%"));
+            }
             (
-                format!("플러그인 {plugin}의 스킬 {n}개(~{est_tokens_saved}토큰)를 한 번도 쓰지 않았어요"),
-                "안 쓰는 플러그인은 설정에서 비활성화하면 매 세션 상주 토큰을 아껴요".to_string(),
+                detail,
+                "자동화 도구가 만든 세션 패턴으로 보여요 — 그 도구의 모델 설정 한 곳을 haiku로 바꾸면 이후 전부에 적용돼요".to_string(),
+            )
+        }
+        "R11" => {
+            let events = evidence.get("friction_events").and_then(|v| v.as_array());
+            let n = events.map(|a| a.len()).unwrap_or(0);
+            let (tool, target) = events
+                .and_then(|a| a.first())
+                .map(|e| {
+                    (
+                        e.get("tool").and_then(|v| v.as_str()).unwrap_or("?").to_string(),
+                        e.get("target").and_then(|v| v.as_str()).unwrap_or("?").to_string(),
+                    )
+                })
+                .unwrap_or(("?".into(), "?".into()));
+            (
+                format!("같은 대상에 같은 도구가 연속 3회 이상 호출된 패턴이 {n}건 있었어요 (예: {tool} → `{target}`)"),
+                "권한 거부 후 재시도일 수 있어요 — settings.json 허용목록에 그 도구를 추가하면 거부→재시도 낭비가 사라져요".to_string(),
+            )
+        }
+        "R12" => {
+            let n = evidence.get("total_sessions").and_then(|v| v.as_u64()).unwrap_or(0);
+            let skills = evidence
+                .get("recommended_skills")
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|s| s.as_str()).collect::<Vec<_>>().join(", "))
+                .unwrap_or_default();
+            (
+                format!("대형 구현 세션 {n}건에서 설치된 스킬을 한 번도 쓰지 않았어요"),
+                format!("{skills} 같은 스킬을 쓰면 플랜→구현 품질이 올라가요 — 컨트롤러만 Opus로 두고 구현은 sonnet에 맡길 수도 있어요"),
             )
         }
         _ => (format!("{evidence}"), String::new()),
@@ -386,16 +436,89 @@ mod tests {
     }
 
     #[test]
-    fn finding_advice_r7() {
+    fn finding_advice_r7_v2_project_aggregate() {
         let (detail, action) = super::finding_advice(
             "R7",
-            &serde_json::json!({"model":"opus","tok_output":420,"tool_calls":2}),
+            &serde_json::json!({"ratio_pct": 75, "total_sessions": 3, "project_session_count": 4}),
             48320,
         );
-        assert!(detail.contains("420"));
-        assert!(detail.contains("2회"));
-        assert!(detail.contains("48320"));
-        assert!(action.contains("Haiku"));
+        assert!(detail.contains("75"));
+        assert!(detail.contains("3건"));
+        assert!(action.contains("claude --model sonnet"));
+    }
+
+    #[test]
+    fn finding_advice_r10_burst() {
+        let (detail, action) = super::finding_advice(
+            "R10",
+            &serde_json::json!({
+                "total_sessions": 81, "opus_session_count": 81,
+                "temp_hit_ratio_pct": 90, "median_gap_secs": 120
+            }),
+            500000,
+        );
+        assert!(detail.contains("81"));
+        assert!(detail.contains("temp")); // 가산 신호 서사 인용
+        assert!(action.contains("모델 설정"));
+        assert!(action.contains("보여요")); // 가설 표현 — 단정 금지
+    }
+
+    #[test]
+    fn finding_advice_r10_omits_temp_when_zero() {
+        let (detail, _) = super::finding_advice(
+            "R10",
+            &serde_json::json!({"total_sessions": 5, "opus_session_count": 5, "temp_hit_ratio_pct": 0}),
+            1000,
+        );
+        assert!(!detail.contains("temp"));
+    }
+
+    #[test]
+    fn finding_advice_r11_fact_and_hypothesis_separated() {
+        let (detail, action) = super::finding_advice(
+            "R11",
+            &serde_json::json!({
+                "friction_events": [
+                    {"tool": "Write", "target": "a.rs", "run_length": 3, "session_id": "s1"},
+                    {"tool": "Write", "target": "b.rs", "run_length": 4, "session_id": "s2"}
+                ],
+                "by_tool": {"Write": 2}
+            }),
+            0,
+        );
+        assert!(detail.contains("2건"));
+        assert!(detail.contains("Write"));
+        assert!(action.contains("일 수 있어요")); // 가설 구분 (스펙 §4.4)
+        assert!(action.contains("허용목록"));
+    }
+
+    #[test]
+    fn finding_advice_r12_value_proposal() {
+        let (detail, action) = super::finding_advice(
+            "R12",
+            &serde_json::json!({
+                "total_sessions": 2,
+                "recommended_skills": ["superpowers:writing-plans", "superpowers:subagent-driven-development"]
+            }),
+            0,
+        );
+        assert!(detail.contains("2건"));
+        assert!(action.contains("writing-plans"));
+    }
+
+    #[test]
+    fn finding_advice_r1_r2_cite_purpose_when_known() {
+        let (d, _) = super::finding_advice("R1", &serde_json::json!({"server": "playwright"}), 2500);
+        assert!(d.contains("브라우저 자동화")); // 용도 사전 인용
+        let (d2, _) = super::finding_advice(
+            "R2",
+            &serde_json::json!({"plugin": "frontend-design@claude-plugins-official", "skill_count": 3}),
+            900,
+        );
+        assert!(d2.contains("UI 디자인"));
+        // 사전에 없으면 현행 문구 유지
+        let (d3, _) = super::finding_advice("R1", &serde_json::json!({"server": "internal-x"}), 100);
+        assert!(d3.contains("상주하는데 호출 0회"));
     }
 
     #[test]
