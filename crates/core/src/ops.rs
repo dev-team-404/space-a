@@ -5,7 +5,6 @@ use crate::hosts::enumerate_hosts;
 use crate::inventory::{collect_host_inventory, scan_plugin_inventory};
 use crate::rules::r1_unused_mcp::R1UnusedMcp;
 use crate::rules::r2_unused_plugins::R2UnusedPluginSkills;
-use crate::rules::r5_repeated_read::R5RepeatedRead;
 use crate::rules::r7_opus_trivial::R7OpusTrivial;
 use crate::rules::r9_web_overuse::R9WebOveruse;
 use crate::rules::r10_automation_burst::R10AutomationBurst;
@@ -84,8 +83,11 @@ pub fn run_inventory(store: &mut SqliteStore) -> Result<Vec<String>> {
 pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     // 코칭 v2 이행: 세션 스코프 R7은 폐기 — 프로젝트 집계(R7 v2)가 대체 (스펙 §3)
     store.delete_findings_by_rule_and_scope("R7", "session")?;
+    // R5(반복 Read)도 발화 보류 + 기존 카드 삭제(사용자 판정: 반복 읽기는 에이전트/압축
+    // 동작이라 조치 주체 없음 — 세션 카드 스팸 재발). 크로스세션 반복→CLAUDE.md 레버로
+    // 재설계 예정 — docs/brainstroming/2026-07-06-coaching-v2.1-kickoff.md
+    store.delete_findings_by_rule_and_scope("R5", "session")?;
     let engine = RuleEngine::new(vec![
-        Box::new(R5RepeatedRead::default()),
         Box::new(R1UnusedMcp::default()),
         Box::new(R2UnusedPluginSkills::default()),
         Box::new(R7OpusTrivial::default()),

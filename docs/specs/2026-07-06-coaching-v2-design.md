@@ -34,6 +34,10 @@ PR① E2E에서 R7("가벼운 작업에 Opus는 과해요" + `/model haiku`)이 
 - 킥오프 6②(미설치 스킬 추천): **사내 스킬허브 검색 API 어댑터**로 확장 예정(사외망에서 접근 불가).
   이번엔 `SkillRecommendationSource` trait 시드만 설계(§5.4). 외부 전송은 프라이버시 원칙상 사내 on-prem 선택지로만.
 - R3/R4/R8(캐시 히트율·MCP 대형 결과 폐기·에러 정밀 탐지): ToolResult/UserPrompt 수집 선행 필요, 유예 유지.
+- **기존 R5(반복 Read) — 발화 보류 + 기존 카드 삭제 (2026-07-06 E2E, 사용자 결정)**: 반복 읽기는
+  에이전트/컨텍스트 압축 동작이라 조치 주체가 없고(v2 원칙 위반), 세션 단위 dedup이라 카드 스팸이 재발함.
+  ops.rs 등록 해제 + 스캔 시 `rule_id='R5' AND scope_kind='session'` 일괄 삭제(§3 이행과 동일 방식).
+  크로스세션 반복 파일 → CLAUDE.md 레버로 v2.1 재설계 — `docs/brainstroming/2026-07-06-coaching-v2.1-kickoff.md`
 
 ## 3. 데이터 모델
 
@@ -55,6 +59,7 @@ PR① E2E에서 R7("가벼운 작업에 Opus는 과해요" + `/model haiku`)이 
 
 **이행(마이그레이션)**: 스캔 시작 시 `rule_id='R7' AND scope_kind='session'`인 기존 finding을 일괄 삭제한다.
 v2에서 R7 세션 finding은 재생성되지 않으므로 1회성 정리로 충분하다. 집계가 events에서 재계산하므로 정보 손실 없음.
+R5 발화 보류(§2)에 따라 `rule_id='R5' AND scope_kind='session'`도 동일하게 삭제한다.
 
 ## 4. 룰 상세
 
