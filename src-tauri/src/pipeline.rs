@@ -114,7 +114,7 @@ mod runtime {
             Ok(d) => d.join("diary"),
             Err(e) => { eprintln!("warn: diary vault 경로 실패: {e}"); return; }
         };
-        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
 
         // 락을 짧게 잡아 missing dates 목록만 조회 후 즉시 해제
         let dates = match store_mutex.lock() {

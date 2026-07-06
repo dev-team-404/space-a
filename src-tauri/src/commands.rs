@@ -20,7 +20,7 @@ pub struct Summary {
 }
 
 pub fn summary_inner(store: &SqliteStore) -> anyhow::Result<Summary> {
-    let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
     let day = store.summary_for_date(&date)?;
     Ok(Summary {
         date,
@@ -91,7 +91,7 @@ pub struct DayStat {
 }
 
 pub fn week_summary_inner(store: &SqliteStore) -> anyhow::Result<Vec<DayStat>> {
-    let today = chrono::Utc::now().date_naive();
+    let today = chrono::Local::now().date_naive();
     let mut out = Vec::with_capacity(7);
     for i in (0..7).rev() {
         let date = (today - chrono::Duration::days(i)).format("%Y-%m-%d").to_string();
@@ -122,13 +122,13 @@ pub fn today_occasions_inner(store: &SqliteStore) -> anyhow::Result<Vec<String>>
     use agent_mentor::diary::occasions::compute_occasions;
     use agent_mentor::diary::{resolve_locale, DiaryConfig};
 
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     if store.get_setting("occasion_notified_date")?.as_deref() == Some(today.as_str()) {
         return Ok(vec![]);
     }
     let Ok(date) = chrono::NaiveDate::parse_from_str(&today, "%Y-%m-%d") else { return Ok(vec![]) };
     let anchor = store.earliest_session_ts()?.and_then(|ts| {
-        ts.get(..10).and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+        agent_mentor::diary::local_date_of(&ts)
     });
     let locale = resolve_locale(&DiaryConfig::default());
     let labels: Vec<String> = compute_occasions(date, anchor, &locale, true)
@@ -199,7 +199,7 @@ pub fn get_week_summary(state: State<AppState>) -> Result<Vec<DayStat>, String> 
 #[tauri::command(async)]
 pub fn get_model_mix(state: State<AppState>) -> Result<Vec<ModelMixEntry>, String> {
     let guard = lock(&state)?;
-    let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
     Ok(guard.model_mix_for_date(&date).map_err(|e| e.to_string())?
         .into_iter().map(|(tier, tokens)| ModelMixEntry { tier, tokens }).collect())
 }
@@ -335,7 +335,7 @@ mod tests {
         let days = week_summary_inner(&store).unwrap();
         assert_eq!(days.len(), 7);
         assert!(days[0].date < days[6].date);
-        assert_eq!(days[6].date, chrono::Utc::now().format("%Y-%m-%d").to_string());
+        assert_eq!(days[6].date, chrono::Local::now().format("%Y-%m-%d").to_string());
         assert_eq!(days[0].session_count, 0); // 빈 store는 0 채움
     }
 
@@ -397,7 +397,7 @@ mod tests {
     #[test]
     fn occasions_gate_returns_empty_when_already_notified() {
         let store = SqliteStore::open_in_memory().unwrap();
-        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
         store.set_setting("occasion_notified_date", &today).unwrap();
         assert!(today_occasions_inner(&store).unwrap().is_empty());
     }
