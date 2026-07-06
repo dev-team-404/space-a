@@ -1,13 +1,21 @@
 use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
 
 pub struct EngineOutput {
     pub text: String,
     pub tokens_used: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
 pub trait Engine {
     fn name(&self) -> String;
     fn generate(&self, system: &str, user: &str) -> Result<EngineOutput>;
+    fn chat(&self, system: &str, messages: &[ChatMessage]) -> Result<EngineOutput>;
 }
 
 /// 결정적 테스트용. 실제 호출 없이 정해진 텍스트 반환.
@@ -21,6 +29,11 @@ impl Engine for MockEngine {
     }
     fn generate(&self, system: &str, user: &str) -> Result<EngineOutput> {
         let approx = ((system.len() + user.len() + self.canned.len()) / 4).max(1) as u64;
+        Ok(EngineOutput { text: self.canned.clone(), tokens_used: approx })
+    }
+    fn chat(&self, system: &str, messages: &[ChatMessage]) -> Result<EngineOutput> {
+        let user_len: usize = messages.iter().map(|m| m.content.len()).sum();
+        let approx = ((system.len() + user_len + self.canned.len()) / 4).max(1) as u64;
         Ok(EngineOutput { text: self.canned.clone(), tokens_used: approx })
     }
 }
@@ -40,21 +53,12 @@ impl OpenAiCompatEngine {
             .unwrap_or_else(|_| "gpt-4o-mini".to_string());
         Some(OpenAiCompatEngine { base_url, api_key, model })
     }
-}
 
-impl Engine for OpenAiCompatEngine {
-    fn name(&self) -> String {
-        format!("openai-compat:{}", self.model)
-    }
-
-    fn generate(&self, system: &str, user: &str) -> Result<EngineOutput> {
+    fn request(&self, messages: serde_json::Value) -> Result<EngineOutput> {
         let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
         let body = serde_json::json!({
             "model": self.model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user}
-            ],
+            "messages": messages,
             "temperature": 0.7
         });
         let resp = ureq::post(&url)
@@ -81,6 +85,25 @@ impl Engine for OpenAiCompatEngine {
     }
 }
 
+impl Engine for OpenAiCompatEngine {
+    fn name(&self) -> String {
+        format!("openai-compat:{}", self.model)
+    }
+
+    fn generate(&self, system: &str, user: &str) -> Result<EngineOutput> {
+        self.request(serde_json::json!([
+            {"role": "system", "content": system},
+            {"role": "user", "content": user}
+        ]))
+    }
+
+    fn chat(&self, system: &str, messages: &[ChatMessage]) -> Result<EngineOutput> {
+        let mut arr = vec![serde_json::json!({"role": "system", "content": system})];
+        arr.extend(messages.iter().map(|m| serde_json::json!({"role": m.role, "content": m.content})));
+        self.request(serde_json::Value::Array(arr))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,5 +115,14 @@ mod tests {
         assert_eq!(out.text, "오늘 주인은 나를 꽤 굴렸다.");
         assert!(out.tokens_used > 0, "mock meters an approximate token count");
         assert_eq!(eng.name(), "mock");
+    }
+
+    #[test]
+    fn mock_engine_chat_returns_canned_and_meters_tokens() {
+        let eng = MockEngine { canned: "안녕 주인".into() };
+        let msgs = vec![ChatMessage { role: "user".into(), content: "안녕?".into() }];
+        let out = eng.chat("system prompt", &msgs).unwrap();
+        assert_eq!(out.text, "안녕 주인");
+        assert!(out.tokens_used > 0);
     }
 }
