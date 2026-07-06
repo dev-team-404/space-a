@@ -194,7 +194,7 @@
   .bubble .text {
     border: none; background: none; font: inherit; color: inherit;
     cursor: pointer; text-align: left; padding: 0;
-    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
   }
   .bubble .x {
     border: none; background: none; cursor: pointer; padding: 0 4px;

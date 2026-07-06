@@ -30,7 +30,11 @@
 
   async function copy(f: CoachFinding) {
     if (!f.fix_command) return;
-    await navigator.clipboard.writeText(f.fix_command).catch(() => {});
+    try {
+      await navigator.clipboard.writeText(f.fix_command);
+    } catch {
+      return; // 실패 시 '복사됨!' 오표시 금지
+    }
     copied = f.dedup_key;
     setTimeout(() => (copied = null), 1500);
   }

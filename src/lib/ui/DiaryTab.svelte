@@ -28,7 +28,11 @@
     const text = await getDiary(date).catch(() => null);
     if (selected !== date) return;
     // 일기는 우리 엔진(LLM) 산출물 — 웹뷰 주입 전 반드시 살균 (스펙 §4)
-    html = text ? DOMPurify.sanitize(await marked.parse(text)) : null;
+    try {
+      html = text ? DOMPurify.sanitize(await marked.parse(text)) : null;
+    } catch {
+      html = null; // 파싱 실패 → 아래 '불러오지 못했어요' 분기가 처리
+    }
   }
 
   function nav(delta: number) {

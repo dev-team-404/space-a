@@ -93,5 +93,6 @@
     background: var(--frame-bg); color: var(--ink);
     border-radius: var(--radius-m); box-shadow: var(--shadow-soft);
     padding: 7px 12px; font-size: 12px; text-align: center;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   }
 </style>
