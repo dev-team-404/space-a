@@ -51,12 +51,12 @@ mod runtime {
             match watcher {
                 Ok(mut w) => {
                     if let Err(e) = w.watch(&projects, notify::RecursiveMode::Recursive) {
-                        eprintln!("warn: {} 감시 실패: {e}", projects.display());
+                        log::warn!("{} 감시 실패: {e}", projects.display());
                     } else {
                         out.push(w);
                     }
                 }
-                Err(e) => eprintln!("warn: {} watcher 생성 실패: {e}", hs.host),
+                Err(e) => log::warn!("{} watcher 생성 실패: {e}", hs.host),
             }
         }
         out
@@ -77,8 +77,8 @@ mod runtime {
                         let _ = app.emit("scan:progress", serde_json::json!({"done": done, "total": total}));
                     }
                 })?;
-                for w in &report.warnings { eprintln!("warn: {w}"); }
-                for w in agent_mentor::ops::run_inventory(&mut store)? { eprintln!("warn: {w}"); }
+                for w in &report.warnings { log::warn!("{w}"); }
+                for w in agent_mentor::ops::run_inventory(&mut store)? { log::warn!("{w}"); }
                 agent_mentor::ops::run_rules(&store)?;
 
                 let after = store.finding_severities()?;
@@ -101,12 +101,12 @@ mod runtime {
             Ok(now) => {
                 // scan:done은 스캔 성공 시 다이어리 결과와 무관하게 emit (§7)
                 if let Err(e) = app.emit("scan:done", &now) {
-                    eprintln!("pipeline error: scan:done emit 실패: {e}");
+                    log::error!("pipeline error: scan:done emit 실패: {e}");
                 }
                 // 다이어리 실패는 조용히 — 다음 사이클에서 재시도
                 maybe_generate_diaries(app, &state.store);
             }
-            Err(e) => eprintln!("pipeline error: {e}"),
+            Err(e) => log::error!("pipeline error: {e}"),
         }
     }
 
@@ -117,7 +117,7 @@ mod runtime {
         let Some(engine) = OpenAiCompatEngine::from_env() else { return; };
         let vault = match app.path().app_data_dir() {
             Ok(d) => d.join("diary"),
-            Err(e) => { eprintln!("warn: diary vault 경로 실패: {e}"); return; }
+            Err(e) => { log::warn!("diary vault 경로 실패: {e}"); return; }
         };
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
 
@@ -125,9 +125,9 @@ mod runtime {
         let dates = match store_mutex.lock() {
             Ok(store) => match store.diary_dates() {
                 Ok(existing) => missing_diary_dates(&existing, &today, 7),
-                Err(e) => { eprintln!("warn: diary_dates 실패: {e}"); return; }
+                Err(e) => { log::warn!("diary_dates 실패: {e}"); return; }
             },
-            Err(e) => { eprintln!("warn: store lock poisoned: {e}"); return; }
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
         };
 
         for date in dates {
@@ -137,10 +137,10 @@ mod runtime {
                     let cfg = DiaryConfig { vault_dir: vault.clone(), ..DiaryConfig::default() };
                     match assemble_brief(&store, "Windows", &date, &cfg) {
                         Ok(brief) => (brief, cfg),
-                        Err(e) => { eprintln!("warn: assemble_brief({date}) 실패: {e}"); continue; }
+                        Err(e) => { log::warn!("assemble_brief({date}) 실패: {e}"); continue; }
                     }
                 }
-                Err(e) => { eprintln!("warn: store lock poisoned: {e}"); return; }
+                Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
             }; // guard drops here
 
             if brief.totals.session_count == 0 { continue; }
@@ -148,17 +148,17 @@ mod runtime {
             // ② 락 없이 render_diary (네트워크 I/O)
             let rendered = match render_diary(&engine, &brief, &cfg) {
                 Ok(r) => r,
-                Err(e) => { eprintln!("warn: render_diary({date}) 실패: {e}"); continue; }
+                Err(e) => { log::warn!("render_diary({date}) 실패: {e}"); continue; }
             };
 
             // ③ 락 획득 → persist_diary (로컬 파일·DB) → 즉시 해제
             let persist_result = match store_mutex.lock() {
                 Ok(store) => persist_diary(&store, &date, &brief.host, &rendered, &cfg),
-                Err(e) => { eprintln!("warn: store lock poisoned: {e}"); return; }
+                Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
             }; // guard drops here
             match persist_result {
                 Ok(_) => { let _ = app.emit("diary:ready", &date); }
-                Err(e) => eprintln!("warn: persist_diary({date}) 실패: {e}"),
+                Err(e) => log::warn!("persist_diary({date}) 실패: {e}"),
             }
         }
     }

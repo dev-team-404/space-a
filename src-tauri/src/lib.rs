@@ -20,6 +20,20 @@ pub fn run() {
     {
         use tauri::Manager;
         tauri::Builder::default()
+            .plugin(
+                tauri_plugin_log::Builder::new()
+                    .targets([
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                            file_name: Some("agent-mentor".into()),
+                        }),
+                    ])
+                    .level(log::LevelFilter::Info)
+                    .max_file_size(512_000)
+                    .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+                    .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+                    .build(),
+            )
             .plugin(tauri_plugin_autostart::init(
                 tauri_plugin_autostart::MacosLauncher::LaunchAgent, // Windows에선 무시되는 인자
                 None,
@@ -87,6 +101,7 @@ pub fn run() {
                         }
                     }
                 }
+                log::info!("Agent Mentor 시작 — 파이프라인·트레이 초기화 완료");
                 Ok(())
             })
             .invoke_handler(tauri::generate_handler![
