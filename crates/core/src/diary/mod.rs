@@ -109,7 +109,10 @@ pub fn finding_advice(
         }
         "R11" => {
             let events = evidence.get("friction_events").and_then(|v| v.as_array());
-            let n = events.map(|a| a.len()).unwrap_or(0);
+            let n = evidence
+                .get("friction_events_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or_else(|| events.map(|a| a.len()).unwrap_or(0) as u64);
             let (tool, target) = events
                 .and_then(|a| a.first())
                 .map(|e| {

@@ -9,7 +9,6 @@ use crate::rules::r5_repeated_read::R5RepeatedRead;
 use crate::rules::r7_opus_trivial::R7OpusTrivial;
 use crate::rules::r9_web_overuse::R9WebOveruse;
 use crate::rules::r10_automation_burst::R10AutomationBurst;
-use crate::rules::r11_permission_friction::R11PermissionFriction;
 use crate::rules::r12_unused_skills::R12UnusedSkills;
 use crate::rules::RuleEngine;
 use crate::store::{ingest_file, SqliteStore};
@@ -92,7 +91,9 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
         Box::new(R7OpusTrivial::default()),
         Box::new(R9WebOveruse::default()),
         Box::new(R10AutomationBurst::default()),
-        Box::new(R11PermissionFriction::default()),
+        // R11(권한 재시도 마찰)은 발화 보류: ToolResult 미수집 상태에서는 권한 거부를
+        // 단정할 수 없어 오탐 위험(사용자 판정: 이벤트 다발·의미 낮음). ToolResult 수집 후
+        // 결정론 판정으로 승격 예정 — docs/brainstroming/2026-07-06-coaching-v2.1-kickoff.md
         Box::new(R12UnusedSkills::default()),
     ]);
     let findings = engine.run(store)?;

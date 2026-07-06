@@ -84,6 +84,8 @@ impl Rule for R11PermissionFriction {
             }
             let mut session_ids: Vec<&str> = events.iter().map(|e| e.session_id.as_str()).collect();
             session_ids.dedup();
+            let total_sessions = session_ids.len();
+            session_ids.truncate(100);
             let tools: Vec<&str> = by_tool.keys().copied().collect();
             let ev_json: Vec<serde_json::Value> = events
                 .iter()
@@ -103,8 +105,9 @@ impl Rule for R11PermissionFriction {
                 scope_ref: project.clone(),
                 evidence: serde_json::json!({
                     "session_ids": session_ids,
-                    "total_sessions": session_ids.len(),
+                    "total_sessions": total_sessions,
                     "friction_events": ev_json,
+                    "friction_events_count": events.len(),
                     "by_tool": by_tool,
                 }),
                 est_tokens_saved: 0, // tool_call에 토큰 컬럼 없음 — 근거 없는 수치 금지 (스펙 §4.4)

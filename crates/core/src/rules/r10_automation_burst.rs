@@ -38,18 +38,20 @@ impl Rule for R10AutomationBurst {
 
     fn evaluate(&self, store: &SqliteStore) -> Result<Vec<Finding>> {
         let stats = collect_session_stats(store)?;
-        // (host, project)별로 버스트 그룹 병합 — 카드 1장 원칙
+        // 과반 Opus 필터는 체인 단위로 — 같은 프로젝트의 저렴한(Haiku) 버스트가
+        // 별도의 Opus 버스트를 가리지 않도록 병합 전에 걸러낸다.
         let mut by_proj: BTreeMap<(String, String), Vec<SessionStat>> = BTreeMap::new();
         for g in detect_bursts(&stats) {
+            let opus = g.sessions.iter().filter(|s| is_opus_only(s)).count();
+            if opus * 2 <= g.sessions.len() {
+                continue; // 이 체인은 과반이 Opus 전용이 아님 — 침묵
+            }
             by_proj.entry((g.host, g.project_id)).or_default().extend(g.sessions);
         }
 
         let mut out = Vec::new();
         for ((host, project), mut sessions) in by_proj {
             let opus_count = sessions.iter().filter(|s| is_opus_only(s)).count();
-            if opus_count * 2 <= sessions.len() {
-                continue; // 과반이 Opus 전용이 아니면 침묵
-            }
 
             sessions.sort_by(|a, b| a.first_ts.cmp(&b.first_ts)); // 오름차순
             let gaps: Vec<u64> = sessions
@@ -192,6 +194,29 @@ mod tests {
         let store = SqliteStore::open_in_memory().unwrap();
         store.upsert_events(&opus_burst(4, 5)).unwrap(); // 4건 < 5
         assert!(R10AutomationBurst::default().evaluate(&store).unwrap().is_empty());
+    }
+
+    #[test]
+    fn r10_opus_burst_not_suppressed_by_cheap_burst_in_same_project() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mut evs = Vec::new();
+        // 오전: Haiku 버스트 5건 (체인 1 — 부적격)
+        for i in 0..5 {
+            let sid = format!("hk{i}");
+            let ts = format!("2026-07-06T09:{:02}:00Z", i * 5);
+            evs.push(turn_at(&sid, &format!("hu{i}"), "claude-haiku-4-5", 50, &ts));
+        }
+        // 오후: Opus 버스트 5건 (체인 2 — 적격, 오전과 3시간 간격이라 별도 체인)
+        for i in 0..5 {
+            let sid = format!("op{i}");
+            let ts = format!("2026-07-06T13:{:02}:00Z", i * 5);
+            evs.push(turn_at(&sid, &format!("ou{i}"), "claude-opus-4-8", 50, &ts));
+        }
+        store.upsert_events(&evs).unwrap();
+        let findings = R10AutomationBurst::default().evaluate(&store).unwrap();
+        assert_eq!(findings.len(), 1); // 병합-후-검사였다면 5/10 ≤ 과반 미달로 침묵했을 것
+        assert_eq!(findings[0].evidence["total_sessions"], 5); // Opus 체인만 포함
+        assert_eq!(findings[0].evidence["opus_session_count"], 5);
     }
 
     #[test]
