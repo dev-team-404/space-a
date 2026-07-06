@@ -186,7 +186,25 @@ npm run tauri dev
   (§5.2 svelte-check 경고 해소) ⑤WeekTrend 날짜 파싱은 거절(타임존 없는 date-time은 ES 스펙상
   로컬 고정 + WebView2 단일 런타임). 인라인 답글 5건 완료. 잔여 §5.1 결정: a11y·expand() 레이스 2건.
 
-## 7. 마무리 & 다음 (PR②)
+## 7. Windows E2E 피드백 1차 반영 (2026-07-06)
+
+사용자 E2E 지적 4건을 같은 브랜치에 반영:
+
+1. **모델 분포가 opus/other 두 덩어리** → `events.model_raw` 컬럼 신설(스키마 마이그레이션 —
+   기존 행은 raw 소급 불가라 events/ingest_state/rollup을 비워 **다음 스캔에서 자동 전체 재수집**,
+   findings·status·diary는 보존). mix 쿼리는 raw 그룹(구 데이터 family 폴백), 위젯은 모델별
+   개별 표시(claude- 접두 제거, 계열 고정색+순환 팔레트, 토큰 수 병기).
+   ⚠ **업데이트 후 첫 실행은 풀 재수집이 돌므로 몇 분간 수치가 비어 보일 수 있음.**
+2. **홈 스크롤바 + 우측 탭 겹침** → 기본 창 1000×760(min 860×620)으로 상향, `.content`
+   margin-right 10px + 전역 얇은 파스텔 스크롤바(theme.css)로 책갈피 탭과 분리.
+3. **코칭이 어떤 작업에 대한 건지 모름(R7 반복)** → 세션 스코프 finding에 `session`
+   컨텍스트(프로젝트 · MM-DD HH:MM 세션) 동봉(`sessions` 테이블 조인), 카드에 📂 줄 표시.
+4. **세션 원본 상세보기** → `core::transcript`(경량 JSONL 파서: user/assistant 텍스트+도구 요약,
+   사이드체인·도구결과 노이즈 제외, 2000자/2000엔트리 상한, session_id 경로주입 방지) +
+   `get_session_transcript` 커맨드 + 코칭 카드 [세션 상세] 버튼 → 모달(Esc/X 닫기).
+   전송 없음 — 로컬 파일 파싱만(프라이버시 경계 유지).
+
+## 8. 마무리 & 다음 (PR②)
 
 - Windows E2E 통과 → §5의 결정사항 반영 커밋 → PR① 머지.
 - **PR②(채팅 탭 + triage 잔여)**: 스펙 §5·§7 기준. 진행률 바(상태줄 자리만 잡혀 있음)·로그·로컬

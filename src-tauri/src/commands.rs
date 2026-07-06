@@ -44,12 +44,20 @@ pub fn diary_inner(store: &SqliteStore, date: &str) -> anyhow::Result<Option<Str
 }
 
 #[derive(Debug, Serialize)]
+pub struct SessionCtx {
+    pub project_id: String,
+    pub first_ts: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct CoachFinding {
     #[serde(flatten)]
     pub row: agent_mentor::store::FindingRow,
     pub detail: String,
     pub suggested_action: String,
     pub fix_command: Option<String>,
+    /// 세션 스코프 finding의 "어떤 작업인지" 컨텍스트 (호스트/프로젝트 스코프는 None).
+    pub session: Option<SessionCtx>,
 }
 
 pub fn coach_findings_inner(store: &SqliteStore, include_hidden: bool) -> anyhow::Result<Vec<CoachFinding>> {
@@ -60,7 +68,16 @@ pub fn coach_findings_inner(store: &SqliteStore, include_hidden: bool) -> anyhow
             let (detail, suggested_action) =
                 agent_mentor::diary::finding_advice(&row.rule_id, &row.evidence, row.est_tokens_saved);
             let fix_command = agent_mentor::coach::fix_command(&row.rule_id, &row.evidence);
-            CoachFinding { row, detail, suggested_action, fix_command }
+            let session = if row.scope_kind == "session" {
+                store
+                    .session_ctx(&row.scope_ref)
+                    .ok()
+                    .flatten()
+                    .map(|(project_id, first_ts)| SessionCtx { project_id, first_ts })
+            } else {
+                None
+            };
+            CoachFinding { row, detail, suggested_action, fix_command, session }
         })
         .collect())
 }
@@ -167,6 +184,21 @@ pub fn get_model_mix(state: State<AppState>) -> Result<Vec<ModelMixEntry>, Strin
 pub fn get_today_occasions(state: State<AppState>) -> Result<Vec<String>, String> {
     let guard = lock(&state)?;
     today_occasions_inner(&*guard).map_err(|e| e.to_string())
+}
+
+/// 세션 원본 트랜스크립트(로컬 JSONL) 상세보기 — 코칭 "세션 상세" 팝업.
+/// store 락 불필요(파일 직접 읽기). 외부 전송 없음(로컬 파싱만).
+#[tauri::command(async)]
+pub fn get_session_transcript(
+    session_id: String,
+) -> Result<Vec<agent_mentor::transcript::TranscriptEntry>, String> {
+    use agent_mentor::transcript::{find_session_file, read_transcript};
+    for hs in agent_mentor::hosts::enumerate_hosts() {
+        if let Some(path) = find_session_file(&hs.claude_root, &session_id) {
+            return read_transcript(&path, 2000).map_err(|e| e.to_string());
+        }
+    }
+    Err("세션 원본 파일을 찾지 못했어요 (트랜스크립트가 정리됐을 수 있어요)".into())
 }
 
 #[tauri::command(async)]
@@ -300,6 +332,36 @@ mod tests {
         assert!(!rows[0].suggested_action.is_empty());
         assert_eq!(rows[0].fix_command.as_deref(), Some("claude mcp remove playwright"));
         assert_eq!(rows[0].row.status, "new");
+    }
+
+    #[test]
+    fn session_scope_finding_carries_session_ctx() {
+        use agent_mentor::finding::{Finding, Severity};
+        use agent_mentor::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_events(&[NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "1".into(),
+            host: "Windows".into(), project_id: "d--project-x".into(), session_id: "s1".into(),
+            uuid: Some("u1".into()), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-06T09:00:00Z".into()),
+            source_file: "f.jsonl".into(), source_offset: 0,
+            kind: EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-opus-4-8"),
+                usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
+            },
+        }]).unwrap();
+        store.upsert_finding(&Finding {
+            rule_id: "R7".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "session".into(), scope_ref: "s1".into(),
+            evidence: serde_json::json!({"tok_output": 100, "tool_calls": 2}),
+            est_tokens_saved: 500, prescription: None, dedup_key: "k-s".into(),
+        }, "2026-07-06T00:00:00Z").unwrap();
+
+        let rows = coach_findings_inner(&store, true).unwrap();
+        let s = rows[0].session.as_ref().expect("세션 컨텍스트 동봉");
+        assert_eq!(s.project_id, "d--project-x");
+        assert_eq!(s.first_ts.as_deref(), Some("2026-07-06T09:00:00Z"));
     }
 
     #[test]

@@ -103,6 +103,7 @@ pub fn run() {
                 commands::get_week_summary,
                 commands::get_model_mix,
                 commands::get_today_occasions,
+                commands::get_session_transcript,
             ])
             .run(tauri::generate_context!())
             .expect("tauri 실행 실패");

@@ -14,3 +14,9 @@
   --radius-l: 16px;
   --shadow-soft: 0 2px 10px rgba(74, 70, 104, 0.14);
 }
+
+/* 얇은 파스텔 스크롤바 — 기본(굵은) 스크롤바가 우측 세로 탭과 겹치는 문제 완화 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--pastel-lav); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }

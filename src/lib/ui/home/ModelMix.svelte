@@ -2,10 +2,15 @@
   import type { ModelMixEntry } from '../../api';
   let { mix }: { mix: ModelMixEntry[] } = $props();
   const total = $derived(Math.max(mix.reduce((a, m) => a + m.tokens, 0), 1));
-  const COLOR: Record<string, string> = {
-    opus: 'var(--pastel-coral)', sonnet: 'var(--pastel-lav)', haiku: 'var(--pastel-mint)',
-  };
-  const color = (tier: string) => COLOR[tier] ?? 'var(--pastel-cream)';
+  // tier 필드에 raw 모델 id가 담긴다(구 데이터만 family 폴백). 계열별 고정색 + 나머지는 순환 팔레트.
+  const FAMILY_COLOR: [string, string][] = [
+    ['opus', 'var(--pastel-coral)'], ['sonnet', 'var(--pastel-lav)'],
+    ['haiku', 'var(--pastel-mint)'], ['fable', 'var(--pastel-cream)'],
+  ];
+  const FALLBACK = ['#e3d3ec', '#cfe3d3', '#ecdccf', '#d3d9ec'];
+  const color = (model: string, i: number) =>
+    FAMILY_COLOR.find(([k]) => model.includes(k))?.[1] ?? FALLBACK[i % FALLBACK.length];
+  const label = (model: string) => model.replace(/^claude-/, '');
   const pct = (t: number) => Math.round((t / total) * 100);
 </script>
 
@@ -15,13 +20,16 @@
     <p class="empty">아직 오늘 기록이 없어요</p>
   {:else}
     <div class="stack">
-      {#each mix as m (m.tier)}
-        <div class="seg" style:width={`${pct(m.tokens)}%`} style:background={color(m.tier)}></div>
+      {#each mix as m, i (m.tier)}
+        <div class="seg" style:width={`${pct(m.tokens)}%`} style:background={color(m.tier, i)}></div>
       {/each}
     </div>
     <ul class="legend">
-      {#each mix as m (m.tier)}
-        <li><span class="chip" style:background={color(m.tier)}></span>{m.tier} {pct(m.tokens)}%</li>
+      {#each mix as m, i (m.tier)}
+        <li>
+          <span class="chip" style:background={color(m.tier, i)}></span>
+          {label(m.tier)} {pct(m.tokens)}% <small>({m.tokens.toLocaleString()})</small>
+        </li>
       {/each}
     </ul>
   {/if}

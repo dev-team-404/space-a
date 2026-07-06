@@ -124,7 +124,8 @@
     display: flex; flex-direction: column; gap: 12px;
   }
   .mood { margin: 0; font-size: 12px; color: var(--ink-soft); text-align: center; }
-  .content { flex: 1; min-width: 0; overflow-y: auto; display: flex; flex-direction: column; }
+  /* margin-right: 스크롤바를 프레임 가장자리(우측 세로 탭이 걸치는 곳)에서 안쪽으로 밀어냄 */
+  .content { flex: 1; min-width: 0; overflow-y: auto; display: flex; flex-direction: column; margin-right: 10px; }
   .tabs {
     position: absolute; right: -30px; top: 24px;
     display: flex; flex-direction: column; gap: 6px;

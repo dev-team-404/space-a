@@ -10,6 +10,7 @@ pub mod ops;
 pub mod pipeline;
 pub mod rules;
 pub mod store;
+pub mod transcript;
 
 #[cfg(test)]
 mod smoke {

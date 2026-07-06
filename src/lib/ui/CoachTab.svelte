@@ -1,5 +1,6 @@
 <script lang="ts">
   import { listFindings, onNewFindings, setFindingStatus, type CoachFinding } from '../api';
+  import SessionModal from './SessionModal.svelte';
 
   let { focusKey = null }: { focusKey?: string | null } = $props();
 
@@ -7,6 +8,7 @@
   let open = $state<string | null>(null);
   let showHidden = $state(false);
   let copied = $state<string | null>(null);
+  let detail = $state<{ id: string; title: string } | null>(null);
 
   const active = $derived(all.filter((f) => f.status === 'new'));
   const hidden = $derived(all.filter((f) => f.status !== 'new'));
@@ -44,6 +46,19 @@
     await refresh();
   }
 
+  // 세션 스코프 finding의 "어떤 작업인지" — 프로젝트 · 시작 시각
+  const sessionLine = (f: CoachFinding) => {
+    if (!f.session) return null;
+    const ts = f.session.first_ts;
+    if (!ts) return f.session.project_id;
+    const d = new Date(ts);
+    return `${f.session.project_id} · ${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} 세션`;
+  };
+
+  function openDetail(f: CoachFinding) {
+    detail = { id: f.scope_ref, title: sessionLine(f) ?? '세션 상세' };
+  }
+
   const icon = (s: CoachFinding['severity']) => (s === 'warn' ? '⚠' : s === 'suggest' ? '💡' : 'ℹ');
   const TITLE: Record<string, string> = {
     R1: '안 쓰는 MCP 서버가 토큰을 먹고 있어요',
@@ -65,12 +80,18 @@
           <span class="save">~{f.est_tokens_saved.toLocaleString()} tok</span>
         </header>
         <p class="why">{f.detail} · {f.occurrences}회 관측</p>
+        {#if sessionLine(f)}
+          <p class="session">📂 {sessionLine(f)}</p>
+        {/if}
         <p class="how">➜ {f.suggested_action}</p>
         <div class="actions">
           {#if f.fix_command}
             <button class="cmd" onclick={() => copy(f)}>
               {copied === f.dedup_key ? '복사됨!' : `📋 ${f.fix_command}`}
             </button>
+          {/if}
+          {#if f.scope_kind === 'session'}
+            <button onclick={() => openDetail(f)}>세션 상세</button>
           {/if}
           <button onclick={() => mark(f, 'resolved')}>해결함</button>
           <button onclick={() => mark(f, 'dismissed')}>무시</button>
@@ -101,6 +122,10 @@
       {/each}
     {/if}
   {/if}
+
+  {#if detail}
+    <SessionModal sessionId={detail.id} title={detail.title} onClose={() => (detail = null)} />
+  {/if}
 </section>
 
 <style>
@@ -116,6 +141,7 @@
   .title { font-weight: 600; }
   .save { color: var(--accent); font-size: 12px; white-space: nowrap; }
   .why { margin: 6px 0 2px; font-size: 12px; color: var(--ink-soft); }
+  .session { margin: 2px 0; font-size: 12px; color: var(--ink-soft); }
   .how { margin: 2px 0 8px; font-size: 13px; }
   .actions { display: flex; gap: 6px; flex-wrap: wrap; }
   .actions button {

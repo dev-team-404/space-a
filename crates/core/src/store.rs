@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS events (
   dedup_key TEXT UNIQUE NOT NULL,
   session_id TEXT NOT NULL, host TEXT NOT NULL, project_id TEXT NOT NULL,
   ts TEXT, source_offset INTEGER NOT NULL, kind TEXT NOT NULL,
-  model_family TEXT, model_tier TEXT,
+  model_family TEXT, model_tier TEXT, model_raw TEXT,
   tok_input INTEGER DEFAULT 0, tok_output INTEGER DEFAULT 0,
   tok_cache_read INTEGER DEFAULT 0, tok_cache_create INTEGER DEFAULT 0,
   tok_eph_1h INTEGER DEFAULT 0, web_search INTEGER DEFAULT 0, web_fetch INTEGER DEFAULT 0,
@@ -66,16 +66,34 @@ pub struct SqliteStore {
     pub conn: Connection,
 }
 
+/// 스키마 마이그레이션. events.model_raw 추가 — 기존 행은 raw id를 소급할 수 없으므로
+/// events/ingest_state/daily_rollup을 비워 다음 스캔에서 전체 재수집한다
+/// (로컬 JSONL 파생 데이터라 손실 없음, findings·status·diary_index는 보존).
+fn migrate(conn: &Connection) -> Result<()> {
+    let has_model_raw = conn
+        .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name='model_raw'")?
+        .exists([])?;
+    if !has_model_raw {
+        conn.execute_batch(
+            "ALTER TABLE events ADD COLUMN model_raw TEXT;
+             DELETE FROM events; DELETE FROM ingest_state; DELETE FROM daily_rollup;",
+        )?;
+    }
+    Ok(())
+}
+
 impl SqliteStore {
     pub fn open(path: &Path) -> Result<SqliteStore> {
         let conn = Connection::open(path)?;
         conn.execute_batch(SCHEMA)?;
+        migrate(&conn)?;
         Ok(SqliteStore { conn })
     }
 
     pub fn open_in_memory() -> Result<SqliteStore> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(SCHEMA)?;
+        migrate(&conn)?;
         Ok(SqliteStore { conn })
     }
 
@@ -88,19 +106,19 @@ impl SqliteStore {
             };
 
             // 봉투 공통 + kind별 컬럼 추출
-            let (kind_str, mfam, mtier, ti, to, tcr, tcc, e1h, ws, wf,
+            let (kind_str, mfam, mtier, mraw, ti, to, tcr, tcc, e1h, ws, wf,
                  tkind, tsrv, ttool, ttarget, raw) = flatten(e);
 
             let n = self.conn.execute(
                 "INSERT OR IGNORE INTO events
                  (dedup_key, session_id, host, project_id, ts, source_offset, kind,
-                  model_family, model_tier, tok_input, tok_output, tok_cache_read,
+                  model_family, model_tier, model_raw, tok_input, tok_output, tok_cache_read,
                   tok_cache_create, tok_eph_1h, web_search, web_fetch,
                   tool_kind, tool_server, tool_tool, tool_target, raw_name, is_sidechain)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)",
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)",
                 params![
                     dedup_key, e.session_id, e.host, e.project_id, e.ts, e.source_offset as i64, kind_str,
-                    mfam, mtier, ti, to, tcr, tcc, e1h, ws, wf,
+                    mfam, mtier, mraw, ti, to, tcr, tcc, e1h, ws, wf,
                     tkind, tsrv, ttool, ttarget, raw, e.is_sidechain as i64
                 ],
             )?;
@@ -441,19 +459,31 @@ impl SqliteStore {
         Ok(n > 0)
     }
 
-    /// 오늘 모델 family별 토큰(입력+출력) 합. 내림차순.
+    /// 오늘 모델별(raw id 기준, 구 데이터는 family 폴백) 토큰(입력+출력) 합. 내림차순.
     pub fn model_mix_for_date(&self, date: &str) -> Result<Vec<(String, u64)>> {
         let mut stmt = self.conn.prepare(
-            "SELECT model_family,
+            "SELECT COALESCE(model_raw, model_family) AS m,
                     COALESCE(SUM(tok_input),0) + COALESCE(SUM(tok_output),0) AS toks
              FROM events
-             WHERE substr(ts,1,10)=?1 AND model_family IS NOT NULL
-             GROUP BY model_family ORDER BY toks DESC",
+             WHERE substr(ts,1,10)=?1 AND COALESCE(model_raw, model_family) IS NOT NULL
+             GROUP BY m ORDER BY toks DESC",
         )?;
         let rows = stmt.query_map(params![date], |r| {
             Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
         })?;
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// 세션 컨텍스트(프로젝트, 시작 시각) — 세션 스코프 finding의 "어떤 작업인지" 표시용.
+    pub fn session_ctx(&self, session_id: &str) -> Result<Option<(String, Option<String>)>> {
+        self.conn
+            .query_row(
+                "SELECT project_id, first_ts FROM sessions WHERE session_id=?1",
+                params![session_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(Into::into)
     }
 
     pub fn finding_severities(&self) -> Result<Vec<(String, String)>> {
@@ -556,7 +586,7 @@ pub fn ingest_file(
 }
 
 type FlatRow = (
-    String, Option<String>, Option<String>, i64, i64, i64, i64, i64, i64, i64,
+    String, Option<String>, Option<String>, Option<String>, i64, i64, i64, i64, i64, i64, i64,
     Option<String>, Option<String>, Option<String>, Option<String>, Option<String>,
 );
 
@@ -566,6 +596,7 @@ fn flatten(e: &NormalizedEvent) -> FlatRow {
             "assistant_turn".into(),
             Some(format!("{:?}", model.family).to_lowercase()),
             Some(format!("{:?}", model.tier).to_lowercase()),
+            Some(model.raw_id.clone()),
             usage.input as i64, usage.output as i64, usage.cache_read as i64,
             usage.cache_creation as i64, usage.eph_1h as i64,
             *web_search as i64, *web_fetch as i64,
@@ -581,12 +612,12 @@ fn flatten(e: &NormalizedEvent) -> FlatRow {
                 other => (tool_kind_str(other).to_string(), None, None),
             };
             (
-                "tool_call".into(), None, None, 0, 0, 0, 0, 0, 0, 0,
+                "tool_call".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
                 Some(tkind), tsrv, ttool, target.clone(), Some(raw_name.clone()),
             )
         }
         EventKind::SessionMeta { .. } => (
-            "session_meta".into(), None, None, 0, 0, 0, 0, 0, 0, 0,
+            "session_meta".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
             None, None, None, None, None,
         ),
     }
@@ -1028,8 +1059,66 @@ mod tests {
             ev("u3", "claude-haiku-4-5-20251001", 20, 10),
         ]).unwrap();
         let mix = store.model_mix_for_date("2026-07-05").unwrap();
-        assert_eq!(mix[0], ("opus".to_string(), 165)); // 100+50+10+5, 내림차순 첫 항목
-        assert_eq!(mix[1], ("haiku".to_string(), 30));
+        assert_eq!(mix[0], ("claude-opus-4-8".to_string(), 165)); // 100+50+10+5, 내림차순 첫 항목
+        assert_eq!(mix[1], ("claude-haiku-4-5-20251001".to_string(), 30));
         assert!(store.model_mix_for_date("2099-01-01").unwrap().is_empty());
+
+        // 세션 컨텍스트 — upsert_events가 만든 sessions 행에서 프로젝트·시작시각
+        let ctx = store.session_ctx("s1").unwrap().unwrap();
+        assert_eq!(ctx.0, "p");
+        assert_eq!(ctx.1.as_deref(), Some("2026-07-05T10:00:00Z"));
+        assert!(store.session_ctx("nope").unwrap().is_none());
+    }
+
+    #[test]
+    fn migrate_adds_model_raw_and_forces_recollect() {
+        use crate::finding::{Finding, Severity};
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("m.db");
+        // 구 스키마(모든 테이블은 신형, events만 model_raw 없는 구형)로 DB 선생성
+        {
+            let conn = Connection::open(&db).unwrap();
+            let old_schema = SCHEMA.replace(" model_raw TEXT,", "");
+            assert!(old_schema.len() < SCHEMA.len(), "구 스키마 치환 실패");
+            conn.execute_batch(&old_schema).unwrap();
+            conn.execute_batch(
+                "INSERT INTO events (dedup_key, session_id, host, project_id, source_offset, kind)
+                   VALUES ('old:0','s1','Windows','p',0,'assistant_turn');
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 123);
+                 INSERT INTO daily_rollup (host, project_id, date, session_count)
+                   VALUES ('Windows','p','2026-07-05',1);",
+            ).unwrap();
+        }
+        // 마이그레이션 전 findings 심어서 보존 검증
+        {
+            let store = {
+                let conn = Connection::open(&db).unwrap();
+                SqliteStore { conn }
+            };
+            store.upsert_finding(&Finding {
+                rule_id: "R1".into(), severity: Severity::Warn,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "host".into(), scope_ref: "srv".into(),
+                evidence: serde_json::json!({}), est_tokens_saved: 10,
+                prescription: None, dedup_key: "keep".into(),
+            }, "2026-07-05T00:00:00Z").unwrap();
+            store.set_finding_status("keep", "dismissed").unwrap();
+        }
+
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행
+        // 컬럼 생김 + 재수집 유도(events/ingest_state/rollup 비움)
+        let n: i64 = store.conn.query_row("SELECT COUNT(*) FROM events", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
+        let n: i64 = store.conn.query_row("SELECT COUNT(*) FROM ingest_state", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
+        assert_eq!(store.summary_for_date("2026-07-05").unwrap().session_count, 0);
+        // findings·status 보존
+        let rows = store.list_findings_current(true).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].status, "dismissed");
+        // 재실행(이미 마이그레이션됨) 시 무파괴
+        store.set_setting("k", "v").unwrap();
+        let store2 = SqliteStore::open(&db).unwrap();
+        assert_eq!(store2.get_setting("k").unwrap().as_deref(), Some("v"));
     }
 }

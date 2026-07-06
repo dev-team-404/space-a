@@ -36,6 +36,15 @@ export interface CoachFinding extends Finding {
   detail: string;
   suggested_action: string;
   fix_command: string | null;
+  session: { project_id: string; first_ts: string | null } | null;
+}
+
+export interface TranscriptEntry {
+  ts: string | null;
+  role: 'user' | 'assistant';
+  text: string;
+  tools: string[];
+  model: string | null;
 }
 
 export interface DayStat {
@@ -58,6 +67,8 @@ export const setFindingStatus = (dedupKey: string, status: 'new' | 'resolved' | 
 export const getWeekSummary = () => invoke<DayStat[]>('get_week_summary');
 export const getModelMix = () => invoke<ModelMixEntry[]>('get_model_mix');
 export const getTodayOccasions = () => invoke<string[]>('get_today_occasions');
+export const getSessionTranscript = (sessionId: string) =>
+  invoke<TranscriptEntry[]>('get_session_transcript', { sessionId });
 export const runScanNow = () => invoke<void>('run_scan_now');
 export const getMascotSeed = () => invoke<RobotSpec>('get_mascot_seed');
 export const openChatTab = (tab: string) => invoke<void>('open_chat_tab', { tab });
