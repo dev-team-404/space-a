@@ -139,6 +139,24 @@ pub fn today_occasions_inner(store: &SqliteStore) -> anyhow::Result<Vec<String>>
     Ok(labels)
 }
 
+#[derive(Debug, Serialize)]
+pub struct SessionCtxItem {
+    pub session_id: String,
+    pub project_id: String,
+    pub first_ts: Option<String>,
+}
+
+/// 집계 finding 카드의 "포함 세션 N건" 펼치기용 배치 조회 (요청 순서 유지, 상한 100).
+pub fn sessions_ctx_inner(store: &SqliteStore, ids: &[String]) -> anyhow::Result<Vec<SessionCtxItem>> {
+    let mut out = Vec::new();
+    for id in ids.iter().take(100) {
+        if let Some((project_id, first_ts)) = store.session_ctx(id)? {
+            out.push(SessionCtxItem { session_id: id.clone(), project_id, first_ts });
+        }
+    }
+    Ok(out)
+}
+
 fn lock<'a>(state: &'a State<AppState>) -> Result<std::sync::MutexGuard<'a, SqliteStore>, String> {
     state.store.lock().map_err(|e| e.to_string())
 }
@@ -153,6 +171,12 @@ pub fn get_summary(state: State<AppState>) -> Result<Summary, String> {
 pub fn list_findings(state: State<AppState>, include_hidden: Option<bool>) -> Result<Vec<CoachFinding>, String> {
     let guard = lock(&state)?;
     coach_findings_inner(&*guard, include_hidden.unwrap_or(false)).map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+pub fn sessions_ctx(state: State<AppState>, ids: Vec<String>) -> Result<Vec<SessionCtxItem>, String> {
+    let guard = lock(&state)?;
+    sessions_ctx_inner(&*guard, &ids).map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]
@@ -376,5 +400,37 @@ mod tests {
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
         store.set_setting("occasion_notified_date", &today).unwrap();
         assert!(today_occasions_inner(&store).unwrap().is_empty());
+    }
+
+    #[test]
+    fn sessions_ctx_batch_returns_known_sessions_in_order() {
+        use agent_mentor::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        for (sid, ts) in [("s1", "2026-07-06T09:00:00Z"), ("s2", "2026-07-06T10:00:00Z")] {
+            store.upsert_events(&[NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "1".into(),
+                host: "Windows".into(), project_id: "d--proj".into(), session_id: sid.into(),
+                uuid: Some(format!("{sid}-u")), parent_uuid: None, is_sidechain: false,
+                ts: Some(ts.into()), source_file: "f.jsonl".into(), source_offset: 0,
+                kind: EventKind::AssistantTurn {
+                    model: NormModel::from_raw_id("claude-opus-4-8"),
+                    usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
+                },
+            }]).unwrap();
+        }
+        let items = sessions_ctx_inner(&store,
+            &["s2".into(), "unknown".into(), "s1".into()]).unwrap();
+        assert_eq!(items.len(), 2); // unknown은 조용히 생략
+        assert_eq!(items[0].session_id, "s2"); // 요청 순서 유지
+        assert_eq!(items[0].project_id, "d--proj");
+        assert_eq!(items[1].session_id, "s1");
+    }
+
+    #[test]
+    fn sessions_ctx_handles_many_ids_without_error() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let ids: Vec<String> = (0..150).map(|i| format!("s{i}")).collect();
+        // 상한(take 100)은 구현으로 보장 — 150개를 넣어도 에러 없이 동작하는지만 검증
+        assert!(sessions_ctx_inner(&store, &ids).unwrap().is_empty());
     }
 }

@@ -59,6 +59,12 @@ export interface ModelMixEntry {
   tokens: number;
 }
 
+export interface SessionCtxItem {
+  session_id: string;
+  project_id: string;
+  first_ts: string | null;
+}
+
 export const getSummary = () => invoke<Summary>('get_summary');
 export const listFindings = (includeHidden = false) =>
   invoke<CoachFinding[]>('list_findings', { includeHidden });
@@ -76,6 +82,8 @@ export const getSettings = () => invoke<Record<string, string>>('get_settings');
 export const setSetting = (key: string, value: string) => invoke<void>('set_setting', { key, value });
 export const listDiaryDates = () => invoke<string[]>('list_diary_dates');
 export const getDiary = (date: string) => invoke<string | null>('get_diary', { date });
+export const sessionsCtx = (ids: string[]) =>
+  invoke<SessionCtxItem[]>('sessions_ctx', { ids });
 
 // 마스코트가 pull한 occasion을 chat 창 알림 로그용으로 재방송 (pull 단일화 — 플랜 Task 2 Step 5)
 export const emitOccasionToday = (labels: string[]) => emit('occasion:today', labels);
