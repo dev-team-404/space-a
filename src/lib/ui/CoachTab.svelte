@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { listFindings, onNewFindings, setFindingStatus, type CoachFinding } from '../api';
+  import { listFindings, onNewFindings, setFindingStatus, sessionsCtx, type CoachFinding, type SessionCtxItem } from '../api';
   import SessionModal from './SessionModal.svelte';
+  import { ctxLine, sessionIdsOf, totalSessionsOf } from './coach-helpers';
 
   let { focusKey = null }: { focusKey?: string | null } = $props();
 
@@ -9,6 +10,19 @@
   let showHidden = $state(false);
   let copied = $state<string | null>(null);
   let detail = $state<{ id: string; title: string } | null>(null);
+  let expanded = $state<string | null>(null);
+  let ctxCache = $state<Record<string, SessionCtxItem[]>>({});
+
+  async function toggleExpand(f: CoachFinding) {
+    if (expanded === f.dedup_key) {
+      expanded = null;
+      return;
+    }
+    expanded = f.dedup_key;
+    if (!ctxCache[f.dedup_key]) {
+      ctxCache[f.dedup_key] = await sessionsCtx(sessionIdsOf(f.evidence)).catch(() => []);
+    }
+  }
 
   const active = $derived(all.filter((f) => f.status === 'new'));
   const hidden = $derived(all.filter((f) => f.status !== 'new'));
@@ -64,8 +78,11 @@
     R1: '안 쓰는 MCP 서버가 토큰을 먹고 있어요',
     R2: '안 쓰는 플러그인이 자리만 차지해요',
     R5: '같은 파일을 반복해서 읽고 있어요',
-    R7: '가벼운 작업에 Opus는 과해요',
+    R7: '이 프로젝트, 가벼운 작업엔 시작 모델을 낮춰보세요',
     R9: '웹 검색이 너무 잦아요',
+    R10: '자동화 파이프라인이 Opus로 돌고 있어요',
+    R11: '같은 호출이 반복 거부되는 것 같아요',
+    R12: '설치해둔 스킬이 놀고 있어요',
   };
 </script>
 
@@ -82,6 +99,25 @@
         <p class="why">{f.detail} · {f.occurrences}회 관측</p>
         {#if sessionLine(f)}
           <p class="session">📂 {sessionLine(f)}</p>
+        {/if}
+        {#if f.scope_kind === 'project' && sessionIdsOf(f.evidence).length > 0}
+          <button class="raw-toggle" onclick={() => toggleExpand(f)}>
+            {expanded === f.dedup_key ? '▾' : '▸'} 포함 세션 {totalSessionsOf(f.evidence, sessionIdsOf(f.evidence).length)}건
+          </button>
+          {#if expanded === f.dedup_key}
+            <ul class="session-list">
+              {#each ctxCache[f.dedup_key] ?? [] as s (s.session_id)}
+                <li>
+                  <button onclick={() => (detail = { id: s.session_id, title: ctxLine(s) })}>
+                    {ctxLine(s)}
+                  </button>
+                </li>
+              {/each}
+              {#if totalSessionsOf(f.evidence, 0) > sessionIdsOf(f.evidence).length}
+                <li class="more">최신 {sessionIdsOf(f.evidence).length}건 표시 중 (전체 {totalSessionsOf(f.evidence, 0)}건)</li>
+              {/if}
+            </ul>
+          {/if}
         {/if}
         <p class="how">➜ {f.suggested_action}</p>
         <div class="actions">
@@ -162,6 +198,13 @@
     align-self: flex-start; border: none; background: none; cursor: pointer;
     font: inherit; font-size: 12px; color: var(--ink-soft); text-decoration: underline; padding: 0;
   }
+  .session-list { margin: 4px 0 0; padding: 0 0 0 8px; list-style: none; max-height: 180px; overflow-y: auto; }
+  .session-list li { margin: 2px 0; }
+  .session-list button {
+    border: none; background: none; cursor: pointer; font: inherit;
+    font-size: 12px; color: var(--ink-soft); text-decoration: underline; padding: 0;
+  }
+  .session-list .more { font-size: 11px; color: var(--ink-soft); }
   header button {
     border: none; cursor: pointer; font: inherit; font-size: 11px;
     background: var(--pastel-mint); border-radius: var(--radius-s); padding: 3px 8px;
