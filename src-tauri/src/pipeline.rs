@@ -71,7 +71,12 @@ mod runtime {
                     .map_err(|_| anyhow::anyhow!("store lock poisoned"))?;
                 let before: HashMap<String, String> = store.finding_severities()?.into_iter().collect();
 
-                let report = agent_mentor::ops::run_ingest(&store)?;
+                let report = agent_mentor::ops::run_ingest_with_progress(&store, &mut |done, total| {
+                    // 파일 수천 개일 수 있어 5건 단위로만 emit (마지막은 항상)
+                    if done == total || done % 5 == 0 {
+                        let _ = app.emit("scan:progress", serde_json::json!({"done": done, "total": total}));
+                    }
+                })?;
                 for w in &report.warnings { eprintln!("warn: {w}"); }
                 for w in agent_mentor::ops::run_inventory(&mut store)? { eprintln!("warn: {w}"); }
                 agent_mentor::ops::run_rules(&store)?;

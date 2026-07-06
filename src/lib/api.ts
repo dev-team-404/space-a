@@ -100,6 +100,14 @@ export const chatSend = (messages: ChatMessage[]) => invoke<string>('chat_send',
 // 마스코트가 pull한 occasion을 chat 창 알림 로그용으로 재방송 (pull 단일화 — 플랜 Task 2 Step 5)
 export const emitOccasionToday = (labels: string[]) => emit('occasion:today', labels);
 
+export interface ScanProgress {
+  done: number;
+  total: number;
+}
+
+export const onScanProgress = (cb: (p: ScanProgress) => void): Promise<UnlistenFn> =>
+  listen<ScanProgress>('scan:progress', (e) => cb(e.payload));
+
 export const onScanDone = (cb: (ts: string) => void): Promise<UnlistenFn> =>
   listen<string>('scan:done', (e) => cb(e.payload));
 export const onNewFindings = (cb: (rows: Finding[]) => void): Promise<UnlistenFn> =>

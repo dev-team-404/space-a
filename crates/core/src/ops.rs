@@ -21,7 +21,17 @@ pub struct IngestReport {
 }
 
 pub fn run_ingest(store: &SqliteStore) -> Result<IngestReport> {
+    run_ingest_with_progress(store, &mut |_, _| {})
+}
+
+/// 파일 단위 진행 콜백 `(done, total)` — Tauri 쪽에서 scan:progress emit에 사용 (스펙 §7).
+pub fn run_ingest_with_progress(
+    store: &SqliteStore,
+    on_progress: &mut dyn FnMut(usize, usize),
+) -> Result<IngestReport> {
     let mut report = IngestReport { files: 0, new_events: 0, warnings: Vec::new() };
+    // 1) 전 호스트 discover 먼저 — total을 알아야 진행률이 됨
+    let mut work: Vec<(crate::adapter::ClaudeCodeAdapter, Vec<std::path::PathBuf>)> = Vec::new();
     for hs in enumerate_hosts() {
         let adapter = hs.adapter();
         let files = match adapter.discover() {
@@ -32,15 +42,32 @@ pub fn run_ingest(store: &SqliteStore) -> Result<IngestReport> {
             }
         };
         report.files += files.len();
-        for f in &files {
-            match ingest_file(store, &adapter, f) {
+        work.push((adapter, files));
+    }
+    // 2) 파일 단위 수집 + 진행 보고
+    ingest_all(store, &work, &mut report, on_progress);
+    store.rebuild_rollup()?;
+    Ok(report)
+}
+
+fn ingest_all(
+    store: &SqliteStore,
+    work: &[(crate::adapter::ClaudeCodeAdapter, Vec<std::path::PathBuf>)],
+    report: &mut IngestReport,
+    on_progress: &mut dyn FnMut(usize, usize),
+) {
+    let total: usize = work.iter().map(|(_, files)| files.len()).sum();
+    let mut done = 0;
+    for (adapter, files) in work {
+        for f in files {
+            match ingest_file(store, adapter, f) {
                 Ok(n) => report.new_events += n,
                 Err(e) => report.warnings.push(format!("{} 수집 실패(건너뜀): {e}", f.display())),
             }
+            done += 1;
+            on_progress(done, total);
         }
     }
-    store.rebuild_rollup()?;
-    Ok(report)
 }
 
 pub fn read_json_guarded(path: &Path) -> Option<serde_json::Value> {
@@ -142,6 +169,34 @@ mod tests {
 
         run_rules(&store).unwrap();
         assert_eq!(store.count_findings().unwrap(), 1); // R1만 생존
+    }
+
+    #[test]
+    fn ingest_all_reports_monotonic_progress() {
+        use crate::adapter::ClaudeCodeAdapter;
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        let proj = dir.path().join("C--Users-jibin");
+        std::fs::create_dir_all(&proj).unwrap();
+        let mut files = Vec::new();
+        for (name, sid) in [("a.jsonl", "s1"), ("b.jsonl", "s2")] {
+            let file = proj.join(name);
+            let mut f = std::fs::File::create(&file).unwrap();
+            writeln!(f, r#"{{"type":"assistant","sessionId":"{sid}","uuid":"{sid}-u","timestamp":"2026-07-01T10:00:00Z","message":{{"model":"claude-opus-4-8","usage":{{"input_tokens":1,"output_tokens":2}}}}}}"#).unwrap();
+            files.push(file);
+        }
+
+        let store = SqliteStore::open_in_memory().unwrap();
+        let adapter = ClaudeCodeAdapter { root: dir.path().into(), host: "Windows".into() };
+        let work = vec![(adapter, files)];
+        let mut seen = Vec::new();
+        let mut report = IngestReport { files: 2, new_events: 0, warnings: Vec::new() };
+        ingest_all(&store, &work, &mut report, &mut |done, total| seen.push((done, total)));
+
+        assert_eq!(seen, vec![(1, 2), (2, 2)]); // 파일 단위 단조 증가
+        assert_eq!(report.new_events, 2);
+        assert!(report.warnings.is_empty());
     }
 
     #[test]

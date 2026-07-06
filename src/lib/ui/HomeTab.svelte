@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
-    getModelMix, getWeekSummary, listFindings, onScanDone, runScanNow,
-    type CoachFinding, type DayStat, type ModelMixEntry, type Summary,
+    getModelMix, getWeekSummary, listFindings, onScanDone, onScanProgress, runScanNow,
+    type CoachFinding, type DayStat, type ModelMixEntry, type ScanProgress, type Summary,
   } from '../api';
   import { loadNotices, type Notice } from '../notices';
   import WeekTrend from './home/WeekTrend.svelte';
@@ -14,6 +14,7 @@
 
   const fmt = (n: number | undefined) => (n ?? 0).toLocaleString();
   let scanning = $state(false);
+  let progress = $state<ScanProgress | null>(null);
   let days = $state<DayStat[]>([]);
   let mix = $state<ModelMixEntry[]>([]);
   let findings = $state<CoachFinding[]>([]);
@@ -31,8 +32,11 @@
   load();
 
   $effect(() => {
-    const p = onScanDone(() => { scanning = false; load(); });
-    return () => { p.then((u) => u()); };
+    const subs = [
+      onScanProgress((p) => { scanning = true; progress = p; }),
+      onScanDone(() => { scanning = false; progress = null; load(); }),
+    ];
+    return () => { subs.forEach((s) => s.then((u) => u())); };
   });
 
   async function scan() {
@@ -64,7 +68,13 @@
 
   <footer class="status">
     {#if scanning}
-      <span class="scanning">스캔 중…</span>
+      <span class="scan-live">
+        <span class="scanning">스캔 중…</span>
+        {#if progress && progress.total > 0}
+          <span class="bar"><span class="fill" style="width: {Math.min(100, Math.round((progress.done / progress.total) * 100))}%"></span></span>
+          <span class="pct">{progress.done}/{progress.total}</span>
+        {/if}
+      </span>
     {:else if summary?.last_scan}
       <span>마지막 스캔: {new Date(summary.last_scan).toLocaleString()}</span>
     {:else}
@@ -96,4 +106,11 @@
   .status button:disabled { opacity: 0.6; cursor: default; }
   .scanning { animation: blink 1.2s ease-in-out infinite; }
   @keyframes blink { 50% { opacity: 0.35; } }
+  .scan-live { display: flex; align-items: center; gap: 8px; }
+  .bar {
+    width: 140px; height: 6px; border-radius: 999px;
+    background: var(--pastel-lav); overflow: hidden; display: inline-block;
+  }
+  .fill { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.2s ease; }
+  .pct { font-size: 11px; color: var(--ink-soft); }
 </style>
