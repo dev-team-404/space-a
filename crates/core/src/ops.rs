@@ -9,6 +9,7 @@ use crate::rules::r5_repeated_read::R5RepeatedRead;
 use crate::rules::r7_opus_trivial::R7OpusTrivial;
 use crate::rules::r9_web_overuse::R9WebOveruse;
 use crate::rules::r10_automation_burst::R10AutomationBurst;
+use crate::rules::r11_permission_friction::R11PermissionFriction;
 use crate::rules::RuleEngine;
 use crate::store::{ingest_file, SqliteStore};
 use anyhow::Result;
@@ -90,6 +91,7 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
         Box::new(R7OpusTrivial::default()),
         Box::new(R9WebOveruse::default()),
         Box::new(R10AutomationBurst::default()),
+        Box::new(R11PermissionFriction::default()),
     ]);
     let findings = engine.run(store)?;
     let now = chrono::Utc::now().to_rfc3339();
