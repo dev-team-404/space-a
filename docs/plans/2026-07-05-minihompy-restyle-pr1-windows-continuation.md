@@ -180,6 +180,11 @@ npm run tauri dev
   중복 전달이나 `.rsrc` 1개로 무해 실측. **mac에선 재현 불가(Windows 로더 전용) — 이런 부류가 §2가 경고한
   실행 환경 차이의 실체.**
 - 남은 것: §4 수동 E2E(시각 판정)와 §5.1 결정 3건 — 사용자 몫.
+- **PR #10 gemini 리뷰 5건 대응(`f9ef3da`)**: ①CoachTab 복사 성공시에만 '복사됨'(§5.2 해소)
+  ②DiaryTab marked 파싱 예외→null 흡수(기존 에러 분기 재사용) ③**MiniRoom 말풍선 2줄 클램프 —
+  §5.1 ★ 오버플로 선반영(E2E에선 클램프 잘림 감성만 확인하면 됨)** ④Mascot 표준 line-clamp 병기
+  (§5.2 svelte-check 경고 해소) ⑤WeekTrend 날짜 파싱은 거절(타임존 없는 date-time은 ES 스펙상
+  로컬 고정 + WebView2 단일 런타임). 인라인 답글 5건 완료. 잔여 §5.1 결정: a11y·expand() 레이스 2건.
 
 ## 7. 마무리 & 다음 (PR②)
 
