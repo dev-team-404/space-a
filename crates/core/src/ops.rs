@@ -87,6 +87,8 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     // 동작이라 조치 주체 없음 — 세션 카드 스팸 재발). 크로스세션 반복→CLAUDE.md 레버로
     // 재설계 예정 — docs/brainstroming/2026-07-06-coaching-v2.1-kickoff.md
     store.delete_findings_by_rule_and_scope("R5", "session")?;
+    // R11 발화 보류(아래 주석)에 따라 이전 스캔이 만든 기존 카드도 정리한다.
+    store.delete_findings_by_rule_and_scope("R11", "project")?;
     let engine = RuleEngine::new(vec![
         Box::new(R1UnusedMcp::default()),
         Box::new(R2UnusedPluginSkills::default()),
@@ -119,6 +121,27 @@ mod tests {
         let findings = run_rules(&store).unwrap();
         assert!(findings.is_empty());
         assert_eq!(store.count_findings().unwrap(), 0);
+    }
+
+    #[test]
+    fn run_rules_purges_deprecated_findings() {
+        use crate::finding::{Finding, Severity};
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |rule: &str, kind: &str, key: &str| Finding {
+            rule_id: rule.into(), severity: Severity::Suggest,
+            scope_host: None, scope_project: None,
+            scope_kind: kind.into(), scope_ref: "x".into(),
+            evidence: serde_json::json!({}), est_tokens_saved: 0,
+            prescription: None, dedup_key: key.into(),
+        };
+        // 보류/폐기된 룰의 기존 카드 3종 + 유지돼야 할 R1 카드 1종
+        store.upsert_finding(&mk("R7", "session", "R7|s1"), "2026-07-06T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R5", "session", "R5|s1|a.md"), "2026-07-06T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R11", "project", "R11|W|p"), "2026-07-06T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R1", "host", "R1|W|ctx"), "2026-07-06T00:00:00Z").unwrap();
+
+        run_rules(&store).unwrap();
+        assert_eq!(store.count_findings().unwrap(), 1); // R1만 생존
     }
 
     #[test]

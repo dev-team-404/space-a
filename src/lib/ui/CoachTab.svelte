@@ -3,7 +3,7 @@
   import SessionModal from './SessionModal.svelte';
   import { ctxLine, sessionIdsOf, totalSessionsOf } from './coach-helpers';
 
-  let { focusKey = null }: { focusKey?: string | null } = $props();
+  let { focusKey = null, onChanged }: { focusKey?: string | null; onChanged?: () => void } = $props();
 
   let all = $state<CoachFinding[]>([]);
   let open = $state<string | null>(null);
@@ -58,6 +58,7 @@
   async function mark(f: CoachFinding, status: 'resolved' | 'dismissed' | 'new') {
     await setFindingStatus(f.dedup_key, status).catch(() => {});
     await refresh();
+    onChanged?.(); // 셸의 절약 총액·코칭 배지 즉시 갱신
   }
 
   // 세션 스코프 finding의 "어떤 작업인지" — 프로젝트 · 시작 시각
