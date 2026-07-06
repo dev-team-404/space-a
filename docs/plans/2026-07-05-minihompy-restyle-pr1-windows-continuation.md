@@ -165,7 +165,23 @@ npm run tauri dev
 
 ---
 
-## 6. 마무리 & 다음 (PR②)
+## 6. Windows 검증 결과 (2026-07-06, 리뷰 세션)
+
+**자동 게이트 전부 그린 + 회귀 1건 발견·수정(`ea2bdcc`).**
+
+- `cargo test --workspace`: core **102**(hosts 테스트 포함, §2 예측대로 스킵 없이 통과) + app **11**, 무경고
+- `npx vitest run`: **37 pass** · `npm run build`: 성공, 경고 0 · `cargo build`: 성공, **앱 실행 스모크 통과**
+- **[Windows 전용 회귀, 수정됨]** `cargo test -p agent-mentor-app`이 `STATUS_ENTRYPOINT_NOT_FOUND`(0xc0000139)로
+  로드조차 실패 — Task 2(18d68c1)부터. 원인: 테스트 하니스에 muda의 `TaskDialogIndirect`(comctl32 **v6 전용**)
+  임포트가 새로 링크됐는데, tauri-build는 매니페스트 리소스를 `rustc-link-arg-bins`(bin 전용)로만 넣어
+  테스트 exe에 `.rsrc`(공용 컨트롤 v6 매니페스트)가 없음 → 로더가 comctl32 **5.82**를 잡아 심볼 부재.
+  디버그 루프 + 전 임포트 GetProcAddress 검사로 확정. 픽스: build.rs에서 전 타깃 `rustc-link-arg`로
+  libresource.a 링크(`rustc-link-arg-tests`는 lib 단위테스트 미적용 — cargo #10937). bin은 동일 아카이브
+  중복 전달이나 `.rsrc` 1개로 무해 실측. **mac에선 재현 불가(Windows 로더 전용) — 이런 부류가 §2가 경고한
+  실행 환경 차이의 실체.**
+- 남은 것: §4 수동 E2E(시각 판정)와 §5.1 결정 3건 — 사용자 몫.
+
+## 7. 마무리 & 다음 (PR②)
 
 - Windows E2E 통과 → §5의 결정사항 반영 커밋 → PR① 머지.
 - **PR②(채팅 탭 + triage 잔여)**: 스펙 §5·§7 기준. 진행률 바(상태줄 자리만 잡혀 있음)·로그·로컬
