@@ -204,6 +204,10 @@ npm run tauri dev
    `get_session_transcript` 커맨드 + 코칭 카드 [세션 상세] 버튼 → 모달(Esc/X 닫기).
    전송 없음 — 로컬 파일 파싱만(프라이버시 경계 유지).
 
+**E2E 최종 판정 (2026-07-06, 사용자)**: §4 체크 완료·통과. §5.1 잔여 2건(a11y 억제 유지, expand 레이스 —
+드리프트 미관측)은 tracked debt로 수용. 코칭 규칙 품질은 별도 라운드로 —
+`docs/brainstroming/2026-07-06-coaching-v2-kickoff.md`. **머지 진행.**
+
 ## 8. 마무리 & 다음 (PR②)
 
 - Windows E2E 통과 → §5의 결정사항 반영 커밋 → PR① 머지.
