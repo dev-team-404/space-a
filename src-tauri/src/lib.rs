@@ -105,6 +105,8 @@ pub fn run() {
                 commands::get_today_occasions,
                 commands::get_session_transcript,
                 commands::sessions_ctx,
+                commands::chat_status,
+                commands::chat_send,
             ])
             .run(tauri::generate_context!())
             .expect("tauri 실행 실패");
