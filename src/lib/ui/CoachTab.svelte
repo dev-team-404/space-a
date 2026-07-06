@@ -99,6 +99,8 @@
         <p class="why">{f.detail} · {f.occurrences}회 관측</p>
         {#if sessionLine(f)}
           <p class="session">📂 {sessionLine(f)}</p>
+        {:else if f.scope_kind === 'project' && f.scope_project}
+          <p class="session">📂 {f.scope_project}</p>
         {/if}
         {#if f.scope_kind === 'project' && sessionIdsOf(f.evidence).length > 0}
           <button class="raw-toggle" onclick={() => toggleExpand(f)}>
