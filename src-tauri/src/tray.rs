@@ -26,15 +26,25 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             .unwrap_or(false)
     };
     let realtime = CheckMenuItem::with_id(app, "realtime", "실시간 조언", true, realtime_on, None::<&str>)?;
+    let protect_on = {
+        let state = app.state::<AppState>();
+        let guard = state.store.lock().ok();
+        guard
+            .and_then(|s| s.get_setting("content_protected").ok().flatten())
+            .map(|v| v == "true")
+            .unwrap_or(false)
+    };
+    let protect = CheckMenuItem::with_id(app, "protect", "화면 캡처 보호", true, protect_on, None::<&str>)?;
     let scan = MenuItem::with_id(app, "scan", "지금 스캔", true, None::<&str>)?;
     let auto_on = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart = CheckMenuItem::with_id(app, "autostart", "시작 시 실행", true, auto_on, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &mascot, &realtime, &scan, &autostart, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &mascot, &realtime, &protect, &scan, &autostart, &quit])?;
 
     let autostart_item = autostart.clone();
     let mascot_item = mascot.clone();
     let realtime_item = realtime.clone();
+    let protect_item = protect.clone();
     TrayIconBuilder::with_id("main")
         .icon(
             app.default_window_icon()
@@ -73,6 +83,24 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     let _ = realtime_item.set_checked(next);
                 }
                 let _ = app.emit("settings:changed", ());
+            }
+            "protect" => {
+                // muda CheckMenuItem은 클릭 시 checked 자동 토글 — store를 소스오브트루스로.
+                let next = {
+                    let state = app.state::<AppState>();
+                    let Ok(store) = state.store.lock() else { return };
+                    let cur = store
+                        .get_setting("content_protected")
+                        .ok()
+                        .flatten()
+                        .map(|v| v == "true")
+                        .unwrap_or(false);
+                    let next = !cur;
+                    let _ = store.set_setting("content_protected", if next { "true" } else { "false" });
+                    next
+                }; // 락 해제 후 창 적용
+                let _ = protect_item.set_checked(next);
+                crate::apply_content_protection(app, next);
             }
             "scan" => {
                 let _ = app.state::<AppState>().scan_tx.send(PipelineMsg::RunNow);

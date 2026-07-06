@@ -290,13 +290,19 @@ pub fn get_settings(state: State<AppState>) -> Result<HashMap<String, String>, S
 }
 
 #[tauri::command(async)]
-pub fn set_setting(state: State<AppState>, key: String, value: String) -> Result<(), String> {
+pub fn set_setting(app: tauri::AppHandle, state: State<AppState>, key: String, value: String) -> Result<(), String> {
     const ALLOWED: &[&str] = &["mascot_visible", "chatter_level", "content_protected", "mascot_pos", "realtime_advice", "last_advice_key"];
     if !ALLOWED.contains(&key.as_str()) {
         return Err(format!("허용되지 않은 설정 키: {key}"));
     }
-    let guard = lock(&state)?;
-    guard.set_setting(&key, &value).map_err(|e| e.to_string())
+    {
+        let guard = lock(&state)?;
+        guard.set_setting(&key, &value).map_err(|e| e.to_string())?;
+    } // 락 해제 후 창 적용
+    if key == "content_protected" {
+        crate::apply_content_protection(&app, value == "true");
+    }
+    Ok(())
 }
 
 #[tauri::command]

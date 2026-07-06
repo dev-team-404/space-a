@@ -15,6 +15,18 @@ pub struct AppState {
     pub scan_tx: std::sync::mpsc::Sender<pipeline::PipelineMsg>,
 }
 
+/// content_protected 설정을 두 창(chat·mascot)에 적용 — 화면 캡처/녹화에서 제외 (스펙 §7).
+pub(crate) fn apply_content_protection(app: &tauri::AppHandle, on: bool) {
+    use tauri::Manager;
+    for label in ["chat", "mascot"] {
+        if let Some(w) = app.get_webview_window(label) {
+            if let Err(e) = w.set_content_protected(on) {
+                log::warn!("content_protected({label}) 적용 실패: {e}");
+            }
+        }
+    }
+}
+
 pub fn run() {
     #[cfg(not(test))]
     {
@@ -99,6 +111,17 @@ pub fn run() {
                         if visible {
                             let _ = w.show();
                         }
+                    }
+                }
+                // content_protected 설정을 시작 시 실제 적용 (스펙 §7)
+                {
+                    let state = app.state::<AppState>();
+                    let on = {
+                        let store = state.store.lock().map_err(|_| anyhow::anyhow!("store lock"))?;
+                        store.get_setting("content_protected")?.map(|v| v == "true").unwrap_or(false)
+                    };
+                    if on {
+                        apply_content_protection(app.handle(), true);
                     }
                 }
                 log::info!("Agent Mentor 시작 — 파이프라인·트레이 초기화 완료");
