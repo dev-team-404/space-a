@@ -96,15 +96,17 @@ pub fn finding_advice(
             let n = evidence.get("total_sessions").and_then(|v| v.as_u64()).unwrap_or(0);
             let opus_n = evidence.get("opus_session_count").and_then(|v| v.as_u64()).unwrap_or(0);
             let temp = evidence.get("temp_hit_ratio_pct").and_then(|v| v.as_u64()).unwrap_or(0);
+            let opus_part =
+                if opus_n == n { "전부".to_string() } else { format!("그중 {opus_n}건이") };
             let mut detail = format!(
-                "초단기 세션 {n}건이 짧은 간격으로 반복됐고 그중 {opus_n}건이 Opus 전용이었어요 (~{est_tokens_saved}토큰 비용-등가)"
+                "초단기 세션 {n}건이 짧은 간격으로 반복됐고 {opus_part} Opus 전용이었어요 (~{est_tokens_saved}토큰 비용-등가)"
             );
             if temp > 0 {
                 detail.push_str(&format!(" · temp 경로 흔적 {temp}%"));
             }
             (
                 detail,
-                "자동화 도구가 만든 세션 패턴으로 보여요 — 그 도구의 모델 설정 한 곳을 haiku로 바꾸면 이후 전부에 적용돼요".to_string(),
+                "자동화 스크립트가 만든 패턴으로 보여요 — 이 프로젝트 경로에서 `claude`를 실행하는 스크립트를 찾아 `--model haiku`를 지정하세요. `--model` 없이 실행된 자동화는 기본 모델을 그대로 상속받아요".to_string(),
             )
         }
         "R11" => {
@@ -461,9 +463,21 @@ mod tests {
             500000,
         );
         assert!(detail.contains("81"));
+        assert!(detail.contains("전부")); // opus_n == n이면 "그중 81건이" 대신 "전부"
         assert!(detail.contains("temp")); // 가산 신호 서사 인용
-        assert!(action.contains("모델 설정"));
+        assert!(action.contains("--model haiku")); // 조치 메커니즘 명시 (플래그 미지정 → 기본 모델 상속)
+        assert!(action.contains("상속"));
         assert!(action.contains("보여요")); // 가설 표현 — 단정 금지
+    }
+
+    #[test]
+    fn finding_advice_r10_partial_opus_says_count() {
+        let (detail, _) = super::finding_advice(
+            "R10",
+            &serde_json::json!({"total_sessions": 9, "opus_session_count": 7, "temp_hit_ratio_pct": 0}),
+            1000,
+        );
+        assert!(detail.contains("그중 7건이"));
     }
 
     #[test]

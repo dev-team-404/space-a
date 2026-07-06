@@ -97,7 +97,8 @@
           <span class="title">{icon(f.severity)} {TITLE[f.rule_id] ?? '아낄 수 있는 게 보여요'}</span>
           <span class="save">~{f.est_tokens_saved.toLocaleString()} tok</span>
         </header>
-        <p class="why">{f.detail} · {f.occurrences}회 관측</p>
+        <!-- 집계(project) 카드의 occurrences는 스캔 횟수라 "N회 관측"이 오독을 유발 → 원본 데이터로 이동 -->
+        <p class="why">{f.detail}{#if f.scope_kind === 'session'} · {f.occurrences}회 관측{/if}</p>
         {#if sessionLine(f)}
           <p class="session">📂 {sessionLine(f)}</p>
         {:else if f.scope_kind === 'project' && f.scope_project}
@@ -139,6 +140,7 @@
           {open === f.dedup_key ? '▾' : '▸'} 원본 데이터
         </button>
         {#if open === f.dedup_key}
+          <p class="why">스캔에서 {f.occurrences}회 관측 · 마지막 {f.last_seen ?? '–'}</p>
           <pre>{JSON.stringify(f.evidence, null, 2)}</pre>
         {/if}
       </article>
