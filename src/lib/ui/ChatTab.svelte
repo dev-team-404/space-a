@@ -87,7 +87,7 @@
     padding: 18px 20px;
   }
   .setup .fine { color: var(--ink-soft); font-size: 12px; }
-  .setup code { background: var(--pastel-lav); border-radius: 4px; padding: 1px 4px; }
+  .setup code { background: var(--pastel-lav); border-radius: var(--radius-s); padding: 1px 4px; }
   .list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
   .hint { color: var(--ink-soft); font-size: 12px; margin: auto; }
   .msg {

@@ -62,6 +62,7 @@ impl OpenAiCompatEngine {
             "temperature": 0.7
         });
         let resp = ureq::post(&url)
+            .timeout(std::time::Duration::from_secs(60))
             .set("Authorization", &format!("Bearer {}", self.api_key))
             .set("Content-Type", "application/json")
             .send_json(body)

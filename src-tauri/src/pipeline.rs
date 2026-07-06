@@ -106,7 +106,14 @@ mod runtime {
                 // 다이어리 실패는 조용히 — 다음 사이클에서 재시도
                 maybe_generate_diaries(app, &state.store);
             }
-            Err(e) => log::error!("pipeline error: {e}"),
+            Err(e) => {
+                log::error!("pipeline error: {e}");
+                // 스캔이 도중 실패해도 프론트의 scanning 상태를 반드시 해제 — scan:progress로 켜진 "스캔 중…" 고착 방지
+                let now = chrono::Local::now().to_rfc3339();
+                if let Err(e) = app.emit("scan:done", &now) {
+                    log::error!("scan:done(에러 경로) emit 실패: {e}");
+                }
+            }
         }
     }
 
