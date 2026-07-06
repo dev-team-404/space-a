@@ -81,6 +81,8 @@ pub fn run_inventory(store: &mut SqliteStore) -> Result<Vec<String>> {
 }
 
 pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
+    // 코칭 v2 이행: 세션 스코프 R7은 폐기 — 프로젝트 집계(R7 v2)가 대체 (스펙 §3)
+    store.delete_findings_by_rule_and_scope("R7", "session")?;
     let engine = RuleEngine::new(vec![
         Box::new(R5RepeatedRead::default()),
         Box::new(R1UnusedMcp::default()),
