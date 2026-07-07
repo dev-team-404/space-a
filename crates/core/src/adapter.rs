@@ -43,6 +43,62 @@ fn as_u64(v: &Value, key: &str) -> u64 {
     v.get(key).and_then(|x| x.as_u64()).unwrap_or(0)
 }
 
+/// tool_result 상태 분류. 프로즈는 저장하지 않고 여기서 enum만 도출한다(스펙 §4.2).
+/// 거부 마커는 Claude Code 메시지 텍스트 의존(안정 API 아님) — 실 트랜스크립트로 핀하고,
+/// 미인식 시 error로 폴백해 R11이 오탐 대신 침묵하게 한다. **거부 마커는 §E2E 검증 포인트.**
+const DENY_MARKERS: &[&str] = &[
+    "doesn't want to proceed",
+    "tool use was rejected",
+    "user doesn't want to take this action",
+    "hasn't granted",
+    "requested permissions",
+];
+
+pub(crate) fn classify_tool_result(is_error: bool, content: &str) -> crate::model::ResultStatus {
+    use crate::model::ResultStatus;
+    let low = content.to_ascii_lowercase();
+    if DENY_MARKERS.iter().any(|m| low.contains(m)) {
+        ResultStatus::Denied
+    } else if is_error {
+        ResultStatus::Error
+    } else {
+        ResultStatus::Ok
+    }
+}
+
+/// tool_result content(문자열 또는 블록 배열)를 검색 가능한 문자열로 평탄화.
+fn tool_result_content_string(content: Option<&Value>) -> String {
+    match content {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Array(arr)) => arr
+            .iter()
+            .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+            .collect::<Vec<_>>()
+            .join(" "),
+        Some(other) => other.to_string(),
+        None => String::new(),
+    }
+}
+
+/// user 프롬프트 미리보기(첫 줄 ≤120자). content가 문자열이면 그대로, 블록 배열이면 text 연결.
+/// tool_result 라인이나 빈 내용은 None. command 마커로 시작하면 None.
+fn extract_prompt_preview(content: Option<&Value>) -> Option<String> {
+    let raw = match content {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Array(arr)) => arr
+            .iter()
+            .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+            .collect::<Vec<_>>()
+            .join(" "),
+        _ => return None,
+    };
+    let first_line = raw.lines().next().unwrap_or("").trim();
+    if first_line.is_empty() || first_line.starts_with("<command") {
+        return None;
+    }
+    Some(first_line.chars().take(120).collect())
+}
+
 impl SourceAdapter for ClaudeCodeAdapter {
     fn discover(&self) -> Result<Vec<PathBuf>> {
         let projects = self.root.join("projects");
@@ -126,6 +182,18 @@ impl SourceAdapter for ClaudeCodeAdapter {
         };
 
         let mut out = Vec::new();
+
+        // cwd 있는 라인 → SessionMeta (sessions로 라우팅됨, events 미저장)
+        if let Some(cwd) = v.get("cwd").and_then(|x| x.as_str()) {
+            let git_branch = v.get("gitBranch").and_then(|x| x.as_str()).map(String::from);
+            out.push(mk(EventKind::SessionMeta { cwd: cwd.to_string(), git_branch }, 900));
+        }
+        // compaction 경계
+        if v.get("isCompactSummary").and_then(|x| x.as_bool()).unwrap_or(false) {
+            out.push(mk(EventKind::Compaction, 0));
+            return out;
+        }
+
         if ltype == "assistant" {
             let msg = v.get("message").cloned().unwrap_or(Value::Null);
             let usage = msg.get("usage").cloned().unwrap_or(Value::Null);
@@ -159,6 +227,8 @@ impl SourceAdapter for ClaudeCodeAdapter {
                         let raw_name =
                             block.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
                         let input = block.get("input").cloned().unwrap_or(Value::Null);
+                        let tool_use_id =
+                            block.get("id").and_then(|x| x.as_str()).map(String::from);
                         let (kind, target) = if raw_name == "Skill" {
                             let sname = input
                                 .get("skill")
@@ -175,10 +245,33 @@ impl SourceAdapter for ClaudeCodeAdapter {
                             (ToolKind::from_raw_name(&raw_name), t)
                         };
                         out.push(mk(
-                            EventKind::ToolCall { kind, raw_name, target, tool_use_id: None },
+                            EventKind::ToolCall { kind, raw_name, target, tool_use_id },
                             (i + 1) as u64,
                         ));
                     }
+                }
+            }
+        }
+
+        if ltype == "user" && !v.get("isMeta").and_then(|x| x.as_bool()).unwrap_or(false) {
+            let msg = v.get("message").cloned().unwrap_or(Value::Null);
+            let content = msg.get("content");
+            let mut had_tool_result = false;
+            if let Some(arr) = content.and_then(|c| c.as_array()) {
+                for (i, block) in arr.iter().enumerate() {
+                    if block.get("type").and_then(|x| x.as_str()) == Some("tool_result") {
+                        had_tool_result = true;
+                        let tuid = block.get("tool_use_id").and_then(|x| x.as_str()).unwrap_or("").to_string();
+                        let is_error = block.get("is_error").and_then(|x| x.as_bool()).unwrap_or(false);
+                        let cstr = tool_result_content_string(block.get("content"));
+                        let status = classify_tool_result(is_error, &cstr);
+                        out.push(mk(EventKind::ToolResult { tool_use_id: tuid, status }, (i + 1) as u64));
+                    }
+                }
+            }
+            if !had_tool_result {
+                if let Some(preview) = extract_prompt_preview(content) {
+                    out.push(mk(EventKind::UserPrompt { preview }, 0)); // off_bump 0 = 라인 시작(deref 포인터)
                 }
             }
         }
@@ -207,9 +300,9 @@ mod tests {
             "content":[{"type":"text","text":"hi"},
             {"type":"tool_use","name":"Read","input":{"file_path":"C:\\a\\report.xlsx"}}]}}"#;
         let evs = adapter().map(line, "s1.jsonl", 0);
-        assert_eq!(evs.len(), 2, "one AssistantTurn + one ToolCall");
+        assert_eq!(evs.len(), 3, "one SessionMeta(cwd) + one AssistantTurn + one ToolCall");
 
-        match &evs[0].kind {
+        match &evs[1].kind {
             EventKind::AssistantTurn { usage, web_search, .. } => {
                 assert_eq!(usage.cache_creation, 55000);
                 assert_eq!(usage.eph_1h, 100);
@@ -217,7 +310,7 @@ mod tests {
             }
             k => panic!("expected AssistantTurn, got {k:?}"),
         }
-        match &evs[1].kind {
+        match &evs[2].kind {
             EventKind::ToolCall { kind, target, .. } => {
                 assert_eq!(*kind, ToolKind::FileRead);
                 assert_eq!(target.as_deref(), Some("C:\\a\\report.xlsx"));
@@ -252,6 +345,81 @@ mod tests {
         assert!(adapter().map("not json at all", "x.jsonl", 0).is_empty());
         assert!(adapter().map("{}", "x.jsonl", 0).is_empty());
         assert!(adapter().map(r#"{"type":"summary"}"#, "x.jsonl", 0).is_empty());
+    }
+
+    #[test]
+    fn classify_tool_result_denied_error_ok() {
+        use crate::model::ResultStatus;
+        assert_eq!(super::classify_tool_result(true, "The user doesn't want to proceed with this tool use"), ResultStatus::Denied);
+        assert_eq!(super::classify_tool_result(false, "the tool use was rejected"), ResultStatus::Denied);
+        assert_eq!(super::classify_tool_result(true, "File not found: x.rs"), ResultStatus::Error);
+        assert_eq!(super::classify_tool_result(false, "ok result body"), ResultStatus::Ok);
+    }
+
+    #[test]
+    fn map_user_tool_result_line_yields_toolresult() {
+        use crate::model::{EventKind, ResultStatus};
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u2","timestamp":"2026-07-07T10:01:00Z",
+            "cwd":"D:\\Project\\cowork","gitBranch":"main",
+            "message":{"role":"user","content":[
+              {"type":"tool_result","tool_use_id":"toolu_1","is_error":true,
+               "content":"The user doesn't want to proceed with this tool use"}]}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 100);
+        // SessionMeta(cwd) + ToolResult
+        let tr = evs.iter().find(|e| matches!(e.kind, EventKind::ToolResult { .. })).unwrap();
+        match &tr.kind {
+            EventKind::ToolResult { tool_use_id, status } => {
+                assert_eq!(tool_use_id, "toolu_1");
+                assert_eq!(*status, ResultStatus::Denied);
+            }
+            k => panic!("expected ToolResult, got {k:?}"),
+        }
+        assert!(evs.iter().any(|e| matches!(&e.kind, EventKind::SessionMeta { cwd, .. } if cwd == "D:\\Project\\cowork")));
+    }
+
+    #[test]
+    fn map_user_prompt_line_yields_userprompt_preview_at_line_offset() {
+        use crate::model::EventKind;
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u3","timestamp":"2026-07-07T10:00:00Z",
+            "cwd":"D:\\Project\\cowork","message":{"role":"user","content":"Run this exact Bash command\nand then stop"}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 500);
+        let up = evs.iter().find(|e| matches!(e.kind, EventKind::UserPrompt { .. })).unwrap();
+        match &up.kind {
+            EventKind::UserPrompt { preview } => assert_eq!(preview, "Run this exact Bash command"), // 첫 줄만
+            k => panic!("expected UserPrompt, got {k:?}"),
+        }
+        assert_eq!(up.source_offset, 500, "deref 포인터는 라인 시작 offset(off_bump 0)");
+    }
+
+    #[test]
+    fn map_meta_user_line_is_not_prompt() {
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u4","isMeta":true,
+            "message":{"role":"user","content":"<command-name>/clear</command-name>"}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        assert!(!evs.iter().any(|e| matches!(e.kind, crate::model::EventKind::UserPrompt { .. })));
+    }
+
+    #[test]
+    fn map_compact_summary_line_yields_compaction() {
+        use crate::model::EventKind;
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u5","isCompactSummary":true,
+            "message":{"role":"user","content":"[compacted]"}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        assert!(evs.iter().any(|e| matches!(e.kind, EventKind::Compaction)));
+    }
+
+    #[test]
+    fn map_assistant_tool_use_captures_tool_use_id() {
+        use crate::model::EventKind;
+        let line = r#"{"type":"assistant","sessionId":"s1","uuid":"u1","timestamp":"2026-07-07T10:00:00Z",
+            "cwd":"C:\\Users\\jibin","message":{"model":"claude-opus-4-8","usage":{"input_tokens":1,"output_tokens":1},
+            "content":[{"type":"tool_use","id":"toolu_9","name":"Read","input":{"file_path":"a.rs"}}]}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        let tc = evs.iter().find(|e| matches!(e.kind, EventKind::ToolCall { .. })).unwrap();
+        match &tc.kind {
+            EventKind::ToolCall { tool_use_id, .. } => assert_eq!(tool_use_id.as_deref(), Some("toolu_9")),
+            k => panic!("expected ToolCall, got {k:?}"),
+        }
     }
 
     #[test]
