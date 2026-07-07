@@ -127,8 +127,8 @@ impl SqliteStore {
                            (session_id, host, project_id, agent, first_ts, last_ts, git_branch, cwd)
                          VALUES (?1,?2,?3,'claude-code',?4,?4,?5,?6)
                          ON CONFLICT(session_id) DO UPDATE SET
-                           last_ts  = MAX(COALESCE(last_ts, ?4), ?4),
-                           first_ts = MIN(COALESCE(first_ts, ?4), ?4),
+                           last_ts  = MAX(COALESCE(last_ts, ?4),  COALESCE(?4, last_ts)),
+                           first_ts = MIN(COALESCE(first_ts, ?4), COALESCE(?4, first_ts)),
                            git_branch = COALESCE(sessions.git_branch, ?5),
                            cwd        = COALESCE(sessions.cwd, ?6)",
                         params![e.session_id, e.host, e.project_id, e.ts, git_branch, cwd],
@@ -142,8 +142,8 @@ impl SqliteStore {
                             first_prompt_preview, first_prompt_source_file, first_prompt_offset)
                          VALUES (?1,?2,?3,'claude-code',?4,?4,?5,?6,?7)
                          ON CONFLICT(session_id) DO UPDATE SET
-                           last_ts  = MAX(COALESCE(last_ts, ?4), ?4),
-                           first_ts = MIN(COALESCE(first_ts, ?4), ?4),
+                           last_ts  = MAX(COALESCE(last_ts, ?4),  COALESCE(?4, last_ts)),
+                           first_ts = MIN(COALESCE(first_ts, ?4), COALESCE(?4, first_ts)),
                            first_prompt_preview     = COALESCE(sessions.first_prompt_preview, ?5),
                            first_prompt_source_file = COALESCE(sessions.first_prompt_source_file, ?6),
                            first_prompt_offset      = COALESCE(sessions.first_prompt_offset, ?7)",
@@ -193,8 +193,8 @@ impl SqliteStore {
                 "INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, git_branch)
                  VALUES (?1,?2,?3,'claude-code',?4,?4,NULL)
                  ON CONFLICT(session_id) DO UPDATE SET
-                   last_ts = MAX(COALESCE(last_ts, ?4), ?4),
-                   first_ts = MIN(COALESCE(first_ts, ?4), ?4)",
+                   last_ts = MAX(COALESCE(last_ts, ?4),  COALESCE(?4, last_ts)),
+                   first_ts = MIN(COALESCE(first_ts, ?4), COALESCE(?4, first_ts))",
                 params![e.session_id, e.host, e.project_id, e.ts],
             )?;
         }
@@ -1406,5 +1406,34 @@ mod tests {
         assert_eq!(prev.as_deref(), Some("Run this exact Bash command")); // 최초값 유지
         assert_eq!(pfile.as_deref(), Some("C:\\proj\\s1.jsonl"));
         assert_eq!(poff, Some(10));
+    }
+
+    #[test]
+    fn ts_less_compaction_does_not_wipe_session_first_last_ts() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let base = |uuid: &str, off: u64, ts: Option<&str>, kind: EventKind| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+            uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
+            ts: ts.map(|s| s.to_string()),
+            source_file: "s1.jsonl".into(), source_offset: off, kind,
+        };
+        // 1) ts 있는 이벤트로 first_ts/last_ts 설정
+        store.upsert_events(&[
+            base("a1", 0, Some("2026-07-01T10:00:00Z"), EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-opus-4-8"),
+                usage: TokenUsage::default(), web_search: 0, web_fetch: 0 }),
+        ]).unwrap();
+        // 2) 같은 세션에 ts 없는 Compaction 이벤트 upsert → first_ts/last_ts는 훼손되면 안 됨
+        store.upsert_events(&[
+            base("c1", 1, None, EventKind::Compaction),
+        ]).unwrap();
+
+        let (first_ts, last_ts): (Option<String>, Option<String>) = store.conn.query_row(
+            "SELECT first_ts, last_ts FROM sessions WHERE session_id='s1'",
+            [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!(first_ts.as_deref(), Some("2026-07-01T10:00:00Z"), "ts 없는 이벤트가 first_ts를 NULL로 훼손하면 안 됨");
+        assert_eq!(last_ts.as_deref(), Some("2026-07-01T10:00:00Z"), "ts 없는 이벤트가 last_ts를 NULL로 훼손하면 안 됨");
     }
 }
