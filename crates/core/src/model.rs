@@ -6,6 +6,19 @@ pub enum ModelFamily { Opus, Sonnet, Haiku, Other }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ModelTier { High, Mid, Low }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum ResultStatus { Ok, Denied, Error }
+
+impl ResultStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ResultStatus::Ok => "ok",
+            ResultStatus::Denied => "denied",
+            ResultStatus::Error => "error",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct NormModel {
     pub family: ModelFamily,
@@ -79,7 +92,10 @@ impl ToolKind {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum EventKind {
     AssistantTurn { model: NormModel, usage: TokenUsage, web_search: u32, web_fetch: u32 },
-    ToolCall { kind: ToolKind, raw_name: String, target: Option<String> },
+    ToolCall { kind: ToolKind, raw_name: String, target: Option<String>, tool_use_id: Option<String> },
+    ToolResult { tool_use_id: String, status: ResultStatus },
+    Compaction,
+    UserPrompt { preview: String },
     SessionMeta { cwd: String, git_branch: Option<String> },
 }
 
@@ -129,5 +145,12 @@ mod tests {
             ToolKind::from_raw_name("SomethingNew"),
             ToolKind::Other("SomethingNew".to_string())
         );
+    }
+
+    #[test]
+    fn result_status_as_str() {
+        assert_eq!(ResultStatus::Ok.as_str(), "ok");
+        assert_eq!(ResultStatus::Denied.as_str(), "denied");
+        assert_eq!(ResultStatus::Error.as_str(), "error");
     }
 }

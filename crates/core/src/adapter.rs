@@ -175,7 +175,7 @@ impl SourceAdapter for ClaudeCodeAdapter {
                             (ToolKind::from_raw_name(&raw_name), t)
                         };
                         out.push(mk(
-                            EventKind::ToolCall { kind, raw_name, target },
+                            EventKind::ToolCall { kind, raw_name, target, tool_use_id: None },
                             (i + 1) as u64,
                         ));
                     }

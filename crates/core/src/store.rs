@@ -611,7 +611,7 @@ fn flatten(e: &NormalizedEvent) -> FlatRow {
             *web_search as i64, *web_fetch as i64,
             None, None, None, None, None,
         ),
-        EventKind::ToolCall { kind, raw_name, target } => {
+        EventKind::ToolCall { kind, raw_name, target, .. } => {
             let (tkind, tsrv, ttool) = match kind {
                 ToolKind::McpCall { server, tool } => (
                     "mcp_call".to_string(),
@@ -625,6 +625,18 @@ fn flatten(e: &NormalizedEvent) -> FlatRow {
                 Some(tkind), tsrv, ttool, target.clone(), Some(raw_name.clone()),
             )
         }
+        EventKind::ToolResult { .. } => (
+            "tool_result".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
+            None, None, None, None, None,
+        ),
+        EventKind::Compaction => (
+            "compaction".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
+            None, None, None, None, None,
+        ),
+        EventKind::UserPrompt { .. } => (
+            "user_prompt".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
+            None, None, None, None, None,
+        ),
         EventKind::SessionMeta { .. } => (
             "session_meta".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
             None, None, None, None, None,
@@ -725,11 +737,13 @@ mod tests {
                 kind: ToolKind::FileRead,
                 raw_name: "Read".into(),
                 target: Some("a.txt".into()),
+                tool_use_id: None,
             }),
             mk(2, EventKind::ToolCall {
                 kind: ToolKind::FileRead,
                 raw_name: "Read".into(),
                 target: Some("b.txt".into()),
+                tool_use_id: None,
             }),
         ];
         let store = SqliteStore::open_in_memory().unwrap();
