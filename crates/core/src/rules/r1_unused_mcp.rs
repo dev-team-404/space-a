@@ -139,7 +139,7 @@ mod tests {
             source_offset: 0,
             kind: EventKind::ToolCall {
                 kind: ToolKind::McpCall { server: server.into(), tool: "x".into() },
-                raw_name: format!("mcp__{server}__x"), target: None,
+                raw_name: format!("mcp__{server}__x"), target: None, tool_use_id: None,
             },
         }
     }

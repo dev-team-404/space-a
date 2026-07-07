@@ -137,7 +137,7 @@ mod tests {
             source_file: "s.jsonl".into(), source_offset: 0,
             kind: EventKind::ToolCall {
                 kind: ToolKind::FileWrite, raw_name: "Write".into(),
-                target: Some(target.into()),
+                target: Some(target.into()), tool_use_id: None,
             },
         }
     }

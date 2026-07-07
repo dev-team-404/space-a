@@ -83,6 +83,7 @@ mod tests {
                 kind: ToolKind::FileRead,
                 raw_name: "Read".into(),
                 target: Some(path.into()),
+                tool_use_id: None,
             },
         }
     }

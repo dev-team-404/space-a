@@ -133,7 +133,7 @@ mod tests {
             session_id: session.into(), uuid: Some(uuid.into()), parent_uuid: None,
             is_sidechain: false, ts: Some(ts.into()),
             source_file: "s.jsonl".into(), source_offset: 0,
-            kind: EventKind::ToolCall { kind, raw_name: raw.into(), target: target.map(String::from) },
+            kind: EventKind::ToolCall { kind, raw_name: raw.into(), target: target.map(String::from), tool_use_id: None },
         }
     }
 

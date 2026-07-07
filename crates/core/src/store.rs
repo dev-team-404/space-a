@@ -7,7 +7,8 @@ use std::path::Path;
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS sessions (
   session_id TEXT PRIMARY KEY, host TEXT, project_id TEXT, agent TEXT,
-  first_ts TEXT, last_ts TEXT, git_branch TEXT
+  first_ts TEXT, last_ts TEXT, git_branch TEXT,
+  cwd TEXT, first_prompt_preview TEXT, first_prompt_source_file TEXT, first_prompt_offset INTEGER
 );
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,7 +20,8 @@ CREATE TABLE IF NOT EXISTS events (
   tok_cache_read INTEGER DEFAULT 0, tok_cache_create INTEGER DEFAULT 0,
   tok_eph_1h INTEGER DEFAULT 0, web_search INTEGER DEFAULT 0, web_fetch INTEGER DEFAULT 0,
   tool_kind TEXT, tool_server TEXT, tool_tool TEXT, tool_target TEXT, raw_name TEXT,
-  is_sidechain INTEGER DEFAULT 0
+  is_sidechain INTEGER DEFAULT 0,
+  source_file TEXT, tool_use_id TEXT, result_status TEXT
 );
 CREATE TABLE IF NOT EXISTS daily_rollup (
   host TEXT NOT NULL, project_id TEXT NOT NULL, date TEXT NOT NULL,
@@ -70,6 +72,7 @@ pub struct SqliteStore {
 /// events/ingest_state/daily_rollup을 비워 다음 스캔에서 전체 재수집한다
 /// (로컬 JSONL 파생 데이터라 손실 없음, findings·status·diary_index는 보존).
 fn migrate(conn: &Connection) -> Result<()> {
+    // v2 model_raw 마이그레이션(기존)
     let has_model_raw = conn
         .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name='model_raw'")?
         .exists([])?;
@@ -77,6 +80,22 @@ fn migrate(conn: &Connection) -> Result<()> {
         conn.execute_batch(
             "ALTER TABLE events ADD COLUMN model_raw TEXT;
              DELETE FROM events; DELETE FROM ingest_state; DELETE FROM daily_rollup;",
+        )?;
+    }
+    // v2.1 수집 마이그레이션 — source_file 부재 시 컬럼 추가 + 전체 재수집(sessions 포함).
+    let has_source_file = conn
+        .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name='source_file'")?
+        .exists([])?;
+    if !has_source_file {
+        conn.execute_batch(
+            "ALTER TABLE events ADD COLUMN source_file TEXT;
+             ALTER TABLE events ADD COLUMN tool_use_id TEXT;
+             ALTER TABLE events ADD COLUMN result_status TEXT;
+             ALTER TABLE sessions ADD COLUMN cwd TEXT;
+             ALTER TABLE sessions ADD COLUMN first_prompt_preview TEXT;
+             ALTER TABLE sessions ADD COLUMN first_prompt_source_file TEXT;
+             ALTER TABLE sessions ADD COLUMN first_prompt_offset INTEGER;
+             DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;",
         )?;
     }
     Ok(())
@@ -100,9 +119,52 @@ impl SqliteStore {
     pub fn upsert_events(&self, evs: &[NormalizedEvent]) -> Result<usize> {
         let mut inserted = 0usize;
         for e in evs {
+            // 세션 단위 필드는 sessions로만 라우팅 (events 미삽입)
+            match &e.kind {
+                EventKind::SessionMeta { cwd, git_branch } => {
+                    self.conn.execute(
+                        "INSERT INTO sessions
+                           (session_id, host, project_id, agent, first_ts, last_ts, git_branch, cwd)
+                         VALUES (?1,?2,?3,'claude-code',?4,?4,?5,?6)
+                         ON CONFLICT(session_id) DO UPDATE SET
+                           last_ts  = MAX(COALESCE(last_ts, ?4),  COALESCE(?4, last_ts)),
+                           first_ts = MIN(COALESCE(first_ts, ?4), COALESCE(?4, first_ts)),
+                           git_branch = COALESCE(sessions.git_branch, ?5),
+                           cwd        = COALESCE(sessions.cwd, ?6)",
+                        params![e.session_id, e.host, e.project_id, e.ts, git_branch, cwd],
+                    )?;
+                    continue;
+                }
+                EventKind::UserPrompt { preview } => {
+                    self.conn.execute(
+                        "INSERT INTO sessions
+                           (session_id, host, project_id, agent, first_ts, last_ts,
+                            first_prompt_preview, first_prompt_source_file, first_prompt_offset)
+                         VALUES (?1,?2,?3,'claude-code',?4,?4,?5,?6,?7)
+                         ON CONFLICT(session_id) DO UPDATE SET
+                           last_ts  = MAX(COALESCE(last_ts, ?4),  COALESCE(?4, last_ts)),
+                           first_ts = MIN(COALESCE(first_ts, ?4), COALESCE(?4, first_ts)),
+                           first_prompt_preview     = COALESCE(sessions.first_prompt_preview, ?5),
+                           first_prompt_source_file = COALESCE(sessions.first_prompt_source_file, ?6),
+                           first_prompt_offset      = COALESCE(sessions.first_prompt_offset, ?7)",
+                        params![e.session_id, e.host, e.project_id, e.ts,
+                                preview, e.source_file, e.source_offset as i64],
+                    )?;
+                    continue;
+                }
+                _ => {}
+            }
+
             let dedup_key = match &e.uuid {
                 Some(u) => format!("{}:{}", u, e.source_offset),
                 None => format!("{}:{}", e.source_file, e.source_offset),
+            };
+
+            let (tool_use_id, result_status) = match &e.kind {
+                EventKind::ToolCall { tool_use_id, .. } => (tool_use_id.clone(), None),
+                EventKind::ToolResult { tool_use_id, status } =>
+                    (Some(tool_use_id.clone()), Some(status.as_str().to_string())),
+                _ => (None, None),
             };
 
             // 봉투 공통 + kind별 컬럼 추출
@@ -114,12 +176,14 @@ impl SqliteStore {
                  (dedup_key, session_id, host, project_id, ts, source_offset, kind,
                   model_family, model_tier, model_raw, tok_input, tok_output, tok_cache_read,
                   tok_cache_create, tok_eph_1h, web_search, web_fetch,
-                  tool_kind, tool_server, tool_tool, tool_target, raw_name, is_sidechain)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)",
+                  tool_kind, tool_server, tool_tool, tool_target, raw_name, is_sidechain,
+                  source_file, tool_use_id, result_status)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26)",
                 params![
                     dedup_key, e.session_id, e.host, e.project_id, e.ts, e.source_offset as i64, kind_str,
                     mfam, mtier, mraw, ti, to, tcr, tcc, e1h, ws, wf,
-                    tkind, tsrv, ttool, ttarget, raw, e.is_sidechain as i64
+                    tkind, tsrv, ttool, ttarget, raw, e.is_sidechain as i64,
+                    e.source_file, tool_use_id, result_status
                 ],
             )?;
             inserted += n;
@@ -129,8 +193,8 @@ impl SqliteStore {
                 "INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, git_branch)
                  VALUES (?1,?2,?3,'claude-code',?4,?4,NULL)
                  ON CONFLICT(session_id) DO UPDATE SET
-                   last_ts = MAX(COALESCE(last_ts, ?4), ?4),
-                   first_ts = MIN(COALESCE(first_ts, ?4), ?4)",
+                   last_ts = MAX(COALESCE(last_ts, ?4),  COALESCE(?4, last_ts)),
+                   first_ts = MIN(COALESCE(first_ts, ?4), COALESCE(?4, first_ts))",
                 params![e.session_id, e.host, e.project_id, e.ts],
             )?;
         }
@@ -483,13 +547,18 @@ impl SqliteStore {
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
     }
 
-    /// 세션 컨텍스트(프로젝트, 시작 시각) — 세션 스코프 finding의 "어떤 작업인지" 표시용.
-    pub fn session_ctx(&self, session_id: &str) -> Result<Option<(String, Option<String>)>> {
+    /// 세션 컨텍스트 — 세션 스코프 finding·집계 카드의 "어떤 작업인지" 표시용.
+    /// (project_id, first_ts, cwd, first_prompt_preview)
+    pub fn session_ctx(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<(String, Option<String>, Option<String>, Option<String>)>> {
         self.conn
             .query_row(
-                "SELECT project_id, first_ts FROM sessions WHERE session_id=?1",
+                "SELECT project_id, first_ts, cwd, first_prompt_preview
+                 FROM sessions WHERE session_id=?1",
                 params![session_id],
-                |r| Ok((r.get(0)?, r.get(1)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
             .optional()
             .map_err(Into::into)
@@ -611,7 +680,7 @@ fn flatten(e: &NormalizedEvent) -> FlatRow {
             *web_search as i64, *web_fetch as i64,
             None, None, None, None, None,
         ),
-        EventKind::ToolCall { kind, raw_name, target } => {
+        EventKind::ToolCall { kind, raw_name, target, .. } => {
             let (tkind, tsrv, ttool) = match kind {
                 ToolKind::McpCall { server, tool } => (
                     "mcp_call".to_string(),
@@ -625,6 +694,18 @@ fn flatten(e: &NormalizedEvent) -> FlatRow {
                 Some(tkind), tsrv, ttool, target.clone(), Some(raw_name.clone()),
             )
         }
+        EventKind::ToolResult { .. } => (
+            "tool_result".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
+            None, None, None, None, None,
+        ),
+        EventKind::Compaction => (
+            "compaction".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
+            None, None, None, None, None,
+        ),
+        EventKind::UserPrompt { .. } => (
+            "user_prompt".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
+            None, None, None, None, None,
+        ),
         EventKind::SessionMeta { .. } => (
             "session_meta".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
             None, None, None, None, None,
@@ -725,11 +806,13 @@ mod tests {
                 kind: ToolKind::FileRead,
                 raw_name: "Read".into(),
                 target: Some("a.txt".into()),
+                tool_use_id: None,
             }),
             mk(2, EventKind::ToolCall {
                 kind: ToolKind::FileRead,
                 raw_name: "Read".into(),
                 target: Some("b.txt".into()),
+                tool_use_id: None,
             }),
         ];
         let store = SqliteStore::open_in_memory().unwrap();
@@ -1097,6 +1180,35 @@ mod tests {
     }
 
     #[test]
+    fn session_ctx_returns_cwd_and_first_prompt() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_events(&[
+            NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(),
+                host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+                uuid: Some("m1".into()), parent_uuid: None, is_sidechain: false,
+                ts: Some("2026-07-07T10:00:00Z".into()),
+                source_file: "s1.jsonl".into(), source_offset: 0,
+                kind: EventKind::SessionMeta { cwd: "D:\\Project\\cowork".into(), git_branch: None },
+            },
+            NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(),
+                host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+                uuid: Some("p1".into()), parent_uuid: None, is_sidechain: false,
+                ts: Some("2026-07-07T10:00:00Z".into()),
+                source_file: "s1.jsonl".into(), source_offset: 10,
+                kind: EventKind::UserPrompt { preview: "Run this exact Bash command".into() },
+            },
+        ]).unwrap();
+        let (proj, _ts, cwd, prompt) = store.session_ctx("s1").unwrap().unwrap();
+        assert_eq!(proj, "p");
+        assert_eq!(cwd.as_deref(), Some("D:\\Project\\cowork"));
+        assert_eq!(prompt.as_deref(), Some("Run this exact Bash command"));
+        assert!(store.session_ctx("nope").unwrap().is_none());
+    }
+
+    #[test]
     fn delete_findings_by_rule_and_scope_removes_only_matching() {
         let store = SqliteStore::open_in_memory().unwrap();
         let mk = |rule: &str, kind: &str, key: &str| crate::finding::Finding {
@@ -1113,6 +1225,29 @@ mod tests {
         let n = store.delete_findings_by_rule_and_scope("R7", "session").unwrap();
         assert_eq!(n, 1);
         assert_eq!(store.count_findings().unwrap(), 2);
+    }
+
+    #[test]
+    fn tool_result_row_stores_status_and_pointer() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let ev = NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+            uuid: Some("u1".into()), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-07T10:00:00Z".into()),
+            source_file: "C:\\proj\\s1.jsonl".into(), source_offset: 42,
+            kind: EventKind::ToolResult { tool_use_id: "toolu_1".into(), status: ResultStatus::Denied },
+        };
+        assert_eq!(store.upsert_events(&[ev]).unwrap(), 1);
+        let (kind, status, tuid, sfile): (String, Option<String>, Option<String>, Option<String>) =
+            store.conn.query_row(
+                "SELECT kind, result_status, tool_use_id, source_file FROM events WHERE session_id='s1'",
+                [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))).unwrap();
+        assert_eq!(kind, "tool_result");
+        assert_eq!(status.as_deref(), Some("denied"));
+        assert_eq!(tuid.as_deref(), Some("toolu_1"));
+        assert_eq!(sfile.as_deref(), Some("C:\\proj\\s1.jsonl"));
     }
 
     #[test]
@@ -1165,5 +1300,140 @@ mod tests {
         store.set_setting("k", "v").unwrap();
         let store2 = SqliteStore::open(&db).unwrap();
         assert_eq!(store2.get_setting("k").unwrap().as_deref(), Some("v"));
+    }
+
+    #[test]
+    fn migrate_v2_1_adds_source_file_cols_and_forces_recollect() {
+        use crate::finding::{Finding, Severity};
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("m21.db");
+        // v2 시대 스키마(model_raw는 있으나 v2.1 컬럼은 없는 상태)로 DB 선생성
+        // — has_model_raw는 참이라 v2 분기는 건너뛰고, has_source_file만 거짓이라 v2.1 분기만 단독 발화한다.
+        let step1 = SCHEMA.replace(
+            ",\n  source_file TEXT, tool_use_id TEXT, result_status TEXT",
+            "",
+        );
+        assert!(step1.len() < SCHEMA.len(), "events v2.1 컬럼 치환 실패");
+        let v2_schema = step1.replace(
+            ",\n  cwd TEXT, first_prompt_preview TEXT, first_prompt_source_file TEXT, first_prompt_offset INTEGER",
+            "",
+        );
+        assert!(v2_schema.len() < step1.len(), "sessions v2.1 컬럼 치환 실패");
+
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(&v2_schema).unwrap();
+            conn.execute_batch(
+                "INSERT INTO events (dedup_key, session_id, host, project_id, source_offset, kind)
+                   VALUES ('old:0','s1','Windows','p',0,'assistant_turn');
+                 INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, git_branch)
+                   VALUES ('s1','Windows','p','claude-code','2026-07-05T00:00:00Z','2026-07-05T00:00:00Z',NULL);
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 123);
+                 INSERT INTO daily_rollup (host, project_id, date, session_count)
+                   VALUES ('Windows','p','2026-07-05',1);",
+            ).unwrap();
+        }
+        // 마이그레이션 전 findings 심어서 보존 검증
+        {
+            let conn = Connection::open(&db).unwrap();
+            let store = SqliteStore { conn };
+            store.upsert_finding(&Finding {
+                rule_id: "R1".into(), severity: Severity::Warn,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "host".into(), scope_ref: "srv".into(),
+                evidence: serde_json::json!({}), est_tokens_saved: 10,
+                prescription: None, dedup_key: "keep21".into(),
+            }, "2026-07-05T00:00:00Z").unwrap();
+            store.set_finding_status("keep21", "dismissed").unwrap();
+        }
+
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v2.1 분기 발화
+
+        // v2.1 컬럼이 실제로 생겼는지 확인
+        let has_source_file = store.conn
+            .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name='source_file'").unwrap()
+            .exists([]).unwrap();
+        assert!(has_source_file, "events.source_file 컬럼이 추가돼야 함");
+        let has_cwd = store.conn
+            .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name='cwd'").unwrap()
+            .exists([]).unwrap();
+        assert!(has_cwd, "sessions.cwd 컬럼이 추가돼야 함");
+
+        // 전체 재수집 유도 — events/sessions/ingest_state/daily_rollup 모두 비워짐
+        for table in ["events", "sessions", "ingest_state", "daily_rollup"] {
+            let n: i64 = store.conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap();
+            assert_eq!(n, 0, "{table} 은(는) v2.1 마이그레이션 후 비워져야 함");
+        }
+
+        // findings·status는 보존
+        let rows = store.list_findings_current(true).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].dedup_key, "keep21");
+        assert_eq!(rows[0].status, "dismissed");
+    }
+
+    #[test]
+    fn session_meta_and_user_prompt_route_to_sessions_not_events() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let base = |uuid: &str, off: u64, kind: EventKind| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+            uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-07T10:00:00Z".into()),
+            source_file: "C:\\proj\\s1.jsonl".into(), source_offset: off, kind,
+        };
+        store.upsert_events(&[
+            base("m1", 0, EventKind::SessionMeta { cwd: "D:\\Project\\cowork".into(), git_branch: Some("main".into()) }),
+            base("p1", 10, EventKind::UserPrompt { preview: "Run this exact Bash command".into() }),
+            // 나중 프롬프트는 COALESCE로 무시돼야 함
+            base("p2", 20, EventKind::UserPrompt { preview: "두 번째 프롬프트".into() }),
+            base("a1", 30, EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-opus-4-8"),
+                usage: TokenUsage::default(), web_search: 0, web_fetch: 0 }),
+        ]).unwrap();
+
+        // events엔 AssistantTurn 1건만
+        assert_eq!(store.count_events().unwrap(), 1);
+        let (cwd, gb, prev, pfile, poff): (Option<String>, Option<String>, Option<String>, Option<String>, Option<i64>) =
+            store.conn.query_row(
+                "SELECT cwd, git_branch, first_prompt_preview, first_prompt_source_file, first_prompt_offset
+                 FROM sessions WHERE session_id='s1'",
+                [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))).unwrap();
+        assert_eq!(cwd.as_deref(), Some("D:\\Project\\cowork"));
+        assert_eq!(gb.as_deref(), Some("main"));
+        assert_eq!(prev.as_deref(), Some("Run this exact Bash command")); // 최초값 유지
+        assert_eq!(pfile.as_deref(), Some("C:\\proj\\s1.jsonl"));
+        assert_eq!(poff, Some(10));
+    }
+
+    #[test]
+    fn ts_less_compaction_does_not_wipe_session_first_last_ts() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let base = |uuid: &str, off: u64, ts: Option<&str>, kind: EventKind| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+            uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
+            ts: ts.map(|s| s.to_string()),
+            source_file: "s1.jsonl".into(), source_offset: off, kind,
+        };
+        // 1) ts 있는 이벤트로 first_ts/last_ts 설정
+        store.upsert_events(&[
+            base("a1", 0, Some("2026-07-01T10:00:00Z"), EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-opus-4-8"),
+                usage: TokenUsage::default(), web_search: 0, web_fetch: 0 }),
+        ]).unwrap();
+        // 2) 같은 세션에 ts 없는 Compaction 이벤트 upsert → first_ts/last_ts는 훼손되면 안 됨
+        store.upsert_events(&[
+            base("c1", 1, None, EventKind::Compaction),
+        ]).unwrap();
+
+        let (first_ts, last_ts): (Option<String>, Option<String>) = store.conn.query_row(
+            "SELECT first_ts, last_ts FROM sessions WHERE session_id='s1'",
+            [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!(first_ts.as_deref(), Some("2026-07-01T10:00:00Z"), "ts 없는 이벤트가 first_ts를 NULL로 훼손하면 안 됨");
+        assert_eq!(last_ts.as_deref(), Some("2026-07-01T10:00:00Z"), "ts 없는 이벤트가 last_ts를 NULL로 훼손하면 안 됨");
     }
 }
