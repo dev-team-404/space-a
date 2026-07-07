@@ -12,6 +12,7 @@ use crate::rules::r12_unused_skills::R12UnusedSkills;
 use crate::rules::RuleEngine;
 use crate::store::{ingest_file, SqliteStore};
 use anyhow::Result;
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::Path;
 
 pub struct IngestReport {
@@ -77,6 +78,21 @@ pub fn read_json_guarded(path: &Path) -> Option<serde_json::Value> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(serde_json::Value::Null),
         Err(_) => None,
     }
+}
+
+/// 포인터(source_file + 라인 시작 byte offset)가 가리키는 JSONL 한 줄을 파싱해 반환.
+/// 프로즈(프롬프트/에러 전문)를 DB에 두지 않고 필요 시 원본에서 지연로드하기 위한 것(스펙 §3).
+/// 파일 부재·파싱 실패·빈 줄이면 None (미리보기 fallback은 호출부 책임).
+pub fn deref_jsonl_line(source_file: &str, offset: u64) -> Option<serde_json::Value> {
+    let f = std::fs::File::open(source_file).ok()?;
+    let mut reader = BufReader::new(f);
+    reader.seek(SeekFrom::Start(offset)).ok()?;
+    let mut line = String::new();
+    let n = reader.read_line(&mut line).ok()?;
+    if n == 0 {
+        return None;
+    }
+    serde_json::from_str(line.trim_end_matches(['\n', '\r'])).ok()
 }
 
 pub fn run_inventory(store: &mut SqliteStore) -> Result<Vec<String>> {
@@ -221,5 +237,28 @@ mod tests {
         let empty = dir.path().join("empty.json");
         std::fs::write(&empty, "   \n").unwrap();
         assert_eq!(read_json_guarded(&empty), Some(serde_json::Value::Null));
+    }
+
+    #[test]
+    fn deref_jsonl_line_roundtrip_and_missing() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s1.jsonl");
+        let mut f = std::fs::File::create(&path).unwrap();
+        let l1 = r#"{"type":"user","sessionId":"s1","message":{"content":"first prompt full text"}}"#;
+        let l2 = r#"{"type":"user","sessionId":"s1","message":{"content":"second"}}"#;
+        writeln!(f, "{l1}").unwrap();
+        let off2 = (l1.len() + 1) as u64; // 개행 포함
+        writeln!(f, "{l2}").unwrap();
+        f.flush().unwrap();
+        let p = path.to_string_lossy();
+
+        let v0 = super::deref_jsonl_line(&p, 0).unwrap();
+        assert_eq!(v0["message"]["content"], "first prompt full text");
+        let v2 = super::deref_jsonl_line(&p, off2).unwrap();
+        assert_eq!(v2["message"]["content"], "second");
+
+        // 파일 부재 → None
+        assert!(super::deref_jsonl_line("C:\\nope\\missing.jsonl", 0).is_none());
     }
 }
