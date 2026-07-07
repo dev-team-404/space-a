@@ -7,7 +7,8 @@ use std::path::Path;
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS sessions (
   session_id TEXT PRIMARY KEY, host TEXT, project_id TEXT, agent TEXT,
-  first_ts TEXT, last_ts TEXT, git_branch TEXT
+  first_ts TEXT, last_ts TEXT, git_branch TEXT,
+  cwd TEXT, first_prompt_preview TEXT, first_prompt_source_file TEXT, first_prompt_offset INTEGER
 );
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,7 +20,8 @@ CREATE TABLE IF NOT EXISTS events (
   tok_cache_read INTEGER DEFAULT 0, tok_cache_create INTEGER DEFAULT 0,
   tok_eph_1h INTEGER DEFAULT 0, web_search INTEGER DEFAULT 0, web_fetch INTEGER DEFAULT 0,
   tool_kind TEXT, tool_server TEXT, tool_tool TEXT, tool_target TEXT, raw_name TEXT,
-  is_sidechain INTEGER DEFAULT 0
+  is_sidechain INTEGER DEFAULT 0,
+  source_file TEXT, tool_use_id TEXT, result_status TEXT
 );
 CREATE TABLE IF NOT EXISTS daily_rollup (
   host TEXT NOT NULL, project_id TEXT NOT NULL, date TEXT NOT NULL,
@@ -70,6 +72,7 @@ pub struct SqliteStore {
 /// events/ingest_state/daily_rollup을 비워 다음 스캔에서 전체 재수집한다
 /// (로컬 JSONL 파생 데이터라 손실 없음, findings·status·diary_index는 보존).
 fn migrate(conn: &Connection) -> Result<()> {
+    // v2 model_raw 마이그레이션(기존)
     let has_model_raw = conn
         .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name='model_raw'")?
         .exists([])?;
@@ -77,6 +80,22 @@ fn migrate(conn: &Connection) -> Result<()> {
         conn.execute_batch(
             "ALTER TABLE events ADD COLUMN model_raw TEXT;
              DELETE FROM events; DELETE FROM ingest_state; DELETE FROM daily_rollup;",
+        )?;
+    }
+    // v2.1 수집 마이그레이션 — source_file 부재 시 컬럼 추가 + 전체 재수집(sessions 포함).
+    let has_source_file = conn
+        .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name='source_file'")?
+        .exists([])?;
+    if !has_source_file {
+        conn.execute_batch(
+            "ALTER TABLE events ADD COLUMN source_file TEXT;
+             ALTER TABLE events ADD COLUMN tool_use_id TEXT;
+             ALTER TABLE events ADD COLUMN result_status TEXT;
+             ALTER TABLE sessions ADD COLUMN cwd TEXT;
+             ALTER TABLE sessions ADD COLUMN first_prompt_preview TEXT;
+             ALTER TABLE sessions ADD COLUMN first_prompt_source_file TEXT;
+             ALTER TABLE sessions ADD COLUMN first_prompt_offset INTEGER;
+             DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;",
         )?;
     }
     Ok(())
@@ -105,6 +124,13 @@ impl SqliteStore {
                 None => format!("{}:{}", e.source_file, e.source_offset),
             };
 
+            let (tool_use_id, result_status) = match &e.kind {
+                EventKind::ToolCall { tool_use_id, .. } => (tool_use_id.clone(), None),
+                EventKind::ToolResult { tool_use_id, status } =>
+                    (Some(tool_use_id.clone()), Some(status.as_str().to_string())),
+                _ => (None, None),
+            };
+
             // 봉투 공통 + kind별 컬럼 추출
             let (kind_str, mfam, mtier, mraw, ti, to, tcr, tcc, e1h, ws, wf,
                  tkind, tsrv, ttool, ttarget, raw) = flatten(e);
@@ -114,12 +140,14 @@ impl SqliteStore {
                  (dedup_key, session_id, host, project_id, ts, source_offset, kind,
                   model_family, model_tier, model_raw, tok_input, tok_output, tok_cache_read,
                   tok_cache_create, tok_eph_1h, web_search, web_fetch,
-                  tool_kind, tool_server, tool_tool, tool_target, raw_name, is_sidechain)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)",
+                  tool_kind, tool_server, tool_tool, tool_target, raw_name, is_sidechain,
+                  source_file, tool_use_id, result_status)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26)",
                 params![
                     dedup_key, e.session_id, e.host, e.project_id, e.ts, e.source_offset as i64, kind_str,
                     mfam, mtier, mraw, ti, to, tcr, tcc, e1h, ws, wf,
-                    tkind, tsrv, ttool, ttarget, raw, e.is_sidechain as i64
+                    tkind, tsrv, ttool, ttarget, raw, e.is_sidechain as i64,
+                    e.source_file, tool_use_id, result_status
                 ],
             )?;
             inserted += n;
@@ -1127,6 +1155,29 @@ mod tests {
         let n = store.delete_findings_by_rule_and_scope("R7", "session").unwrap();
         assert_eq!(n, 1);
         assert_eq!(store.count_findings().unwrap(), 2);
+    }
+
+    #[test]
+    fn tool_result_row_stores_status_and_pointer() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let ev = NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+            uuid: Some("u1".into()), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-07T10:00:00Z".into()),
+            source_file: "C:\\proj\\s1.jsonl".into(), source_offset: 42,
+            kind: EventKind::ToolResult { tool_use_id: "toolu_1".into(), status: ResultStatus::Denied },
+        };
+        assert_eq!(store.upsert_events(&[ev]).unwrap(), 1);
+        let (kind, status, tuid, sfile): (String, Option<String>, Option<String>, Option<String>) =
+            store.conn.query_row(
+                "SELECT kind, result_status, tool_use_id, source_file FROM events WHERE session_id='s1'",
+                [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))).unwrap();
+        assert_eq!(kind, "tool_result");
+        assert_eq!(status.as_deref(), Some("denied"));
+        assert_eq!(tuid.as_deref(), Some("toolu_1"));
+        assert_eq!(sfile.as_deref(), Some("C:\\proj\\s1.jsonl"));
     }
 
     #[test]
