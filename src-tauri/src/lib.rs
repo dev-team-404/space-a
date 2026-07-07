@@ -30,6 +30,12 @@ pub(crate) fn apply_content_protection(app: &tauri::AppHandle, on: bool) {
 pub fn run() {
     #[cfg(not(test))]
     {
+        // dev 빌드에서만 프로젝트 루트 .env 자동 로드 — 엔진 env(AGENT_MENTOR_ENGINE_*) 편의.
+        // dotenv()는 cwd와 상위 디렉터리를 탐색하므로 tauri dev의 cwd(src-tauri)에서도 루트 .env를 찾음.
+        // release(배포) 빌드는 로드하지 않음 — cwd .env 의존 방지.
+        #[cfg(debug_assertions)]
+        let _ = dotenvy::dotenv();
+
         use tauri::Manager;
         tauri::Builder::default()
             .plugin(
