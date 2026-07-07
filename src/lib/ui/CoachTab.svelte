@@ -183,7 +183,7 @@
   .save { color: var(--accent); font-size: 12px; white-space: nowrap; }
   .why { margin: 6px 0 2px; font-size: 12px; color: var(--ink-soft); }
   .session { margin: 2px 0; font-size: 12px; color: var(--ink-soft); }
-  .how { margin: 2px 0 8px; font-size: 13px; }
+  .how { margin: 2px 0 8px; font-size: 13px; white-space: pre-line; }
   .actions { display: flex; gap: 6px; flex-wrap: wrap; }
   .actions button {
     border: none; cursor: pointer; font: inherit; font-size: 12px;
