@@ -47,11 +47,11 @@ pub fn finding_advice(
 ) -> (String, String) {
     match rule_id {
         "R5" => {
-            let path = evidence.get("path").and_then(|v| v.as_str()).unwrap_or("어떤 파일");
-            let count = evidence.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
+            // v2.1: 프로젝트 집계 context_drift (§6.2). 구 세션 evidence(path/count)는 폐기됨.
+            let n = evidence.get("total_sessions").and_then(|v| v.as_u64()).unwrap_or(0);
             (
-                format!("`{path}`를 {count}회 반복해서 읽음 (~{est_tokens_saved}토큰)"),
-                "한 번만 읽고 그 내용을 기억해 두면 다음엔 그 토큰을 아낄 수 있어요".to_string(),
+                format!("몇몇 세션({n}건)에서 같은 파일을 편집 없이 여러 번 다시 읽었어요 (~{est_tokens_saved}토큰 잠재, 추정)"),
+                "직접 시키신 게 아니라 작업 중 파일 구조 기억이 약해졌을 때 생겨요 — 다음엔 '먼저 관련 파일을 읽고 역할·수정 위치를 짧게 메모한 뒤 진행해'처럼 시작하면 반복 재확인이 줄어요".to_string(),
             )
         }
         "R1" => {
@@ -104,10 +104,16 @@ pub fn finding_advice(
             if temp > 0 {
                 detail.push_str(&format!(" · temp 경로 흔적 {temp}%"));
             }
-            (
-                detail,
-                "자동화 스크립트가 만든 패턴으로 보여요 — 이 프로젝트 경로에서 `claude`를 실행하는 스크립트를 찾아 `--model haiku`를 지정하세요. `--model` 없이 실행된 자동화는 기본 모델을 그대로 상속받아요".to_string(),
-            )
+            // §7.1 진짜 작업 경로(정규화 키 아님)
+            if let Some(cwd) = evidence.get("rep_cwd").and_then(|v| v.as_str()) {
+                detail.push_str(&format!(" · 경로 `{cwd}`"));
+            }
+            let mut action = "자동화 스크립트가 만든 패턴으로 보여요 — 이 프로젝트 경로에서 `claude`를 실행하는 스크립트를 찾아 `--model haiku`를 지정하세요. `--model` 없이 실행된 자동화는 기본 모델을 그대로 상속받아요".to_string();
+            // §7.2 첫 요청 한 줄 — 세션 상세 없이 자동화 도구 정체 즉시 식별
+            if let Some(p) = evidence.get("rep_first_prompt").and_then(|v| v.as_str()) {
+                action.push_str(&format!("\n💬 이런 요청으로 시작해요: '{p}'"));
+            }
+            (detail, action)
         }
         "R11" => {
             let events = evidence.get("friction_events").and_then(|v| v.as_array());
@@ -125,8 +131,8 @@ pub fn finding_advice(
                 })
                 .unwrap_or(("?".into(), "?".into()));
             (
-                format!("같은 대상에 같은 도구가 연속 3회 이상 호출된 패턴이 {n}건 있었어요 (예: {tool} → `{target}`)"),
-                "권한 거부 후 재시도일 수 있어요 — settings.json 허용목록에 그 도구를 추가하면 거부→재시도 낭비가 사라져요".to_string(),
+                format!("거부한 뒤 결국 승인하신 도구 패턴이 {n}건 있었어요 (예: {tool} → `{target}`)"),
+                "settings.json 허용목록에 그 도구를 추가하면 매번 뜨는 승인 프롬프트와 거부→재시도 낭비가 사라져요".to_string(),
             )
         }
         "R12" => {
@@ -419,24 +425,18 @@ mod tests {
     }
 
     #[test]
-    fn finding_advice_r5_and_r1() {
+    fn finding_advice_r5_context_drift() {
         let (detail, action) = super::finding_advice(
             "R5",
-            &serde_json::json!({"path": "report.xlsx", "count": 7}),
+            &serde_json::json!({
+                "subtype": "within_session_context_drift", "user_actionability": "medium",
+                "total_sessions": 3, "sessions": [], "cwd": null
+            }),
             7200,
         );
-        assert!(detail.contains("report.xlsx"));
-        assert!(detail.contains("7"));
-        assert!(detail.contains("7200"));
-        assert!(!action.is_empty());
-
-        let (d1, a1) = super::finding_advice(
-            "R1",
-            &serde_json::json!({"server": "playwright"}),
-            2500,
-        );
-        assert!(d1.contains("playwright"));
-        assert!(a1.contains("playwright"));
+        assert!(detail.contains("3건"));
+        assert!(detail.contains("잠재") || detail.contains("추정")); // potential 프레이밍
+        assert!(action.contains("메모")); // 다음 세션 팁(비난 금지)
     }
 
     #[test]
@@ -500,22 +500,40 @@ mod tests {
     }
 
     #[test]
-    fn finding_advice_r11_fact_and_hypothesis_separated() {
+    fn finding_advice_r11_deterministic() {
         let (detail, action) = super::finding_advice(
             "R11",
             &serde_json::json!({
                 "friction_events": [
-                    {"tool": "Write", "target": "a.rs", "run_length": 3, "session_id": "s1"},
-                    {"tool": "Write", "target": "b.rs", "run_length": 4, "session_id": "s2"}
+                    {"tool": "Write", "target": "a.rs", "session_id": "s1"},
+                    {"tool": "Write", "target": "b.rs", "session_id": "s2"}
                 ],
+                "friction_events_count": 2,
                 "by_tool": {"Write": 2}
             }),
             0,
         );
         assert!(detail.contains("2건"));
+        assert!(detail.contains("거부") && detail.contains("승인"));
         assert!(detail.contains("Write"));
-        assert!(action.contains("일 수 있어요")); // 가설 구분 (스펙 §4.4)
         assert!(action.contains("허용목록"));
+        assert!(!action.contains("일 수 있어요")); // 결정론 — 가설 표현 제거(스펙 §5)
+    }
+
+    #[test]
+    fn finding_advice_r10_inserts_real_path_and_first_prompt() {
+        let (detail, action) = super::finding_advice(
+            "R10",
+            &serde_json::json!({
+                "total_sessions": 81, "opus_session_count": 81, "temp_hit_ratio_pct": 90,
+                "rep_cwd": "D:\\Project\\cowork\\.worktrees\\probe",
+                "rep_first_prompt": "이 리포의 최근 커밋 요약해줘"
+            }),
+            500000,
+        );
+        assert!(detail.contains("cowork")); // 진짜 경로(정규화 키 아님)
+        assert!(action.contains("이런 요청으로 시작해요"));
+        assert!(action.contains("최근 커밋 요약")); // 첫 요청 한 줄
     }
 
     #[test]
