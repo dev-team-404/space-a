@@ -5,9 +5,11 @@ use crate::hosts::enumerate_hosts;
 use crate::inventory::{collect_host_inventory, scan_plugin_inventory};
 use crate::rules::r1_unused_mcp::R1UnusedMcp;
 use crate::rules::r2_unused_plugins::R2UnusedPluginSkills;
+use crate::rules::r5_repeated_read::R5RepeatedRead;
 use crate::rules::r7_opus_trivial::R7OpusTrivial;
 use crate::rules::r9_web_overuse::R9WebOveruse;
 use crate::rules::r10_automation_burst::R10AutomationBurst;
+use crate::rules::r11_permission_friction::R11PermissionFriction;
 use crate::rules::r12_unused_skills::R12UnusedSkills;
 use crate::rules::RuleEngine;
 use crate::store::{ingest_file, SqliteStore};
@@ -126,21 +128,16 @@ pub fn run_inventory(store: &mut SqliteStore) -> Result<Vec<String>> {
 pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     // 코칭 v2 이행: 세션 스코프 R7은 폐기 — 프로젝트 집계(R7 v2)가 대체 (스펙 §3)
     store.delete_findings_by_rule_and_scope("R7", "session")?;
-    // R5(반복 Read)도 발화 보류 + 기존 카드 삭제(사용자 판정: 반복 읽기는 에이전트/압축
-    // 동작이라 조치 주체 없음 — 세션 카드 스팸 재발). 크로스세션 반복→CLAUDE.md 레버로
-    // 재설계 예정 — docs/brainstroming/2026-07-06-coaching-v2.1-kickoff.md
+    // 옛 R5 세션 카드 정리(스팸 재발분). 새 R5는 scope_kind="project"+subtype dedup이라 안 걸리고 공존(스펙 §6.3).
     store.delete_findings_by_rule_and_scope("R5", "session")?;
-    // R11 발화 보류(아래 주석)에 따라 이전 스캔이 만든 기존 카드도 정리한다.
-    store.delete_findings_by_rule_and_scope("R11", "project")?;
     let engine = RuleEngine::new(vec![
         Box::new(R1UnusedMcp::default()),
         Box::new(R2UnusedPluginSkills::default()),
+        Box::new(R5RepeatedRead::default()),
         Box::new(R7OpusTrivial::default()),
         Box::new(R9WebOveruse::default()),
         Box::new(R10AutomationBurst::default()),
-        // R11(권한 재시도 마찰)은 발화 보류: ToolResult 미수집 상태에서는 권한 거부를
-        // 단정할 수 없어 오탐 위험(사용자 판정: 이벤트 다발·의미 낮음). ToolResult 수집 후
-        // 결정론 판정으로 승격 예정 — docs/brainstroming/2026-07-06-coaching-v2.1-kickoff.md
+        Box::new(R11PermissionFriction::default()),
         Box::new(R12UnusedSkills::default()),
     ]);
     let findings = engine.run(store)?;
@@ -167,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn run_rules_purges_deprecated_findings() {
+    fn run_rules_purges_deprecated_session_findings() {
         use crate::finding::{Finding, Severity};
         let store = SqliteStore::open_in_memory().unwrap();
         let mk = |rule: &str, kind: &str, key: &str| Finding {
@@ -177,14 +174,13 @@ mod tests {
             evidence: serde_json::json!({}), est_tokens_saved: 0,
             prescription: None, dedup_key: key.into(),
         };
-        // 보류/폐기된 룰의 기존 카드 3종 + 유지돼야 할 R1 카드 1종
+        // 폐기된 세션 스코프 카드 2종(R7 session·R5 session) + 유지될 R1 host 1종
         store.upsert_finding(&mk("R7", "session", "R7|s1"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R5", "session", "R5|s1|a.md"), "2026-07-06T00:00:00Z").unwrap();
-        store.upsert_finding(&mk("R11", "project", "R11|W|p"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R1", "host", "R1|W|ctx"), "2026-07-06T00:00:00Z").unwrap();
 
         run_rules(&store).unwrap();
-        assert_eq!(store.count_findings().unwrap(), 1); // R1만 생존
+        assert_eq!(store.count_findings().unwrap(), 1); // R1만 생존(R7·R5 세션 카드 삭제)
     }
 
     #[test]
