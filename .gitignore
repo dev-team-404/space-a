@@ -2,7 +2,8 @@
 /target
 /agent-mentor.db
 /diary/
-.env
+.env*
+!.env.example
 node_modules/
 dist/
 

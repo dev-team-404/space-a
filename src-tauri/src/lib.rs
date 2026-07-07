@@ -120,12 +120,16 @@ pub fn run() {
                     }
                 }
                 // content_protected 설정을 시작 시 실제 적용 (스펙 §7)
+                // 설정 읽기 실패(락 poison·일시 잠금)로 시작이 죽지 않도록 안전 폴백 — 기본 미보호 (에러 철학 §9)
                 {
                     let state = app.state::<AppState>();
-                    let on = {
-                        let store = state.store.lock().map_err(|_| anyhow::anyhow!("store lock"))?;
-                        store.get_setting("content_protected")?.map(|v| v == "true").unwrap_or(false)
-                    };
+                    let on = state
+                        .store
+                        .lock()
+                        .ok()
+                        .and_then(|store| store.get_setting("content_protected").ok().flatten())
+                        .map(|v| v == "true")
+                        .unwrap_or(false);
                     if on {
                         apply_content_protection(app.handle(), true);
                     }

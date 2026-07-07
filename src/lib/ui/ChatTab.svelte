@@ -12,6 +12,12 @@
     .then((s) => (status = s))
     .catch(() => (status = { configured: false, model: null }));
 
+  // 탭 재진입(마운트)·메시지 변경 시 항상 최신 메시지로 스크롤
+  $effect(() => {
+    chatState.messages.length; // 반응성 추적
+    scrollBottom();
+  });
+
   async function send() {
     const text = draft.trim();
     if (!text || sending) return;
@@ -25,6 +31,8 @@
       chatState.messages.push({ role: 'assistant', content: reply });
     } catch (e) {
       error = String(e); // 인라인 표시 — 말풍선/토스트 아님 (스펙 §9)
+      draft = text; // 실패 시 입력 복원 — 재입력 불필요
+      chatState.messages.pop(); // 답 못 받은 user 메시지 제거 — 히스토리 일관성(sending 가드로 항상 마지막이 이 메시지)
     } finally {
       sending = false;
       scrollBottom();
