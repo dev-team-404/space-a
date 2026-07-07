@@ -3,6 +3,7 @@
   import HomeTab from './lib/ui/HomeTab.svelte';
   import CoachTab from './lib/ui/CoachTab.svelte';
   import DiaryTab from './lib/ui/DiaryTab.svelte';
+  import ChatTab from './lib/ui/ChatTab.svelte';
   import RobotPortrait from './lib/ui/RobotPortrait.svelte';
   import {
     getSummary, listFindings, onScanDone, onGotoTab,
@@ -79,7 +80,7 @@
         {:else if tab === 'diary'}
           <DiaryTab />
         {:else}
-          <section class="placeholder">채팅은 준비 중이에요, 주인. (다음 PR에서 열려요)</section>
+          <ChatTab />
         {/if}
       </main>
       <nav class="tabs">
@@ -145,5 +146,4 @@
     background: var(--pastel-coral); color: var(--ink);
     border-radius: 999px; font-size: 10px; padding: 1px 5px;
   }
-  .placeholder { padding: 24px; }
 </style>

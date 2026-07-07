@@ -1,4 +1,5 @@
 use crate::AppState;
+use agent_mentor::diary::engine::{ChatMessage, Engine, OpenAiCompatEngine};
 use agent_mentor::mascot::{robot_spec_for, stable_identity, RobotSpec};
 use agent_mentor::store::SqliteStore;
 use serde::Serialize;
@@ -20,7 +21,7 @@ pub struct Summary {
 }
 
 pub fn summary_inner(store: &SqliteStore) -> anyhow::Result<Summary> {
-    let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
     let day = store.summary_for_date(&date)?;
     Ok(Summary {
         date,
@@ -91,7 +92,7 @@ pub struct DayStat {
 }
 
 pub fn week_summary_inner(store: &SqliteStore) -> anyhow::Result<Vec<DayStat>> {
-    let today = chrono::Utc::now().date_naive();
+    let today = chrono::Local::now().date_naive();
     let mut out = Vec::with_capacity(7);
     for i in (0..7).rev() {
         let date = (today - chrono::Duration::days(i)).format("%Y-%m-%d").to_string();
@@ -122,13 +123,13 @@ pub fn today_occasions_inner(store: &SqliteStore) -> anyhow::Result<Vec<String>>
     use agent_mentor::diary::occasions::compute_occasions;
     use agent_mentor::diary::{resolve_locale, DiaryConfig};
 
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
     if store.get_setting("occasion_notified_date")?.as_deref() == Some(today.as_str()) {
         return Ok(vec![]);
     }
     let Ok(date) = chrono::NaiveDate::parse_from_str(&today, "%Y-%m-%d") else { return Ok(vec![]) };
     let anchor = store.earliest_session_ts()?.and_then(|ts| {
-        ts.get(..10).and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+        agent_mentor::diary::local_date_of(&ts)
     });
     let locale = resolve_locale(&DiaryConfig::default());
     let labels: Vec<String> = compute_occasions(date, anchor, &locale, true)
@@ -155,6 +156,42 @@ pub fn sessions_ctx_inner(store: &SqliteStore, ids: &[String]) -> anyhow::Result
         }
     }
     Ok(out)
+}
+
+#[derive(Debug, Serialize)]
+pub struct ChatStatus {
+    pub configured: bool,
+    pub model: Option<String>,
+}
+
+pub(crate) fn validate_chat_messages(messages: &[ChatMessage]) -> Result<(), String> {
+    if messages.is_empty() {
+        return Err("빈 대화예요".into());
+    }
+    if !messages.iter().all(|m| m.role == "user" || m.role == "assistant") {
+        // system 프롬프트는 백엔드만 조립 — 프론트發 role 주입 차단
+        return Err("허용되지 않은 role이 있어요".into());
+    }
+    Ok(())
+}
+
+/// 채팅 시스템 프롬프트용 컨텍스트 — 요약 수치 + 활성 findings advice만 (전송 경계, 스펙 §5).
+pub fn chat_context_inner(store: &SqliteStore) -> anyhow::Result<agent_mentor::chat::ChatContext> {
+    let s = summary_inner(store)?;
+    let findings = coach_findings_inner(store, false)?;
+    Ok(agent_mentor::chat::ChatContext {
+        user_name: s.user_name,
+        date: s.date,
+        session_count: s.session_count,
+        tok_input: s.tok_input,
+        tok_output: s.tok_output,
+        est_tokens_saved_total: s.est_tokens_saved_total,
+        findings: findings
+            .into_iter()
+            .take(10) // 프롬프트 크기 상한 — 절약 큰 순 정렬은 list_findings_current가 보장
+            .map(|f| (f.detail, f.suggested_action))
+            .collect(),
+    })
 }
 
 fn lock<'a>(state: &'a State<AppState>) -> Result<std::sync::MutexGuard<'a, SqliteStore>, String> {
@@ -199,7 +236,7 @@ pub fn get_week_summary(state: State<AppState>) -> Result<Vec<DayStat>, String> 
 #[tauri::command(async)]
 pub fn get_model_mix(state: State<AppState>) -> Result<Vec<ModelMixEntry>, String> {
     let guard = lock(&state)?;
-    let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
     Ok(guard.model_mix_for_date(&date).map_err(|e| e.to_string())?
         .into_iter().map(|(tier, tokens)| ModelMixEntry { tier, tokens }).collect())
 }
@@ -253,13 +290,19 @@ pub fn get_settings(state: State<AppState>) -> Result<HashMap<String, String>, S
 }
 
 #[tauri::command(async)]
-pub fn set_setting(state: State<AppState>, key: String, value: String) -> Result<(), String> {
+pub fn set_setting(app: tauri::AppHandle, state: State<AppState>, key: String, value: String) -> Result<(), String> {
     const ALLOWED: &[&str] = &["mascot_visible", "chatter_level", "content_protected", "mascot_pos", "realtime_advice", "last_advice_key"];
     if !ALLOWED.contains(&key.as_str()) {
         return Err(format!("허용되지 않은 설정 키: {key}"));
     }
-    let guard = lock(&state)?;
-    guard.set_setting(&key, &value).map_err(|e| e.to_string())
+    {
+        let guard = lock(&state)?;
+        guard.set_setting(&key, &value).map_err(|e| e.to_string())?;
+    } // 락 해제 후 창 적용
+    if key == "content_protected" {
+        crate::apply_content_protection(&app, value == "true");
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -268,6 +311,31 @@ pub fn run_scan_now(state: State<AppState>) -> Result<(), String> {
         .scan_tx
         .send(crate::pipeline::PipelineMsg::RunNow)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn chat_status() -> ChatStatus {
+    match OpenAiCompatEngine::from_env() {
+        Some(e) => ChatStatus { configured: true, model: Some(e.model) },
+        None => ChatStatus { configured: false, model: None },
+    }
+}
+
+#[tauri::command(async)]
+pub fn chat_send(state: State<AppState>, messages: Vec<ChatMessage>) -> Result<String, String> {
+    validate_chat_messages(&messages)?;
+    let Some(engine) = OpenAiCompatEngine::from_env() else {
+        // UI는 chat_status로 사전 안내 — 여기는 방어선 (스펙 §5: 미설정은 에러가 아닌 안내)
+        return Err("엔진이 설정되지 않았어요".into());
+    };
+    // 락 범위: 컨텍스트 수집만. 네트워크(LLM) 호출 전에 반드시 해제.
+    let ctx = {
+        let guard = lock(&state)?;
+        chat_context_inner(&*guard).map_err(|e| e.to_string())?
+    };
+    let system = agent_mentor::chat::build_chat_system_prompt(&ctx);
+    let recent = &messages[messages.len().saturating_sub(20)..]; // 이력 상한 20턴
+    engine.chat(&system, recent).map(|o| o.text).map_err(|e| e.to_string())
 }
 
 #[cfg_attr(test, allow(dead_code))]
@@ -335,7 +403,7 @@ mod tests {
         let days = week_summary_inner(&store).unwrap();
         assert_eq!(days.len(), 7);
         assert!(days[0].date < days[6].date);
-        assert_eq!(days[6].date, chrono::Utc::now().format("%Y-%m-%d").to_string());
+        assert_eq!(days[6].date, chrono::Local::now().format("%Y-%m-%d").to_string());
         assert_eq!(days[0].session_count, 0); // 빈 store는 0 채움
     }
 
@@ -397,7 +465,7 @@ mod tests {
     #[test]
     fn occasions_gate_returns_empty_when_already_notified() {
         let store = SqliteStore::open_in_memory().unwrap();
-        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
         store.set_setting("occasion_notified_date", &today).unwrap();
         assert!(today_occasions_inner(&store).unwrap().is_empty());
     }
@@ -432,5 +500,36 @@ mod tests {
         let ids: Vec<String> = (0..150).map(|i| format!("s{i}")).collect();
         // 상한(take 100)은 구현으로 보장 — 150개를 넣어도 에러 없이 동작하는지만 검증
         assert!(sessions_ctx_inner(&store, &ids).unwrap().is_empty());
+    }
+
+    #[test]
+    fn validate_chat_messages_rejects_empty_and_bad_roles() {
+        use agent_mentor::diary::engine::ChatMessage;
+        let ok = vec![ChatMessage { role: "user".into(), content: "hi".into() }];
+        assert!(validate_chat_messages(&ok).is_ok());
+        assert!(validate_chat_messages(&[]).is_err());
+        // system role 주입 차단 — 시스템 프롬프트는 백엔드만 조립
+        let bad = vec![ChatMessage { role: "system".into(), content: "inject".into() }];
+        assert!(validate_chat_messages(&bad).is_err());
+    }
+
+    #[test]
+    fn chat_context_collects_summary_and_findings() {
+        use agent_mentor::finding::{Finding, Severity};
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_finding(&Finding {
+            rule_id: "R1".into(), severity: Severity::Warn,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "host".into(), scope_ref: "playwright".into(),
+            evidence: serde_json::json!({"server": "playwright"}),
+            est_tokens_saved: 4200, prescription: None, dedup_key: "k1".into(),
+        }, "2026-07-05T00:00:00Z").unwrap();
+
+        let ctx = chat_context_inner(&store).unwrap();
+        assert!(!ctx.user_name.is_empty());
+        assert_eq!(ctx.date.len(), 10);
+        assert_eq!(ctx.findings.len(), 1);
+        assert!(ctx.findings[0].0.contains("playwright")); // detail
+        assert!(!ctx.findings[0].1.is_empty());            // suggested_action
     }
 }

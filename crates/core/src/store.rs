@@ -176,7 +176,7 @@ impl SqliteStore {
             "INSERT INTO daily_rollup
                 (host, project_id, date, tok_input, tok_output, tok_cache_read,
                  tok_cache_create, session_count)
-             SELECT host, project_id, date(ts) AS d,
+             SELECT host, project_id, date(ts, 'localtime') AS d,
                     SUM(tok_input), SUM(tok_output), SUM(tok_cache_read),
                     SUM(tok_cache_create), COUNT(DISTINCT session_id)
              FROM events
@@ -344,7 +344,7 @@ impl SqliteStore {
              WHERE f.scope_host = ?1
                AND EXISTS (
                  SELECT 1 FROM sessions s
-                 WHERE s.host = ?1 AND date(s.first_ts) = ?2
+                 WHERE s.host = ?1 AND date(s.first_ts, 'localtime') = ?2
                    AND ( (f.scope_kind = 'session' AND s.session_id = f.scope_ref)
                       OR (f.scope_kind = 'project' AND s.project_id = f.scope_project)
                       OR (f.scope_kind = 'host') )
@@ -474,7 +474,7 @@ impl SqliteStore {
             "SELECT COALESCE(model_raw, model_family) AS m,
                     COALESCE(SUM(tok_input),0) + COALESCE(SUM(tok_output),0) AS toks
              FROM events
-             WHERE substr(ts,1,10)=?1 AND COALESCE(model_raw, model_family) IS NOT NULL
+             WHERE date(ts, 'localtime')=?1 AND COALESCE(model_raw, model_family) IS NOT NULL
              GROUP BY m ORDER BY toks DESC",
         )?;
         let rows = stmt.query_map(params![date], |r| {
@@ -824,7 +824,9 @@ mod tests {
         assert_eq!(ingest_file(&store, &adapter, &file).unwrap(), 0);
 
         store.rebuild_rollup().unwrap();
-        let r = store.rollup_for("Windows", "c--users-jibin", "2026-07-01").unwrap().unwrap();
+        let expected = chrono::DateTime::parse_from_rfc3339("2026-07-01T10:00:00Z").unwrap()
+            .with_timezone(&chrono::Local).format("%Y-%m-%d").to_string();
+        let r = store.rollup_for("Windows", "c--users-jibin", &expected).unwrap().unwrap();
         assert_eq!(r.tok_input, 15);
         assert_eq!(r.tok_output, 27);
         assert_eq!(r.tok_cache_create, 55000);
@@ -842,6 +844,21 @@ mod tests {
                 usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
             },
         }
+    }
+
+    #[test]
+    fn rollup_and_model_mix_bucket_by_local_date() {
+        // UTC 자정 직전 이벤트 — 로컬 타임존(KST 등 동쪽)에선 다음날로 버킷돼야 한다.
+        // 기대값을 chrono::Local로 계산하므로 머신 타임존과 무관하게 결정론적.
+        let store = SqliteStore::open_in_memory().unwrap();
+        let ts = "2026-07-01T23:30:00Z";
+        store.upsert_events(&[sess_turn("Windows", "p1", "s1", "u1", ts)]).unwrap();
+        store.rebuild_rollup().unwrap();
+
+        let expected = chrono::DateTime::parse_from_rfc3339(ts).unwrap()
+            .with_timezone(&chrono::Local).format("%Y-%m-%d").to_string();
+        assert_eq!(store.summary_for_date(&expected).unwrap().session_count, 1);
+        assert!(!store.model_mix_for_date(&expected).unwrap().is_empty());
     }
 
     #[test]

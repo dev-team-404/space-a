@@ -190,7 +190,7 @@ pub fn assemble_brief(
     let today = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok();
     let anchor = store
         .earliest_session_ts()?
-        .and_then(|ts| NaiveDate::parse_from_str(ts.get(..10)?, "%Y-%m-%d").ok());
+        .and_then(|ts| local_date_of(&ts));
     let occasions = match today {
         Some(d) => compute_occasions(d, anchor, &locale, cfg.include_dev_days),
         None => Vec::new(),
@@ -226,6 +226,15 @@ pub fn resolve_locale(cfg: &DiaryConfig) -> String {
         .clone()
         .or_else(sys_locale::get_locale)
         .unwrap_or_else(|| "en".to_string())
+}
+
+/// RFC3339 ts(UTC 포함)를 로컬 타임존 날짜로 변환. 파싱 실패 시 앞 10자(YYYY-MM-DD) 폴백.
+/// "오늘" 정책: 날짜 버킷은 로컬 자정 기준 (스펙 §7).
+pub fn local_date_of(ts: &str) -> Option<NaiveDate> {
+    chrono::DateTime::parse_from_rfc3339(ts)
+        .map(|dt| dt.with_timezone(&chrono::Local).date_naive())
+        .ok()
+        .or_else(|| ts.get(..10).and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok()))
 }
 
 #[derive(Debug, Clone)]
@@ -588,5 +597,18 @@ mod tests {
             store.diary_path_for("2026-07-04").unwrap(),
             Some(out.path.to_string_lossy().to_string()),
         );
+    }
+
+    #[test]
+    fn local_date_of_converts_utc_and_falls_back() {
+        let expected = chrono::DateTime::parse_from_rfc3339("2026-07-01T23:30:00Z").unwrap()
+            .with_timezone(&chrono::Local).date_naive();
+        assert_eq!(super::local_date_of("2026-07-01T23:30:00Z"), Some(expected));
+        // RFC3339 파싱 불가 → 앞 10자(YYYY-MM-DD) 폴백
+        assert_eq!(
+            super::local_date_of("2026-07-01(비표준)"),
+            chrono::NaiveDate::from_ymd_opt(2026, 7, 1)
+        );
+        assert_eq!(super::local_date_of("junk"), None);
     }
 }

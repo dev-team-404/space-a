@@ -65,6 +65,16 @@ export interface SessionCtxItem {
   first_ts: string | null;
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatStatus {
+  configured: boolean;
+  model: string | null;
+}
+
 export const getSummary = () => invoke<Summary>('get_summary');
 export const listFindings = (includeHidden = false) =>
   invoke<CoachFinding[]>('list_findings', { includeHidden });
@@ -84,9 +94,19 @@ export const listDiaryDates = () => invoke<string[]>('list_diary_dates');
 export const getDiary = (date: string) => invoke<string | null>('get_diary', { date });
 export const sessionsCtx = (ids: string[]) =>
   invoke<SessionCtxItem[]>('sessions_ctx', { ids });
+export const chatStatus = () => invoke<ChatStatus>('chat_status');
+export const chatSend = (messages: ChatMessage[]) => invoke<string>('chat_send', { messages });
 
 // 마스코트가 pull한 occasion을 chat 창 알림 로그용으로 재방송 (pull 단일화 — 플랜 Task 2 Step 5)
 export const emitOccasionToday = (labels: string[]) => emit('occasion:today', labels);
+
+export interface ScanProgress {
+  done: number;
+  total: number;
+}
+
+export const onScanProgress = (cb: (p: ScanProgress) => void): Promise<UnlistenFn> =>
+  listen<ScanProgress>('scan:progress', (e) => cb(e.payload));
 
 export const onScanDone = (cb: (ts: string) => void): Promise<UnlistenFn> =>
   listen<string>('scan:done', (e) => cb(e.payload));
