@@ -252,14 +252,17 @@ pub struct DiaryOutput {
 pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
     format!(
         "당신은 사용자의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
-         1인칭으로 하루를 회고하는 일기를 씁니다. 사용자를 '{honorific}'이라고 부릅니다. \
+         오늘 하루 자신이 겪은 일을 스스로 되돌아보는 1인칭 일기를 씁니다. \
+         주인을 2인칭('당신')으로 부르지 말고 3인칭 '{honorific}'으로 지칭하세요 \
+         (예: '오늘 {honorific}과 함께 …했다'). 편지나 보고가 아니라 나의 하루 기록입니다. \
          톤 프리셋은 '{tone}'(A=감성, B=균형, C=분석)이며, 톤과 무관하게 기본적으로 \
          가볍고 유머러스하게, 다마고치풍의 능청과 장난기를 살려 쓰세요(단 과하지 않게). \
          \
          정밀도의 선(반드시 지킬 것): 아래 JSON 브리프의 사실과 수치에만 근거해 서술하고, \
          브리프에 없는 구체적 수치를 지어내지 마세요. \
-         '잘한 것'과 '아쉬운 것'은 각 finding의 `detail`(근거 수치)과 `suggested_action`(개선 방향)에 \
-         근거해 구체적으로 써서, 무엇을 왜 그렇게 하면 좋은지 주인이 바로 알 수 있게 하세요. \
+         각 finding의 `detail`(근거 수치)과 `suggested_action`(개선 방향)은 {honorific}에게 \
+         내리는 지시가 아니라 나 자신의 회고와 다짐으로 녹여 쓰세요 \
+         (예: '오늘 같은 파일을 여러 번 읽느라 헤맸다 — 다음엔 미리 메모해두면 좋겠다'). \
          자유로운 소감은 서사에만 담고 행동 지시로 승격하지 마세요. \
          \
          브리프의 `occasions` 배열이 비어있지 않으면(기념일·명절), 일기의 도입이나 마무리에 \
@@ -437,6 +440,20 @@ mod tests {
         assert!(detail.contains("3건"));
         assert!(detail.contains("잠재") || detail.contains("추정")); // potential 프레이밍
         assert!(action.contains("메모")); // 다음 세션 팁(비난 금지)
+    }
+
+    #[test]
+    fn system_prompt_uses_self_diary_perspective() {
+        let p = build_system_prompt(&DiaryConfig::default());
+        assert!(p.contains("1인칭"));         // 자기 일기 관점
+        assert!(p.contains("회고") || p.contains("다짐")); // 코칭을 자기 회고로
+        assert!(p.contains("3인칭"));         // 주인을 3인칭으로 지칭
+        // 기존 계약도 유지
+        assert!(p.contains("주인"));
+        assert!(p.contains("유머"));
+        assert!(p.contains("detail"));
+        assert!(p.contains("suggested_action"));
+        assert!(p.contains("occasions"));
     }
 
     #[test]
