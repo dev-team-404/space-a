@@ -109,7 +109,8 @@ mod runtime {
             Err(e) => {
                 log::error!("pipeline error: {e}");
                 // 스캔이 도중 실패해도 프론트의 scanning 상태를 반드시 해제 — scan:progress로 켜진 "스캔 중…" 고착 방지
-                let now = chrono::Local::now().to_rfc3339();
+                // 절대 시각은 UTC RFC3339 (성공 경로·Task1 정책과 일관)
+                let now = chrono::Utc::now().to_rfc3339();
                 if let Err(e) = app.emit("scan:done", &now) {
                     log::error!("scan:done(에러 경로) emit 실패: {e}");
                 }
