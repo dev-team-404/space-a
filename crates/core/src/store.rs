@@ -119,6 +119,42 @@ impl SqliteStore {
     pub fn upsert_events(&self, evs: &[NormalizedEvent]) -> Result<usize> {
         let mut inserted = 0usize;
         for e in evs {
+            // 세션 단위 필드는 sessions로만 라우팅 (events 미삽입)
+            match &e.kind {
+                EventKind::SessionMeta { cwd, git_branch } => {
+                    self.conn.execute(
+                        "INSERT INTO sessions
+                           (session_id, host, project_id, agent, first_ts, last_ts, git_branch, cwd)
+                         VALUES (?1,?2,?3,'claude-code',?4,?4,?5,?6)
+                         ON CONFLICT(session_id) DO UPDATE SET
+                           last_ts  = MAX(COALESCE(last_ts, ?4), ?4),
+                           first_ts = MIN(COALESCE(first_ts, ?4), ?4),
+                           git_branch = COALESCE(sessions.git_branch, ?5),
+                           cwd        = COALESCE(sessions.cwd, ?6)",
+                        params![e.session_id, e.host, e.project_id, e.ts, git_branch, cwd],
+                    )?;
+                    continue;
+                }
+                EventKind::UserPrompt { preview } => {
+                    self.conn.execute(
+                        "INSERT INTO sessions
+                           (session_id, host, project_id, agent, first_ts, last_ts,
+                            first_prompt_preview, first_prompt_source_file, first_prompt_offset)
+                         VALUES (?1,?2,?3,'claude-code',?4,?4,?5,?6,?7)
+                         ON CONFLICT(session_id) DO UPDATE SET
+                           last_ts  = MAX(COALESCE(last_ts, ?4), ?4),
+                           first_ts = MIN(COALESCE(first_ts, ?4), ?4),
+                           first_prompt_preview     = COALESCE(sessions.first_prompt_preview, ?5),
+                           first_prompt_source_file = COALESCE(sessions.first_prompt_source_file, ?6),
+                           first_prompt_offset      = COALESCE(sessions.first_prompt_offset, ?7)",
+                        params![e.session_id, e.host, e.project_id, e.ts,
+                                preview, e.source_file, e.source_offset as i64],
+                    )?;
+                    continue;
+                }
+                _ => {}
+            }
+
             let dedup_key = match &e.uuid {
                 Some(u) => format!("{}:{}", u, e.source_offset),
                 None => format!("{}:{}", e.source_file, e.source_offset),
@@ -1301,5 +1337,40 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].dedup_key, "keep21");
         assert_eq!(rows[0].status, "dismissed");
+    }
+
+    #[test]
+    fn session_meta_and_user_prompt_route_to_sessions_not_events() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let base = |uuid: &str, off: u64, kind: EventKind| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+            uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-07T10:00:00Z".into()),
+            source_file: "C:\\proj\\s1.jsonl".into(), source_offset: off, kind,
+        };
+        store.upsert_events(&[
+            base("m1", 0, EventKind::SessionMeta { cwd: "D:\\Project\\cowork".into(), git_branch: Some("main".into()) }),
+            base("p1", 10, EventKind::UserPrompt { preview: "Run this exact Bash command".into() }),
+            // 나중 프롬프트는 COALESCE로 무시돼야 함
+            base("p2", 20, EventKind::UserPrompt { preview: "두 번째 프롬프트".into() }),
+            base("a1", 30, EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-opus-4-8"),
+                usage: TokenUsage::default(), web_search: 0, web_fetch: 0 }),
+        ]).unwrap();
+
+        // events엔 AssistantTurn 1건만
+        assert_eq!(store.count_events().unwrap(), 1);
+        let (cwd, gb, prev, pfile, poff): (Option<String>, Option<String>, Option<String>, Option<String>, Option<i64>) =
+            store.conn.query_row(
+                "SELECT cwd, git_branch, first_prompt_preview, first_prompt_source_file, first_prompt_offset
+                 FROM sessions WHERE session_id='s1'",
+                [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))).unwrap();
+        assert_eq!(cwd.as_deref(), Some("D:\\Project\\cowork"));
+        assert_eq!(gb.as_deref(), Some("main"));
+        assert_eq!(prev.as_deref(), Some("Run this exact Bash command")); // 최초값 유지
+        assert_eq!(pfile.as_deref(), Some("C:\\proj\\s1.jsonl"));
+        assert_eq!(poff, Some(10));
     }
 }
