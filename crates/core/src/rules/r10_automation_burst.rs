@@ -80,6 +80,10 @@ impl Rule for R10AutomationBurst {
             let total = sessions.len();
             let ids: Vec<&str> =
                 sessions.iter().rev().take(100).map(|s| s.session_id.as_str()).collect(); // 최신순 상한 100
+            // §7 식별력: 대표(최신) 세션의 진짜 경로·첫 요청 한 줄 (탐지 로직 무변경, evidence만)
+            let rep = ids.first().copied().and_then(|sid| store.session_ctx(sid).ok().flatten());
+            let rep_cwd = rep.as_ref().and_then(|r| r.2.clone());
+            let rep_first_prompt = rep.as_ref().and_then(|r| r.3.clone());
 
             out.push(Finding {
                 rule_id: "R10".into(),
@@ -97,7 +101,9 @@ impl Rule for R10AutomationBurst {
                     "median_turns": median_u64(turns),
                     "temp_hit_ratio_pct": temp_ratio_pct,
                     "dominant_model_raw": dominant,
-                    "note": "비용-등가 추정(Opus↔Haiku 5:1 가격비)"
+                    "note": "비용-등가 추정(Opus↔Haiku 5:1 가격비)",
+                    "rep_cwd": rep_cwd,
+                    "rep_first_prompt": rep_first_prompt
                 }),
                 est_tokens_saved: est,
                 prescription: Some(Prescription {
@@ -173,6 +179,37 @@ mod tests {
         assert!(f.evidence["temp_hit_ratio_pct"].as_u64().unwrap() > 0);
         assert!(f.est_tokens_saved > 0);
         assert_eq!(f.prescription.as_ref().unwrap().kind, "automation_model_config");
+    }
+
+    #[test]
+    fn r10_evidence_carries_rep_cwd_and_first_prompt() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mut evs = opus_burst(5, 5); // 세션 b0..b4, b4가 최신(ids[0])
+        // 최신 세션 b4에 진짜 경로 + 첫 요청 부착 (sessions로 라우팅됨)
+        evs.push(NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "d--proj".into(), session_id: "b4".into(),
+            uuid: Some("b4-meta".into()), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-06T10:20:00Z".into()),
+            source_file: "s.jsonl".into(), source_offset: 500,
+            kind: EventKind::SessionMeta { cwd: "D:\\Project\\cowork\\.worktrees\\probe".into(), git_branch: None },
+        });
+        evs.push(NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "d--proj".into(), session_id: "b4".into(),
+            uuid: Some("b4-prompt".into()), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-06T10:20:00Z".into()),
+            source_file: "s.jsonl".into(), source_offset: 600,
+            kind: EventKind::UserPrompt { preview: "이 리포의 최근 커밋 요약해줘".into() },
+        });
+        store.upsert_events(&evs).unwrap();
+
+        let findings = R10AutomationBurst::default().evaluate(&store).unwrap();
+        assert_eq!(findings.len(), 1);
+        let ev = &findings[0].evidence;
+        assert_eq!(ev["rep_cwd"], "D:\\Project\\cowork\\.worktrees\\probe");
+        assert_eq!(ev["rep_first_prompt"], "이 리포의 최근 커밋 요약해줘");
     }
 
     #[test]
