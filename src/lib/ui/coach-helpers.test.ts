@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { ctxLine, sessionIdsOf, totalSessionsOf } from './coach-helpers';
+import type { SessionCtxItem } from '../api';
+
+const item = (over: Partial<SessionCtxItem> = {}): SessionCtxItem => ({
+  session_id: 's1', project_id: 'd--proj', first_ts: null, cwd: null, first_prompt: null, ...over,
+});
 
 describe('coach-helpers', () => {
   it('sessionIdsOf extracts string array from evidence', () => {
@@ -17,9 +22,15 @@ describe('coach-helpers', () => {
   });
 
   it('ctxLine formats project and timestamp', () => {
-    const line = ctxLine({ session_id: 's1', project_id: 'd--proj', first_ts: '2026-07-06T09:30:00Z' });
+    const line = ctxLine(item({ first_ts: '2026-07-06T09:30:00Z' }));
     expect(line).toContain('d--proj');
     expect(line).toMatch(/\d{2}-\d{2} \d{2}:\d{2}/);
-    expect(ctxLine({ session_id: 's1', project_id: 'd--proj', first_ts: null })).toBe('d--proj');
+    expect(ctxLine(item())).toBe('d--proj');
+  });
+
+  it('ctxLine appends first_prompt snippet when present', () => {
+    const line = ctxLine(item({ first_prompt: '커밋 요약해줘' }));
+    expect(line).toContain('d--proj');
+    expect(line).toContain('커밋 요약해줘');
   });
 });

@@ -14,8 +14,13 @@ export function totalSessionsOf(evidence: unknown, fallback: number): number {
 }
 
 export function ctxLine(s: SessionCtxItem): string {
-  if (!s.first_ts) return s.project_id;
-  const d = new Date(s.first_ts);
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${s.project_id} · ${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())} 세션`;
+  let base: string;
+  if (!s.first_ts) {
+    base = s.project_id;
+  } else {
+    const d = new Date(s.first_ts);
+    const p = (n: number) => String(n).padStart(2, '0');
+    base = `${s.project_id} · ${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())} 세션`;
+  }
+  return s.first_prompt ? `${base} — “${s.first_prompt}”` : base;
 }
