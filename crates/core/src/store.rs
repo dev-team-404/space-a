@@ -1231,4 +1231,75 @@ mod tests {
         let store2 = SqliteStore::open(&db).unwrap();
         assert_eq!(store2.get_setting("k").unwrap().as_deref(), Some("v"));
     }
+
+    #[test]
+    fn migrate_v2_1_adds_source_file_cols_and_forces_recollect() {
+        use crate::finding::{Finding, Severity};
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("m21.db");
+        // v2 시대 스키마(model_raw는 있으나 v2.1 컬럼은 없는 상태)로 DB 선생성
+        // — has_model_raw는 참이라 v2 분기는 건너뛰고, has_source_file만 거짓이라 v2.1 분기만 단독 발화한다.
+        let step1 = SCHEMA.replace(
+            ",\n  source_file TEXT, tool_use_id TEXT, result_status TEXT",
+            "",
+        );
+        assert!(step1.len() < SCHEMA.len(), "events v2.1 컬럼 치환 실패");
+        let v2_schema = step1.replace(
+            ",\n  cwd TEXT, first_prompt_preview TEXT, first_prompt_source_file TEXT, first_prompt_offset INTEGER",
+            "",
+        );
+        assert!(v2_schema.len() < step1.len(), "sessions v2.1 컬럼 치환 실패");
+
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(&v2_schema).unwrap();
+            conn.execute_batch(
+                "INSERT INTO events (dedup_key, session_id, host, project_id, source_offset, kind)
+                   VALUES ('old:0','s1','Windows','p',0,'assistant_turn');
+                 INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, git_branch)
+                   VALUES ('s1','Windows','p','claude-code','2026-07-05T00:00:00Z','2026-07-05T00:00:00Z',NULL);
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 123);
+                 INSERT INTO daily_rollup (host, project_id, date, session_count)
+                   VALUES ('Windows','p','2026-07-05',1);",
+            ).unwrap();
+        }
+        // 마이그레이션 전 findings 심어서 보존 검증
+        {
+            let conn = Connection::open(&db).unwrap();
+            let store = SqliteStore { conn };
+            store.upsert_finding(&Finding {
+                rule_id: "R1".into(), severity: Severity::Warn,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "host".into(), scope_ref: "srv".into(),
+                evidence: serde_json::json!({}), est_tokens_saved: 10,
+                prescription: None, dedup_key: "keep21".into(),
+            }, "2026-07-05T00:00:00Z").unwrap();
+            store.set_finding_status("keep21", "dismissed").unwrap();
+        }
+
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v2.1 분기 발화
+
+        // v2.1 컬럼이 실제로 생겼는지 확인
+        let has_source_file = store.conn
+            .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name='source_file'").unwrap()
+            .exists([]).unwrap();
+        assert!(has_source_file, "events.source_file 컬럼이 추가돼야 함");
+        let has_cwd = store.conn
+            .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name='cwd'").unwrap()
+            .exists([]).unwrap();
+        assert!(has_cwd, "sessions.cwd 컬럼이 추가돼야 함");
+
+        // 전체 재수집 유도 — events/sessions/ingest_state/daily_rollup 모두 비워짐
+        for table in ["events", "sessions", "ingest_state", "daily_rollup"] {
+            let n: i64 = store.conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap();
+            assert_eq!(n, 0, "{table} 은(는) v2.1 마이그레이션 후 비워져야 함");
+        }
+
+        // findings·status는 보존
+        let rows = store.list_findings_current(true).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].dedup_key, "keep21");
+        assert_eq!(rows[0].status, "dismissed");
+    }
 }
