@@ -145,14 +145,16 @@ pub struct SessionCtxItem {
     pub session_id: String,
     pub project_id: String,
     pub first_ts: Option<String>,
+    pub cwd: Option<String>,
+    pub first_prompt: Option<String>,
 }
 
 /// 집계 finding 카드의 "포함 세션 N건" 펼치기용 배치 조회 (요청 순서 유지, 상한 100).
 pub fn sessions_ctx_inner(store: &SqliteStore, ids: &[String]) -> anyhow::Result<Vec<SessionCtxItem>> {
     let mut out = Vec::new();
     for id in ids.iter().take(100) {
-        if let Some((project_id, first_ts, _cwd, _prompt)) = store.session_ctx(id)? {
-            out.push(SessionCtxItem { session_id: id.clone(), project_id, first_ts });
+        if let Some((project_id, first_ts, cwd, first_prompt)) = store.session_ctx(id)? {
+            out.push(SessionCtxItem { session_id: id.clone(), project_id, first_ts, cwd, first_prompt });
         }
     }
     Ok(out)
@@ -492,6 +494,34 @@ mod tests {
         assert_eq!(items[0].session_id, "s2"); // 요청 순서 유지
         assert_eq!(items[0].project_id, "d--proj");
         assert_eq!(items[1].session_id, "s1");
+    }
+
+    #[test]
+    fn sessions_ctx_surfaces_cwd_and_first_prompt() {
+        use agent_mentor::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_events(&[
+            NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(),
+                host: "Windows".into(), project_id: "d--proj".into(), session_id: "s1".into(),
+                uuid: Some("m1".into()), parent_uuid: None, is_sidechain: false,
+                ts: Some("2026-07-07T10:00:00Z".into()),
+                source_file: "s.jsonl".into(), source_offset: 0,
+                kind: EventKind::SessionMeta { cwd: "D:\\Project\\cowork".into(), git_branch: None },
+            },
+            NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(),
+                host: "Windows".into(), project_id: "d--proj".into(), session_id: "s1".into(),
+                uuid: Some("p1".into()), parent_uuid: None, is_sidechain: false,
+                ts: Some("2026-07-07T10:00:00Z".into()),
+                source_file: "s.jsonl".into(), source_offset: 10,
+                kind: EventKind::UserPrompt { preview: "커밋 요약해줘".into() },
+            },
+        ]).unwrap();
+        let items = sessions_ctx_inner(&store, &["s1".into()]).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].cwd.as_deref(), Some("D:\\Project\\cowork"));
+        assert_eq!(items[0].first_prompt.as_deref(), Some("커밋 요약해줘"));
     }
 
     #[test]

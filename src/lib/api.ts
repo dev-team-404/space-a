@@ -63,6 +63,8 @@ export interface SessionCtxItem {
   session_id: string;
   project_id: string;
   first_ts: string | null;
+  cwd: string | null;
+  first_prompt: string | null;
 }
 
 export interface ChatMessage {

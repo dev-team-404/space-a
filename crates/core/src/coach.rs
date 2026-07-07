@@ -45,8 +45,13 @@ mod tests {
     #[test]
     fn v2_aggregate_rules_have_no_fix_command() {
         assert_eq!(fix_command("R10", &json!({})), None);
-        assert_eq!(fix_command("R11", &json!({})), None);
+        assert_eq!(fix_command("R11", &json!({"friction_events": [], "by_tool": {}})), None);
         assert_eq!(fix_command("R12", &json!({})), None);
+        // v2.1 신규 처방 kind는 서사로만 안내 — fix_command 없음
+        assert_eq!(
+            fix_command("R5", &json!({"subtype": "within_session_context_drift", "total_sessions": 3})),
+            None
+        );
     }
 
     #[test]
