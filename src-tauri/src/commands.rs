@@ -74,7 +74,7 @@ pub fn coach_findings_inner(store: &SqliteStore, include_hidden: bool) -> anyhow
                     .session_ctx(&row.scope_ref)
                     .ok()
                     .flatten()
-                    .map(|(project_id, first_ts)| SessionCtx { project_id, first_ts })
+                    .map(|(project_id, first_ts, _cwd, _prompt)| SessionCtx { project_id, first_ts })
             } else {
                 None
             };
@@ -151,7 +151,7 @@ pub struct SessionCtxItem {
 pub fn sessions_ctx_inner(store: &SqliteStore, ids: &[String]) -> anyhow::Result<Vec<SessionCtxItem>> {
     let mut out = Vec::new();
     for id in ids.iter().take(100) {
-        if let Some((project_id, first_ts)) = store.session_ctx(id)? {
+        if let Some((project_id, first_ts, _cwd, _prompt)) = store.session_ctx(id)? {
             out.push(SessionCtxItem { session_id: id.clone(), project_id, first_ts });
         }
     }

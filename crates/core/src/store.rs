@@ -547,13 +547,18 @@ impl SqliteStore {
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
     }
 
-    /// 세션 컨텍스트(프로젝트, 시작 시각) — 세션 스코프 finding의 "어떤 작업인지" 표시용.
-    pub fn session_ctx(&self, session_id: &str) -> Result<Option<(String, Option<String>)>> {
+    /// 세션 컨텍스트 — 세션 스코프 finding·집계 카드의 "어떤 작업인지" 표시용.
+    /// (project_id, first_ts, cwd, first_prompt_preview)
+    pub fn session_ctx(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<(String, Option<String>, Option<String>, Option<String>)>> {
         self.conn
             .query_row(
-                "SELECT project_id, first_ts FROM sessions WHERE session_id=?1",
+                "SELECT project_id, first_ts, cwd, first_prompt_preview
+                 FROM sessions WHERE session_id=?1",
                 params![session_id],
-                |r| Ok((r.get(0)?, r.get(1)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
             .optional()
             .map_err(Into::into)
@@ -1171,6 +1176,35 @@ mod tests {
         let ctx = store.session_ctx("s1").unwrap().unwrap();
         assert_eq!(ctx.0, "p");
         assert_eq!(ctx.1.as_deref(), Some("2026-07-05T10:00:00Z"));
+        assert!(store.session_ctx("nope").unwrap().is_none());
+    }
+
+    #[test]
+    fn session_ctx_returns_cwd_and_first_prompt() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_events(&[
+            NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(),
+                host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+                uuid: Some("m1".into()), parent_uuid: None, is_sidechain: false,
+                ts: Some("2026-07-07T10:00:00Z".into()),
+                source_file: "s1.jsonl".into(), source_offset: 0,
+                kind: EventKind::SessionMeta { cwd: "D:\\Project\\cowork".into(), git_branch: None },
+            },
+            NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(),
+                host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+                uuid: Some("p1".into()), parent_uuid: None, is_sidechain: false,
+                ts: Some("2026-07-07T10:00:00Z".into()),
+                source_file: "s1.jsonl".into(), source_offset: 10,
+                kind: EventKind::UserPrompt { preview: "Run this exact Bash command".into() },
+            },
+        ]).unwrap();
+        let (proj, _ts, cwd, prompt) = store.session_ctx("s1").unwrap().unwrap();
+        assert_eq!(proj, "p");
+        assert_eq!(cwd.as_deref(), Some("D:\\Project\\cowork"));
+        assert_eq!(prompt.as_deref(), Some("Run this exact Bash command"));
         assert!(store.session_ctx("nope").unwrap().is_none());
     }
 
