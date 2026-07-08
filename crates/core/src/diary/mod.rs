@@ -249,6 +249,28 @@ pub struct DiaryOutput {
     pub tokens_used: u64,
 }
 
+/// 다이어리 서사의 한국어 "AI티"를 줄이는 문체 가이드(생성 시 예방).
+/// im-not-ai(사후 탐지→수정)의 범주를 생성 지침으로 번역한 것. 팩트 안전은 정밀도의 선이 담당.
+/// #1 프로필 한마디·#3 상주봇 말풍선이 다른 태스크 프롬프트에서 재사용하도록 `&'static str` 반환.
+pub fn voice_guidance() -> &'static str {
+    "문체는 진짜 사람이 그날 하루를 캐주얼하게 적는 일기처럼 자연스럽게. \
+     문장 길이와 종결어미를 다양하게 섞고(짧은 감탄·구어 종결을 간간이), 담백한 구어체로 쓰세요. \
+     다음 'AI티'는 피하세요: \
+     ① 번역투('~을 통해', '~에 대해', '작업을 진행/수행하였다' 같은 do/have류 직역), \
+     ② 이중·과잉 피동('읽혀지다', '보여지다', '되어지다' → 능동이나 단일 피동으로), \
+     ③ 굳이 안 써도 될 과잉 영어(단 기술 고유명 Read·Opus·MCP·플러그인/스킬 이름 등은 그대로 보존), \
+     ④ 사실을 번호목록·불릿으로 기계적으로 나열하기(→ 하나의 이야기 흐름으로 녹이세요), \
+     ⑤ AI 상투구('결론적으로', '종합하면', '시사하는 바가 크다', '~라고 할 수 있다'), \
+     ⑥ 이모지 남발(아주 가끔이면 캐릭터상 괜찮지만 문장마다 붙이지 마세요), \
+     ⑦ 리듬 획일('~했다. ~했다. ~했다.'처럼 같은 길이·같은 종결의 반복), \
+     ⑧ 습관적으로 얼버무리는 빈 헤지('~인 것 같기도', '어느 정도', '다소'). \
+     단, 브리프 수치·가설의 불확실성을 표시하는 헤지(추정·잠재·'~로 보여요')는 정밀도의 선이므로 \
+     반드시 유지하세요 — 이 인식적 헤지와 ⑧의 빈 헤지를 혼동하지 마세요. \
+     예시(형태만 참고, 내용은 브리프 사실만 쓸 것): \
+     어색함 '오늘은 총 세 개의 세션을 통해 작업이 진행되었고, 같은 파일이 여러 번 읽혀지는 상황이 발생하였다' → \
+     자연스러움 '오늘 세션 세 번. 같은 파일을 자꾸 다시 열었다 — 좀 헤맸네'."
+}
+
 pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
     format!(
         "당신은 사용자의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
@@ -257,6 +279,8 @@ pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
          (예: '오늘 {honorific}과 함께 …했다'). 편지나 보고가 아니라 나의 하루 기록입니다. \
          톤 프리셋은 '{tone}'(A=감성, B=균형, C=분석)이며, 톤과 무관하게 기본적으로 \
          가볍고 유머러스하게, 다마고치풍의 능청과 장난기를 살려 쓰세요(단 과하지 않게). \
+         \
+         {voice} \
          \
          정밀도의 선(반드시 지킬 것): 아래 JSON 브리프의 사실과 수치에만 근거해 서술하고, \
          브리프에 없는 구체적 수치를 지어내지 마세요. \
@@ -270,6 +294,7 @@ pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
          비어있으면 언급하지 마세요.",
         honorific = cfg.honorific,
         tone = cfg.tone,
+        voice = voice_guidance(),
     )
 }
 
@@ -454,6 +479,28 @@ mod tests {
         assert!(p.contains("detail"));
         assert!(p.contains("suggested_action"));
         assert!(p.contains("occasions"));
+    }
+
+    #[test]
+    fn voice_guidance_covers_key_anti_ai_directives() {
+        let v = super::voice_guidance();
+        // 긍정 보이스
+        assert!(v.contains("구어체"));
+        // 회피목록 핵심
+        assert!(v.contains("번역투"));
+        assert!(v.contains("피동"));           // 이중·과잉 피동
+        assert!(v.contains("고유명"));         // 기술 고유명 보존(과잉 영어 예외)
+        assert!(v.contains("이모지"));         // 이모지 남용 회피
+        // 헤지 carve-out — 정밀도의 선이 요구하는 인식적 헤지는 유지
+        assert!(v.contains("추정") && v.contains("잠재"));
+        // form-only 예시(어색함 → 자연스러움)
+        assert!(v.contains("→"));
+    }
+
+    #[test]
+    fn build_system_prompt_embeds_voice_guidance() {
+        let p = build_system_prompt(&DiaryConfig::default());
+        assert!(p.contains(super::voice_guidance())); // 조각이 그대로 배선됨
     }
 
     #[test]
