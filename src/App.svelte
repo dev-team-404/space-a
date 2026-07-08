@@ -7,7 +7,7 @@
   import RobotPortrait from './lib/ui/RobotPortrait.svelte';
   import {
     getSummary, getDailyLine, listFindings, onScanDone, onGotoTab,
-    onNewFindings, onDiaryReady, onOccasionToday, type Summary,
+    onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, type Summary,
   } from './lib/api';
   import { loadNotices, pushNotice, saveNotices, type Notice } from './lib/notices';
 
@@ -47,6 +47,7 @@
       onNewFindings((rows) => rows.length && record('finding', `코칭 지적 ${rows.length}건이 도착했어요`)),
       onDiaryReady((date) => record('diary', `${date} 일기가 나왔어요`)),
       onOccasionToday((labels) => labels.length && record('occasion', `오늘은 ${labels[0]}!`)),
+      onDailyLine((text) => { dailyLine = text; }),
     ];
     return () => { subs.forEach((p) => p.then((u) => u())); };
   });

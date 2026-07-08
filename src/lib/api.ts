@@ -117,6 +117,8 @@ export const onNewFindings = (cb: (rows: Finding[]) => void): Promise<UnlistenFn
   listen<Finding[]>('coach:finding', (e) => cb(e.payload));
 export const onDiaryReady = (cb: (date: string) => void): Promise<UnlistenFn> =>
   listen<string>('diary:ready', (e) => cb(e.payload));
+export const onDailyLine = (cb: (text: string) => void): Promise<UnlistenFn> =>
+  listen<string>('daily-line:ready', (e) => cb(e.payload));
 export const onOccasionToday = (cb: (labels: string[]) => void): Promise<UnlistenFn> =>
   listen<string[]>('occasion:today', (e) => cb(e.payload));
 export const onGotoTab = (cb: (tab: string) => void): Promise<UnlistenFn> =>

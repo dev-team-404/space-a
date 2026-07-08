@@ -106,7 +106,7 @@ mod runtime {
                 // 다이어리 실패는 조용히 — 다음 사이클에서 재시도
                 maybe_generate_diaries(app, &state.store);
                 // 오늘의 한마디 — 엔진 없으면 no-op, 실패는 조용히(다음 스캔 재시도)
-                maybe_generate_daily_line(&state.store);
+                maybe_generate_daily_line(app, &state.store);
             }
             Err(e) => {
                 log::error!("pipeline error: {e}");
@@ -174,8 +174,11 @@ mod runtime {
     }
 
     /// 오늘의 한마디 — scan:done마다 fp가 stale할 때만 재생성(스펙 §3). 엔진 없으면 no-op.
-    /// 네트워크(LLM)는 diary와 동일하게 store 락 밖에서 호출.
+    /// 네트워크(LLM)는 diary와 동일하게 store 락 밖에서 호출. 생성/갱신 성공 시
+    /// `daily-line:ready`를 emit한다 — scan:done은 생성 전에 이미 나갔으므로, 이 이벤트로
+    /// 프론트가 방금 만든 한마디를 즉시 반영한다(diary:ready 선례).
     fn maybe_generate_daily_line(
+        app: &AppHandle,
         store_mutex: &std::sync::Mutex<SqliteStore>,
     ) {
         let Some(engine) = OpenAiCompatEngine::from_env() else { return; };
@@ -205,13 +208,16 @@ mod runtime {
         let Some((text, fp)) = outcome else { return; };
 
         // ③ 락: 캐시 upsert → 즉시 해제
-        match store_mutex.lock() {
-            Ok(store) => {
-                if let Err(e) = store.upsert_daily_line(&today, &text, &fp) {
-                    log::warn!("upsert_daily_line 실패: {e}");
-                }
-            }
-            Err(e) => log::warn!("store lock poisoned: {e}"),
+        let stored = match store_mutex.lock() {
+            Ok(store) => match store.upsert_daily_line(&today, &text, &fp) {
+                Ok(_) => true,
+                Err(e) => { log::warn!("upsert_daily_line 실패: {e}"); false }
+            },
+            Err(e) => { log::warn!("store lock poisoned: {e}"); false }
+        };
+        // ④ 표시 갱신 알림 — 프론트가 재조회 없이 즉시 반영 (diary:ready 선례)
+        if stored {
+            let _ = app.emit("daily-line:ready", &text);
         }
     }
 }
