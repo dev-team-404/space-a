@@ -1,7 +1,7 @@
 <script lang="ts">
   import { listFindings, onNewFindings, setFindingStatus, sessionsCtx, type CoachFinding, type SessionCtxItem } from '../api';
   import SessionModal from './SessionModal.svelte';
-  import { ctxLine, sessionIdsOf, totalSessionsOf } from './coach-helpers';
+  import { coachTitle, ctxLine, sessionIdsOf, totalSessionsOf } from './coach-helpers';
 
   let { focusKey = null, onChanged }: { focusKey?: string | null; onChanged?: () => void } = $props();
 
@@ -75,16 +75,6 @@
   }
 
   const icon = (s: CoachFinding['severity']) => (s === 'warn' ? '⚠' : s === 'suggest' ? '💡' : 'ℹ');
-  const TITLE: Record<string, string> = {
-    R1: '안 쓰는 MCP 서버가 토큰을 먹고 있어요',
-    R2: '안 쓰는 플러그인이 자리만 차지해요',
-    R5: '세션 안에서 같은 파일을 여러 번 다시 읽었어요',
-    R7: '이 프로젝트, 가벼운 작업엔 시작 모델을 낮춰보세요',
-    R9: '웹 검색이 너무 잦아요',
-    R10: '자동화 파이프라인이 Opus로 돌고 있어요',
-    R11: '거부한 뒤 결국 허용한 도구가 있어요',
-    R12: '설치해둔 스킬이 놀고 있어요',
-  };
 </script>
 
 <section class="coach">
@@ -94,7 +84,7 @@
     {#each active as f (f.dedup_key)}
       <article class="card" class:warn={f.severity === 'warn'} data-key={f.dedup_key}>
         <header>
-          <span class="title">{icon(f.severity)} {TITLE[f.rule_id] ?? '아낄 수 있는 게 보여요'}</span>
+          <span class="title">{icon(f.severity)} {coachTitle(f.rule_id, f.evidence)}</span>
           <span class="save">~{f.est_tokens_saved.toLocaleString()} tok</span>
         </header>
         <!-- 집계(project) 카드의 occurrences는 스캔 횟수라 "N회 관측"이 오독을 유발 → 원본 데이터로 이동 -->
@@ -155,7 +145,7 @@
       {#each hidden as f (f.dedup_key)}
         <article class="card muted" data-key={f.dedup_key}>
           <header>
-            <span class="title">{f.status === 'resolved' ? '✔ 해결함' : '✕ 무시'} · {TITLE[f.rule_id] ?? f.rule_id}</span>
+            <span class="title">{f.status === 'resolved' ? '✔ 해결함' : '✕ 무시'} · {coachTitle(f.rule_id, f.evidence)}</span>
             <button onclick={() => mark(f, 'new')}>다시 보기</button>
           </header>
           <p class="why">{f.detail}</p>
