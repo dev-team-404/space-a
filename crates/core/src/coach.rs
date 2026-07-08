@@ -52,6 +52,10 @@ mod tests {
             fix_command("R5", &json!({"subtype": "within_session_context_drift", "total_sessions": 3})),
             None
         );
+        assert_eq!(
+            fix_command("R5", &json!({"subtype": "cross_session_claude_md", "files": []})),
+            None
+        );
     }
 
     #[test]

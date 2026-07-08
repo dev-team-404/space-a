@@ -47,6 +47,29 @@ pub fn finding_advice(
 ) -> (String, String) {
     match rule_id {
         "R5" => {
+            // §6.1 cross_session_claude_md — 여러 세션 반복 읽기 → CLAUDE.md 레버
+            if evidence.get("subtype").and_then(|v| v.as_str()) == Some("cross_session_claude_md") {
+                let files = evidence.get("files").and_then(|v| v.as_array());
+                let n_files = files.map(|a| a.len()).unwrap_or(0);
+                let shown = files
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|f| f.get("path").and_then(|p| p.as_str()))
+                            .take(3)
+                            .collect::<Vec<_>>()
+                            .join("`, `")
+                    })
+                    .unwrap_or_default();
+                let more = if n_files > 3 { format!(" 외 {}개", n_files - 3) } else { String::new() };
+                let where_claude_md = match evidence.get("cwd").and_then(|v| v.as_str()) {
+                    Some(cwd) => format!("`{cwd}\\CLAUDE.md`"),
+                    None => "이 프로젝트의 `CLAUDE.md`".to_string(),
+                };
+                return (
+                    format!("이 프로젝트 여러 세션에서 `{shown}`{more}를 반복해서 읽었어요 (최대 ~{est_tokens_saved}토큰 추정)"),
+                    format!("이 파일들의 요약이나 포인터를 {where_claude_md}에 넣어두면 매 세션 다시 읽지 않아도 돼요"),
+                );
+            }
             // v2.1: 프로젝트 집계 context_drift (§6.2). 구 세션 evidence(path/count)는 폐기됨.
             let n = evidence.get("total_sessions").and_then(|v| v.as_u64()).unwrap_or(0);
             (
@@ -465,6 +488,24 @@ mod tests {
         assert!(detail.contains("3건"));
         assert!(detail.contains("잠재") || detail.contains("추정")); // potential 프레이밍
         assert!(action.contains("메모")); // 다음 세션 팁(비난 금지)
+    }
+
+    #[test]
+    fn finding_advice_r5_cross_session_claude_md() {
+        let (detail, action) = super::finding_advice(
+            "R5",
+            &serde_json::json!({
+                "subtype": "cross_session_claude_md", "user_actionability": "high",
+                "files": [{"path": "docs/architecture.md", "session_count": 4}],
+                "session_ids": [], "total_sessions": 4,
+                "cwd": "D:\\Project\\cowork"
+            }),
+            9600,
+        );
+        assert!(detail.contains("architecture.md")); // 반복 읽힌 파일 인용
+        assert!(detail.contains("추정"));            // 잠재/추정 프레이밍(정밀도의 선)
+        assert!(action.contains("CLAUDE.md"));       // CLAUDE.md 레버
+        assert!(action.contains("cowork"));          // cwd로 어느 CLAUDE.md인지 지목
     }
 
     #[test]
