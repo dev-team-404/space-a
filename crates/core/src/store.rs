@@ -62,6 +62,9 @@ CREATE TABLE IF NOT EXISTS ingest_state (
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY, value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS daily_line (
+  date TEXT PRIMARY KEY, text TEXT NOT NULL, fingerprint TEXT NOT NULL
+);
 "#;
 
 pub struct SqliteStore {
@@ -605,6 +608,26 @@ impl SqliteStore {
         let mut stmt = self.conn.prepare("SELECT key, value FROM settings ORDER BY key")?;
         let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn get_daily_line(&self, date: &str) -> Result<Option<(String, String)>> {
+        self.conn
+            .query_row(
+                "SELECT text, fingerprint FROM daily_line WHERE date=?1",
+                params![date],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn upsert_daily_line(&self, date: &str, text: &str, fingerprint: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO daily_line (date, text, fingerprint) VALUES (?1,?2,?3)
+             ON CONFLICT(date) DO UPDATE SET text=?2, fingerprint=?3",
+            params![date, text, fingerprint],
+        )?;
+        Ok(())
     }
 }
 
@@ -1435,5 +1458,26 @@ mod tests {
             [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
         assert_eq!(first_ts.as_deref(), Some("2026-07-01T10:00:00Z"), "ts 없는 이벤트가 first_ts를 NULL로 훼손하면 안 됨");
         assert_eq!(last_ts.as_deref(), Some("2026-07-01T10:00:00Z"), "ts 없는 이벤트가 last_ts를 NULL로 훼손하면 안 됨");
+    }
+
+    #[test]
+    fn daily_line_roundtrip_and_upsert_overwrites() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 없으면 None
+        assert_eq!(store.get_daily_line("2026-07-08").unwrap(), None);
+        // upsert 후 (text, fp) 라운드트립
+        store.upsert_daily_line("2026-07-08", "오늘 좀 굴렀다.", "3|100|200|1").unwrap();
+        assert_eq!(
+            store.get_daily_line("2026-07-08").unwrap(),
+            Some(("오늘 좀 굴렀다.".to_string(), "3|100|200|1".to_string()))
+        );
+        // 같은 날짜 재upsert → text·fp 덮어씀
+        store.upsert_daily_line("2026-07-08", "생각보다 바빴네.", "5|300|400|2").unwrap();
+        assert_eq!(
+            store.get_daily_line("2026-07-08").unwrap(),
+            Some(("생각보다 바빴네.".to_string(), "5|300|400|2".to_string()))
+        );
+        // 다른 날짜는 독립적으로 None
+        assert_eq!(store.get_daily_line("2099-01-01").unwrap(), None);
     }
 }
