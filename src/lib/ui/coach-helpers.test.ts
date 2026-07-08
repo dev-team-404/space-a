@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ctxLine, sessionIdsOf, totalSessionsOf } from './coach-helpers';
+import { coachTitle, ctxLine, sessionIdsOf, totalSessionsOf } from './coach-helpers';
 import type { SessionCtxItem } from '../api';
 
 const item = (over: Partial<SessionCtxItem> = {}): SessionCtxItem => ({
@@ -32,5 +32,20 @@ describe('coach-helpers', () => {
     const line = ctxLine(item({ first_prompt: '커밋 요약해줘' }));
     expect(line).toContain('d--proj');
     expect(line).toContain('커밋 요약해줘');
+  });
+});
+
+describe('coachTitle', () => {
+  it('R5 cross_session subtype → CLAUDE.md 카피', () => {
+    expect(coachTitle('R5', { subtype: 'cross_session_claude_md' })).toContain('CLAUDE.md');
+  });
+  it('R5 context_drift subtype → 기존 다시읽기 제목', () => {
+    expect(coachTitle('R5', { subtype: 'within_session_context_drift' })).toContain('다시 읽었어요');
+  });
+  it('R1은 기존 제목', () => {
+    expect(coachTitle('R1', null)).toContain('MCP');
+  });
+  it('알 수 없는 rule → fallback', () => {
+    expect(coachTitle('RX', {})).toBe('아낄 수 있는 게 보여요');
   });
 });
