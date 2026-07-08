@@ -161,6 +161,7 @@ impl R5RepeatedRead {
                     "subtype": "cross_session_claude_md",
                     "user_actionability": "high",
                     "files": files_json,
+                    "total_files": files.len(),
                     "session_ids": capped_sessions,
                     "total_sessions": total_sessions,
                     "cwd": cwd,
@@ -451,6 +452,7 @@ mod tests {
         assert_eq!(f.evidence["total_sessions"], 3);
         assert_eq!(f.evidence["files"][0]["path"], "shared.rs");
         assert_eq!(f.evidence["files"][0]["session_count"], 3);
+        assert_eq!(f.evidence["total_files"], 1); // 절단 전 총 파일 수(레포 관례: cap 동반 카운트)
         assert_eq!(f.est_tokens_saved, (3 - 1) * 1200);
         assert_eq!(f.prescription.as_ref().unwrap().kind, "add_to_claude_md");
     }

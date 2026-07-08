@@ -94,6 +94,7 @@ export const getSettings = () => invoke<Record<string, string>>('get_settings');
 export const setSetting = (key: string, value: string) => invoke<void>('set_setting', { key, value });
 export const listDiaryDates = () => invoke<string[]>('list_diary_dates');
 export const getDiary = (date: string) => invoke<string | null>('get_diary', { date });
+export const getDailyLine = () => invoke<string | null>('get_daily_line');
 export const sessionsCtx = (ids: string[]) =>
   invoke<SessionCtxItem[]>('sessions_ctx', { ids });
 export const chatStatus = () => invoke<ChatStatus>('chat_status');
@@ -116,6 +117,8 @@ export const onNewFindings = (cb: (rows: Finding[]) => void): Promise<UnlistenFn
   listen<Finding[]>('coach:finding', (e) => cb(e.payload));
 export const onDiaryReady = (cb: (date: string) => void): Promise<UnlistenFn> =>
   listen<string>('diary:ready', (e) => cb(e.payload));
+export const onDailyLine = (cb: (text: string) => void): Promise<UnlistenFn> =>
+  listen<string>('daily-line:ready', (e) => cb(e.payload));
 export const onOccasionToday = (cb: (labels: string[]) => void): Promise<UnlistenFn> =>
   listen<string[]>('occasion:today', (e) => cb(e.payload));
 export const onGotoTab = (cb: (tab: string) => void): Promise<UnlistenFn> =>

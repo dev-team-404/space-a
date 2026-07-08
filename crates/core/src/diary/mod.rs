@@ -50,7 +50,12 @@ pub fn finding_advice(
             // §6.1 cross_session_claude_md — 여러 세션 반복 읽기 → CLAUDE.md 레버
             if evidence.get("subtype").and_then(|v| v.as_str()) == Some("cross_session_claude_md") {
                 let files = evidence.get("files").and_then(|v| v.as_array());
-                let n_files = files.map(|a| a.len()).unwrap_or(0);
+                // 절단 전 총 파일 수: total_files 우선, 없으면(구 데이터) 실린 files 길이로 폴백
+                let n_files = evidence
+                    .get("total_files")
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n as usize)
+                    .unwrap_or_else(|| files.map(|a| a.len()).unwrap_or(0));
                 let shown = files
                     .map(|a| {
                         a.iter()
@@ -506,6 +511,26 @@ mod tests {
         assert!(detail.contains("추정"));            // 잠재/추정 프레이밍(정밀도의 선)
         assert!(action.contains("CLAUDE.md"));       // CLAUDE.md 레버
         assert!(action.contains("cowork"));          // cwd로 어느 CLAUDE.md인지 지목
+    }
+
+    #[test]
+    fn finding_advice_r5_cross_session_uses_total_files_for_count() {
+        // files는 3개만 실렸지만 total_files=5 → "외 2개"가 절단 전 총계 기준으로 계산됨
+        let (detail, _) = super::finding_advice(
+            "R5",
+            &serde_json::json!({
+                "subtype": "cross_session_claude_md", "user_actionability": "high",
+                "files": [
+                    {"path": "a.md", "session_count": 4},
+                    {"path": "b.md", "session_count": 3},
+                    {"path": "c.md", "session_count": 3}
+                ],
+                "total_files": 5,
+                "session_ids": [], "total_sessions": 4, "cwd": null
+            }),
+            12000,
+        );
+        assert!(detail.contains("외 2개")); // 5 − 3(표시) = 2. files.len()=3이면 "외" 없음
     }
 
     #[test]

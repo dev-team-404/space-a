@@ -105,6 +105,8 @@ mod runtime {
                 }
                 // 다이어리 실패는 조용히 — 다음 사이클에서 재시도
                 maybe_generate_diaries(app, &state.store);
+                // 오늘의 한마디 — 엔진 없으면 no-op, 실패는 조용히(다음 스캔 재시도)
+                maybe_generate_daily_line(app, &state.store);
             }
             Err(e) => {
                 log::error!("pipeline error: {e}");
@@ -168,6 +170,54 @@ mod runtime {
                 Ok(_) => { let _ = app.emit("diary:ready", &date); }
                 Err(e) => log::warn!("persist_diary({date}) 실패: {e}"),
             }
+        }
+    }
+
+    /// 오늘의 한마디 — scan:done마다 fp가 stale할 때만 재생성(스펙 §3). 엔진 없으면 no-op.
+    /// 네트워크(LLM)는 diary와 동일하게 store 락 밖에서 호출. 생성/갱신 성공 시
+    /// `daily-line:ready`를 emit한다 — scan:done은 생성 전에 이미 나갔으므로, 이 이벤트로
+    /// 프론트가 방금 만든 한마디를 즉시 반영한다(diary:ready 선례).
+    fn maybe_generate_daily_line(
+        app: &AppHandle,
+        store_mutex: &std::sync::Mutex<SqliteStore>,
+    ) {
+        let Some(engine) = OpenAiCompatEngine::from_env() else { return; };
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+
+        // ① 락: 오늘 컨텍스트 + 캐시된 fingerprint 읽기 → 즉시 해제
+        let (ctx, cached_fp) = match store_mutex.lock() {
+            Ok(store) => {
+                let ctx = match crate::commands::chat_context_inner(&store) {
+                    Ok(c) => c,
+                    Err(e) => { log::warn!("daily-line chat_context 실패: {e}"); return; }
+                };
+                let cached_fp = match store.get_daily_line(&today) {
+                    Ok(v) => v.map(|(_, fp)| fp),
+                    Err(e) => { log::warn!("get_daily_line 실패: {e}"); return; }
+                };
+                (ctx, cached_fp)
+            }
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        }; // guard drops here — 네트워크 전에 락 해제
+
+        // ② 락 없이 compute (0건 정적 or 네트워크 생성). None이면 skip.
+        let outcome = match agent_mentor::mascot::compute_daily_line(&engine, &ctx, cached_fp.as_deref()) {
+            Ok(o) => o,
+            Err(e) => { log::warn!("compute_daily_line 실패: {e}"); return; }
+        };
+        let Some((text, fp)) = outcome else { return; };
+
+        // ③ 락: 캐시 upsert → 즉시 해제
+        let stored = match store_mutex.lock() {
+            Ok(store) => match store.upsert_daily_line(&today, &text, &fp) {
+                Ok(_) => true,
+                Err(e) => { log::warn!("upsert_daily_line 실패: {e}"); false }
+            },
+            Err(e) => { log::warn!("store lock poisoned: {e}"); false }
+        };
+        // ④ 표시 갱신 알림 — 프론트가 재조회 없이 즉시 반영 (diary:ready 선례)
+        if stored {
+            let _ = app.emit("daily-line:ready", &text);
         }
     }
 }
