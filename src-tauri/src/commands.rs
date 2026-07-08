@@ -44,6 +44,10 @@ pub fn diary_inner(store: &SqliteStore, date: &str) -> anyhow::Result<Option<Str
     }
 }
 
+pub fn daily_line_inner(store: &SqliteStore, date: &str) -> anyhow::Result<Option<String>> {
+    Ok(store.get_daily_line(date)?.map(|(text, _fp)| text))
+}
+
 #[derive(Debug, Serialize)]
 pub struct SessionCtx {
     pub project_id: String,
@@ -276,6 +280,13 @@ pub fn get_diary(state: State<AppState>, date: String) -> Result<Option<String>,
     diary_inner(&*guard, &date).map_err(|e| e.to_string())
 }
 
+#[tauri::command(async)]
+pub fn get_daily_line(state: State<AppState>) -> Result<Option<String>, String> {
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let guard = lock(&state)?;
+    daily_line_inner(&*guard, &today).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn get_mascot_seed() -> RobotSpec {
     robot_spec_for(&stable_identity())
@@ -379,6 +390,18 @@ mod tests {
         assert_eq!(s.total_sessions, 0);
         assert_eq!(s.last_scan, None);
         assert_eq!(s.date.len(), 10); // YYYY-MM-DD
+    }
+
+    #[test]
+    fn daily_line_inner_returns_cached_text_or_none() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        assert_eq!(daily_line_inner(&store, "2026-07-08").unwrap(), None);
+        store.upsert_daily_line("2026-07-08", "오늘 좀 굴렀다.", "3|1|2|0").unwrap();
+        assert_eq!(
+            daily_line_inner(&store, "2026-07-08").unwrap(),
+            Some("오늘 좀 굴렀다.".to_string())
+        );
+        assert_eq!(daily_line_inner(&store, "2099-01-01").unwrap(), None);
     }
 
     #[test]
