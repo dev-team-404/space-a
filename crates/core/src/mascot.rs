@@ -100,26 +100,39 @@ pub fn build_daily_line_prompt(ctx: &crate::chat::ChatContext) -> String {
     )
 }
 
+/// 생성 텍스트를 감싼 따옴표 한 겹 제거 — LLM이 문장을 따옴표로 감싸 반환할 때
+/// UI(초상 밑 `“…”`)에서 이중 따옴표가 되는 것을 방지한다. 매칭되는 쌍일 때만 벗기고,
+/// `strip_prefix`/`strip_suffix`라 멀티바이트 UTF-8 경계에서도 안전(패닉 없음).
+fn strip_wrapping_quotes(s: &str) -> &str {
+    for (open, close) in [('"', '"'), ('\'', '\''), ('“', '”'), ('‘', '’')] {
+        if let Some(inner) = s.strip_prefix(open).and_then(|x| x.strip_suffix(close)) {
+            return inner.trim();
+        }
+    }
+    s
+}
+
 /// 오늘의 한마디 계산 — store 접근 없음, 네트워크만. 호출자가 락 밖에서 부른다
 /// (diary::render_diary 선례). 반환: None=재생성 불필요(fp 동일, skip) /
 /// Some((text, fp))=이 값으로 캐시하라.
+/// - fp가 캐시와 동일: None(skip). idle 상태의 불필요한 재-upsert도 여기서 걸러진다.
 /// - 오늘 활동 0건(session_count==0): 엔진 호출 없이 정적 문구.
-/// - fp가 캐시와 동일: None(skip).
-/// - 그 외: 엔진으로 오늘 한 문장 생성.
+/// - 그 외: 엔진으로 오늘 한 문장 생성(앞뒤 공백·감싼 따옴표 제거).
 pub fn compute_daily_line(
     engine: &dyn crate::diary::engine::Engine,
     ctx: &crate::chat::ChatContext,
     cached_fp: Option<&str>,
 ) -> anyhow::Result<Option<(String, String)>> {
     let fp = facts_fingerprint(ctx);
-    if ctx.session_count == 0 {
-        return Ok(Some((static_daily_line().to_string(), fp)));
-    }
     if cached_fp == Some(fp.as_str()) {
         return Ok(None);
     }
+    if ctx.session_count == 0 {
+        return Ok(Some((static_daily_line().to_string(), fp)));
+    }
     let system = build_daily_line_prompt(ctx);
-    let text = engine.generate(&system, "")?.text;
+    let raw = engine.generate(&system, "")?.text;
+    let text = strip_wrapping_quotes(raw.trim()).to_string();
     Ok(Some((text, fp)))
 }
 
@@ -214,6 +227,24 @@ mod daily_line_tests {
         let c = ctx(3, 100, 200, 1);
         let fp = facts_fingerprint(&c);
         assert_eq!(compute_daily_line(&eng, &c, Some(&fp)).unwrap(), None);
+    }
+
+    #[test]
+    fn compute_skips_when_idle_and_fingerprint_matches() {
+        // idle(session_count==0)이라도 캐시된 fp가 이미 idle-fp와 같으면 재-upsert 없이 skip.
+        // (idle-fp로 저장된 text는 항상 정적 문구이므로 skip해도 캐시 상태 동일)
+        let eng = MockEngine { canned: "안 나와야 함".into() };
+        let c = ctx(0, 0, 0, 2);
+        let fp = facts_fingerprint(&c); // "0|0|0|2"
+        assert_eq!(compute_daily_line(&eng, &c, Some(&fp)).unwrap(), None);
+    }
+
+    #[test]
+    fn compute_trims_and_strips_wrapping_quotes() {
+        // LLM이 앞뒤 공백·감싼 따옴표를 붙여 반환해도 정제 — UI 이중 따옴표 방지.
+        let eng = MockEngine { canned: "  \"오늘 좀 굴렀다\"  ".into() };
+        let out = compute_daily_line(&eng, &ctx(3, 100, 200, 1), None).unwrap();
+        assert_eq!(out, Some(("오늘 좀 굴렀다".to_string(), "3|100|200|1".to_string())));
     }
 
     #[test]
