@@ -94,6 +94,7 @@ export const getSettings = () => invoke<Record<string, string>>('get_settings');
 export const setSetting = (key: string, value: string) => invoke<void>('set_setting', { key, value });
 export const listDiaryDates = () => invoke<string[]>('list_diary_dates');
 export const getDiary = (date: string) => invoke<string | null>('get_diary', { date });
+export const getDailyLine = () => invoke<string | null>('get_daily_line');
 export const sessionsCtx = (ids: string[]) =>
   invoke<SessionCtxItem[]>('sessions_ctx', { ids });
 export const chatStatus = () => invoke<ChatStatus>('chat_status');

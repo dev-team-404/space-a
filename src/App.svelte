@@ -6,7 +6,7 @@
   import ChatTab from './lib/ui/ChatTab.svelte';
   import RobotPortrait from './lib/ui/RobotPortrait.svelte';
   import {
-    getSummary, listFindings, onScanDone, onGotoTab,
+    getSummary, getDailyLine, listFindings, onScanDone, onGotoTab,
     onNewFindings, onDiaryReady, onOccasionToday, type Summary,
   } from './lib/api';
   import { loadNotices, pushNotice, saveNotices, type Notice } from './lib/notices';
@@ -21,6 +21,7 @@
 
   let tab = $state<Tab>('home');
   let summary = $state<Summary | null>(null);
+  let dailyLine = $state<string | null>(null);
   let activeCount = $state(0);
   let coachFocus = $state<string | null>(null);
   let notices = $state<Notice[]>(loadNotices());
@@ -28,6 +29,7 @@
   async function refresh() {
     summary = await getSummary().catch(() => null);
     activeCount = (await listFindings(false).catch(() => [])).length;
+    dailyLine = await getDailyLine().catch(() => null);
   }
   refresh();
   onScanDone(() => refresh());
@@ -70,6 +72,7 @@
     <div class="body">
       <aside class="profile">
         <RobotPortrait />
+        {#if dailyLine}<p class="daily-line">“{dailyLine}”</p>{/if}
         <p class="mood">“{mood}”</p>
       </aside>
       <main class="content">
@@ -125,6 +128,7 @@
     display: flex; flex-direction: column; gap: 12px;
   }
   .mood { margin: 0; font-size: 12px; color: var(--ink-soft); text-align: center; }
+  .daily-line { margin: 0; font-size: 13px; color: var(--ink); text-align: center; line-height: 1.45; }
   /* margin-right: 스크롤바를 프레임 가장자리(우측 세로 탭이 걸치는 곳)에서 안쪽으로 밀어냄 */
   .content { flex: 1; min-width: 0; overflow-y: auto; display: flex; flex-direction: column; margin-right: 10px; }
   .tabs {
