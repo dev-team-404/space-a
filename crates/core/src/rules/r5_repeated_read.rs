@@ -1,5 +1,5 @@
 //! R5 — 반복 파일 재확인 (프로젝트 집계, 코칭 v2.1 스펙 §6).
-//! PR②는 subtype `within_session_context_drift`만 구현(§6.2). cross_session_claude_md(§6.1)는 PR③.
+//! 두 subtype 공존: `within_session_context_drift`(§6.2, PR②) + `cross_session_claude_md`(§6.1, PR③).
 //! context_drift: 세션 안에서 같은 파일을 편집 없이 여러 번 다시 읽는 패턴 = 작업 기억이 흐려진 관찰.
 //! 오탐 억제(핵심): 편집 후·검색 직후·compaction 직후 재읽기는 드리프트로 세지 않는다.
 //! 이벤트 스트림은 tool_call+compaction만 훑는다("직전 이벤트"의 근접 기준 — 스펙 §6.2).
