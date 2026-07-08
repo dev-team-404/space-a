@@ -99,6 +99,29 @@ pub fn build_daily_line_prompt(ctx: &crate::chat::ChatContext) -> String {
     )
 }
 
+/// 오늘의 한마디 계산 — store 접근 없음, 네트워크만. 호출자가 락 밖에서 부른다
+/// (diary::render_diary 선례). 반환: None=재생성 불필요(fp 동일, skip) /
+/// Some((text, fp))=이 값으로 캐시하라.
+/// - 오늘 활동 0건(session_count==0): 엔진 호출 없이 정적 문구.
+/// - fp가 캐시와 동일: None(skip).
+/// - 그 외: 엔진으로 오늘 한 문장 생성.
+pub fn compute_daily_line(
+    engine: &dyn crate::diary::engine::Engine,
+    ctx: &crate::chat::ChatContext,
+    cached_fp: Option<&str>,
+) -> anyhow::Result<Option<(String, String)>> {
+    let fp = facts_fingerprint(ctx);
+    if ctx.session_count == 0 {
+        return Ok(Some((static_daily_line().to_string(), fp)));
+    }
+    if cached_fp == Some(fp.as_str()) {
+        return Ok(None);
+    }
+    let system = build_daily_line_prompt(ctx);
+    let text = engine.generate(&system, "")?.text;
+    Ok(Some((text, fp)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,5 +193,36 @@ mod daily_line_tests {
         assert!(p.contains("한 문장"));                      // 한 문장 지시
         assert!(p.contains("40자"));                         // 길이 상한
         assert!(p.contains("지어내지 마세요"));              // 정밀도의 선
+    }
+
+    use crate::diary::engine::MockEngine;
+
+    #[test]
+    fn compute_generates_when_active_and_uncached() {
+        let eng = MockEngine { canned: "오늘 주인이 나를 꽤 굴렸다".into() };
+        let out = compute_daily_line(&eng, &ctx(3, 100, 200, 1), None).unwrap();
+        assert_eq!(
+            out,
+            Some(("오늘 주인이 나를 꽤 굴렸다".to_string(), "3|100|200|1".to_string()))
+        );
+    }
+
+    #[test]
+    fn compute_skips_when_fingerprint_matches_cache() {
+        let eng = MockEngine { canned: "안 나와야 함".into() };
+        let c = ctx(3, 100, 200, 1);
+        let fp = facts_fingerprint(&c);
+        assert_eq!(compute_daily_line(&eng, &c, Some(&fp)).unwrap(), None);
+    }
+
+    #[test]
+    fn compute_uses_static_line_without_engine_when_idle() {
+        // 활동 0건 → 엔진을 부르지 않고 정적 문구. canned(≠정적)가 나오면 엔진이 호출됐다는 뜻이라 실패.
+        let eng = MockEngine { canned: "엔진이 불렸다면 이게 나온다".into() };
+        let out = compute_daily_line(&eng, &ctx(0, 0, 0, 2), None).unwrap();
+        assert_eq!(
+            out,
+            Some(("오늘은 널널하네. 근데 좀 심심;;;".to_string(), "0|0|0|2".to_string()))
+        );
     }
 }
