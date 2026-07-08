@@ -39,6 +39,66 @@ pub fn robot_spec_for(identity: &str) -> RobotSpec {
     }
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// 오늘의 한마디 (마스코트 보이스 #1) — 채팅과 동일 인물이 오늘 하루를 한 문장으로.
+// 사실 기반은 chat::ChatContext(오늘 요약), 자연스러움은 diary::voice_guidance() 재사용.
+// #3 상주봇 주기 말풍선이 나중에 이 프롬프트/정적 문구를 재사용한다.
+
+/// 오늘 활동 0건일 때 LLM 없이 캐시하는 고정 폴백 문구 (스펙 §2).
+pub const STATIC_DAILY_LINE: &str = "오늘은 널널하네. 근데 좀 심심;;;";
+
+pub fn static_daily_line() -> &'static str {
+    STATIC_DAILY_LINE
+}
+
+/// 사실 지문 — 이 값이 바뀌었거나 캐시가 없을 때만 한마디를 재생성한다 (스펙 §2·§3).
+pub fn facts_fingerprint(ctx: &crate::chat::ChatContext) -> String {
+    format!(
+        "{}|{}|{}|{}",
+        ctx.session_count,
+        ctx.tok_input,
+        ctx.tok_output,
+        ctx.findings.len()
+    )
+}
+
+/// 오늘의 한마디 생성 시스템 프롬프트 — 채팅과 동일 인물(1인칭·주인·능청) +
+/// 오늘 요약(chat과 같은 사실 블록) + voice_guidance + "짧은 한 문장" 지시 (스펙 §5).
+pub fn build_daily_line_prompt(ctx: &crate::chat::ChatContext) -> String {
+    let findings_block = if ctx.findings.is_empty() {
+        "- (지금은 활성 코칭 지적이 없어요)".to_string()
+    } else {
+        ctx.findings
+            .iter()
+            .map(|(detail, action)| format!("- {detail}\n  → {action}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    format!(
+        "당신은 {user}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
+         매일 일기를 쓰는 그 다마고치와 동일 인물로, 1인칭으로 가볍고 능청스럽게 \
+         사용자를 '주인'이라고 부릅니다. \
+         \
+         {voice} \
+         \
+         정밀도의 선(반드시 지킬 것): 아래 오늘 요약의 사실과 수치에만 근거하고, \
+         요약에 없는 구체적 수치를 지어내지 마세요.\n\n\
+         [오늘({date}) 요약]\n\
+         - 세션 {sessions}건 · 입력 {tin} · 출력 {tout} 토큰\n\
+         - 절약 가능 총량(누적): {saved} 토큰\n\n\
+         [활성 코칭 지적 (무엇이 → 어떻게)]\n{findings_block}\n\n\
+         오늘 하루의 기분이나 재치를 담아 짧은 한 문장(40자 이내)으로 표현하세요. \
+         대화가 아니라 오늘을 한마디로 요약하는 혼잣말입니다. 딱 한 문장만 출력하세요.",
+        user = ctx.user_name,
+        voice = crate::diary::voice_guidance(),
+        date = ctx.date,
+        sessions = ctx.session_count,
+        tin = ctx.tok_input,
+        tout = ctx.tok_output,
+        saved = ctx.est_tokens_saved_total,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -63,5 +123,52 @@ mod tests {
     fn identity_uses_env_or_fallback() {
         let id = stable_identity();
         assert!(id.contains('|'));
+    }
+}
+
+#[cfg(test)]
+mod daily_line_tests {
+    use super::*;
+    use crate::chat::ChatContext;
+
+    fn ctx(session_count: u64, tin: u64, tout: u64, n_findings: usize) -> ChatContext {
+        ChatContext {
+            user_name: "jibin".into(),
+            date: "2026-07-08".into(),
+            session_count,
+            tok_input: tin,
+            tok_output: tout,
+            est_tokens_saved_total: 4200,
+            findings: (0..n_findings)
+                .map(|i| (format!("detail {i}"), format!("action {i}")))
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn static_daily_line_is_fixed_idle_copy() {
+        assert_eq!(static_daily_line(), "오늘은 널널하네. 근데 좀 심심;;;");
+    }
+
+    #[test]
+    fn fingerprint_reflects_facts_and_is_stable() {
+        assert_eq!(facts_fingerprint(&ctx(3, 100, 200, 1)), "3|100|200|1");
+        // 같은 사실 → 같은 fp
+        assert_eq!(facts_fingerprint(&ctx(3, 100, 200, 1)), facts_fingerprint(&ctx(3, 100, 200, 1)));
+        // 세션 수 / findings 수가 바뀌면 fp 달라짐
+        assert_ne!(facts_fingerprint(&ctx(3, 100, 200, 1)), facts_fingerprint(&ctx(4, 100, 200, 1)));
+        assert_ne!(facts_fingerprint(&ctx(3, 100, 200, 1)), facts_fingerprint(&ctx(3, 100, 200, 2)));
+    }
+
+    #[test]
+    fn prompt_carries_persona_facts_voice_and_one_line_directive() {
+        let p = build_daily_line_prompt(&ctx(3, 100, 200, 1));
+        assert!(p.contains("주인"));                         // 페르소나 호칭
+        assert!(p.contains("jibin"));                        // 유저명
+        assert!(p.contains("3건"));                          // 오늘 세션 수(사실)
+        assert!(p.contains(crate::diary::voice_guidance())); // voice_guidance 그대로 주입
+        assert!(p.contains("한 문장"));                      // 한 문장 지시
+        assert!(p.contains("40자"));                         // 길이 상한
+        assert!(p.contains("지어내지 마세요"));              // 정밀도의 선
     }
 }
