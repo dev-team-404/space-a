@@ -29,6 +29,13 @@ pub struct BriefFinding {
     pub suggested_action: String,
 }
 
+/// 직전 며칠간 내가 쓴 일기의 발췌 — LLM이 어제와 다른 이야기를 쓰도록 브리프에 싣는 컨텍스트.
+#[derive(Debug, Clone, Serialize)]
+pub struct RecentDiary {
+    pub date: String,
+    pub excerpt: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Brief {
     pub date: String,
@@ -36,6 +43,7 @@ pub struct Brief {
     pub totals: BriefTotals,
     pub findings: Vec<BriefFinding>,
     pub occasions: Vec<Occasion>,
+    pub recent_diaries: Vec<RecentDiary>,
 }
 
 /// rule_id + evidence에서 사람이 읽는 근거(detail)와 개선방향(suggested_action)을 결정론적으로 생성.
@@ -230,7 +238,49 @@ pub fn assemble_brief(
         None => Vec::new(),
     };
 
-    Ok(Brief { date: date.to_string(), host: host.to_string(), totals, findings, occasions })
+    // 직전 며칠 일기를 브리프에 실어 서사 반복을 막는다 — 로컬 vault 파일만 읽으므로 프라이버시 경계 불변.
+    let recent_diaries = match today {
+        Some(d) => collect_recent_diaries(store, d),
+        None => Vec::new(),
+    };
+
+    Ok(Brief {
+        date: date.to_string(),
+        host: host.to_string(),
+        totals,
+        findings,
+        occasions,
+        recent_diaries,
+    })
+}
+
+/// 직전 며칠간 서사 반복을 막기 위해 브리프에 싣는 최근 일기 발췌 파라미터.
+const RECENT_DIARY_LOOKBACK: i64 = 3;
+const RECENT_DIARY_EXCERPT_CAP: usize = 500;
+
+/// 직전 N일(오래된 것부터) 중 vault에 실재하는 일기 본문을 발췌해 온다.
+/// backfill이 오래된 날짜부터 재생성하므로(missing_diary_dates) 오늘 생성 시 직전 날짜 일기는 이미 존재.
+/// 파일 없음·읽기 실패는 조용히 스킵 — 브리프 조립을 막지 않는다.
+fn collect_recent_diaries(store: &SqliteStore, today: NaiveDate) -> Vec<RecentDiary> {
+    (1..=RECENT_DIARY_LOOKBACK)
+        .rev()
+        .filter_map(|i| {
+            let date = (today - chrono::Duration::days(i)).format("%Y-%m-%d").to_string();
+            let path = store.diary_path_for(&date).ok().flatten()?;
+            let body = std::fs::read_to_string(&path).ok()?;
+            // 토큰 푸터(render_diary가 붙임)는 제외 — 발췌 예시로 들어가면 LLM이 흉내내 이중 푸터가 생김.
+            let narrative = body.split("\n\n*—").next().unwrap_or(&body).trim();
+            Some(RecentDiary { date, excerpt: cap_chars(narrative, RECENT_DIARY_EXCERPT_CAP) })
+        })
+        .collect()
+}
+
+/// char 경계에서 안전하게 앞 max개 문자만 취한다(멀티바이트 한글·이모지 절단 방지).
+fn cap_chars(s: &str, max: usize) -> String {
+    match s.char_indices().nth(max) {
+        Some((idx, _)) => s[..idx].to_string(),
+        None => s.to_string(),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -321,9 +371,14 @@ pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
          자연스럽고 다정하게 언급하세요(예: 오늘이 크리스마스이거나 함께한 지 100일 등). \
          비어있으면 언급하지 마세요. \
          \
+         브리프의 `recent_diaries`는 직전 며칠간 내가 쓴 일기입니다. \
+         거기서 이미 다룬 지적·화제는 되풀이하지 말고(꼭 필요하면 한 줄로만 스치듯), \
+         오늘 브리프의 오늘만의 사실과 기분에 집중해 어제와는 다른 이야기로 쓰세요. \
+         비어있으면 신경 쓰지 마세요. \
+         \
          형식: 일기는 짧게 — 2~3문단, 전체 350자 이내로 쓰세요. \
          그날의 핵심 한두 가지만 골라 쓰고 나머지 사실은 과감히 버리세요. \
-         이모지는 적당히 — 문단당 0~1개, 감정이 실리는 자리에만 쓰세요.",
+         이모지는 문단마다 1개 정도, 감정이 실리는 자연스러운 자리에 넣되 같은 이모지를 반복하지 마세요.",
         honorific = cfg.honorific,
         tone = cfg.tone,
         voice = voice_guidance(),
@@ -428,6 +483,7 @@ mod tests {
             totals: BriefTotals { tok_cache_create: 55000, session_count: 3, ..Default::default() },
             findings: vec![],
             occasions: vec![],
+            recent_diaries: vec![],
         };
         let tmp = tempfile::tempdir().unwrap();
         let cfg = DiaryConfig {
@@ -482,6 +538,56 @@ mod tests {
         // 2026-04-11 = 2026-01-01 + 100일
         let brief = assemble_brief(&store, "Windows", "2026-04-11", &cfg).unwrap();
         assert!(brief.occasions.iter().any(|o| o.label == "함께한 지 100일"));
+    }
+
+    /// 테스트 vault에 일기 한 편을 심는다(파일 + diary_index).
+    fn seed_diary(store: &SqliteStore, cfg: &DiaryConfig, date: &str, narrative: &str) {
+        let rendered = RenderedDiary {
+            body: format!("{narrative}\n\n*— 이 일기 ~10 토큰 (엔진: mock)*\n"),
+            tokens_used: 10,
+            engine_name: "mock".into(),
+        };
+        persist_diary(store, date, "Windows", &rendered, cfg).unwrap();
+    }
+
+    #[test]
+    fn assemble_brief_includes_recent_diaries() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        // 그저께·어제 일기를 vault에 심는다 (07-08, 07-09) → 오늘 07-10 브리프가 참조
+        seed_diary(&store, &cfg, "2026-07-08", "그저께 일기 본문");
+        seed_diary(&store, &cfg, "2026-07-09", "어제 일기 본문");
+
+        let brief = assemble_brief(&store, "Windows", "2026-07-10", &cfg).unwrap();
+        assert_eq!(brief.recent_diaries.len(), 2);
+        // 오래된 것부터 (missing_diary_dates 재생성 순서와 정합)
+        assert_eq!(brief.recent_diaries[0].date, "2026-07-08");
+        assert_eq!(brief.recent_diaries[1].date, "2026-07-09");
+        assert!(brief.recent_diaries[1].excerpt.contains("어제 일기 본문"));
+        // 토큰 푸터는 발췌에서 제외됨
+        assert!(!brief.recent_diaries[1].excerpt.contains("토큰"));
+    }
+
+    #[test]
+    fn assemble_brief_recent_diaries_absent_when_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        let brief = assemble_brief(&store, "Windows", "2026-07-10", &cfg).unwrap();
+        assert!(brief.recent_diaries.is_empty());
+    }
+
+    #[test]
+    fn assemble_brief_recent_diaries_caps_excerpt_at_500_chars() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        // 멀티바이트(한글 3바이트) 700자 → char 경계 캡이 정확히 500자, 바이트 슬라이스면 패닉
+        seed_diary(&store, &cfg, "2026-07-09", &"가".repeat(700));
+        let brief = assemble_brief(&store, "Windows", "2026-07-10", &cfg).unwrap();
+        assert_eq!(brief.recent_diaries.len(), 1);
+        assert_eq!(brief.recent_diaries[0].excerpt.chars().count(), 500);
     }
 
     #[test]
@@ -590,7 +696,15 @@ mod tests {
         assert!(p.contains("350자"));     // 길이 상한(글자)
         assert!(p.contains("골라"));      // 핵심만 골라 쓰기(장황함 차단)
         assert!(p.contains("이모지"));    // 이모지 지시
-        assert!(p.contains("0~1개"));     // 문단당 사용량
+        assert!(p.contains("문단마다 1개")); // 사용량 상향(0 허용 → 문단마다 1개 정도)
+    }
+
+    #[test]
+    fn system_prompt_directs_recent_diary_variety() {
+        let p = build_system_prompt(&DiaryConfig::default());
+        assert!(p.contains("recent_diaries")); // 최근 일기 참조 지시
+        assert!(p.contains("되풀이하지"));      // 이미 다룬 화제 반복 금지
+        assert!(p.contains("다른 이야기"));     // 어제와 다른 서사
     }
 
     #[test]
