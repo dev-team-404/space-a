@@ -643,7 +643,12 @@ impl SqliteStore {
             )
             .optional()?;
         match row {
-            Some((lines_json, fp)) => Ok(Some((serde_json::from_str(&lines_json)?, fp))),
+            Some((lines_json, fp)) => {
+                // 손상된 JSON은 하드 페일 대신 빈 풀 폴백 (evidence/prescription 읽기 관례).
+                // fp는 온전히 반환 — 사실이 바뀌면 다음 스캔이 손상 행을 덮어쓴다.
+                let lines = serde_json::from_str(&lines_json).unwrap_or_default();
+                Ok(Some((lines, fp)))
+            }
             None => Ok(None),
         }
     }
@@ -1529,5 +1534,22 @@ mod tests {
         );
         // 다른 날짜는 독립적으로 None
         assert_eq!(store.get_chatter_pool("2099-01-01").unwrap(), None);
+    }
+
+    #[test]
+    fn chatter_pool_corrupt_json_falls_back_to_empty() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store
+            .conn
+            .execute(
+                "INSERT INTO chatter_pool (date, lines, fingerprint) VALUES ('2026-07-10', 'not-json', '3|1|2|0')",
+                [],
+            )
+            .unwrap();
+        // 손상 JSON → 에러 아닌 빈 풀. fp는 보존 — 사실 변경 시 다음 스캔이 덮어씀
+        assert_eq!(
+            store.get_chatter_pool("2026-07-10").unwrap(),
+            Some((Vec::new(), "3|1|2|0".to_string()))
+        );
     }
 }
