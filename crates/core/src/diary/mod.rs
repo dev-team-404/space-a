@@ -319,7 +319,11 @@ pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
          \
          브리프의 `occasions` 배열이 비어있지 않으면(기념일·명절), 일기의 도입이나 마무리에 \
          자연스럽고 다정하게 언급하세요(예: 오늘이 크리스마스이거나 함께한 지 100일 등). \
-         비어있으면 언급하지 마세요.",
+         비어있으면 언급하지 마세요. \
+         \
+         형식: 일기는 짧게 — 2~3문단, 전체 350자 이내로 쓰세요. \
+         그날의 핵심 한두 가지만 골라 쓰고 나머지 사실은 과감히 버리세요. \
+         이모지는 적당히 — 문단당 0~1개, 감정이 실리는 자리에만 쓰세요.",
         honorific = cfg.honorific,
         tone = cfg.tone,
         voice = voice_guidance(),
@@ -577,6 +581,16 @@ mod tests {
         assert!(p.contains("detail")); // 근거 필드 사용 지시
         assert!(p.contains("suggested_action")); // 개선방향 필드 사용 지시
         assert!(p.contains("occasions")); // 기념일/명절 사용 지시
+    }
+
+    #[test]
+    fn system_prompt_directs_short_length_and_moderate_emoji() {
+        let p = build_system_prompt(&DiaryConfig::default());
+        assert!(p.contains("2~3문단"));   // 길이 상한(문단)
+        assert!(p.contains("350자"));     // 길이 상한(글자)
+        assert!(p.contains("골라"));      // 핵심만 골라 쓰기(장황함 차단)
+        assert!(p.contains("이모지"));    // 이모지 지시
+        assert!(p.contains("0~1개"));     // 문단당 사용량
     }
 
     #[test]
