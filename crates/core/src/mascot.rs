@@ -202,6 +202,29 @@ pub fn compute_daily_line(
     Ok(Some((text, fp)))
 }
 
+/// 잡담 풀 계산 — store 접근 없음, 네트워크만. 호출자가 락 밖에서 부른다
+/// (compute_daily_line 선례). 반환: None=재생성 불필요(fp 동일, skip) /
+/// Some((lines, fp))=이 값으로 캐시하라.
+/// - fp가 캐시와 동일: None(skip).
+/// - 오늘 활동 0건(session_count==0): 엔진 호출 없이 빈 풀(정적 폴백은 프론트 담당).
+/// - 그 외: 엔진 1회 호출로 잡담 N개 배치 생성·파싱(전부 실패면 빈 풀 캐시).
+pub fn compute_chatter_pool(
+    engine: &dyn crate::diary::engine::Engine,
+    ctx: &crate::chat::ChatContext,
+    cached_fp: Option<&str>,
+) -> anyhow::Result<Option<(Vec<String>, String)>> {
+    let fp = facts_fingerprint(ctx);
+    if cached_fp == Some(fp.as_str()) {
+        return Ok(None);
+    }
+    if ctx.session_count == 0 {
+        return Ok(Some((Vec::new(), fp)));
+    }
+    let system = build_chatter_prompt(ctx, CHATTER_POOL_SIZE);
+    let raw = engine.generate(&system, "")?.text;
+    Ok(Some((parse_chatter_lines(&raw, CHATTER_POOL_SIZE), fp)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -393,5 +416,48 @@ mod chatter_tests {
     fn parse_returns_empty_for_garbage() {
         assert_eq!(parse_chatter_lines("", 5), Vec::<String>::new());
         assert_eq!(parse_chatter_lines("  \n\n\t\n\"\"", 5), Vec::<String>::new());
+    }
+
+    use crate::diary::engine::MockEngine;
+
+    #[test]
+    fn compute_pool_generates_and_parses_when_active_and_uncached() {
+        let eng = MockEngine { canned: "오늘 세션 셋, 좀 굴렀다\n- 커밋은 자주\n\"토큰 아낀 날\"".into() };
+        let out = compute_chatter_pool(&eng, &ctx(3, 100, 200, 1), None).unwrap();
+        assert_eq!(
+            out,
+            Some((
+                vec![
+                    "오늘 세션 셋, 좀 굴렀다".to_string(),
+                    "커밋은 자주".to_string(),
+                    "토큰 아낀 날".to_string(),
+                ],
+                "3|100|200|1".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn compute_pool_skips_when_fingerprint_matches_cache() {
+        let eng = MockEngine { canned: "안 나와야 함".into() };
+        let c = ctx(3, 100, 200, 1);
+        let fp = facts_fingerprint(&c);
+        assert_eq!(compute_chatter_pool(&eng, &c, Some(&fp)).unwrap(), None);
+    }
+
+    #[test]
+    fn compute_pool_returns_empty_without_engine_when_idle() {
+        // 활동 0건 → 엔진 미호출·빈 풀 캐시 (canned가 파싱돼 나오면 엔진이 불렸다는 뜻이라 실패)
+        let eng = MockEngine { canned: "엔진이 불렸다면 이게 나온다".into() };
+        let out = compute_chatter_pool(&eng, &ctx(0, 0, 0, 2), None).unwrap();
+        assert_eq!(out, Some((Vec::new(), "0|0|0|2".to_string())));
+    }
+
+    #[test]
+    fn compute_pool_caches_empty_when_output_is_garbage() {
+        // 전부 파싱 실패 → 빈 풀 + fp 캐시 (다음 스캔까지 재시도 안 함, 프론트는 정적 폴백)
+        let eng = MockEngine { canned: "  \n\n".into() };
+        let out = compute_chatter_pool(&eng, &ctx(3, 100, 200, 1), None).unwrap();
+        assert_eq!(out, Some((Vec::new(), "3|100|200|1".to_string())));
     }
 }
