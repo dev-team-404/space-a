@@ -101,5 +101,11 @@
   .cells button.sel .dot { background: #fff; }
   .body { flex: 1; overflow-y: auto; min-width: 0; }
   .empty { color: var(--ink-soft); }
+  article {
+    background: var(--frame-bg); border-radius: var(--radius-m);
+    box-shadow: var(--shadow-soft); padding: 18px 22px;
+    max-width: 62ch; line-height: 1.75;
+  }
+  article :global(p + p) { margin-top: 0.9em; }
   article :global(h1), article :global(h2), article :global(h3) { font-size: 15px; }
 </style>
