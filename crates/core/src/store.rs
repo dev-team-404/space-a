@@ -65,6 +65,9 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS daily_line (
   date TEXT PRIMARY KEY, text TEXT NOT NULL, fingerprint TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS chatter_pool (
+  date TEXT PRIMARY KEY, lines TEXT NOT NULL, fingerprint TEXT NOT NULL
+);
 "#;
 
 pub struct SqliteStore {
@@ -626,6 +629,31 @@ impl SqliteStore {
             "INSERT INTO daily_line (date, text, fingerprint) VALUES (?1,?2,?3)
              ON CONFLICT(date) DO UPDATE SET text=?2, fingerprint=?3",
             params![date, text, fingerprint],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_chatter_pool(&self, date: &str) -> Result<Option<(Vec<String>, String)>> {
+        let row: Option<(String, String)> = self
+            .conn
+            .query_row(
+                "SELECT lines, fingerprint FROM chatter_pool WHERE date=?1",
+                params![date],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        match row {
+            Some((lines_json, fp)) => Ok(Some((serde_json::from_str(&lines_json)?, fp))),
+            None => Ok(None),
+        }
+    }
+
+    pub fn upsert_chatter_pool(&self, date: &str, lines: &[String], fingerprint: &str) -> Result<()> {
+        let lines_json = serde_json::to_string(lines)?;
+        self.conn.execute(
+            "INSERT INTO chatter_pool (date, lines, fingerprint) VALUES (?1,?2,?3)
+             ON CONFLICT(date) DO UPDATE SET lines=?2, fingerprint=?3",
+            params![date, lines_json, fingerprint],
         )?;
         Ok(())
     }
@@ -1479,5 +1507,27 @@ mod tests {
         );
         // 다른 날짜는 독립적으로 None
         assert_eq!(store.get_daily_line("2099-01-01").unwrap(), None);
+    }
+
+    #[test]
+    fn chatter_pool_roundtrip_and_upsert_overwrites() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 없으면 None
+        assert_eq!(store.get_chatter_pool("2026-07-10").unwrap(), None);
+        // upsert 후 (lines, fp) 라운드트립 — JSON 직렬화 왕복
+        let lines = vec!["오늘 좀 바빴네".to_string(), "커밋은 자주".to_string()];
+        store.upsert_chatter_pool("2026-07-10", &lines, "3|100|200|1").unwrap();
+        assert_eq!(
+            store.get_chatter_pool("2026-07-10").unwrap(),
+            Some((lines, "3|100|200|1".to_string()))
+        );
+        // 같은 날짜 재upsert → 덮어씀. 빈 풀(idle 캐시)도 왕복 가능
+        store.upsert_chatter_pool("2026-07-10", &[], "0|0|0|2").unwrap();
+        assert_eq!(
+            store.get_chatter_pool("2026-07-10").unwrap(),
+            Some((Vec::new(), "0|0|0|2".to_string()))
+        );
+        // 다른 날짜는 독립적으로 None
+        assert_eq!(store.get_chatter_pool("2099-01-01").unwrap(), None);
     }
 }
