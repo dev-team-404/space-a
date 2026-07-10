@@ -48,6 +48,10 @@ pub fn daily_line_inner(store: &SqliteStore, date: &str) -> anyhow::Result<Optio
     Ok(store.get_daily_line(date)?.map(|(text, _fp)| text))
 }
 
+pub fn chatter_pool_inner(store: &SqliteStore, date: &str) -> anyhow::Result<Vec<String>> {
+    Ok(store.get_chatter_pool(date)?.map(|(lines, _fp)| lines).unwrap_or_default())
+}
+
 #[derive(Debug, Serialize)]
 pub struct SessionCtx {
     pub project_id: String,
@@ -287,6 +291,13 @@ pub fn get_daily_line(state: State<AppState>) -> Result<Option<String>, String> 
     daily_line_inner(&*guard, &today).map_err(|e| e.to_string())
 }
 
+#[tauri::command(async)]
+pub fn get_chatter_pool(state: State<AppState>) -> Result<Vec<String>, String> {
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let guard = lock(&state)?;
+    chatter_pool_inner(&*guard, &today).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn get_mascot_seed() -> RobotSpec {
     robot_spec_for(&stable_identity())
@@ -402,6 +413,22 @@ mod tests {
             Some("오늘 좀 굴렀다.".to_string())
         );
         assert_eq!(daily_line_inner(&store, "2099-01-01").unwrap(), None);
+    }
+
+    #[test]
+    fn chatter_pool_inner_returns_lines_or_empty() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 캐시 없음 → 빈 벡터 (에러 아님)
+        assert_eq!(chatter_pool_inner(&store, "2026-07-10").unwrap(), Vec::<String>::new());
+        store
+            .upsert_chatter_pool("2026-07-10", &["잡담 하나".to_string(), "잡담 둘".to_string()], "3|1|2|0")
+            .unwrap();
+        assert_eq!(
+            chatter_pool_inner(&store, "2026-07-10").unwrap(),
+            vec!["잡담 하나".to_string(), "잡담 둘".to_string()]
+        );
+        // 다른 날짜 → 빈 벡터
+        assert_eq!(chatter_pool_inner(&store, "2099-01-01").unwrap(), Vec::<String>::new());
     }
 
     #[test]
