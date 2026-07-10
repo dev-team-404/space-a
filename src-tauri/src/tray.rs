@@ -1,6 +1,6 @@
 use crate::{pipeline::PipelineMsg, AppState};
 use tauri::{
-    menu::{CheckMenuItem, Menu, MenuItem},
+    menu::{CheckMenuItem, Menu, MenuItem, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager,
 };
@@ -35,16 +35,37 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             .unwrap_or(false)
     };
     let protect = CheckMenuItem::with_id(app, "protect", "화면 캡처 보호", true, protect_on, None::<&str>)?;
+    let chatter_level = {
+        let state = app.state::<AppState>();
+        let guard = state.store.lock().ok();
+        let raw = guard
+            .and_then(|s| s.get_setting("chatter_level").ok().flatten())
+            .unwrap_or_else(|| "low".into());
+        // 알 수 없는 값은 low로 정규화 (Mascot.svelte 기본값과 일치)
+        if raw == "normal" || raw == "off" { raw } else { "low".to_string() }
+    };
+    let chatter_normal =
+        CheckMenuItem::with_id(app, "chatter_normal", "자주", true, chatter_level == "normal", None::<&str>)?;
+    let chatter_low =
+        CheckMenuItem::with_id(app, "chatter_low", "가끔", true, chatter_level == "low", None::<&str>)?;
+    let chatter_off =
+        CheckMenuItem::with_id(app, "chatter_off", "안 함", true, chatter_level == "off", None::<&str>)?;
+    let chatter_menu = SubmenuBuilder::with_id(app, "chatter", "잡담")
+        .items(&[&chatter_normal, &chatter_low, &chatter_off])
+        .build()?;
     let scan = MenuItem::with_id(app, "scan", "지금 스캔", true, None::<&str>)?;
     let auto_on = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart = CheckMenuItem::with_id(app, "autostart", "시작 시 실행", true, auto_on, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &mascot, &realtime, &protect, &scan, &autostart, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &mascot, &realtime, &protect, &chatter_menu, &scan, &autostart, &quit])?;
 
     let autostart_item = autostart.clone();
     let mascot_item = mascot.clone();
     let realtime_item = realtime.clone();
     let protect_item = protect.clone();
+    let chatter_normal_item = chatter_normal.clone();
+    let chatter_low_item = chatter_low.clone();
+    let chatter_off_item = chatter_off.clone();
     TrayIconBuilder::with_id("main")
         .icon(
             app.default_window_icon()
@@ -101,6 +122,22 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 }; // 락 해제 후 창 적용
                 let _ = protect_item.set_checked(next);
                 crate::apply_content_protection(app, next);
+            }
+            "chatter_normal" | "chatter_low" | "chatter_off" => {
+                use tauri::Emitter;
+                let level = match e.id().as_ref() {
+                    "chatter_normal" => "normal",
+                    "chatter_off" => "off",
+                    _ => "low",
+                };
+                if let Ok(store) = app.state::<AppState>().store.lock() {
+                    let _ = store.set_setting("chatter_level", level);
+                }
+                // 수동 라디오: muda 자동 토글을 덮어써 선택 항목만 체크 (store가 소스오브트루스)
+                let _ = chatter_normal_item.set_checked(level == "normal");
+                let _ = chatter_low_item.set_checked(level == "low");
+                let _ = chatter_off_item.set_checked(level == "off");
+                let _ = app.emit("settings:changed", ());
             }
             "scan" => {
                 let _ = app.state::<AppState>().scan_tx.send(PipelineMsg::RunNow);
