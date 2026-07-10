@@ -1,0 +1,6 @@
+# EOL 정책 — 레포 저장은 LF로 정규화.
+* text=auto
+
+# Cargo.toml은 빌드 도구가 워크트리 파일을 LF로 재작성해 autocrlf(CRLF 기대)와
+# 충돌하는 팬텀 modified가 반복됨 — 워크트리도 LF로 고정해 충돌 제거.
+*.toml text eol=lf
