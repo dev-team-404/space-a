@@ -63,9 +63,9 @@ pub fn facts_fingerprint(ctx: &crate::chat::ChatContext) -> String {
     )
 }
 
-/// 오늘의 한마디 생성 시스템 프롬프트 — 채팅과 동일 인물(1인칭·주인·능청) +
-/// 오늘 요약(chat과 같은 사실 블록) + voice_guidance + "짧은 한 문장" 지시 (스펙 §5).
-pub fn build_daily_line_prompt(ctx: &crate::chat::ChatContext) -> String {
+/// 오늘 요약 + 활성 findings 사실 블록 — 오늘의 한마디·잡담 프롬프트가 공용하는 사실 재료.
+/// (#1 최종 리뷰의 중복 지적 해소 — mascot.rs 안에서만 공용, chat.rs와는 독립 진화 유지)
+fn facts_block(ctx: &crate::chat::ChatContext) -> String {
     let findings_block = if ctx.findings.is_empty() {
         "- (지금은 활성 코칭 지적이 없어요)".to_string()
     } else {
@@ -76,6 +76,22 @@ pub fn build_daily_line_prompt(ctx: &crate::chat::ChatContext) -> String {
             .join("\n")
     };
     format!(
+        "[오늘({date}) 요약]\n\
+         - 세션 {sessions}건 · 입력 {tin} · 출력 {tout} 토큰\n\
+         - 절약 가능 총량(누적): {saved} 토큰\n\n\
+         [활성 코칭 지적 (무엇이 → 어떻게)]\n{findings_block}",
+        date = ctx.date,
+        sessions = ctx.session_count,
+        tin = ctx.tok_input,
+        tout = ctx.tok_output,
+        saved = ctx.est_tokens_saved_total,
+    )
+}
+
+/// 오늘의 한마디 생성 시스템 프롬프트 — 채팅과 동일 인물(1인칭·주인·능청) +
+/// 오늘 요약(chat과 같은 사실 블록) + voice_guidance + "짧은 한 문장" 지시 (스펙 §5).
+pub fn build_daily_line_prompt(ctx: &crate::chat::ChatContext) -> String {
+    format!(
         "당신은 {user}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
          매일 일기를 쓰는 그 다마고치와 동일 인물로, 1인칭으로 가볍고 능청스럽게 \
          사용자를 '주인'이라고 부릅니다. \
@@ -84,20 +100,70 @@ pub fn build_daily_line_prompt(ctx: &crate::chat::ChatContext) -> String {
          \
          정밀도의 선(반드시 지킬 것): 아래 오늘 요약의 사실과 수치에만 근거하고, \
          요약에 없는 구체적 수치를 지어내지 마세요.\n\n\
-         [오늘({date}) 요약]\n\
-         - 세션 {sessions}건 · 입력 {tin} · 출력 {tout} 토큰\n\
-         - 절약 가능 총량(누적): {saved} 토큰\n\n\
-         [활성 코칭 지적 (무엇이 → 어떻게)]\n{findings_block}\n\n\
+         {facts}\n\n\
          오늘 하루의 기분이나 재치를 담아 짧은 한 문장(40자 이내)으로 표현하세요. \
          대화가 아니라 오늘을 한마디로 요약하는 혼잣말입니다. 딱 한 문장만 출력하세요.",
         user = ctx.user_name,
         voice = crate::diary::voice_guidance(),
-        date = ctx.date,
-        sessions = ctx.session_count,
-        tin = ctx.tok_input,
-        tout = ctx.tok_output,
-        saved = ctx.est_tokens_saved_total,
+        facts = facts_block(ctx),
     )
+}
+
+/// 잡담 풀 크기 — 스캔당 LLM 1회 호출로 배치 생성하는 잡담 개수 (스펙 §2).
+pub const CHATTER_POOL_SIZE: usize = 5;
+
+/// 잡담 풀 생성 시스템 프롬프트 — 오늘의 한마디와 동일 인물·동일 사실 재료,
+/// 지시만 "가벼운 잡담 N개"로 다름 (스펙 §5). 코칭 조언 채널(realtime_advice)과의
+/// 역할 분리를 프롬프트에 명시한다.
+pub fn build_chatter_prompt(ctx: &crate::chat::ChatContext, n: usize) -> String {
+    format!(
+        "당신은 {user}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
+         매일 일기를 쓰는 그 다마고치와 동일 인물로, 1인칭으로 가볍고 능청스럽게 \
+         사용자를 '주인'이라고 부릅니다. \
+         \
+         {voice} \
+         \
+         정밀도의 선(반드시 지킬 것): 아래 오늘 요약의 사실과 수치에만 근거하고, \
+         요약에 없는 구체적 수치를 지어내지 마세요.\n\n\
+         {facts}\n\n\
+         위 요약을 재료로, 상주 마스코트가 가끔 툭 던질 가벼운 잡담·혼잣말을 {n}개 만드세요. \
+         코칭 조언이나 보고처럼 굴지 마세요(조언은 다른 채널이 합니다). \
+         한 줄에 하나씩, 각 40자 이내로, 번호·불릿·따옴표 없이 출력하세요.",
+        user = ctx.user_name,
+        voice = crate::diary::voice_guidance(),
+        facts = facts_block(ctx),
+    )
+}
+
+/// LLM 출력에서 잡담 줄을 방어적으로 추출 — trim, 선두 불릿/번호 제거,
+/// 감싼 따옴표 한 겹 제거, 빈 줄 제거, 최대 max_n개 (스펙 §5 파싱 내성).
+pub fn parse_chatter_lines(raw: &str, max_n: usize) -> Vec<String> {
+    raw.lines()
+        .filter_map(|line| {
+            let mut l = line.trim();
+            for p in ["- ", "• ", "* "] {
+                if let Some(rest) = l.strip_prefix(p) {
+                    l = rest;
+                    break;
+                }
+            }
+            l = strip_leading_number(l).trim_start();
+            let l = strip_wrapping_quotes(l).trim();
+            if l.is_empty() { None } else { Some(l.to_string()) }
+        })
+        .take(max_n)
+        .collect()
+}
+
+/// "1. " / "2) " 류 선두 번호 매김 제거 — 번호가 아니면 원문 그대로.
+fn strip_leading_number(s: &str) -> &str {
+    let rest = s.trim_start_matches(|c: char| c.is_ascii_digit());
+    if rest.len() < s.len() {
+        if let Some(r) = rest.strip_prefix(". ").or_else(|| rest.strip_prefix(") ")) {
+            return r;
+        }
+    }
+    s
 }
 
 /// 생성 텍스트를 감싼 따옴표 한 겹 제거 — LLM이 문장을 따옴표로 감싸 반환할 때
@@ -134,6 +200,29 @@ pub fn compute_daily_line(
     let raw = engine.generate(&system, "")?.text;
     let text = strip_wrapping_quotes(raw.trim()).to_string();
     Ok(Some((text, fp)))
+}
+
+/// 잡담 풀 계산 — store 접근 없음, 네트워크만. 호출자가 락 밖에서 부른다
+/// (compute_daily_line 선례). 반환: None=재생성 불필요(fp 동일, skip) /
+/// Some((lines, fp))=이 값으로 캐시하라.
+/// - fp가 캐시와 동일: None(skip).
+/// - 오늘 활동 0건(session_count==0): 엔진 호출 없이 빈 풀(정적 폴백은 프론트 담당).
+/// - 그 외: 엔진 1회 호출로 잡담 N개 배치 생성·파싱(전부 실패면 빈 풀 캐시).
+pub fn compute_chatter_pool(
+    engine: &dyn crate::diary::engine::Engine,
+    ctx: &crate::chat::ChatContext,
+    cached_fp: Option<&str>,
+) -> anyhow::Result<Option<(Vec<String>, String)>> {
+    let fp = facts_fingerprint(ctx);
+    if cached_fp == Some(fp.as_str()) {
+        return Ok(None);
+    }
+    if ctx.session_count == 0 {
+        return Ok(Some((Vec::new(), fp)));
+    }
+    let system = build_chatter_prompt(ctx, CHATTER_POOL_SIZE);
+    let raw = engine.generate(&system, "")?.text;
+    Ok(Some((parse_chatter_lines(&raw, CHATTER_POOL_SIZE), fp)))
 }
 
 #[cfg(test)]
@@ -256,5 +345,119 @@ mod daily_line_tests {
             out,
             Some(("오늘은 널널하네. 근데 좀 심심;;;".to_string(), "0|0|0|2".to_string()))
         );
+    }
+}
+
+#[cfg(test)]
+mod chatter_tests {
+    use super::*;
+    use crate::chat::ChatContext;
+
+    fn ctx(session_count: u64, tin: u64, tout: u64, n_findings: usize) -> ChatContext {
+        ChatContext {
+            user_name: "jibin".into(),
+            date: "2026-07-10".into(),
+            session_count,
+            tok_input: tin,
+            tok_output: tout,
+            est_tokens_saved_total: 4200,
+            findings: (0..n_findings)
+                .map(|i| (format!("detail {i}"), format!("action {i}")))
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn chatter_prompt_carries_persona_facts_voice_and_directives() {
+        let p = build_chatter_prompt(&ctx(3, 100, 200, 1), 5);
+        assert!(p.contains("주인"));                         // 페르소나 호칭
+        assert!(p.contains("jibin"));                        // 유저명
+        assert!(p.contains("3건"));                          // 오늘 세션 수(사실)
+        assert!(p.contains(crate::diary::voice_guidance())); // voice_guidance verbatim
+        assert!(p.contains("잡담"));                         // 잡담 지시
+        assert!(p.contains("5개"));                          // 개수 N
+        assert!(p.contains("40자"));                         // 길이 상한
+        assert!(p.contains("지어내지 마세요"));              // 정밀도의 선
+        assert!(p.contains("조언"));                         // "코칭 조언처럼 굴지 말 것"
+        assert!(p.contains("detail 0"));                     // findings 블록 포함
+    }
+
+    #[test]
+    fn parse_keeps_clean_lines_up_to_max() {
+        let raw = "오늘 세션 셋. 손이 빨랐다\n커밋은 자주, 후회는 짧게\n토큰 아낀 날";
+        assert_eq!(
+            parse_chatter_lines(raw, 5),
+            vec![
+                "오늘 세션 셋. 손이 빨랐다".to_string(),
+                "커밋은 자주, 후회는 짧게".to_string(),
+                "토큰 아낀 날".to_string(),
+            ]
+        );
+        // max_n 초과는 절단
+        assert_eq!(parse_chatter_lines("a\nb\nc", 2), vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn parse_strips_bullets_numbers_quotes_and_blanks() {
+        let raw = "- 불릿 잡담\n2. 번호 잡담\n\n  \n\"따옴표 잡담\"\n* 별표 잡담\n3) 괄호번호 잡담";
+        assert_eq!(
+            parse_chatter_lines(raw, 10),
+            vec![
+                "불릿 잡담".to_string(),
+                "번호 잡담".to_string(),
+                "따옴표 잡담".to_string(),
+                "별표 잡담".to_string(),
+                "괄호번호 잡담".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_returns_empty_for_garbage() {
+        assert_eq!(parse_chatter_lines("", 5), Vec::<String>::new());
+        assert_eq!(parse_chatter_lines("  \n\n\t\n\"\"", 5), Vec::<String>::new());
+    }
+
+    use crate::diary::engine::MockEngine;
+
+    #[test]
+    fn compute_pool_generates_and_parses_when_active_and_uncached() {
+        let eng = MockEngine { canned: "오늘 세션 셋, 좀 굴렀다\n- 커밋은 자주\n\"토큰 아낀 날\"".into() };
+        let out = compute_chatter_pool(&eng, &ctx(3, 100, 200, 1), None).unwrap();
+        assert_eq!(
+            out,
+            Some((
+                vec![
+                    "오늘 세션 셋, 좀 굴렀다".to_string(),
+                    "커밋은 자주".to_string(),
+                    "토큰 아낀 날".to_string(),
+                ],
+                "3|100|200|1".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn compute_pool_skips_when_fingerprint_matches_cache() {
+        let eng = MockEngine { canned: "안 나와야 함".into() };
+        let c = ctx(3, 100, 200, 1);
+        let fp = facts_fingerprint(&c);
+        assert_eq!(compute_chatter_pool(&eng, &c, Some(&fp)).unwrap(), None);
+    }
+
+    #[test]
+    fn compute_pool_returns_empty_without_engine_when_idle() {
+        // 활동 0건 → 엔진 미호출·빈 풀 캐시 (canned가 파싱돼 나오면 엔진이 불렸다는 뜻이라 실패)
+        let eng = MockEngine { canned: "엔진이 불렸다면 이게 나온다".into() };
+        let out = compute_chatter_pool(&eng, &ctx(0, 0, 0, 2), None).unwrap();
+        assert_eq!(out, Some((Vec::new(), "0|0|0|2".to_string())));
+    }
+
+    #[test]
+    fn compute_pool_caches_empty_when_output_is_garbage() {
+        // 전부 파싱 실패 → 빈 풀 + fp 캐시 (다음 스캔까지 재시도 안 함, 프론트는 정적 폴백)
+        let eng = MockEngine { canned: "  \n\n".into() };
+        let out = compute_chatter_pool(&eng, &ctx(3, 100, 200, 1), None).unwrap();
+        assert_eq!(out, Some((Vec::new(), "3|100|200|1".to_string())));
     }
 }

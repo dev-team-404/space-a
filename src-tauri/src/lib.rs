@@ -143,6 +143,7 @@ pub fn run() {
                 commands::list_diary_dates,
                 commands::get_diary,
                 commands::get_daily_line,
+                commands::get_chatter_pool,
                 commands::get_mascot_seed,
                 commands::get_settings,
                 commands::set_setting,
