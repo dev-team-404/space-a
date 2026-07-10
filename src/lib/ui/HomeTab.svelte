@@ -94,6 +94,8 @@
   .strip b { color: var(--ink); }
   .strip .save b { color: var(--accent); }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  /* grid 아이템 기본 min-width:auto가 긴 top3(nowrap)에 밀려 컬럼을 늘리는 것 방지 — 1fr 고정·ellipsis 복구 */
+  .grid > :global(*) { min-width: 0; }
   .status {
     margin-top: auto; display: flex; justify-content: space-between; align-items: center;
     font-size: 12px; color: var(--ink-soft);
