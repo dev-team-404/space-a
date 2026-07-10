@@ -2,13 +2,13 @@
   import { getCurrentWindow, PhysicalPosition, LogicalSize } from '@tauri-apps/api/window';
   import './lib/theme.css';
   import {
-    emitOccasionToday, getMascotSeed, getSettings, getSummary, getTodayOccasions,
+    emitOccasionToday, getChatterPool, getMascotSeed, getSettings, getSummary, getTodayOccasions,
     listFindings, openChatTab, setSetting,
     onDiaryReady, onNewFindings, onScanDone, onSettingsChanged,
   } from './lib/api';
   import { drawRobot, type RobotSpec } from './lib/robot/render';
   import { frameAt, resolveState, type BubbleKind } from './lib/robot/anim';
-  import { adviceBubble, chatterBubble, diaryBubble, findingBubble, occasionBubble, type Bubble } from './lib/robot/bubble';
+  import { adviceBubble, diaryBubble, findingBubble, occasionBubble, pickChatter, type Bubble } from './lib/robot/bubble';
   import { isDrag } from './lib/robot/drag';
 
   const win = getCurrentWindow();
@@ -21,6 +21,7 @@
   let chatterLevel = $state('low');
   let realtimeAdvice = $state(false);
   let lastAdviceKey: string | null = null;
+  let recentChatter: string[] = []; // 최근 표시 잡담 3개 (세션-로컬, 영속화 안 함)
 
   // 지속 말풍선 (스펙 §6): 자동 소멸 없음 — 교체/X/본문 클릭까지 유지
   async function showBubble(b: Bubble) {
@@ -102,8 +103,13 @@
       timer = setTimeout(async () => {
         const hour = new Date().getHours();
         if (chatterLevel !== 'off' && !(hour >= 1 && hour < 7) && bubble === null) {
-          const summary = await getSummary().catch(() => null);
-          showBubble(chatterBubble(Math.floor(Math.random() * 10), summary));
+          const [summary, pool] = await Promise.all([
+            getSummary().catch(() => null),
+            getChatterPool().catch(() => [] as string[]),
+          ]);
+          const b = pickChatter(pool, summary, recentChatter, Math.random);
+          recentChatter = [...recentChatter.slice(-2), b.text];
+          showBubble(b);
         }
         schedule();
       }, delayMin * 60_000);

@@ -47,6 +47,11 @@ const CHATTER: ((n: number | null) => string)[] = [
   () => '오늘 일기 기대해 주세요',
   () => '레지스트리에 새 스킬 구경 갈까요',
   () => 'zzz… 아 깨어있어요!',
+  () => '주인, 오늘도 제가 응원해요. 조용히, 근데 진심으로',
+  () => '막히면 잠깐 산책 — 코드는 도망 안 가요',
+  () => '어제보다 한 커밋만 더. 그게 성장이에요',
+  (n) => (n === null ? '오늘의 주인도 응원합니다!' : `${n}세션째 달리는 주인, 존경해요`),
+  () => '실패한 시도도 데이터예요. 제가 다 보고 있었어요',
 ];
 
 /** realtime_advice 옵트인: 스캔 후 최상위 활성 advice를 말풍선으로 (스펙 §6).
@@ -55,7 +60,24 @@ export function adviceBubble(f: { dedup_key: string; detail: string }): Bubble {
   return { kind: 'finding', tab: 'coach', text: `주인, ${f.detail}`, key: f.dedup_key };
 }
 
-export function chatterBubble(pick: number, summary: { session_count: number } | null): Bubble {
-  const f = CHATTER[((pick % CHATTER.length) + CHATTER.length) % CHATTER.length];
-  return { kind: 'chatter', tab: 'home', text: f(summary?.session_count ?? null) };
+/** 잡담 후보 전체 — LLM 풀(사용기록 연계) + 정적 큐레이션(잡담/응원, summary 렌더). */
+export function chatterCandidates(
+  pool: string[],
+  summary: { session_count: number } | null,
+): string[] {
+  return [...pool, ...CHATTER.map((f) => f(summary?.session_count ?? null))];
+}
+
+/** 잡담 pick — 후보에서 최근 표시분(recent)을 제외하고 균등 랜덤.
+ *  제외 후 후보가 비면 recent를 무시하고 전체에서 pick(기아 방지). rand는 [0,1) 주입. */
+export function pickChatter(
+  pool: string[],
+  summary: { session_count: number } | null,
+  recent: string[],
+  rand: () => number,
+): Bubble {
+  const all = chatterCandidates(pool, summary);
+  const fresh = all.filter((t) => !recent.includes(t));
+  const candidates = fresh.length ? fresh : all;
+  return { kind: 'chatter', tab: 'home', text: candidates[Math.floor(rand() * candidates.length)] };
 }
