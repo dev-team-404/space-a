@@ -13,6 +13,9 @@ use std::collections::{BTreeMap, HashSet};
 const TOKENS_PER_READ: u64 = 1200;
 
 /// §6.1 노이즈 경로 판정 — 생성/락 파일·의존/빌드 디렉터리는 CLAUDE.md 후보에서 제외.
+/// `.claude`(플러그인 캐시·스킬·메모리 등)는 하네스가 매 실행 의도적으로 읽는 도구 내부
+/// 경로라 사용자가 행동할 수 없음 — 정밀도의 선에 따라 제외 (프로젝트 루트 CLAUDE.md는
+/// `.claude` 디렉터리 밖이라 무영향).
 fn is_noise_path(path: &str) -> bool {
     let lower = path.to_lowercase();
     let file = lower.rsplit(|c| c == '/' || c == '\\').next().unwrap_or("");
@@ -21,7 +24,7 @@ fn is_noise_path(path: &str) -> bool {
     {
         return true;
     }
-    const NOISE_DIRS: &[&str] = &["node_modules", "target", "dist", "build", ".git", "vendor"];
+    const NOISE_DIRS: &[&str] = &["node_modules", "target", "dist", "build", ".git", "vendor", ".claude"];
     // 경로 세그먼트 일치(부분 문자열 아님 — src/builder.rs 오제외 방지)
     lower.split(|c| c == '/' || c == '\\').any(|seg| NOISE_DIRS.contains(&seg))
 }
@@ -465,6 +468,17 @@ mod tests {
             read("s2", 0, "node_modules/dep/index.js"),
             read("s3", 0, "node_modules/dep/index.js"),
         ];
+        store.upsert_events(&evs).unwrap();
+        let findings = R5RepeatedRead::default().evaluate(&store).unwrap();
+        assert!(findings.iter().all(|f| f.evidence["subtype"] != "cross_session_claude_md"));
+    }
+
+    #[test]
+    fn r5_cross_session_excludes_tool_internal_claude_paths() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 스킬/플러그인 템플릿은 하네스가 매 실행 의도적으로 읽음(사용자 행동 아님) — 미발화여야 함
+        let p = "C:\\Users\\jibin\\.claude\\plugins\\cache\\superpowers\\skills\\implementer-prompt.md";
+        let evs = vec![read("s1", 0, p), read("s2", 0, p), read("s3", 0, p)];
         store.upsert_events(&evs).unwrap();
         let findings = R5RepeatedRead::default().evaluate(&store).unwrap();
         assert!(findings.iter().all(|f| f.evidence["subtype"] != "cross_session_claude_md"));
