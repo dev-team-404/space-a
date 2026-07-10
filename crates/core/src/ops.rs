@@ -5,7 +5,6 @@ use crate::hosts::enumerate_hosts;
 use crate::inventory::{collect_host_inventory, scan_plugin_inventory};
 use crate::rules::r1_unused_mcp::R1UnusedMcp;
 use crate::rules::r2_unused_plugins::R2UnusedPluginSkills;
-use crate::rules::r5_repeated_read::R5RepeatedRead;
 use crate::rules::r7_opus_trivial::R7OpusTrivial;
 use crate::rules::r9_web_overuse::R9WebOveruse;
 use crate::rules::r10_automation_burst::R10AutomationBurst;
@@ -128,12 +127,13 @@ pub fn run_inventory(store: &mut SqliteStore) -> Result<Vec<String>> {
 pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     // 코칭 v2 이행: 세션 스코프 R7은 폐기 — 프로젝트 집계(R7 v2)가 대체 (스펙 §3)
     store.delete_findings_by_rule_and_scope("R7", "session")?;
-    // 옛 R5 세션 카드 정리(스팸 재발분). 새 R5는 scope_kind="project"+subtype dedup이라 안 걸리고 공존(스펙 §6.3).
+    // R5(반복 읽기) 발화 보류(2026-07-10 사용자 판정): 반복 Read는 에이전트 동작이라
+    // 사용자가 행동할 레버가 없음 — 등록 해제·전 스코프 카드 정리, 룰 코드·테스트는 보존.
     store.delete_findings_by_rule_and_scope("R5", "session")?;
+    store.delete_findings_by_rule_and_scope("R5", "project")?;
     let engine = RuleEngine::new(vec![
         Box::new(R1UnusedMcp::default()),
         Box::new(R2UnusedPluginSkills::default()),
-        Box::new(R5RepeatedRead::default()),
         Box::new(R7OpusTrivial::default()),
         Box::new(R9WebOveruse::default()),
         Box::new(R10AutomationBurst::default()),
@@ -174,13 +174,14 @@ mod tests {
             evidence: serde_json::json!({}), est_tokens_saved: 0,
             prescription: None, dedup_key: key.into(),
         };
-        // 폐기된 세션 스코프 카드 2종(R7 session·R5 session) + 유지될 R1 host 1종
+        // 폐기 카드 3종(R7 session·R5 session·R5 project=발화 보류) + 유지될 R1 host 1종
         store.upsert_finding(&mk("R7", "session", "R7|s1"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R5", "session", "R5|s1|a.md"), "2026-07-06T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R5", "project", "R5|W|proj|cross_session_claude_md"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R1", "host", "R1|W|ctx"), "2026-07-06T00:00:00Z").unwrap();
 
         run_rules(&store).unwrap();
-        assert_eq!(store.count_findings().unwrap(), 1); // R1만 생존(R7·R5 세션 카드 삭제)
+        assert_eq!(store.count_findings().unwrap(), 1); // R1만 생존(R7 세션·R5 전 스코프 삭제)
     }
 
     #[test]
