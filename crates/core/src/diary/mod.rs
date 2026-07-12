@@ -46,7 +46,6 @@ pub struct BriefFinding {
     pub prescription: Option<serde_json::Value>,
     pub detail: String,
     pub suggested_action: String,
-    pub recently_covered: bool,
 }
 
 /// 직전 며칠간 내가 쓴 일기의 발췌 — LLM이 어제와 다른 이야기를 쓰도록 브리프에 싣는 컨텍스트.
@@ -251,9 +250,11 @@ pub fn assemble_brief(
     let findings = store
         .findings_for_date(host, date)?
         .into_iter()
+        // 요 며칠 일기에서 이미 다룬 상시 이슈는 브리프에서 제외 — 매일 같은 지적 반복 방지.
+        // (코칭 자체는 Coach 탭이 계속 보여준다. 다이어리는 그날의 새 이야기에 집중.)
+        .filter(|f| !recent_keys.contains(&f.dedup_key))
         .map(|f| {
             let (detail, suggested_action) = finding_advice(&f.rule_id, &f.evidence, f.est_tokens_saved);
-            let recently_covered = recent_keys.contains(&f.dedup_key);
             BriefFinding {
                 rule_id: f.rule_id,
                 severity: f.severity.as_str().to_string(),
@@ -264,7 +265,6 @@ pub fn assemble_brief(
                 })),
                 detail,
                 suggested_action,
-                recently_covered,
             }
         })
         .collect();
@@ -366,13 +366,14 @@ fn collect_tool_usage(store: &SqliteStore, host: &str, date: &str) -> ToolUsage 
     }
 }
 
-/// 근무 맥락: 요일(주말)과 그날 세션 지속시간 합. 지속시간은 세션 first_ts 날짜 기준 버킷.
+/// 근무 맥락: 요일(주말)과 그날 활동 시간(첫~마지막 이벤트 간 span, 로컬 날짜 버킷이라 ≤24h).
+/// 세션 지속시간 합은 세션이 여러 날에 걸치면 24h를 초과해 비현실적이라 이벤트 span을 쓴다.
 fn collect_work_context(store: &SqliteStore, host: &str, date: &str, today: NaiveDate) -> WorkContext {
     let hours: f64 = store
         .conn
         .query_row(
-            "SELECT COALESCE(SUM((julianday(last_ts)-julianday(first_ts))*24.0), 0.0)
-             FROM sessions WHERE host=?1 AND date(first_ts,'localtime')=?2",
+            "SELECT COALESCE((julianday(MAX(ts))-julianday(MIN(ts)))*24.0, 0.0)
+             FROM events WHERE host=?1 AND date(ts,'localtime')=?2 AND ts IS NOT NULL",
             params![host, date],
             |r| r.get::<_, f64>(0),
         )
@@ -478,10 +479,10 @@ pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
          오늘 브리프의 오늘만의 사실과 기분에 집중해 어제와는 다른 이야기로 쓰세요. \
          비어있으면 신경 쓰지 마세요. \
          \
-         finding 중 `recently_covered`가 true인 것은 요 며칠 일기에서 이미 다룬 상시 이슈입니다 — \
-         오늘은 그걸로 시작하지 말고, 정 필요하면 맨 뒤에 한 줄로만 스치세요. \
-         `recently_covered`가 false인(새로운) finding을 우선 소재로 삼고, \
-         새 코칭거리가 없으면 억지로 지적을 만들지 말고 그날의 흐름을 편하게 적으세요. \
+         브리프의 `findings`는 오늘 새로 눈에 띈 코칭거리입니다 \
+         (요 며칠 일기에서 이미 다룬 상시 이슈는 빠져 있으니 되풀이하지 마세요). \
+         finding이 있으면 그중 하나만 자연스럽게 녹이고, 비어 있으면 억지로 지적을 만들지 말고 \
+         그날의 도구 사용·리듬·기분으로 편하게 적으세요. \
          \
          브리프의 `tool_usage`는 오늘 쓴 도구 집계입니다 — 그날의 리듬을 살리는 데 쓰세요 \
          (예: '오늘은 스킬을 열 번 넘게 불러서 정신없었네', '온종일 파일만 뒤졌다'). \
@@ -732,15 +733,15 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let store = SqliteStore::open_in_memory().unwrap();
         let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
-        // 2026-07-11 = 토요일. 한 세션이 10:00~15:30 (5.5h)
+        // 2026-07-11 = 토요일. 08:00Z~14:00Z=6h span(어느 타임존이든 같은 로컬 날짜에 들도록 한낮 UTC).
         store.upsert_events(&[
-            turn_event("Windows", "p", "s1", "u1", "2026-07-11T10:00:00Z"),
-            turn_event("Windows", "p", "s1", "u2", "2026-07-11T15:30:00Z"),
+            turn_event("Windows", "p", "s1", "u1", "2026-07-11T08:00:00Z"),
+            turn_event("Windows", "p", "s1", "u2", "2026-07-11T14:00:00Z"),
         ]).unwrap();
         let brief = assemble_brief(&store, "Windows", "2026-07-11", &cfg).unwrap();
         assert!(brief.work_context.is_weekend, "07-11은 토요일");
-        assert!((brief.work_context.active_hours - 5.5).abs() < 0.01);
-        assert!(brief.work_context.long_work, "5.5h >= 5.0 임계");
+        assert!((brief.work_context.active_hours - 6.0).abs() < 0.01);
+        assert!(brief.work_context.long_work, "6h >= 5.0 임계");
     }
 
     #[test]
@@ -748,10 +749,10 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let store = SqliteStore::open_in_memory().unwrap();
         let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
-        // 2026-07-08 = 수요일. 한 세션 10:00~11:00 (1h)
+        // 2026-07-08 = 수요일. 08:00Z~09:00Z=1h span(한낮 UTC로 타임존 무관 같은 날짜).
         store.upsert_events(&[
-            turn_event("Windows", "p", "s1", "u1", "2026-07-08T10:00:00Z"),
-            turn_event("Windows", "p", "s1", "u2", "2026-07-08T11:00:00Z"),
+            turn_event("Windows", "p", "s1", "u1", "2026-07-08T08:00:00Z"),
+            turn_event("Windows", "p", "s1", "u2", "2026-07-08T09:00:00Z"),
         ]).unwrap();
         let brief = assemble_brief(&store, "Windows", "2026-07-08", &cfg).unwrap();
         assert!(!brief.work_context.is_weekend);
@@ -759,7 +760,7 @@ mod tests {
     }
 
     #[test]
-    fn assemble_brief_marks_recently_covered_findings() {
+    fn assemble_brief_excludes_recently_covered_findings() {
         use crate::finding::{Finding, Severity};
         let tmp = tempfile::tempdir().unwrap();
         let store = SqliteStore::open_in_memory().unwrap();
@@ -772,7 +773,7 @@ mod tests {
         ]).unwrap();
         store.rebuild_rollup().unwrap();
 
-        // 상시(host) finding — 두 날 모두 브리프에 포함됨
+        // 상시(host) finding — 두 날 모두 findings_for_date에 잡히는 것
         store.upsert_finding(&Finding {
             rule_id: "R1".into(), severity: Severity::Warn,
             scope_host: Some("Windows".into()), scope_project: None,
@@ -794,10 +795,9 @@ mod tests {
         seed_diary(&store, &cfg, "2026-07-09", "어제도 context7 얘기");
 
         let brief = assemble_brief(&store, "Windows", "2026-07-10", &cfg).unwrap();
-        let r1 = brief.findings.iter().find(|f| f.rule_id == "R1").unwrap();
-        let r9 = brief.findings.iter().find(|f| f.rule_id == "R9").unwrap();
-        assert!(r1.recently_covered, "어제 일기 날짜에도 있던 상시 finding → true");
-        assert!(!r9.recently_covered, "오늘만의 새 finding → false");
+        // 이미 다룬 상시(R1)는 브리프에서 제외, 오늘만의 새 finding(R9)은 포함
+        assert!(brief.findings.iter().all(|f| f.rule_id != "R1"), "이미 다룬 상시 finding 제외");
+        assert!(brief.findings.iter().any(|f| f.rule_id == "R9"), "오늘만의 새 finding 포함");
     }
 
     #[test]
@@ -972,8 +972,7 @@ mod tests {
     #[test]
     fn system_prompt_directs_context_signals_and_comfort() {
         let p = build_system_prompt(&DiaryConfig::default());
-        assert!(p.contains("recently_covered")); // 상시 이슈 억제 지시
-        assert!(p.contains("상시 이슈"));
+        assert!(p.contains("상시 이슈"));         // 이미 다룬 상시 이슈 제외 언급
         assert!(p.contains("tool_usage"));        // 도구 텍스처 지시
         assert!(p.contains("work_context"));      // 근무 맥락
         assert!(p.contains("위로"));              // 주말/공휴일/장시간 위로
