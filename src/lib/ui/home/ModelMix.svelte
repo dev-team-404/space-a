@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getModelMix, onScanDone, type ModelMixEntry, type ModelMixPeriod } from '../../api';
-  import { pctLabel, shapeMix } from './model-mix-helpers';
+  import { modelLabel, shapeMix } from './model-mix-helpers';
 
   const PERIODS: { key: ModelMixPeriod; label: string }[] = [
     { key: 'today', label: '오늘' }, { key: 'week', label: '주간' },
@@ -36,7 +36,6 @@
   const OTHER_COLOR = '#d8d5d0'; // 기타(상위 3개 밖 합산) 세그먼트
   const color = (model: string, i: number) =>
     FAMILY_COLOR.find(([k]) => model.includes(k))?.[1] ?? FALLBACK[i % FALLBACK.length];
-  const label = (model: string) => model.replace(/^claude-/, '');
 </script>
 
 <div class="widget">
@@ -61,18 +60,24 @@
     </div>
     <ul class="legend">
       {#each shaped.top as m, i (m.tier)}
-        <li>
+        <li class="has-tip">
           <span class="chip" style:background={color(m.tier, i)}></span>
-          {label(m.tier)} {pctLabel(m.pct)}
+          {modelLabel(m.tier)}
+          <div class="tip" role="tooltip">
+            <div class="row"><span class="pct">{m.pct.toFixed(1)}%</span></div>
+          </div>
         </li>
       {/each}
       {#if shaped.other}
-        <li class="other">
+        <li class="has-tip">
           <span class="chip" style:background={OTHER_COLOR}></span>
-          기타 {pctLabel(shaped.other.pct)}
+          기타
           <div class="tip" role="tooltip">
             {#each shaped.other.items as it (it.tier)}
-              <div>{label(it.tier)} {it.pct.toFixed(1)}%</div>
+              <div class="row">
+                <span class="name">{modelLabel(it.tier)}</span>
+                <span class="pct">{it.pct.toFixed(1)}%</span>
+              </div>
             {/each}
           </div>
         </li>
@@ -100,13 +105,16 @@
     height: 36px; align-content: flex-start;
   }
   .legend li { display: flex; align-items: center; gap: 4px; }
-  .legend li.other { position: relative; cursor: default; }
+  .legend li.has-tip { position: relative; cursor: default; }
   .tip {
     display: none; position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 5;
     background: var(--frame-bg); border: 1px solid rgba(0, 0, 0, 0.08);
     border-radius: var(--radius-s); box-shadow: var(--shadow-soft);
-    padding: 6px 9px; white-space: nowrap; line-height: 1.6; color: var(--ink);
+    padding: 6px 9px; white-space: nowrap; line-height: 1.6;
   }
-  .other:hover .tip { display: block; }
+  .has-tip:hover .tip { display: block; }
+  .tip .row { display: flex; justify-content: space-between; gap: 14px; }
+  .tip .name { color: var(--ink-soft); }
+  .tip .pct { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
   .chip { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 </style>

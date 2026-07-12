@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pctLabel, shapeMix } from './model-mix-helpers';
+import { modelLabel, shapeMix } from './model-mix-helpers';
 
 const e = (tier: string, tokens: number) => ({ tier, tokens });
 
@@ -26,14 +26,14 @@ describe('shapeMix', () => {
   });
 });
 
-describe('pctLabel', () => {
-  it('1% 미만은 <1%', () => {
-    expect(pctLabel(0.3)).toBe('<1%');
-    expect(pctLabel(0.94)).toBe('<1%');
+describe('modelLabel', () => {
+  it('claude- 접두사와 말미 날짜 스탬프(-YYYYMMDD) 제거', () => {
+    expect(modelLabel('claude-opus-4-5-20251101')).toBe('opus-4-5');
+    expect(modelLabel('claude-haiku-4-5-20251001')).toBe('haiku-4-5');
+    expect(modelLabel('claude-opus-4-8')).toBe('opus-4-8');
+    expect(modelLabel('claude-fable-5')).toBe('fable-5');
   });
-  it('그 외는 반올림 정수', () => {
-    expect(pctLabel(1.2)).toBe('1%');
-    expect(pctLabel(80.19)).toBe('80%');
-    expect(pctLabel(17.5)).toBe('18%');
+  it('비 claude 모델은 그대로', () => {
+    expect(modelLabel('<synthetic>')).toBe('<synthetic>');
   });
 });

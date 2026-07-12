@@ -25,7 +25,7 @@ export function shapeMix(mix: ModelMixEntry[], topN = TOP_N): ShapedMix {
   return { top, other: { tokens, pct: (tokens / total) * 100, items: rest } };
 }
 
-/** 범례 % 라벨 — 반올림 정수, 1% 미만은 "0%" 대신 "<1%". */
-export function pctLabel(pct: number): string {
-  return pct < 1 ? '<1%' : `${Math.round(pct)}%`;
+/** 표시용 모델명 — 'claude-' 접두사와 말미 날짜 스탬프(-YYYYMMDD) 제거. */
+export function modelLabel(model: string): string {
+  return model.replace(/^claude-/, '').replace(/-\d{8}$/, '');
 }
