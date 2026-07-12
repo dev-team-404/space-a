@@ -478,9 +478,22 @@ pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
          오늘 브리프의 오늘만의 사실과 기분에 집중해 어제와는 다른 이야기로 쓰세요. \
          비어있으면 신경 쓰지 마세요. \
          \
+         finding 중 `recently_covered`가 true인 것은 요 며칠 일기에서 이미 다룬 상시 이슈입니다 — \
+         오늘은 그걸로 시작하지 말고, 정 필요하면 맨 뒤에 한 줄로만 스치세요. \
+         `recently_covered`가 false인(새로운) finding을 우선 소재로 삼고, \
+         새 코칭거리가 없으면 억지로 지적을 만들지 말고 그날의 흐름을 편하게 적으세요. \
+         \
+         브리프의 `tool_usage`는 오늘 쓴 도구 집계입니다 — 그날의 리듬을 살리는 데 쓰세요 \
+         (예: '오늘은 스킬을 열 번 넘게 불러서 정신없었네', '온종일 파일만 뒤졌다'). \
+         \
+         `work_context.is_weekend`가 true이거나 `occasions`에 명절·공휴일이 있는데도 일했다면, \
+         쉬는 날에도 함께해줘 고맙다는 위로·응원을 한마디 건네세요 \
+         (단 발렌타인·파이데이 같은 재미 기념일은 위로 대상이 아니니 상식으로 가려서). \
+         `work_context.long_work`가 true면 '오래 붙어 있었네, 무리하지 말고 쉬엄쉬엄' 하고 챙기세요. \
+         \
          형식: 일기는 짧게 — 2~3문단, 전체 350자 이내로 쓰세요. \
          그날의 핵심 한두 가지만 골라 쓰고 나머지 사실은 과감히 버리세요. \
-         이모지는 문단마다 1개 정도, 감정이 실리는 자연스러운 자리에 넣되 같은 이모지를 반복하지 마세요.",
+         이모지는 문단마다 1~2개, 감정이 실리는 자연스러운 자리에 넣되 같은 이모지를 반복하지 마세요.",
         honorific = cfg.honorific,
         tone = cfg.tone,
         voice = voice_guidance(),
@@ -953,7 +966,18 @@ mod tests {
         assert!(p.contains("350자"));     // 길이 상한(글자)
         assert!(p.contains("골라"));      // 핵심만 골라 쓰기(장황함 차단)
         assert!(p.contains("이모지"));    // 이모지 지시
-        assert!(p.contains("문단마다 1개")); // 사용량 상향(0 허용 → 문단마다 1개 정도)
+        assert!(p.contains("문단마다 1~2개")); // 사용량 상향(1개 정도 → 1~2개)
+    }
+
+    #[test]
+    fn system_prompt_directs_context_signals_and_comfort() {
+        let p = build_system_prompt(&DiaryConfig::default());
+        assert!(p.contains("recently_covered")); // 상시 이슈 억제 지시
+        assert!(p.contains("상시 이슈"));
+        assert!(p.contains("tool_usage"));        // 도구 텍스처 지시
+        assert!(p.contains("work_context"));      // 근무 맥락
+        assert!(p.contains("위로"));              // 주말/공휴일/장시간 위로
+        assert!(p.contains("쉬엄쉬엄"));          // long_work 챙김
     }
 
     #[test]
