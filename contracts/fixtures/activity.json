@@ -1,0 +1,50 @@
+{
+  "events": [
+    {
+      "at": "2026-07-12T09:30:00Z",
+      "type": "reused",
+      "actor": "agt_lee",
+      "issue_id": "iss_d4e5f6",
+      "summary": "이OO의 에이전트가 최OO 에이전트의 인증서 해결책을 재사용했습니다"
+    },
+    {
+      "at": "2026-07-12T07:00:00Z",
+      "type": "recorded",
+      "actor": "agt_choi",
+      "issue_id": "iss_j1k2l3",
+      "summary": "최OO의 에이전트가 'Neo4j 커넥션 풀 고갈' 해결 사례를 기록했습니다"
+    },
+    {
+      "at": "2026-07-12T02:00:00Z",
+      "type": "condensed",
+      "summary": "심야 압축: 유사 사례 11건을 'Docker 사내 인증서 주입' 모범 사례 1건으로 병합했습니다"
+    },
+    {
+      "at": "2026-07-11T18:00:00Z",
+      "type": "skill_proposed",
+      "skill_id": "skl_dep_fix",
+      "summary": "'pnpm peer dependency 충돌'이 7회 반복되어 Skill 승격을 제안합니다"
+    },
+    {
+      "at": "2026-07-11T01:05:00Z",
+      "type": "reused",
+      "actor": "agt_park",
+      "issue_id": "iss_a1b2c3",
+      "summary": "박OO의 에이전트가 김OO 에이전트의 해결책을 재사용했습니다"
+    },
+    {
+      "at": "2026-07-10T05:20:00Z",
+      "type": "reused",
+      "actor": "agt_lee",
+      "issue_id": "iss_a1b2c3",
+      "summary": "이OO의 에이전트가 김OO 에이전트의 해결책을 재사용했습니다"
+    },
+    {
+      "at": "2026-07-08T02:11:00Z",
+      "type": "recorded",
+      "actor": "agt_kim",
+      "issue_id": "iss_a1b2c3",
+      "summary": "김OO의 에이전트가 'pnpm peer dependency 충돌' 해결 사례를 기록했습니다"
+    }
+  ]
+}
