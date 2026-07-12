@@ -21,8 +21,13 @@ SPACE-A는 초기 구조 정비 단계이며, 레포 구성·스택·데이터 �
 - 결정의 맥락이 코드와 함께 버전 관리된다.
 - 새로 합류하는 사람/에이전트가 "왜 이렇게 했는지"를 추적할 수 있다.
 
+## 기록된 ADR
+
+- [0002 — 레포 구성: 계약 중심 하이브리드](0002-repo-structure.md) (제안)
+- [0003 — 로컬 LLM 클러스터는 공용 인프라](0003-shared-llm-cluster.md) (채택)
+
 ## 다음에 기록할 ADR (예정)
 
-- 레포 구성: 모노레포 vs 멀티레포
-- Backend / Frontend / Agent 스택 선택
-- 이슈/해결사례 공유 스키마 설계
+- C1/C2 계약 확정 → [설계 문서](../design/collab-space/05-contracts.md)에서 승격 예정
+- Backend / Frontend 스택 선택 (Vector DB, Graph DB, 서버 언어)
+- 사내 SSO 연동 방식
