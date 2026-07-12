@@ -31,11 +31,12 @@ pub struct ToolUsage {
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct WorkContext {
     pub is_weekend: bool,
-    pub active_hours: f64, // Σ 세션 지속시간(시간, 소수 1자리)
+    pub active_hours: f64, // 몰입 시간(연속 이벤트 간 30분 이하 간격 합, 시간·소수 1자리)
     pub long_work: bool,   // active_hours >= LONG_WORK_HOURS
 }
 
-const LONG_WORK_HOURS: f64 = 5.0;
+const LONG_WORK_HOURS: f64 = 7.0;  // 몰입 시간 기준 — 이 이상이면 "유난히 긴 날"(매일 아님)
+const IDLE_GAP_SECS: f64 = 1800.0; // 30분 이상 공백은 휴식으로 보고 몰입 시간에서 제외
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BriefFinding {
@@ -366,19 +367,26 @@ fn collect_tool_usage(store: &SqliteStore, host: &str, date: &str) -> ToolUsage 
     }
 }
 
-/// 근무 맥락: 요일(주말)과 그날 활동 시간(첫~마지막 이벤트 간 span, 로컬 날짜 버킷이라 ≤24h).
-/// 세션 지속시간 합은 세션이 여러 날에 걸치면 24h를 초과해 비현실적이라 이벤트 span을 쓴다.
+/// 근무 맥락: 요일(주말)과 그날 몰입 시간. 몰입 시간은 연속 이벤트 간격 중 IDLE_GAP_SECS(30분)
+/// 이하인 것만 합산 — 첫~마지막 span은 중간 공백(점심·회의 등)까지 포함해 과장되므로 쓰지 않는다.
 fn collect_work_context(store: &SqliteStore, host: &str, date: &str, today: NaiveDate) -> WorkContext {
-    let hours: f64 = store
+    let ts: Vec<f64> = store
         .conn
-        .query_row(
-            "SELECT COALESCE((julianday(MAX(ts))-julianday(MIN(ts)))*24.0, 0.0)
-             FROM events WHERE host=?1 AND date(ts,'localtime')=?2 AND ts IS NOT NULL",
-            params![host, date],
-            |r| r.get::<_, f64>(0),
+        .prepare(
+            "SELECT julianday(ts)*86400.0 FROM events
+             WHERE host=?1 AND date(ts,'localtime')=?2 AND ts IS NOT NULL ORDER BY ts",
         )
-        .unwrap_or(0.0);
-    let active_hours = (hours * 10.0).round() / 10.0; // 소수 1자리
+        .and_then(|mut s| {
+            let rows = s.query_map(params![host, date], |r| r.get::<_, f64>(0))?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()
+        })
+        .unwrap_or_default();
+    let engaged_secs: f64 = ts
+        .windows(2)
+        .map(|w| w[1] - w[0])
+        .filter(|&g| g > 0.0 && g <= IDLE_GAP_SECS)
+        .sum();
+    let active_hours = (engaged_secs / 3600.0 * 10.0).round() / 10.0;
     WorkContext {
         is_weekend: matches!(today.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun),
         active_hours,
@@ -480,17 +488,21 @@ pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
          비어있으면 신경 쓰지 마세요. \
          \
          브리프의 `findings`는 오늘 새로 눈에 띈 코칭거리입니다 \
-         (요 며칠 일기에서 이미 다룬 상시 이슈는 빠져 있으니 되풀이하지 마세요). \
-         finding이 있으면 그중 하나만 자연스럽게 녹이고, 비어 있으면 억지로 지적을 만들지 말고 \
-         그날의 도구 사용·리듬·기분으로 편하게 적으세요. \
+         (이미 다룬 상시 이슈는 빠져 있으니 되풀이하지 마세요). 있으면 하나만 자연스럽게 녹이고, \
+         없으면 억지로 만들지 마세요. \
          \
-         브리프의 `tool_usage`는 오늘 쓴 도구 집계입니다 — 그날의 리듬을 살리는 데 쓰세요 \
-         (예: '오늘은 스킬을 열 번 넘게 불러서 정신없었네', '온종일 파일만 뒤졌다'). \
+         `tool_usage`(도구 사용량)와 `work_context`(주말 여부·몰입 시간)는 그날을 다르게 그릴 재료입니다. \
+         단 매일 똑같은 틀로 쓰지 마세요 — 특히 '오늘도 오래 붙어 있었다'처럼 작업 시간으로 시작하는 습관, \
+         매번 '무리하지 마 / 오래 달리자'로 끝맺는 습관은 금물입니다. \
+         날마다 여는 방식을 바꾸세요: 어떤 날은 유난히 많이 쓴 도구(스킬 폭주 등)로, \
+         어떤 날은 그날의 기분이나 사소한 장면으로, 어떤 날은 occasion으로. \
          \
-         `work_context.is_weekend`가 true이거나 `occasions`에 명절·공휴일이 있는데도 일했다면, \
-         쉬는 날에도 함께해줘 고맙다는 위로·응원을 한마디 건네세요 \
-         (단 발렌타인·파이데이 같은 재미 기념일은 위로 대상이 아니니 상식으로 가려서). \
-         `work_context.long_work`가 true면 '오래 붙어 있었네, 무리하지 말고 쉬엄쉬엄' 하고 챙기세요. \
+         위로·응원은 매일이 아니라 정말 특별할 때만 하세요 — `work_context.long_work`가 true인 유난히 긴 날이나 \
+         `is_weekend`(주말)에 일한 날. 그때도 판에 박힌 위로 말고 다마고치답게 능청맞고 장난스럽게 \
+         (주말이면 짐짓 타박하듯 '주말인데 또 붙잡고 있어? 우리 주인 일중독인가 봐', \
+         긴 날이면 과장 리액션 '오늘 좀 과했다… 나 배터리 방전 직전'). \
+         평범한 날은 굳이 위로하지 말고 그날의 한 장면으로 담백하게 끝내세요. \
+         공휴일도 마찬가지 — 단 발렌타인·파이데이 같은 재미 기념일은 '위로' 대상이 아니니 상식으로 가려서. \
          \
          형식: 일기는 짧게 — 2~3문단, 전체 350자 이내로 쓰세요. \
          그날의 핵심 한두 가지만 골라 쓰고 나머지 사실은 과감히 버리세요. \
@@ -733,29 +745,37 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let store = SqliteStore::open_in_memory().unwrap();
         let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
-        // 2026-07-11 = 토요일. 08:00Z~14:00Z=6h span(어느 타임존이든 같은 로컬 날짜에 들도록 한낮 UTC).
-        store.upsert_events(&[
-            turn_event("Windows", "p", "s1", "u1", "2026-07-11T08:00:00Z"),
-            turn_event("Windows", "p", "s1", "u2", "2026-07-11T14:00:00Z"),
-        ]).unwrap();
+        // 2026-07-11 = 토요일. 20분 간격 밀집 이벤트 22개 → 21×20분 = 7.0h 몰입.
+        // 00:00Z~07:00Z는 KST(UTC+9)에서 09:00~16:00 07-11이라 로컬 날짜 07-11에 다 들어감.
+        let mut evs = Vec::new();
+        for i in 0..22u64 {
+            let m = i * 20;
+            evs.push(turn_event("Windows", "p", "s1", &format!("u{i}"),
+                &format!("2026-07-11T{:02}:{:02}:00Z", m / 60, m % 60)));
+        }
+        store.upsert_events(&evs).unwrap();
         let brief = assemble_brief(&store, "Windows", "2026-07-11", &cfg).unwrap();
         assert!(brief.work_context.is_weekend, "07-11은 토요일");
-        assert!((brief.work_context.active_hours - 6.0).abs() < 0.01);
-        assert!(brief.work_context.long_work, "6h >= 5.0 임계");
+        assert!((brief.work_context.active_hours - 7.0).abs() < 0.05, "몰입 7.0h");
+        assert!(brief.work_context.long_work, "7.0h >= 7.0 임계");
     }
 
     #[test]
-    fn assemble_brief_work_context_weekday_short() {
+    fn assemble_brief_work_context_excludes_idle_and_short_weekday() {
         let tmp = tempfile::tempdir().unwrap();
         let store = SqliteStore::open_in_memory().unwrap();
         let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
-        // 2026-07-08 = 수요일. 08:00Z~09:00Z=1h span(한낮 UTC로 타임존 무관 같은 날짜).
+        // 2026-07-08 = 수요일. 10분 간격 3개(20분) + 160분 공백 + 10분 간격 2개(10분) → 몰입 0.5h.
         store.upsert_events(&[
-            turn_event("Windows", "p", "s1", "u1", "2026-07-08T08:00:00Z"),
-            turn_event("Windows", "p", "s1", "u2", "2026-07-08T09:00:00Z"),
+            turn_event("Windows", "p", "s1", "u1", "2026-07-08T02:00:00Z"),
+            turn_event("Windows", "p", "s1", "u2", "2026-07-08T02:10:00Z"),
+            turn_event("Windows", "p", "s1", "u3", "2026-07-08T02:20:00Z"),
+            turn_event("Windows", "p", "s1", "u4", "2026-07-08T05:00:00Z"), // 160분 공백 → 제외
+            turn_event("Windows", "p", "s1", "u5", "2026-07-08T05:10:00Z"),
         ]).unwrap();
         let brief = assemble_brief(&store, "Windows", "2026-07-08", &cfg).unwrap();
-        assert!(!brief.work_context.is_weekend);
+        assert!(!brief.work_context.is_weekend, "07-08은 수요일");
+        assert!((brief.work_context.active_hours - 0.5).abs() < 0.05, "긴 공백 제외 → 0.5h");
         assert!(!brief.work_context.long_work);
     }
 
@@ -975,8 +995,9 @@ mod tests {
         assert!(p.contains("상시 이슈"));         // 이미 다룬 상시 이슈 제외 언급
         assert!(p.contains("tool_usage"));        // 도구 텍스처 지시
         assert!(p.contains("work_context"));      // 근무 맥락
-        assert!(p.contains("위로"));              // 주말/공휴일/장시간 위로
-        assert!(p.contains("쉬엄쉬엄"));          // long_work 챙김
+        assert!(p.contains("위로"));              // 주말/장시간 위로
+        assert!(p.contains("일중독"));            // 주말 능청 예시(유머·주말 강화)
+        assert!(p.contains("똑같은 틀"));         // 단조로운 템플릿 금지
     }
 
     #[test]
