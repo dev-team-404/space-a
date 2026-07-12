@@ -10,7 +10,8 @@
 | 아이데이션 | ✅ 완료 (문제 정의 → 시장 조사 → 아키텍처 검토) |
 | 컴포넌트 경계 검토 | ✅ 완료 ([03 §1](03-architecture.md#1-컴포넌트-경계--가장-큰-함정-두-가지)) |
 | MCP 채택 결정 | ✅ 확정 (Agent Skills 비교 검토 후) |
-| C1/C2 계약 스키마 | 🔴 **미착수 — 최우선 과제** |
+| C1/C2 계약 스키마 | ✅ **확정 (v1)** — [05-contracts.md](05-contracts.md), [`/contracts/`](../../../contracts/) |
+| Pillar 3용 픽스처 | ✅ 전달 완료 |
 | 코드 | 🔴 없음 |
 
 **AX 경진대회 제출은 완료**되었고, 지금은 본 설계 단계다.
@@ -64,10 +65,14 @@
 
 이게 안 정해지면 **다른 두 팀원이 일을 시작할 수 없다.**
 
-- [ ] **C1: MCP Tool 시그니처 확정** — `search_knowledge`, `report_issue` 등 입출력 JSON 스키마
-- [ ] **C2: 시각화용 읽기 REST 스키마 확정** — Pillar 3에 **픽스처로 먼저 전달**
+- [x] **C1: MCP Tool 시그니처 확정** → [05-contracts.md](05-contracts.md) · [`/contracts/c1-mcp-tools.json`](../../../contracts/c1-mcp-tools.json)
+- [x] **C2: 시각화용 읽기 REST 스키마 확정** → [`/contracts/c2-rest-api.json`](../../../contracts/c2-rest-api.json)
+- [x] **Pillar 3용 픽스처 전달** → [`/contracts/fixtures/`](../../../contracts/fixtures/) — **서버 없이 프론트 작업 시작 가능**
+- [ ] Pillar 1 / Pillar 3 담당자 **리뷰** → 이견 없으면 ADR로 승격
 - [ ] **로컬 LLM 클러스터의 소유권 합의** — Pillar 2 밖의 공용 인프라로 둘 것 ([03 §1](03-architecture.md#1-컴포넌트-경계--가장-큰-함정-두-가지))
 - [ ] **레포 구성 결정** → 되돌리기 어려우므로 **ADR로 기록**
+
+> **계약이 확정되었으므로 ①단계는 끝났다.** 이제 세 컴포넌트가 병렬로 움직일 수 있다.
 
 ### 4.2 이후 — 어댑터 뒤에 숨어 있어 미뤄도 되는 것
 

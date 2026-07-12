@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Space A Hub — C1: MCP Tool Contract",
+  "version": "1.0.0",
+  "description": "Tools exposed by the Space A MCP server to employee agents (Pillar 1 and any MCP client). Change policy: additive only. Adding optional fields or enum values is allowed; removing/renaming fields or changing their meaning is not. Consumers MUST ignore unknown fields.",
+
+  "$defs": {
+    "visibility": {
+      "type": "string",
+      "enum": ["private", "team", "public"],
+      "default": "team",
+      "description": "Knowledge sharing scope. Omitting this yields 'team' — the safe default, so an agent that makes no judgment call cannot leak a secret org-wide. Agents may narrow to 'private' freely; widening to 'public' must be explicit."
+    },
+    "issueId": { "type": "string", "pattern": "^iss_[a-zA-Z0-9]+$" },
+    "skillId": { "type": "string", "pattern": "^skl_[a-zA-Z0-9]+$" },
+    "context": {
+      "type": "object",
+      "description": "Anchors for graph expansion. The richer this is, the fewer tokens the answer needs.",
+      "properties": {
+        "language": { "type": "string", "examples": ["typescript", "python"] },
+        "framework": { "type": "string", "examples": ["next.js", "fastapi"] },
+        "os": { "type": "string", "examples": ["windows", "wsl2", "macos"] },
+        "tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "MCP tools / CLIs in play, e.g. ['pnpm', 'docker']"
+        }
+      },
+      "additionalProperties": true
+    },
+    "solution": {
+      "type": "object",
+      "required": ["summary", "steps"],
+      "properties": {
+        "summary": { "type": "string", "description": "One line: what actually worked." },
+        "steps": { "type": "array", "items": { "type": "string" } },
+        "required_tools": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["error"],
+      "properties": {
+        "error": {
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": ["invalid_request", "not_found", "forbidden", "rate_limited"]
+            },
+            "message": { "type": "string" }
+          }
+        }
+      }
+    }
+  },
+
+  "tools": [
+    {
+      "name": "search_knowledge",
+      "description": "Search the org's agent knowledge for a similar past issue and its solution. Call this BEFORE trying to reason a fix from scratch. Returns a condensed solution payload, not raw logs.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The error message or problem statement. Raw text is fine."
+          },
+          "context": { "$ref": "#/$defs/context" },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 3,
+            "description": "Keep small. Every extra result is tokens spent."
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["results", "searched"],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["issue_id", "title", "confidence", "solution"],
+              "properties": {
+                "issue_id": { "$ref": "#/$defs/issueId" },
+                "title": { "type": "string" },
+                "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+                "solution": { "$ref": "#/$defs/solution" },
+                "tried_and_failed": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Dead ends a previous agent already walked. Do not repeat them."
+                },
+                "related": {
+                  "type": "object",
+                  "description": "Graph-expanded neighbours. This is what a vector-only search cannot give you.",
+                  "properties": {
+                    "tools": { "type": "array", "items": { "type": "string" } },
+                    "skills": { "type": "array", "items": { "$ref": "#/$defs/skillId" } }
+                  }
+                },
+                "reuse_count": {
+                  "type": "integer",
+                  "description": "How many times this solution has been reused successfully. Higher = more trustworthy."
+                },
+                "recorded_at": { "type": "string", "format": "date-time" }
+              }
+            }
+          },
+          "searched": {
+            "type": "object",
+            "description": "Retrieval funnel. Proves the token saving: many candidates considered, few returned.",
+            "required": ["vector_hits", "graph_expanded", "returned"],
+            "properties": {
+              "vector_hits": { "type": "integer" },
+              "graph_expanded": { "type": "integer" },
+              "returned": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+
+    {
+      "name": "report_issue",
+      "description": "Record an issue and its solution AFTER you have solved it. Single call — there is deliberately no separate 'open' step, because an agent that dies before resolving would leave an orphan record, and an unresolved record is not knowledge.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["issue", "solution"],
+        "properties": {
+          "issue": {
+            "type": "object",
+            "required": ["title", "context"],
+            "properties": {
+              "title": { "type": "string" },
+              "context": { "$ref": "#/$defs/context" },
+              "error_message": { "type": "string" },
+              "environment": { "type": "string" }
+            }
+          },
+          "tried_steps": {
+            "type": "array",
+            "description": "What you tried that did NOT work. As valuable as the solution — it saves the next agent the same dead ends.",
+            "items": {
+              "type": "object",
+              "required": ["step", "outcome"],
+              "properties": {
+                "step": { "type": "string" },
+                "outcome": { "type": "string", "enum": ["failed", "partial"] },
+                "note": { "type": "string" }
+              }
+            }
+          },
+          "solution": { "$ref": "#/$defs/solution" },
+          "visibility": { "$ref": "#/$defs/visibility" },
+          "source_issue_id": {
+            "$ref": "#/$defs/issueId",
+            "description": "If you solved this by reusing an existing entry, cite it. This is what makes reuse_count and the knowledge-flow graph possible."
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["issue_id", "status"],
+        "properties": {
+          "issue_id": { "$ref": "#/$defs/issueId" },
+          "status": {
+            "type": "string",
+            "enum": ["recorded", "merged"],
+            "description": "'merged' means the gatekeeper judged this a duplicate and folded it into an existing entry — the first line of defence against knowledge-base bloat."
+          },
+          "merged_into": { "$ref": "#/$defs/issueId" }
+        }
+      }
+    },
+
+    {
+      "name": "get_skill_candidates",
+      "description": "List repeated solution patterns that should be promoted into an automated Skill. A fix recorded 3+ times is a signal that a human should stop doing it by hand.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scope": { "type": "string", "enum": ["me", "team", "org"], "default": "team" },
+          "min_occurrences": { "type": "integer", "minimum": 2, "default": 3 }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["candidates"],
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["skill_id", "pattern", "occurrences", "status"],
+              "properties": {
+                "skill_id": { "$ref": "#/$defs/skillId" },
+                "pattern": { "type": "string" },
+                "occurrences": { "type": "integer" },
+                "issue_ids": { "type": "array", "items": { "$ref": "#/$defs/issueId" } },
+                "proposed_skill": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "steps": { "type": "array", "items": { "type": "string" } }
+                  }
+                },
+                "status": { "type": "string", "enum": ["proposed", "accepted", "rejected"] }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

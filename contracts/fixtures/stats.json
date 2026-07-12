@@ -1,0 +1,25 @@
+{
+  "period": { "from": "2026-07-01", "to": "2026-07-12" },
+  "totals": {
+    "issues": 143,
+    "solutions": 128,
+    "skills": 9,
+    "reuses": 61
+  },
+  "top_reused_skills": [
+    { "skill_id": "skl_cert", "name": "inject-corp-ca-cert", "reuse_count": 23 },
+    { "skill_id": "skl_dep_fix", "name": "fix-pnpm-peer-deps", "reuse_count": 17 },
+    { "skill_id": "skl_wsl_path", "name": "resolve-wsl-claude-path", "reuse_count": 8 }
+  ],
+  "top_issues": [
+    { "issue_id": "iss_d4e5f6", "title": "Docker 빌드에서 사내 인증서 검증 실패", "occurrences": 12 },
+    { "issue_id": "iss_a1b2c3", "title": "pnpm install 시 ERR_PNPM_PEER_DEP_ISSUES", "occurrences": 9 },
+    { "issue_id": "iss_g7h8i9", "title": "WSL2에서 .claude 경로를 못 찾음", "occurrences": 5 }
+  ],
+  "tokens_saved_est": 412000,
+  "by_team": [
+    { "team": "platform", "contributed": 52, "reused": 31 },
+    { "team": "product", "contributed": 18, "reused": 44 },
+    { "team": "data", "contributed": 33, "reused": 12 }
+  ]
+}
