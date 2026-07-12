@@ -18,6 +18,15 @@ pub struct BriefTotals {
     pub session_count: u64,
 }
 
+/// 그날 (host,date) 도구 사용 집계 — 일기의 "그날 리듬" 소재.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct ToolUsage {
+    pub total_calls: u64,
+    pub by_kind: Vec<(String, u64)>, // 0 아닌 kind만, count 내림차순
+    pub skills: Vec<String>,         // distinct 스킬 타깃, 최대 8
+    pub mcp_servers: Vec<String>,    // distinct MCP 서버, 최대 8
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct BriefFinding {
     pub rule_id: String,
@@ -45,6 +54,7 @@ pub struct Brief {
     pub findings: Vec<BriefFinding>,
     pub occasions: Vec<Occasion>,
     pub recent_diaries: Vec<RecentDiary>,
+    pub tool_usage: ToolUsage,
 }
 
 /// rule_id + evidence에서 사람이 읽는 근거(detail)와 개선방향(suggested_action)을 결정론적으로 생성.
@@ -256,6 +266,8 @@ pub fn assemble_brief(
         None => Vec::new(),
     };
 
+    let tool_usage = collect_tool_usage(store, host, date);
+
     Ok(Brief {
         date: date.to_string(),
         host: host.to_string(),
@@ -263,6 +275,7 @@ pub fn assemble_brief(
         findings,
         occasions,
         recent_diaries,
+        tool_usage,
     })
 }
 
@@ -293,6 +306,47 @@ fn cap_chars(s: &str, max: usize) -> String {
     match s.char_indices().nth(max) {
         Some((idx, _)) => s[..idx].to_string(),
         None => s.to_string(),
+    }
+}
+
+/// 그날 (host,date)의 도구 호출을 집계한다. tool_kind별 카운트 + distinct 스킬/서버.
+/// 실패(쿼리 오류)는 빈 집계로 처리 — 브리프 조립을 막지 않는다.
+fn collect_tool_usage(store: &SqliteStore, host: &str, date: &str) -> ToolUsage {
+    let by_kind: Vec<(String, u64)> = store
+        .conn
+        .prepare(
+            "SELECT tool_kind, COUNT(*) FROM events
+             WHERE host=?1 AND date(ts,'localtime')=?2 AND tool_kind IS NOT NULL AND tool_kind <> ''
+             GROUP BY tool_kind ORDER BY COUNT(*) DESC, tool_kind",
+        )
+        .and_then(|mut s| {
+            let rows = s.query_map(params![host, date], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
+            })?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()
+        })
+        .unwrap_or_default();
+    let total_calls: u64 = by_kind.iter().map(|(_, n)| *n).sum();
+
+    let distinct = |col: &str, kind: &str| -> Vec<String> {
+        store
+            .conn
+            .prepare(&format!(
+                "SELECT {col} FROM events
+                 WHERE host=?1 AND date(ts,'localtime')=?2 AND tool_kind=?3 AND {col} IS NOT NULL
+                 GROUP BY {col} ORDER BY COUNT(*) DESC, {col} LIMIT 8"
+            ))
+            .and_then(|mut s| {
+                let rows = s.query_map(params![host, date, kind], |r| r.get::<_, String>(0))?;
+                rows.collect::<rusqlite::Result<Vec<_>>>()
+            })
+            .unwrap_or_default()
+    };
+    ToolUsage {
+        total_calls,
+        by_kind,
+        skills: distinct("tool_target", "skill"),
+        mcp_servers: distinct("tool_server", "mcp_call"),
     }
 }
 
@@ -497,6 +551,7 @@ mod tests {
             findings: vec![],
             occasions: vec![],
             recent_diaries: vec![],
+            tool_usage: ToolUsage::default(),
         };
         let tmp = tempfile::tempdir().unwrap();
         let cfg = DiaryConfig {
@@ -576,6 +631,51 @@ mod tests {
                 usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
             },
         }
+    }
+
+    /// 특정 host/session/ts의 도구 호출 이벤트(tool_kind/서버/타깃 적재용).
+    /// off는 고유 source_offset — events dedup_key(uuid 없을 때 source_file:offset)가 겹치지 않게.
+    fn tool_event(host: &str, session: &str, ts: &str, off: usize, kind: ToolKind, raw: &str, target: Option<&str>) -> NormalizedEvent {
+        NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: host.into(), project_id: "p".into(),
+            session_id: session.into(), uuid: None, parent_uuid: None,
+            is_sidechain: false, ts: Some(ts.into()),
+            source_file: "s.jsonl".into(), source_offset: off as u64,
+            kind: EventKind::ToolCall {
+                kind, raw_name: raw.into(),
+                target: target.map(|s| s.to_string()), tool_use_id: None,
+            },
+        }
+    }
+
+    #[test]
+    fn assemble_brief_collects_tool_usage() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        // 07-10: 스킬 2종(brainstorming×2, writing-plans×1), 파일읽기×3, MCP(context7)×1
+        store.upsert_events(&[
+            tool_event("Windows", "s1", "2026-07-10T10:00:00Z", 0, ToolKind::Skill { name: "brainstorming".into() }, "Skill", Some("superpowers:brainstorming")),
+            tool_event("Windows", "s1", "2026-07-10T10:01:00Z", 1, ToolKind::Skill { name: "brainstorming".into() }, "Skill", Some("superpowers:brainstorming")),
+            tool_event("Windows", "s1", "2026-07-10T10:02:00Z", 2, ToolKind::Skill { name: "writing-plans".into() }, "Skill", Some("superpowers:writing-plans")),
+            tool_event("Windows", "s1", "2026-07-10T10:03:00Z", 3, ToolKind::FileRead, "Read", Some("a.rs")),
+            tool_event("Windows", "s1", "2026-07-10T10:04:00Z", 4, ToolKind::FileRead, "Read", Some("b.rs")),
+            tool_event("Windows", "s1", "2026-07-10T10:05:00Z", 5, ToolKind::FileRead, "Read", Some("c.rs")),
+            tool_event("Windows", "s1", "2026-07-10T10:06:00Z", 6, ToolKind::McpCall { server: "context7".into(), tool: "query".into() }, "mcp__context7__query", None),
+        ]).unwrap();
+
+        let brief = assemble_brief(&store, "Windows", "2026-07-10", &cfg).unwrap();
+        let tu = &brief.tool_usage;
+        assert_eq!(tu.total_calls, 7);
+        // by_kind는 count 내림차순 — skill(3)·file_read(3)·mcp_call(1)
+        assert_eq!(tu.by_kind.iter().find(|(k, _)| k.as_str() == "skill").unwrap().1, 3);
+        assert_eq!(tu.by_kind.iter().find(|(k, _)| k.as_str() == "file_read").unwrap().1, 3);
+        assert_eq!(tu.by_kind.iter().find(|(k, _)| k.as_str() == "mcp_call").unwrap().1, 1);
+        // distinct 스킬 2종·MCP 서버 1종
+        assert_eq!(tu.skills.len(), 2);
+        assert!(tu.skills.contains(&"superpowers:brainstorming".to_string()));
+        assert_eq!(tu.mcp_servers, vec!["context7".to_string()]);
     }
 
     #[test]
