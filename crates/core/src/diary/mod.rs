@@ -27,6 +27,7 @@ pub struct BriefFinding {
     pub prescription: Option<serde_json::Value>,
     pub detail: String,
     pub suggested_action: String,
+    pub recently_covered: bool,
 }
 
 /// 직전 며칠간 내가 쓴 일기의 발췌 — LLM이 어제와 다른 이야기를 쓰도록 브리프에 싣는 컨텍스트.
@@ -209,11 +210,29 @@ pub fn assemble_brief(
         },
     )?;
 
+    let locale = resolve_locale(cfg);
+    let today = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok();
+
+    // 직전 며칠 일기(서사 반복 방지) — 먼저 계산해야 recently_covered 판정에 쓸 수 있다.
+    // 로컬 vault 파일만 읽으므로 프라이버시 경계 불변.
+    let recent_diaries = match today {
+        Some(d) => collect_recent_diaries(store, host, d),
+        None => Vec::new(),
+    };
+    // 최근 일기가 있던 날들의 finding dedup_key 집합 — 오늘 finding이 여기 있으면 "이미 다룬 상시 이슈".
+    let recent_keys: std::collections::HashSet<String> = recent_diaries
+        .iter()
+        .filter_map(|rd| store.findings_for_date(host, &rd.date).ok())
+        .flatten()
+        .map(|f| f.dedup_key)
+        .collect();
+
     let findings = store
         .findings_for_date(host, date)?
         .into_iter()
         .map(|f| {
             let (detail, suggested_action) = finding_advice(&f.rule_id, &f.evidence, f.est_tokens_saved);
+            let recently_covered = recent_keys.contains(&f.dedup_key);
             BriefFinding {
                 rule_id: f.rule_id,
                 severity: f.severity.as_str().to_string(),
@@ -224,23 +243,16 @@ pub fn assemble_brief(
                 })),
                 detail,
                 suggested_action,
+                recently_covered,
             }
         })
         .collect();
 
-    let locale = resolve_locale(cfg);
-    let today = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok();
     let anchor = store
         .earliest_session_ts()?
         .and_then(|ts| local_date_of(&ts));
     let occasions = match today {
         Some(d) => compute_occasions(d, anchor, &locale, cfg.include_dev_days),
-        None => Vec::new(),
-    };
-
-    // 직전 며칠 일기를 브리프에 실어 서사 반복을 막는다 — 로컬 vault 파일만 읽으므로 프라이버시 경계 불변.
-    let recent_diaries = match today {
-        Some(d) => collect_recent_diaries(store, host, d),
         None => Vec::new(),
     };
 
@@ -549,6 +561,63 @@ mod tests {
             engine_name: "mock".into(),
         };
         persist_diary(store, date, "Windows", &rendered, cfg).unwrap();
+    }
+
+    /// 특정 host/project/session/ts의 assistant turn 이벤트 하나(sessions.first_ts/last_ts·rollup 채움용).
+    fn turn_event(host: &str, project: &str, session: &str, uuid: &str, ts: &str) -> NormalizedEvent {
+        NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: host.into(), project_id: project.into(),
+            session_id: session.into(), uuid: Some(uuid.into()), parent_uuid: None,
+            is_sidechain: false, ts: Some(ts.into()),
+            source_file: "s.jsonl".into(), source_offset: 0,
+            kind: EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-opus-4-8"),
+                usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
+            },
+        }
+    }
+
+    #[test]
+    fn assemble_brief_marks_recently_covered_findings() {
+        use crate::finding::{Finding, Severity};
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+
+        // 07-09·07-10 각각 세션(host 스코프 finding이 두 날 모두 활성이 되도록 별개 세션)
+        store.upsert_events(&[
+            turn_event("Windows", "p", "s1", "u1", "2026-07-09T10:00:00Z"),
+            turn_event("Windows", "p", "s2", "u2", "2026-07-10T10:00:00Z"),
+        ]).unwrap();
+        store.rebuild_rollup().unwrap();
+
+        // 상시(host) finding — 두 날 모두 브리프에 포함됨
+        store.upsert_finding(&Finding {
+            rule_id: "R1".into(), severity: Severity::Warn,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "host".into(), scope_ref: "Windows".into(),
+            evidence: serde_json::json!({"server":"context7"}),
+            est_tokens_saved: 2500, prescription: None,
+            dedup_key: "R1|Windows|Windows|context7".into(),
+        }, "2026-07-09T10:00:00Z").unwrap();
+        // 오늘(s2)만의 세션 스코프 finding — 어제 일기엔 없던 새것
+        store.upsert_finding(&Finding {
+            rule_id: "R9".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: Some("p".into()),
+            scope_kind: "session".into(), scope_ref: "s2".into(),
+            evidence: serde_json::json!({"web_search":20,"web_fetch":0,"total_requests":20}),
+            est_tokens_saved: 40000, prescription: None, dedup_key: "R9|s2".into(),
+        }, "2026-07-10T10:00:00Z").unwrap();
+
+        // 어제(07-09) 일기 존재 → recent_diaries에 포함 → 그날 finding(R1)이 "이미 다룸"
+        seed_diary(&store, &cfg, "2026-07-09", "어제도 context7 얘기");
+
+        let brief = assemble_brief(&store, "Windows", "2026-07-10", &cfg).unwrap();
+        let r1 = brief.findings.iter().find(|f| f.rule_id == "R1").unwrap();
+        let r9 = brief.findings.iter().find(|f| f.rule_id == "R9").unwrap();
+        assert!(r1.recently_covered, "어제 일기 날짜에도 있던 상시 finding → true");
+        assert!(!r9.recently_covered, "오늘만의 새 finding → false");
     }
 
     #[test]
