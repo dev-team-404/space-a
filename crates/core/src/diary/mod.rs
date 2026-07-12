@@ -5,7 +5,7 @@ use crate::diary::engine::Engine;
 use crate::diary::occasions::{compute_occasions, Occasion};
 use crate::store::SqliteStore;
 use anyhow::Result;
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use rusqlite::params;
 use serde::Serialize;
 use std::path::PathBuf;
@@ -26,6 +26,16 @@ pub struct ToolUsage {
     pub skills: Vec<String>,         // distinct 스킬 타깃, 최대 8
     pub mcp_servers: Vec<String>,    // distinct MCP 서버, 최대 8
 }
+
+/// 근무 맥락 — 위로/응원 트리거 신호.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct WorkContext {
+    pub is_weekend: bool,
+    pub active_hours: f64, // Σ 세션 지속시간(시간, 소수 1자리)
+    pub long_work: bool,   // active_hours >= LONG_WORK_HOURS
+}
+
+const LONG_WORK_HOURS: f64 = 5.0;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BriefFinding {
@@ -55,6 +65,7 @@ pub struct Brief {
     pub occasions: Vec<Occasion>,
     pub recent_diaries: Vec<RecentDiary>,
     pub tool_usage: ToolUsage,
+    pub work_context: WorkContext,
 }
 
 /// rule_id + evidence에서 사람이 읽는 근거(detail)와 개선방향(suggested_action)을 결정론적으로 생성.
@@ -267,6 +278,10 @@ pub fn assemble_brief(
     };
 
     let tool_usage = collect_tool_usage(store, host, date);
+    let work_context = match today {
+        Some(d) => collect_work_context(store, host, date, d),
+        None => WorkContext::default(),
+    };
 
     Ok(Brief {
         date: date.to_string(),
@@ -276,6 +291,7 @@ pub fn assemble_brief(
         occasions,
         recent_diaries,
         tool_usage,
+        work_context,
     })
 }
 
@@ -347,6 +363,25 @@ fn collect_tool_usage(store: &SqliteStore, host: &str, date: &str) -> ToolUsage 
         by_kind,
         skills: distinct("tool_target", "skill"),
         mcp_servers: distinct("tool_server", "mcp_call"),
+    }
+}
+
+/// 근무 맥락: 요일(주말)과 그날 세션 지속시간 합. 지속시간은 세션 first_ts 날짜 기준 버킷.
+fn collect_work_context(store: &SqliteStore, host: &str, date: &str, today: NaiveDate) -> WorkContext {
+    let hours: f64 = store
+        .conn
+        .query_row(
+            "SELECT COALESCE(SUM((julianday(last_ts)-julianday(first_ts))*24.0), 0.0)
+             FROM sessions WHERE host=?1 AND date(first_ts,'localtime')=?2",
+            params![host, date],
+            |r| r.get::<_, f64>(0),
+        )
+        .unwrap_or(0.0);
+    let active_hours = (hours * 10.0).round() / 10.0; // 소수 1자리
+    WorkContext {
+        is_weekend: matches!(today.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun),
+        active_hours,
+        long_work: active_hours >= LONG_WORK_HOURS,
     }
 }
 
@@ -552,6 +587,7 @@ mod tests {
             occasions: vec![],
             recent_diaries: vec![],
             tool_usage: ToolUsage::default(),
+            work_context: WorkContext::default(),
         };
         let tmp = tempfile::tempdir().unwrap();
         let cfg = DiaryConfig {
@@ -676,6 +712,37 @@ mod tests {
         assert_eq!(tu.skills.len(), 2);
         assert!(tu.skills.contains(&"superpowers:brainstorming".to_string()));
         assert_eq!(tu.mcp_servers, vec!["context7".to_string()]);
+    }
+
+    #[test]
+    fn assemble_brief_work_context_weekend_and_long_work() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        // 2026-07-11 = 토요일. 한 세션이 10:00~15:30 (5.5h)
+        store.upsert_events(&[
+            turn_event("Windows", "p", "s1", "u1", "2026-07-11T10:00:00Z"),
+            turn_event("Windows", "p", "s1", "u2", "2026-07-11T15:30:00Z"),
+        ]).unwrap();
+        let brief = assemble_brief(&store, "Windows", "2026-07-11", &cfg).unwrap();
+        assert!(brief.work_context.is_weekend, "07-11은 토요일");
+        assert!((brief.work_context.active_hours - 5.5).abs() < 0.01);
+        assert!(brief.work_context.long_work, "5.5h >= 5.0 임계");
+    }
+
+    #[test]
+    fn assemble_brief_work_context_weekday_short() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        // 2026-07-08 = 수요일. 한 세션 10:00~11:00 (1h)
+        store.upsert_events(&[
+            turn_event("Windows", "p", "s1", "u1", "2026-07-08T10:00:00Z"),
+            turn_event("Windows", "p", "s1", "u2", "2026-07-08T11:00:00Z"),
+        ]).unwrap();
+        let brief = assemble_brief(&store, "Windows", "2026-07-08", &cfg).unwrap();
+        assert!(!brief.work_context.is_weekend);
+        assert!(!brief.work_context.long_work);
     }
 
     #[test]
