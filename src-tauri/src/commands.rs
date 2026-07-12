@@ -121,6 +121,26 @@ pub struct ModelMixEntry {
     pub tokens: u64,
 }
 
+/// period("today"|"week"|"month"|"all") → (from, to) 로컬 날짜 범위(양끝 포함).
+/// week/month는 오늘 포함 rolling 7/30일, all은 하한 없음. 알 수 없는 값은 today 취급.
+fn period_range(period: &str, today: chrono::NaiveDate) -> (Option<String>, String) {
+    let d = |n: i64| (today - chrono::Duration::days(n)).format("%Y-%m-%d").to_string();
+    let to = d(0);
+    let from = match period {
+        "week" => Some(d(6)),
+        "month" => Some(d(29)),
+        "all" => None,
+        _ => Some(to.clone()),
+    };
+    (from, to)
+}
+
+pub fn model_mix_inner(store: &SqliteStore, period: &str) -> anyhow::Result<Vec<ModelMixEntry>> {
+    let (from, to) = period_range(period, chrono::Local::now().date_naive());
+    Ok(store.model_mix_for_range(from.as_deref(), &to)?
+        .into_iter().map(|(tier, tokens)| ModelMixEntry { tier, tokens }).collect())
+}
+
 pub(crate) fn valid_finding_status(s: &str) -> bool {
     matches!(s, "new" | "resolved" | "dismissed")
 }
@@ -244,11 +264,9 @@ pub fn get_week_summary(state: State<AppState>) -> Result<Vec<DayStat>, String> 
 }
 
 #[tauri::command(async)]
-pub fn get_model_mix(state: State<AppState>) -> Result<Vec<ModelMixEntry>, String> {
+pub fn get_model_mix(state: State<AppState>, period: Option<String>) -> Result<Vec<ModelMixEntry>, String> {
     let guard = lock(&state)?;
-    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
-    Ok(guard.model_mix_for_date(&date).map_err(|e| e.to_string())?
-        .into_iter().map(|(tier, tokens)| ModelMixEntry { tier, tokens }).collect())
+    model_mix_inner(&*guard, period.as_deref().unwrap_or("today")).map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]
@@ -457,6 +475,39 @@ mod tests {
         assert!(days[0].date < days[6].date);
         assert_eq!(days[6].date, chrono::Local::now().format("%Y-%m-%d").to_string());
         assert_eq!(days[0].session_count, 0); // 빈 store는 0 채움
+    }
+
+    #[test]
+    fn period_range_maps_periods() {
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 7, 12).unwrap();
+        assert_eq!(period_range("today", today), (Some("2026-07-12".into()), "2026-07-12".into()));
+        assert_eq!(period_range("week", today), (Some("2026-07-06".into()), "2026-07-12".into()));
+        assert_eq!(period_range("month", today), (Some("2026-06-13".into()), "2026-07-12".into()));
+        assert_eq!(period_range("all", today), (None, "2026-07-12".into()));
+        // 알 수 없는 값은 today 취급
+        assert_eq!(period_range("yolo", today), period_range("today", today));
+    }
+
+    #[test]
+    fn model_mix_inner_today_vs_all() {
+        use agent_mentor::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_events(&[NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "1".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+            uuid: Some("u1".into()), parent_uuid: None, is_sidechain: false,
+            ts: Some("2020-01-01T10:00:00Z".into()), // 확실한 과거 — today엔 안 걸린다
+            source_file: "f.jsonl".into(), source_offset: 0,
+            kind: EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-opus-4-8"),
+                usage: TokenUsage { input: 5, output: 5, ..Default::default() },
+                web_search: 0, web_fetch: 0,
+            },
+        }]).unwrap();
+        let all = model_mix_inner(&store, "all").unwrap();
+        assert_eq!(all[0].tier, "claude-opus-4-8");
+        assert_eq!(all[0].tokens, 10);
+        assert!(model_mix_inner(&store, "today").unwrap().is_empty());
     }
 
     #[test]

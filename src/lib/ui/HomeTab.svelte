@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
-    getModelMix, getWeekSummary, listFindings, onScanDone, onScanProgress, runScanNow,
-    type CoachFinding, type DayStat, type ModelMixEntry, type ScanProgress, type Summary,
+    getWeekSummary, listFindings, onScanDone, onScanProgress, runScanNow,
+    type CoachFinding, type DayStat, type ScanProgress, type Summary,
   } from '../api';
   import { loadNotices, type Notice } from '../notices';
   import WeekTrend from './home/WeekTrend.svelte';
@@ -16,15 +16,13 @@
   let scanning = $state(false);
   let progress = $state<ScanProgress | null>(null);
   let days = $state<DayStat[]>([]);
-  let mix = $state<ModelMixEntry[]>([]);
   let findings = $state<CoachFinding[]>([]);
   let notices = $state<Notice[]>([]);
   const topAdvice = $derived(findings.length > 0 ? findings[0].suggested_action : null);
 
   async function load() {
-    [days, mix, findings] = await Promise.all([
+    [days, findings] = await Promise.all([
       getWeekSummary().catch(() => [] as DayStat[]),
-      getModelMix().catch(() => [] as ModelMixEntry[]),
       listFindings(false).catch(() => [] as CoachFinding[]),
     ]);
     notices = loadNotices();
@@ -59,7 +57,7 @@
 
   <div class="grid">
     <WeekTrend {days} />
-    <ModelMix {mix} />
+    <ModelMix />
     <SaveTop3 {findings} onGoto={onGotoCoach} />
     <NoticeLog {notices} />
   </div>

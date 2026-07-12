@@ -59,6 +59,8 @@ export interface ModelMixEntry {
   tokens: number;
 }
 
+export type ModelMixPeriod = 'today' | 'week' | 'month' | 'all';
+
 export interface SessionCtxItem {
   session_id: string;
   project_id: string;
@@ -83,7 +85,8 @@ export const listFindings = (includeHidden = false) =>
 export const setFindingStatus = (dedupKey: string, status: 'new' | 'resolved' | 'dismissed') =>
   invoke<void>('set_finding_status', { dedupKey, status });
 export const getWeekSummary = () => invoke<DayStat[]>('get_week_summary');
-export const getModelMix = () => invoke<ModelMixEntry[]>('get_model_mix');
+export const getModelMix = (period: ModelMixPeriod = 'today') =>
+  invoke<ModelMixEntry[]>('get_model_mix', { period });
 export const getTodayOccasions = () => invoke<string[]>('get_today_occasions');
 export const getSessionTranscript = (sessionId: string) =>
   invoke<TranscriptEntry[]>('get_session_transcript', { sessionId });
