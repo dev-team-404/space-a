@@ -33,6 +33,7 @@ MCP 서버로 구현한다. (담당: msalt)
 | [03-architecture.md](03-architecture.md) | 컴포넌트 경계·외부 계약(C1~C3)·포트/어댑터 구조·공용 GPU 클러스터 | "어떻게 짤 것이고, 남의 작업과 어떻게 분리되나" |
 | [04-roadmap.md](04-roadmap.md) | 구현 순서·데모 시나리오·미결정 사항·리스크 | "무엇부터 하고, 아직 안 정해진 건 뭔가" |
 | **[05-contracts.md](05-contracts.md)** | **C1(MCP Tools)·C2(읽기 REST) 확정 계약** | **"다른 Pillar는 나를 어떻게 호출하나"** |
+| **[06-governance.md](06-governance.md)** | **운영 정책 — 매니저 에이전트·방 생애주기·토큰 예산·지식 신뢰도** | **"누가 이 공간을 관리하나"** |
 
 ## 핵심 결정 3줄 요약
 
