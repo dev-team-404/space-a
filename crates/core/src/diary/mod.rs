@@ -38,6 +38,15 @@ pub struct WorkContext {
 const LONG_WORK_HOURS: f64 = 7.0;  // 몰입 시간 기준 — 이 이상이면 "유난히 긴 날"(매일 아님)
 const IDLE_GAP_SECS: f64 = 1800.0; // 30분 이상 공백은 휴식으로 보고 몰입 시간에서 제외
 
+/// 그날 실제로 한 작업 — "열심히 달렸다"가 아니라 무슨 작업이었는지 일기에 담을 재료.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct WorkLog {
+    pub commits: Vec<String>, // 그날 활동 repo의 git 커밋 제목(정제·최대 WORK_LOG_CAP)
+    pub topics: Vec<String>,  // 폴백/보조: 브랜치명·정제된 첫 프롬프트(여러 갈래=멀티태스킹 신호)
+}
+
+const WORK_LOG_CAP: usize = 8;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct BriefFinding {
     pub rule_id: String,
@@ -66,6 +75,7 @@ pub struct Brief {
     pub recent_diaries: Vec<RecentDiary>,
     pub tool_usage: ToolUsage,
     pub work_context: WorkContext,
+    pub work_log: WorkLog,
 }
 
 /// rule_id + evidence에서 사람이 읽는 근거(detail)와 개선방향(suggested_action)을 결정론적으로 생성.
@@ -283,6 +293,7 @@ pub fn assemble_brief(
         Some(d) => collect_work_context(store, host, date, d),
         None => WorkContext::default(),
     };
+    let work_log = collect_work_log(store, host, date);
 
     Ok(Brief {
         date: date.to_string(),
@@ -293,6 +304,7 @@ pub fn assemble_brief(
         recent_diaries,
         tool_usage,
         work_context,
+        work_log,
     })
 }
 
@@ -392,6 +404,95 @@ fn collect_work_context(store: &SqliteStore, host: &str, date: &str, today: Naiv
         active_hours,
         long_work: active_hours >= LONG_WORK_HOURS,
     }
+}
+
+/// 첫 프롬프트에서 명령 에코·시스템 마커 등 노이즈를 걸러 사람이 읽는 작업 설명만 남긴다.
+/// 노이즈면 None(예: `<task-notification>`, `<local-command-stdout>…`, 모델 전환 에코).
+fn clean_prompt(s: &str) -> Option<String> {
+    let t = s.trim();
+    if t.is_empty() || t.starts_with('<') || t.starts_with('[') {
+        return None;
+    }
+    if t.contains("Set model to") || t.contains("local-command") || t.contains("task-notification") {
+        return None;
+    }
+    Some(cap_chars(t, 60))
+}
+
+/// 그날(로컬 날짜) 해당 repo(cwd)에서 그 repo의 커밋 작성자가 남긴 커밋 제목들. best-effort — 실패는 빈 벡터.
+fn git_commits_for(cwd: &str, date: &str) -> Vec<String> {
+    use std::process::Command;
+    let Some(next) = NaiveDate::parse_from_str(date, "%Y-%m-%d")
+        .ok()
+        .and_then(|d| d.succ_opt())
+        .map(|d| d.format("%Y-%m-%d").to_string())
+    else {
+        return Vec::new();
+    };
+    // 다중 개발자 repo에서 남의 커밋 혼입 방지 — 해당 repo에 설정된 작성자 이메일로 필터.
+    let email = Command::new("git")
+        .args(["-C", cwd, "config", "user.email"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default();
+    let mut args: Vec<String> = vec![
+        "-C".into(), cwd.into(), "log".into(), "--no-merges".into(), "--format=%s".into(),
+        format!("--since={date} 00:00:00"), format!("--until={next} 00:00:00"),
+    ];
+    if !email.is_empty() {
+        args.push(format!("--author={email}"));
+    }
+    match Command::new("git").args(&args).output() {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// 그날 실제 한 작업 — 활동 repo의 git 커밋 제목(우선) + 세션 갈래(브랜치·정제 첫 프롬프트, 폴백/보조).
+fn collect_work_log(store: &SqliteStore, host: &str, date: &str) -> WorkLog {
+    let rows: Vec<(Option<String>, Option<String>, Option<String>)> = store
+        .conn
+        .prepare(
+            "SELECT DISTINCT cwd, git_branch, first_prompt_preview FROM sessions
+             WHERE host=?1 AND date(first_ts,'localtime')=?2",
+        )
+        .and_then(|mut s| {
+            let r = s.query_map(params![host, date], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+            r.collect::<rusqlite::Result<Vec<_>>>()
+        })
+        .unwrap_or_default();
+
+    // 커밋: 그날 활동한 distinct repo(cwd)에서
+    let mut cwds: Vec<String> = rows.iter().filter_map(|(c, _, _)| c.clone()).collect();
+    cwds.sort();
+    cwds.dedup();
+    let mut commits: Vec<String> = cwds.iter().flat_map(|c| git_commits_for(c, date)).collect();
+    commits.dedup();
+    commits.truncate(WORK_LOG_CAP);
+
+    // 토픽: 브랜치(main/master/HEAD 제외) + 정제된 첫 프롬프트 — 여러 갈래면 멀티태스킹 신호
+    let mut topics: Vec<String> = Vec::new();
+    for (_, br, fp) in &rows {
+        if let Some(b) = br {
+            if !matches!(b.as_str(), "main" | "master" | "HEAD" | "") {
+                topics.push(b.clone());
+            }
+        }
+        if let Some(p) = fp.as_deref().and_then(clean_prompt) {
+            topics.push(p);
+        }
+    }
+    topics.sort();
+    topics.dedup();
+    topics.truncate(WORK_LOG_CAP);
+
+    WorkLog { commits, topics }
 }
 
 #[derive(Debug, Clone)]
@@ -504,8 +605,14 @@ pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
          평범한 날은 굳이 위로하지 말고 그날의 한 장면으로 담백하게 끝내세요. \
          공휴일도 마찬가지 — 단 발렌타인·파이데이 같은 재미 기념일은 '위로' 대상이 아니니 상식으로 가려서. \
          \
-         형식: 일기는 짧게 — 2~3문단, 전체 350자 이내로 쓰세요. \
-         그날의 핵심 한두 가지만 골라 쓰고 나머지 사실은 과감히 버리세요. \
+         브리프의 `work_log`는 그날 실제로 한 작업입니다 — `commits`(git 커밋 제목)가 있으면 그걸로 \
+         '오늘은 무엇무엇을 했다'를 구체적으로 적고, 없으면 `topics`(작업 갈래)로 적으세요. \
+         갈래가 여럿이면 '여러 작업을 동시에 오갔다'는 분주함도 살리세요. \
+         '열심히 달렸다' 같은 뭉뚱그림 대신 구체적인 작업으로 그날을 남기세요. \
+         \
+         형식: 일기는 2~4문단, 전체 500자 안팎으로 쓰세요 \
+         (작업 내용을 담느라 한 문단 늘어도 좋지만 여전히 간결하게). \
+         그날의 핵심을 골라 쓰고 덜 중요한 사실은 과감히 버리세요. \
          이모지는 문단마다 1~2개, 감정이 실리는 자연스러운 자리에 넣되 같은 이모지를 반복하지 마세요.",
         honorific = cfg.honorific,
         tone = cfg.tone,
@@ -614,6 +721,7 @@ mod tests {
             recent_diaries: vec![],
             tool_usage: ToolUsage::default(),
             work_context: WorkContext::default(),
+            work_log: WorkLog::default(),
         };
         let tmp = tempfile::tempdir().unwrap();
         let cfg = DiaryConfig {
@@ -777,6 +885,61 @@ mod tests {
         assert!(!brief.work_context.is_weekend, "07-08은 수요일");
         assert!((brief.work_context.active_hours - 0.5).abs() < 0.05, "긴 공백 제외 → 0.5h");
         assert!(!brief.work_context.long_work);
+    }
+
+    #[test]
+    fn clean_prompt_filters_noise() {
+        assert_eq!(super::clean_prompt("<task-notification>"), None);
+        assert_eq!(super::clean_prompt("<local-command-stdout>Set model to X"), None);
+        assert_eq!(super::clean_prompt("  Set model to Fable 5  "), None);
+        assert_eq!(super::clean_prompt(""), None);
+        assert_eq!(super::clean_prompt("코칭 v2.1 PR② 구현").as_deref(), Some("코칭 v2.1 PR② 구현"));
+    }
+
+    #[test]
+    fn collect_work_log_falls_back_to_branch_and_prompt() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let seed = |sid: &str, ts: &str, br: &str, fp: &str| {
+            store.conn.execute(
+                "INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, git_branch, cwd, first_prompt_preview)
+                 VALUES (?1,'Windows','p','claude-code',?2,?2,?3,NULL,?4)",
+                rusqlite::params![sid, ts, br, fp],
+            ).unwrap();
+        };
+        // cwd 없는(=git 불가) 세션 둘 — 서로 다른 브랜치·프롬프트(멀티태스킹), 하나는 노이즈 프롬프트
+        seed("s1", "2026-07-08T02:00:00Z", "feat/mascot-daily-line", "마스코트 한마디 구현");
+        seed("s2", "2026-07-08T03:00:00Z", "main", "<task-notification>");
+
+        let wl = super::collect_work_log(&store, "Windows", "2026-07-08");
+        assert!(wl.commits.is_empty(), "cwd 없어 git 커밋 없음");
+        assert!(wl.topics.contains(&"feat/mascot-daily-line".to_string()), "서술적 브랜치 포함");
+        assert!(wl.topics.contains(&"마스코트 한마디 구현".to_string()), "정제된 프롬프트 포함");
+        assert!(!wl.topics.contains(&"main".to_string()), "main 브랜치 제외");
+        assert!(!wl.topics.iter().any(|t| t.contains("task-notification")), "노이즈 프롬프트 제외");
+    }
+
+    #[test]
+    fn git_commits_for_reads_dated_authored_subjects() {
+        use std::process::Command;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+        let run = |args: &[&str]| {
+            Command::new("git").args(["-C", dir]).args(args)
+                .env("GIT_AUTHOR_DATE", "2026-07-08T12:00:00")
+                .env("GIT_COMMITTER_DATE", "2026-07-08T12:00:00")
+                .output().unwrap()
+        };
+        Command::new("git").args(["init", "-q", dir]).output().unwrap();
+        run(&["config", "user.email", "t@example.com"]);
+        run(&["config", "user.name", "t"]);
+        run(&["commit", "--allow-empty", "-q", "-m", "feat: work_log 다이어리 반영"]);
+
+        let subs = super::git_commits_for(dir, "2026-07-08");
+        assert!(subs.iter().any(|s| s.contains("work_log 다이어리 반영")), "그날 커밋 제목: {subs:?}");
+        assert!(super::git_commits_for(dir, "2026-07-09").is_empty(), "다른 날짜엔 없음");
+        // git repo 아닌 경로 → 빈 벡터(패닉 없음)
+        let nogit = tempfile::tempdir().unwrap();
+        assert!(super::git_commits_for(nogit.path().to_str().unwrap(), "2026-07-08").is_empty());
     }
 
     #[test]
@@ -982,8 +1145,8 @@ mod tests {
     #[test]
     fn system_prompt_directs_short_length_and_moderate_emoji() {
         let p = build_system_prompt(&DiaryConfig::default());
-        assert!(p.contains("2~3문단"));   // 길이 상한(문단)
-        assert!(p.contains("350자"));     // 길이 상한(글자)
+        assert!(p.contains("2~4문단"));   // 길이 상한(문단, 작업 내용용 한 문단 허용)
+        assert!(p.contains("500자"));     // 길이 상한(글자)
         assert!(p.contains("골라"));      // 핵심만 골라 쓰기(장황함 차단)
         assert!(p.contains("이모지"));    // 이모지 지시
         assert!(p.contains("문단마다 1~2개")); // 사용량 상향(1개 정도 → 1~2개)
@@ -998,6 +1161,7 @@ mod tests {
         assert!(p.contains("위로"));              // 주말/장시간 위로
         assert!(p.contains("일중독"));            // 주말 능청 예시(유머·주말 강화)
         assert!(p.contains("똑같은 틀"));         // 단조로운 템플릿 금지
+        assert!(p.contains("work_log"));          // 그날 한 작업(커밋/토픽) 지시
     }
 
     #[test]

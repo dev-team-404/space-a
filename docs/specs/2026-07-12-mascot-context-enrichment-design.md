@@ -77,6 +77,20 @@ Windows 다이어리는 `findings_for_date("Windows", date)`만 소재로 쓰는
 - 위로/응원: "`work_context.is_weekend`이거나 occasions에 명절·공휴일이 있는데도 일했다면, 쉬는 날 함께해줘 고맙다는 위로·응원을 한마디 (단 재미 기념일인 발렌타인·파이데이 등은 위로 대상 아님 — 상식으로 구분). `long_work`면 '오래 붙어 있었네, 무리하지 마' 식으로 챙겨라."
 - 이모지: 기존 "문단마다 1개 정도" → **"문단마다 1~2개, 겹치지 않게"**.
 
+**A4. `work_log` — 그날 실제 한 작업** (2026-07-12 추가 결정: git 커밋 + 폴백)
+
+"열심히 달렸다/N시간 몰입" 대신 무슨 작업을 했는지를 담기 위한 신호.
+- `Brief.work_log { commits: Vec<String>, topics: Vec<String> }`.
+- `commits`: 그날 활동한 각 repo(sessions.cwd distinct)에서 `git log --no-merges --format=%s --since/--until`(로컬 날짜) + `--author=<repo user.email>`(남의 커밋 혼입 방지). best-effort — git/repo 없으면 빈 벡터. 상한 8.
+- `topics`(폴백/보조): `git_branch`(main/master/HEAD 제외) + 정제된 `first_prompt_preview`(`<…>`·"Set model"·command 에코 등 노이즈 제거). 여러 갈래 = 멀티태스킹 신호.
+- 프롬프트: commits 있으면 그걸로 "오늘은 …를 했다" 구체적으로, 없으면 topics로. 여러 갈래면 "여러 작업을 동시에 오갔다"는 분주함. **길이 2~4문단·500자 안팎**으로 상향(작업 내용 한 문단 허용).
+- cwd 없는 옛(v2.1 이전) 세션은 commits·topics 모두 비어 tool_usage에 의존 — 필요 시 재스캔으로 backfill.
+
+**A5. E2E 재검증 정제 (2026-07-12)** — 재생성 육안 후 반영:
+- context7 매일 반복: `recently_covered` 플래그(소프트)를 작은 모델이 무시 → **브리프 findings에서 아예 제외**(필터)로 강화. 코칭은 Coach 탭이 계속 담당.
+- `active_hours`: 세션 span 합(다일 세션 24h 초과 버그)→**그날 이벤트 첫~마지막 중 30분 이하 간격만 합산한 몰입 시간**(`IDLE_GAP_SECS=1800`). `LONG_WORK_HOURS` 5→**7**(매일 발동 방지).
+- 단조로움: 프롬프트에 "작업 시간으로 시작·매번 위로로 끝맺기 금지, 여는 방식 다양화", 위로는 긴 날/주말만·다마고치 능청("주말에 또? 일중독"·"배터리 방전"), 유머 강화.
+
 ### 묶음 B — 잡담 (Mascot, 신규 PR)
 
 `compute_chatter_pool`이 쓰는 컨텍스트에 근무 맥락(오늘 주말 여부·오늘 세션 수) 추가 →
