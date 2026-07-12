@@ -112,10 +112,50 @@ pub fn build_daily_line_prompt(ctx: &crate::chat::ChatContext) -> String {
 /// 잡담 풀 크기 — 스캔당 LLM 1회 호출로 배치 생성하는 잡담 개수 (스펙 §2).
 pub const CHATTER_POOL_SIZE: usize = 5;
 
+/// 오늘 세션이 이 이상이면 "그만 좀 하고 쉬어라" 코믹 지시를 넣는다 (스펙 묶음 B, 조정 가능).
+pub const CHATTER_REST_SESSIONS: u64 = 5;
+
+/// 근무 맥락 코믹 지시 — 신호(주말·연속세션·장시간)가 있을 때만 소재 블록 생성, 없으면 빈 문자열.
+/// 위로가 아니라 능청·놀림 톤(다이어리 A5의 anti-monotony 결과 일관).
+fn comic_directives(ctx: &crate::chat::ChatContext, work: &crate::diary::WorkContext) -> String {
+    let mut items: Vec<String> = Vec::new();
+    if work.is_weekend {
+        items.push(
+            "- 오늘은 주말인데 주인이 또 나와서 일하고 있다 — \"주말에 또 나왔어? 일중독이야ㅋㅋ\" 같은 능청."
+                .to_string(),
+        );
+    }
+    if ctx.session_count >= CHATTER_REST_SESSIONS {
+        items.push(format!(
+            "- 오늘 세션이 벌써 {}건 — \"그만 좀 하고 쉬었다 와라\" 같은 잔소리.",
+            ctx.session_count
+        ));
+    }
+    if work.long_work {
+        items.push(format!(
+            "- 오늘 몰입 시간이 {}시간 — \"오래 붙어 있었네, 배터리 방전되겠다\" 같은 챙김.",
+            work.active_hours
+        ));
+    }
+    if items.is_empty() {
+        return String::new();
+    }
+    format!(
+        "\n\n[오늘 근무 맥락 — 코믹 소재]\n{}\n\
+         위 근무 맥락은 사실이니 잡담 일부에 능청스럽게 녹이세요. \
+         걱정 어투 말고 웃기게 — 다마고치가 주인을 놀리는 톤.",
+        items.join("\n")
+    )
+}
+
 /// 잡담 풀 생성 시스템 프롬프트 — 오늘의 한마디와 동일 인물·동일 사실 재료,
 /// 지시만 "가벼운 잡담 N개"로 다름 (스펙 §5). 코칭 조언 채널(realtime_advice)과의
 /// 역할 분리를 프롬프트에 명시한다.
-pub fn build_chatter_prompt(ctx: &crate::chat::ChatContext, n: usize) -> String {
+pub fn build_chatter_prompt(
+    ctx: &crate::chat::ChatContext,
+    work: &crate::diary::WorkContext,
+    n: usize,
+) -> String {
     format!(
         "당신은 {user}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
          매일 일기를 쓰는 그 다마고치와 동일 인물로, 1인칭으로 가볍고 능청스럽게 \
@@ -125,13 +165,14 @@ pub fn build_chatter_prompt(ctx: &crate::chat::ChatContext, n: usize) -> String 
          \
          정밀도의 선(반드시 지킬 것): 아래 오늘 요약의 사실과 수치에만 근거하고, \
          요약에 없는 구체적 수치를 지어내지 마세요.\n\n\
-         {facts}\n\n\
+         {facts}{comic}\n\n\
          위 요약을 재료로, 상주 마스코트가 가끔 툭 던질 가벼운 잡담·혼잣말을 {n}개 만드세요. \
          코칭 조언이나 보고처럼 굴지 마세요(조언은 다른 채널이 합니다). \
          한 줄에 하나씩, 각 40자 이내로, 번호·불릿·따옴표 없이 출력하세요.",
         user = ctx.user_name,
         voice = crate::diary::voice_guidance(),
         facts = facts_block(ctx),
+        comic = comic_directives(ctx, work),
     )
 }
 
@@ -211,6 +252,7 @@ pub fn compute_daily_line(
 pub fn compute_chatter_pool(
     engine: &dyn crate::diary::engine::Engine,
     ctx: &crate::chat::ChatContext,
+    work: &crate::diary::WorkContext,
     cached_fp: Option<&str>,
 ) -> anyhow::Result<Option<(Vec<String>, String)>> {
     let fp = facts_fingerprint(ctx);
@@ -220,7 +262,7 @@ pub fn compute_chatter_pool(
     if ctx.session_count == 0 {
         return Ok(Some((Vec::new(), fp)));
     }
-    let system = build_chatter_prompt(ctx, CHATTER_POOL_SIZE);
+    let system = build_chatter_prompt(ctx, work, CHATTER_POOL_SIZE);
     let raw = engine.generate(&system, "")?.text;
     Ok(Some((parse_chatter_lines(&raw, CHATTER_POOL_SIZE), fp)))
 }
@@ -367,9 +409,13 @@ mod chatter_tests {
         }
     }
 
+    fn work(is_weekend: bool, active_hours: f64, long_work: bool) -> crate::diary::WorkContext {
+        crate::diary::WorkContext { is_weekend, active_hours, long_work }
+    }
+
     #[test]
     fn chatter_prompt_carries_persona_facts_voice_and_directives() {
-        let p = build_chatter_prompt(&ctx(3, 100, 200, 1), 5);
+        let p = build_chatter_prompt(&ctx(3, 100, 200, 1), &Default::default(), 5);
         assert!(p.contains("주인"));                         // 페르소나 호칭
         assert!(p.contains("jibin"));                        // 유저명
         assert!(p.contains("3건"));                          // 오늘 세션 수(사실)
@@ -380,6 +426,39 @@ mod chatter_tests {
         assert!(p.contains("지어내지 마세요"));              // 정밀도의 선
         assert!(p.contains("조언"));                         // "코칭 조언처럼 굴지 말 것"
         assert!(p.contains("detail 0"));                     // findings 블록 포함
+    }
+
+    #[test]
+    fn chatter_prompt_weekend_adds_comic_directive() {
+        let p = build_chatter_prompt(&ctx(3, 100, 200, 1), &work(true, 2.0, false), 5);
+        assert!(p.contains("[오늘 근무 맥락"));   // 코믹 소재 블록 헤더
+        assert!(p.contains("주말"));              // 주말 신호
+        assert!(p.contains("일중독"));            // 능청 예시 문구
+        assert!(!p.contains("쉬었다 와라"));      // 세션 3건 → 쉬어라 지시 없음
+    }
+
+    #[test]
+    fn chatter_prompt_rest_directive_at_session_threshold() {
+        // 경계: CHATTER_REST_SESSIONS(5) 이상이면 on, 미만이면 off
+        let on = build_chatter_prompt(&ctx(5, 100, 200, 1), &work(false, 2.0, false), 5);
+        assert!(on.contains("5건"));              // 오늘 세션 수(사실) 인용
+        assert!(on.contains("쉬었다 와라"));      // 잔소리 지시
+        let off = build_chatter_prompt(&ctx(4, 100, 200, 1), &work(false, 2.0, false), 5);
+        assert!(!off.contains("쉬었다 와라"));
+    }
+
+    #[test]
+    fn chatter_prompt_long_work_adds_care_directive() {
+        let p = build_chatter_prompt(&ctx(3, 100, 200, 1), &work(false, 7.5, true), 5);
+        assert!(p.contains("7.5시간"));           // 몰입 시간(사실) 인용
+        assert!(p.contains("배터리"));            // 다마고치 능청 예시(묶음 A A5 톤과 일관)
+    }
+
+    #[test]
+    fn chatter_prompt_without_signals_has_no_comic_block() {
+        // 무신호(평일·세션 적음·짧은 몰입) → 코믹 블록 자체가 없어 기존 프롬프트와 동일 골격
+        let p = build_chatter_prompt(&ctx(3, 100, 200, 1), &work(false, 2.0, false), 5);
+        assert!(!p.contains("근무 맥락"));
     }
 
     #[test]
@@ -423,7 +502,7 @@ mod chatter_tests {
     #[test]
     fn compute_pool_generates_and_parses_when_active_and_uncached() {
         let eng = MockEngine { canned: "오늘 세션 셋, 좀 굴렀다\n- 커밋은 자주\n\"토큰 아낀 날\"".into() };
-        let out = compute_chatter_pool(&eng, &ctx(3, 100, 200, 1), None).unwrap();
+        let out = compute_chatter_pool(&eng, &ctx(3, 100, 200, 1), &Default::default(), None).unwrap();
         assert_eq!(
             out,
             Some((
@@ -442,14 +521,14 @@ mod chatter_tests {
         let eng = MockEngine { canned: "안 나와야 함".into() };
         let c = ctx(3, 100, 200, 1);
         let fp = facts_fingerprint(&c);
-        assert_eq!(compute_chatter_pool(&eng, &c, Some(&fp)).unwrap(), None);
+        assert_eq!(compute_chatter_pool(&eng, &c, &Default::default(), Some(&fp)).unwrap(), None);
     }
 
     #[test]
     fn compute_pool_returns_empty_without_engine_when_idle() {
         // 활동 0건 → 엔진 미호출·빈 풀 캐시 (canned가 파싱돼 나오면 엔진이 불렸다는 뜻이라 실패)
         let eng = MockEngine { canned: "엔진이 불렸다면 이게 나온다".into() };
-        let out = compute_chatter_pool(&eng, &ctx(0, 0, 0, 2), None).unwrap();
+        let out = compute_chatter_pool(&eng, &ctx(0, 0, 0, 2), &Default::default(), None).unwrap();
         assert_eq!(out, Some((Vec::new(), "0|0|0|2".to_string())));
     }
 
@@ -457,7 +536,7 @@ mod chatter_tests {
     fn compute_pool_caches_empty_when_output_is_garbage() {
         // 전부 파싱 실패 → 빈 풀 + fp 캐시 (다음 스캔까지 재시도 안 함, 프론트는 정적 폴백)
         let eng = MockEngine { canned: "  \n\n".into() };
-        let out = compute_chatter_pool(&eng, &ctx(3, 100, 200, 1), None).unwrap();
+        let out = compute_chatter_pool(&eng, &ctx(3, 100, 200, 1), &Default::default(), None).unwrap();
         assert_eq!(out, Some((Vec::new(), "3|100|200|1".to_string())));
     }
 }

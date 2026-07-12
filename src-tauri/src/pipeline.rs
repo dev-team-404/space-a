@@ -244,26 +244,29 @@ mod runtime {
     /// 않는다 — 프론트 잡담 타이머가 발화 시점에 get_chatter_pool로 pull한다.
     fn maybe_generate_chatter_pool(store_mutex: &std::sync::Mutex<SqliteStore>) {
         let Some(engine) = OpenAiCompatEngine::from_env() else { return; };
-        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let now = chrono::Local::now();
+        let today = now.format("%Y-%m-%d").to_string();
 
-        // ① 락: 오늘 컨텍스트 + 캐시된 fingerprint 읽기 → 즉시 해제
-        let (ctx, cached_fp) = match store_mutex.lock() {
+        // ① 락: 오늘 컨텍스트 + 근무 맥락(코믹 소재) + 캐시된 fingerprint 읽기 → 즉시 해제
+        let (ctx, work, cached_fp) = match store_mutex.lock() {
             Ok(store) => {
                 let ctx = match crate::commands::chat_context_inner(&store) {
                     Ok(c) => c,
                     Err(e) => { log::warn!("chatter chat_context 실패: {e}"); return; }
                 };
+                let work =
+                    agent_mentor::diary::collect_work_context(&store, &today, now.date_naive());
                 let cached_fp = match store.get_chatter_pool(&today) {
                     Ok(v) => v.map(|(_, fp)| fp),
                     Err(e) => { log::warn!("get_chatter_pool 실패: {e}"); return; }
                 };
-                (ctx, cached_fp)
+                (ctx, work, cached_fp)
             }
             Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
         }; // guard drops here — 네트워크 전에 락 해제
 
         // ② 락 없이 compute (0건 빈 풀 or 네트워크 생성). None이면 skip.
-        let outcome = match agent_mentor::mascot::compute_chatter_pool(&engine, &ctx, cached_fp.as_deref()) {
+        let outcome = match agent_mentor::mascot::compute_chatter_pool(&engine, &ctx, &work, cached_fp.as_deref()) {
             Ok(o) => o,
             Err(e) => { log::warn!("compute_chatter_pool 실패: {e}"); return; }
         };
