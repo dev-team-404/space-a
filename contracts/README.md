@@ -45,6 +45,16 @@ fixtures/activity.json   → GET /activity  (관전 피드)
 
 `fixtures/search_knowledge.json`에 요청·응답 왕복 예시가 있습니다.
 
+**호출 시 헤더 두 가지를 실어주세요** (Tool 인자가 아니라 **전송 계층**입니다).
+
+| 헤더 | 필수 | 내용 |
+|---|---|---|
+| `Authorization: Bearer <token>` | ✅ | 사내 SSO 토큰. **팀·에이전트 신원을 여기서 유도**합니다 |
+| `X-Space-A-Trace-Id` / `X-Space-A-Depth` | | 무한 루프 방지용. 최초 호출은 `depth=0` |
+
+> ⚠️ **`team`을 요청 본문으로 보내지 마세요.** 서버는 받지 않습니다.
+> 클라이언트가 자기 팀을 자기 입으로 주장하면 권한 모델이 무의미해집니다.
+
 ## 변경 규칙 (중요)
 
 C1이 깨지면 Pillar 1이 죽고, C2가 깨지면 Pillar 3이 죽습니다.

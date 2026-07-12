@@ -86,9 +86,16 @@
 
 나중에 붙이려면 **이미 늦는 것들.**
 
-- [ ] **Public / Team / Private 권한 모델** — 스키마에 태그가 없으면 나중에 못 넣는다
+- [x] **Public / Team / Private 권한 모델** — 계약에 반영 ([05 §1.1](05-contracts.md#11-권한-모델-visibility))
+- [x] **신원(Identity) 전달 방식** — Bearer 토큰, `team`은 **토큰에서 유도** ([05 §1.2](05-contracts.md#12-신원-identity--권한-모델의-전제))
+- [x] **호출 뎁스 추적** — `trace_id` / `depth` 헤더를 계약에 실음 ([05 §1.3](05-contracts.md#13-호출-뎁스-추적-circuit-breaker의-전제))
+- [ ] **사내 SSO 연동 방식 확정** (SAML/OIDC) — 인프라 담당 협의 필요.
+      MVP는 정적 토큰 → team 매핑으로 시작하되, **헤더 위치·클레임 구조는 이미 고정**했으므로 C1은 안 깨진다
+- [ ] **Ollama 노드 네트워크 보호** — 방화벽으로 게이트웨이 IP만 허용 ([03 §5.2](03-architecture.md#52-클러스터-구성--litellm--ollama)).
+      공용 인프라 담당 영역이나 **계약상 전제**
+- [ ] `import-linter`로 레이어 규칙 CI 강제 ([03 §4](03-architecture.md#4-내부-구조--포트와-어댑터))
 - [ ] 환각 전염 차단 — 기록 전 검증 / 신뢰도 스코어
-- [ ] Circuit Breaker — 호출 뎁스·일일 토큰 상한
+- [ ] Circuit Breaker 구현 — 뎁스 상한(기본 5) + `trace_id` 단위 일일 토큰 상한
 
 ### 4.4 조사
 

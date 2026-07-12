@@ -4,6 +4,30 @@
   "version": "1.0.0",
   "description": "Tools exposed by the Space A MCP server to employee agents (Pillar 1 and any MCP client). Change policy: additive only. Adding optional fields or enum values is allowed; removing/renaming fields or changing their meaning is not. Consumers MUST ignore unknown fields.",
 
+  "transport": {
+    "description": "Every C1 call carries identity and trace metadata OUT OF BAND — in transport headers, not in tool arguments. MCP's own auth spec is not mature, so this is defined at the application layer. Identity is the precondition for the visibility model: without it, 'team' filtering cannot be computed at all.",
+    "http": {
+      "Authorization": {
+        "required": true,
+        "format": "Bearer <token>",
+        "description": "Issued by corporate SSO. The server resolves it to { user_id, agent_id, team, scopes }. NOTE: team and agent_id are derived from this token and are NOT accepted as request parameters — letting a client assert its own team would void the whole permission model."
+      },
+      "X-Space-A-Trace-Id": {
+        "required": false,
+        "description": "Correlates one problem-solving flow across agents. The originating caller generates it. If absent, the server issues one and returns it."
+      },
+      "X-Space-A-Depth": {
+        "required": false,
+        "type": "integer",
+        "default": 0,
+        "description": "How many agent hops deep this call is. Increment when acting on a Space A response by calling another agent. Server rejects depth > MAX_DEPTH (default 5) with rate_limited. This is a cooperative guard against runaway loops, not a defence against a malicious client; the hard backstop is the server-side token/call circuit breaker."
+      }
+    },
+    "stdio": {
+      "SPACE_A_TOKEN": "Same token, passed as an environment variable at process launch (local development)."
+    }
+  },
+
   "$defs": {
     "visibility": {
       "type": "string",
@@ -47,7 +71,8 @@
           "properties": {
             "code": {
               "type": "string",
-              "enum": ["invalid_request", "not_found", "forbidden", "rate_limited"]
+              "enum": ["invalid_request", "unauthorized", "not_found", "forbidden", "rate_limited"],
+              "description": "unauthorized = missing/expired token. forbidden = authenticated but out of scope. rate_limited = depth exceeded or circuit breaker tripped."
             },
             "message": { "type": "string" }
           }

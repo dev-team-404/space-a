@@ -96,6 +96,28 @@ api/           ← 진입점
 **의존성 방향은 항상 안쪽(core)으로만.**
 `core`가 `adapters`를 import 하는 순간 이 설계는 무너진다.
 
+> ⚙️ **원칙은 CI로 강제한다.** Python은 컴파일 타임에 import 방향을 막을 수단이 없어서,
+> "core는 adapters를 import하지 않는다"는 규칙은 **문서에만 적어두면 반드시 깨진다.**
+> 마감에 쫓기면 누구든 한 줄 질러 넣게 되고, 그 순간 DB 교체 가능성이 사라진다.
+>
+> [`import-linter`](https://import-linter.readthedocs.io/)를 CI에 넣어 **레이어 규칙을 테스트로 만든다.**
+>
+> ```ini
+> # setup.cfg — layered contract: 위가 아래를 import 할 수 있고, 역방향은 금지
+> [importlinter]
+> root_package = space_a
+>
+> [importlinter:contract:layers]
+> name = Core must not depend on adapters or api
+> type = layers
+> layers =
+>     space_a.api
+>     space_a.adapters
+>     space_a.core
+> ```
+>
+> 이러면 `core`가 `adapters`를 import하는 PR은 **CI에서 빨간불**이 뜬다.
+
 ### 이 구조의 실익
 
 | 실익 | 내용 |
@@ -165,6 +187,18 @@ router_settings:
 
 **설정 주의:** 작업자 PC는 `OLLAMA_HOST=0.0.0.0`이어야 한다.
 기본값 `127.0.0.1`이면 게이트웨이의 요청을 거부한다.
+
+> 🔒 **보안 경고 — `0.0.0.0`은 인증 없이 GPU를 여는 것이다.**
+> Ollama에는 자체 인증이 없다. `0.0.0.0`으로 열면 **같은 네트워크 대역의 누구나** 그 GPU를
+> 무단으로 쓸 수 있다. 사내망이라고 안전한 게 아니다.
+>
+> 최소 대책 (인프라 담당과 협의 필요):
+> - **방화벽으로 LiteLLM 게이트웨이 IP만 허용** — 가장 싸고 확실하다. 이것만 해도 대부분 막힌다.
+> - 가능하면 **별도 서브넷/VLAN으로 격리**.
+> - 그래도 부족하면 Ollama 앞에 **리버스 프록시를 두고 토큰 인증**을 붙인다.
+>
+> 이 클러스터는 **공용 인프라**이므로 이 대책의 실행 주체는 Pillar 2가 아니다.
+> 다만 **계약상 전제**이므로 여기 명시한다.
 
 ### 5.3 왜 로드밸런싱인가 (분산 추론이 아니라)
 
