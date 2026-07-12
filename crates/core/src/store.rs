@@ -585,16 +585,24 @@ impl SqliteStore {
         Ok(n)
     }
 
-    /// 오늘 모델별(raw id 기준, 구 데이터는 family 폴백) 토큰(입력+출력) 합. 내림차순.
+    /// 특정 하루의 모델 분포 — model_mix_for_range의 단일일 특수형.
     pub fn model_mix_for_date(&self, date: &str) -> Result<Vec<(String, u64)>> {
+        self.model_mix_for_range(Some(date), date)
+    }
+
+    /// 기간 내 모델별(raw id 기준, 구 데이터는 family 폴백) 토큰(입력+출력) 합. 내림차순.
+    /// from=None이면 하한 없음(전체). 로컬 날짜 버킷(date(ts,'localtime')), 양끝 포함.
+    pub fn model_mix_for_range(&self, from: Option<&str>, to: &str) -> Result<Vec<(String, u64)>> {
         let mut stmt = self.conn.prepare(
             "SELECT COALESCE(model_raw, model_family) AS m,
                     COALESCE(SUM(tok_input),0) + COALESCE(SUM(tok_output),0) AS toks
              FROM events
-             WHERE date(ts, 'localtime')=?1 AND COALESCE(model_raw, model_family) IS NOT NULL
+             WHERE date(ts, 'localtime') <= ?2
+               AND (?1 IS NULL OR date(ts, 'localtime') >= ?1)
+               AND COALESCE(model_raw, model_family) IS NOT NULL
              GROUP BY m ORDER BY toks DESC",
         )?;
-        let rows = stmt.query_map(params![date], |r| {
+        let rows = stmt.query_map(params![from, to], |r| {
             Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
         })?;
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
@@ -1313,6 +1321,41 @@ mod tests {
         assert_eq!(ctx.0, "p");
         assert_eq!(ctx.1.as_deref(), Some("2026-07-05T10:00:00Z"));
         assert!(store.session_ctx("nope").unwrap().is_none());
+    }
+
+    #[test]
+    fn model_mix_for_range_bounds_inclusive_and_open_start() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let ev = |uuid: &str, ts: &str, inp: u64| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "1".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+            uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
+            ts: Some(ts.into()),
+            source_file: "f.jsonl".into(), source_offset: 0,
+            kind: EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-opus-4-8"),
+                usage: TokenUsage { input: inp, output: 0, ..Default::default() },
+                web_search: 0, web_fetch: 0,
+            },
+        };
+        store.upsert_events(&[
+            ev("u1", "2026-07-01T10:00:00Z", 1),
+            ev("u2", "2026-07-03T10:00:00Z", 10),
+            ev("u3", "2026-07-05T10:00:00Z", 100),
+        ]).unwrap();
+
+        // 양끝 포함: 03~05 → 10+100 (여러 날짜가 한 모델로 합산)
+        assert_eq!(store.model_mix_for_range(Some("2026-07-03"), "2026-07-05").unwrap(),
+                   vec![("claude-opus-4-8".to_string(), 110)]);
+        // 단일일(from=to) — model_mix_for_date와 동치
+        assert_eq!(store.model_mix_for_range(Some("2026-07-03"), "2026-07-03").unwrap(),
+                   vec![("claude-opus-4-8".to_string(), 10)]);
+        // from=None → 하한 없음(전체)
+        assert_eq!(store.model_mix_for_range(None, "2026-07-05").unwrap(),
+                   vec![("claude-opus-4-8".to_string(), 111)]);
+        // 범위 밖 → 빈 벡터
+        assert!(store.model_mix_for_range(Some("2026-08-01"), "2026-08-31").unwrap().is_empty());
     }
 
     #[test]
