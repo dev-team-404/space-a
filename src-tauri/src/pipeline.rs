@@ -151,7 +151,7 @@ mod runtime {
                     let cfg = DiaryConfig { vault_dir: vault.clone(), ..DiaryConfig::default() };
                     match assemble_brief(&store, "Windows", &date, &cfg) {
                         Ok(brief) => {
-                            let days_idle = store.days_since_last_active("Windows", &date).ok().flatten();
+                            let days_idle = store.days_since_last_active(&date).ok().flatten();
                             (brief, cfg, days_idle)
                         }
                         Err(e) => { log::warn!("assemble_brief({date}) 실패: {e}"); continue; }

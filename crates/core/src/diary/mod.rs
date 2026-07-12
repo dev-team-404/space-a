@@ -219,18 +219,20 @@ pub fn finding_advice(
     }
 }
 
+/// 다이어리는 "주인의 하루"다 — 작업 신호(totals·findings·tool_usage·work_context·work_log)는
+/// 모든 host(Windows+WSL)를 합산한다. `host`는 diary_index 저장·recent_diaries 조회의 정규 스코프로만 쓴다.
 pub fn assemble_brief(
     store: &SqliteStore,
     host: &str,
     date: &str,
     cfg: &DiaryConfig,
 ) -> Result<Brief> {
-    // 해당 host+date의 rollup 합산(여러 프로젝트 합)
+    // 그날 전 host rollup 합산(여러 프로젝트·Windows+WSL 모두 주인의 하루) — host로 필터하지 않는다.
     let totals = store.conn.query_row(
         "SELECT COALESCE(SUM(tok_input),0), COALESCE(SUM(tok_output),0),
                 COALESCE(SUM(tok_cache_create),0), COALESCE(SUM(session_count),0)
-         FROM daily_rollup WHERE host=?1 AND date=?2",
-        params![host, date],
+         FROM daily_rollup WHERE date=?1",
+        params![date],
         |r| {
             Ok(BriefTotals {
                 tok_input: r.get::<_, i64>(0)? as u64,
@@ -253,13 +255,13 @@ pub fn assemble_brief(
     // 최근 일기가 있던 날들의 finding dedup_key 집합 — 오늘 finding이 여기 있으면 "이미 다룬 상시 이슈".
     let recent_keys: std::collections::HashSet<String> = recent_diaries
         .iter()
-        .filter_map(|rd| store.findings_for_date(host, &rd.date).ok())
+        .filter_map(|rd| store.findings_for_date_all(&rd.date).ok())
         .flatten()
         .map(|f| f.dedup_key)
         .collect();
 
     let findings = store
-        .findings_for_date(host, date)?
+        .findings_for_date_all(date)?
         .into_iter()
         // 요 며칠 일기에서 이미 다룬 상시 이슈는 브리프에서 제외 — 매일 같은 지적 반복 방지.
         // (코칭 자체는 Coach 탭이 계속 보여준다. 다이어리는 그날의 새 이야기에 집중.)
@@ -288,12 +290,12 @@ pub fn assemble_brief(
         None => Vec::new(),
     };
 
-    let tool_usage = collect_tool_usage(store, host, date);
+    let tool_usage = collect_tool_usage(store, date);
     let work_context = match today {
-        Some(d) => collect_work_context(store, host, date, d),
+        Some(d) => collect_work_context(store, date, d),
         None => WorkContext::default(),
     };
-    let work_log = collect_work_log(store, host, date);
+    let work_log = collect_work_log(store, date);
 
     Ok(Brief {
         date: date.to_string(),
@@ -340,16 +342,16 @@ fn cap_chars(s: &str, max: usize) -> String {
 
 /// 그날 (host,date)의 도구 호출을 집계한다. tool_kind별 카운트 + distinct 스킬/서버.
 /// 실패(쿼리 오류)는 빈 집계로 처리 — 브리프 조립을 막지 않는다.
-fn collect_tool_usage(store: &SqliteStore, host: &str, date: &str) -> ToolUsage {
+fn collect_tool_usage(store: &SqliteStore, date: &str) -> ToolUsage {
     let by_kind: Vec<(String, u64)> = store
         .conn
         .prepare(
             "SELECT tool_kind, COUNT(*) FROM events
-             WHERE host=?1 AND date(ts,'localtime')=?2 AND tool_kind IS NOT NULL AND tool_kind <> ''
+             WHERE date(ts,'localtime')=?1 AND tool_kind IS NOT NULL AND tool_kind <> ''
              GROUP BY tool_kind ORDER BY COUNT(*) DESC, tool_kind",
         )
         .and_then(|mut s| {
-            let rows = s.query_map(params![host, date], |r| {
+            let rows = s.query_map(params![date], |r| {
                 Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
             })?;
             rows.collect::<rusqlite::Result<Vec<_>>>()
@@ -362,11 +364,11 @@ fn collect_tool_usage(store: &SqliteStore, host: &str, date: &str) -> ToolUsage 
             .conn
             .prepare(&format!(
                 "SELECT {col} FROM events
-                 WHERE host=?1 AND date(ts,'localtime')=?2 AND tool_kind=?3 AND {col} IS NOT NULL
+                 WHERE date(ts,'localtime')=?1 AND tool_kind=?2 AND {col} IS NOT NULL
                  GROUP BY {col} ORDER BY COUNT(*) DESC, {col} LIMIT 8"
             ))
             .and_then(|mut s| {
-                let rows = s.query_map(params![host, date, kind], |r| r.get::<_, String>(0))?;
+                let rows = s.query_map(params![date, kind], |r| r.get::<_, String>(0))?;
                 rows.collect::<rusqlite::Result<Vec<_>>>()
             })
             .unwrap_or_default()
@@ -381,15 +383,15 @@ fn collect_tool_usage(store: &SqliteStore, host: &str, date: &str) -> ToolUsage 
 
 /// 근무 맥락: 요일(주말)과 그날 몰입 시간. 몰입 시간은 연속 이벤트 간격 중 IDLE_GAP_SECS(30분)
 /// 이하인 것만 합산 — 첫~마지막 span은 중간 공백(점심·회의 등)까지 포함해 과장되므로 쓰지 않는다.
-fn collect_work_context(store: &SqliteStore, host: &str, date: &str, today: NaiveDate) -> WorkContext {
+fn collect_work_context(store: &SqliteStore, date: &str, today: NaiveDate) -> WorkContext {
     let ts: Vec<f64> = store
         .conn
         .prepare(
             "SELECT julianday(ts)*86400.0 FROM events
-             WHERE host=?1 AND date(ts,'localtime')=?2 AND ts IS NOT NULL ORDER BY ts",
+             WHERE date(ts,'localtime')=?1 AND ts IS NOT NULL ORDER BY ts",
         )
         .and_then(|mut s| {
-            let rows = s.query_map(params![host, date], |r| r.get::<_, f64>(0))?;
+            let rows = s.query_map(params![date], |r| r.get::<_, f64>(0))?;
             rows.collect::<rusqlite::Result<Vec<_>>>()
         })
         .unwrap_or_default();
@@ -419,8 +421,10 @@ fn clean_prompt(s: &str) -> Option<String> {
     Some(cap_chars(t, 60))
 }
 
-/// 그날(로컬 날짜) 해당 repo(cwd)에서 그 repo의 커밋 작성자가 남긴 커밋 제목들. best-effort — 실패는 빈 벡터.
-fn git_commits_for(cwd: &str, date: &str) -> Vec<String> {
+/// 그날(로컬 날짜) 해당 repo(host,cwd)에서 그 repo 작성자가 남긴 커밋 제목들. best-effort — 실패는 빈 벡터.
+/// host가 `wsl:<distro>`면 `wsl -d <distro> -- git`으로 WSL 안에서 실행(리눅스 경로), 아니면 네이티브 git.
+/// WSL 미설치·distro 부재 등은 spawn 에러 → 빈 벡터 → 상위에서 topics로 폴백.
+fn git_commits_for(host: &str, cwd: &str, date: &str) -> Vec<String> {
     use std::process::Command;
     let Some(next) = NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .ok()
@@ -429,13 +433,26 @@ fn git_commits_for(cwd: &str, date: &str) -> Vec<String> {
     else {
         return Vec::new();
     };
-    // 다중 개발자 repo에서 남의 커밋 혼입 방지 — 해당 repo에 설정된 작성자 이메일로 필터.
-    let email = Command::new("git")
-        .args(["-C", cwd, "config", "user.email"])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    let wsl_distro = host.strip_prefix("wsl:");
+    // git 인자를 받아 host에 맞는 방식으로 실행하고 성공 시 stdout 반환.
+    let run = |git_args: &[String]| -> Option<String> {
+        let mut cmd = match wsl_distro {
+            Some(distro) => {
+                let mut c = Command::new("wsl");
+                c.args(["-d", distro, "--", "git"]);
+                c
+            }
+            None => Command::new("git"),
+        };
+        cmd.args(git_args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+    };
+    // 다중 개발자 repo에서 남의 커밋 혼입 방지 — 해당 repo 작성자 이메일로 필터.
+    let email = run(&["-C".into(), cwd.into(), "config".into(), "user.email".into()])
+        .map(|s| s.trim().to_string())
         .unwrap_or_default();
     let mut args: Vec<String> = vec![
         "-C".into(), cwd.into(), "log".into(), "--no-merges".into(), "--format=%s".into(),
@@ -444,41 +461,45 @@ fn git_commits_for(cwd: &str, date: &str) -> Vec<String> {
     if !email.is_empty() {
         args.push(format!("--author={email}"));
     }
-    match Command::new("git").args(&args).output() {
-        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout)
-            .lines()
-            .map(|l| l.trim().to_string())
-            .filter(|l| !l.is_empty())
-            .collect(),
-        _ => Vec::new(),
+    match run(&args) {
+        Some(out) => out.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
+        None => Vec::new(),
     }
 }
 
-/// 그날 실제 한 작업 — 활동 repo의 git 커밋 제목(우선) + 세션 갈래(브랜치·정제 첫 프롬프트, 폴백/보조).
-fn collect_work_log(store: &SqliteStore, host: &str, date: &str) -> WorkLog {
-    let rows: Vec<(Option<String>, Option<String>, Option<String>)> = store
+/// 그날 실제 한 작업 — 전 host 활동 repo의 git 커밋 제목(우선) + 세션 갈래(브랜치·정제 첫 프롬프트, 폴백/보조).
+fn collect_work_log(store: &SqliteStore, date: &str) -> WorkLog {
+    let rows: Vec<(String, Option<String>, Option<String>, Option<String>)> = store
         .conn
         .prepare(
-            "SELECT DISTINCT cwd, git_branch, first_prompt_preview FROM sessions
-             WHERE host=?1 AND date(first_ts,'localtime')=?2",
+            "SELECT DISTINCT host, cwd, git_branch, first_prompt_preview FROM sessions
+             WHERE date(first_ts,'localtime')=?1",
         )
         .and_then(|mut s| {
-            let r = s.query_map(params![host, date], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+            let r = s.query_map(params![date], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+            })?;
             r.collect::<rusqlite::Result<Vec<_>>>()
         })
         .unwrap_or_default();
 
-    // 커밋: 그날 활동한 distinct repo(cwd)에서
-    let mut cwds: Vec<String> = rows.iter().filter_map(|(c, _, _)| c.clone()).collect();
-    cwds.sort();
-    cwds.dedup();
-    let mut commits: Vec<String> = cwds.iter().flat_map(|c| git_commits_for(c, date)).collect();
+    // 커밋: 그날 활동한 distinct (host, repo)에서 — host별로 git 실행 방식 분기(Windows/WSL)
+    let mut host_cwds: Vec<(String, String)> = rows
+        .iter()
+        .filter_map(|(h, c, _, _)| c.clone().map(|c| (h.clone(), c)))
+        .collect();
+    host_cwds.sort();
+    host_cwds.dedup();
+    let mut commits: Vec<String> = host_cwds
+        .iter()
+        .flat_map(|(h, c)| git_commits_for(h, c, date))
+        .collect();
     commits.dedup();
     commits.truncate(WORK_LOG_CAP);
 
     // 토픽: 브랜치(main/master/HEAD 제외) + 정제된 첫 프롬프트 — 여러 갈래면 멀티태스킹 신호
     let mut topics: Vec<String> = Vec::new();
-    for (_, br, fp) in &rows {
+    for (_, _, br, fp) in &rows {
         if let Some(b) = br {
             if !matches!(b.as_str(), "main" | "master" | "HEAD" | "") {
                 topics.push(b.clone());
@@ -944,7 +965,7 @@ mod tests {
         seed("s1", "2026-07-08T02:00:00Z", "feat/mascot-daily-line", "마스코트 한마디 구현");
         seed("s2", "2026-07-08T03:00:00Z", "main", "<task-notification>");
 
-        let wl = super::collect_work_log(&store, "Windows", "2026-07-08");
+        let wl = super::collect_work_log(&store, "2026-07-08");
         assert!(wl.commits.is_empty(), "cwd 없어 git 커밋 없음");
         assert!(wl.topics.contains(&"feat/mascot-daily-line".to_string()), "서술적 브랜치 포함");
         assert!(wl.topics.contains(&"마스코트 한마디 구현".to_string()), "정제된 프롬프트 포함");
@@ -968,12 +989,12 @@ mod tests {
         run(&["config", "user.name", "t"]);
         run(&["commit", "--allow-empty", "-q", "-m", "feat: work_log 다이어리 반영"]);
 
-        let subs = super::git_commits_for(dir, "2026-07-08");
+        let subs = super::git_commits_for("Windows", dir, "2026-07-08");
         assert!(subs.iter().any(|s| s.contains("work_log 다이어리 반영")), "그날 커밋 제목: {subs:?}");
-        assert!(super::git_commits_for(dir, "2026-07-09").is_empty(), "다른 날짜엔 없음");
+        assert!(super::git_commits_for("Windows", dir, "2026-07-09").is_empty(), "다른 날짜엔 없음");
         // git repo 아닌 경로 → 빈 벡터(패닉 없음)
         let nogit = tempfile::tempdir().unwrap();
-        assert!(super::git_commits_for(nogit.path().to_str().unwrap(), "2026-07-08").is_empty());
+        assert!(super::git_commits_for("Windows", nogit.path().to_str().unwrap(), "2026-07-08").is_empty());
     }
 
     #[test]
@@ -1005,9 +1026,23 @@ mod tests {
         store.upsert_events(&[turn_event("Windows", "p", "s1", "u1", "2026-07-08T10:00:00Z")]).unwrap();
         store.rebuild_rollup().unwrap();
         // 07-10 기준 마지막 활동 07-08 → 2일째
-        assert_eq!(store.days_since_last_active("Windows", "2026-07-10").unwrap(), Some(2));
+        assert_eq!(store.days_since_last_active("2026-07-10").unwrap(), Some(2));
         // 활동일(07-08) 이전엔 이력 없음 → None
-        assert_eq!(store.days_since_last_active("Windows", "2026-07-08").unwrap(), None);
+        assert_eq!(store.days_since_last_active("2026-07-08").unwrap(), None);
+    }
+
+    #[test]
+    fn assemble_brief_aggregates_all_hosts_not_just_windows() {
+        // 07-09에 WSL만 활동(Windows 0) — 다이어리는 주인의 하루라 이걸 무활동으로 보면 안 됨(이전 버그).
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        store.upsert_events(&[
+            turn_event("wsl:Ubuntu-22.04", "avatar-meter", "w1", "u1", "2026-07-09T10:00:00Z"),
+        ]).unwrap();
+        store.rebuild_rollup().unwrap();
+        let brief = assemble_brief(&store, "Windows", "2026-07-09", &cfg).unwrap();
+        assert!(brief.totals.session_count > 0, "WSL 활동도 합산되어 무활동일이 아님");
     }
 
     #[test]

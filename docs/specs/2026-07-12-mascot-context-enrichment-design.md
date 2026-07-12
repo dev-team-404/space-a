@@ -98,6 +98,13 @@ Windows 다이어리는 `findings_for_date("Windows", date)`만 소재로 쓰는
 - `build_idle_prompt`: 작업 사실 없음 → **마스코트의 능청스러운 상상 일기**(작업 일기의 "브리프 사실만" 규율은 여기서 명시적 해제). 설정: 마스코트에겐 옆 동네 에이전트 친구들이 있고 쉬는 날 걔들과 논다. `occasions`면 테마대로(추석→이웃과 송편, 크리스마스→트리). 짧게 1~2문장(특별한 날 2~3문장), 며칠째·주말로 변화, 주인 안부 슬쩍.
 - 반복 방지: `days_idle`/요일/occasion으로 연속 무활동일도 다르게.
 
+**A7. 전 호스트 합산 (2026-07-12 추가 결정)** — 다이어리는 "주인의 하루"라 Windows+WSL을 모두 본다.
+
+- 발견: 다이어리가 `host="Windows"` 하드코딩이라 WSL 작업을 통째로 못 봄 → 07-09(WSL avatar-meter 4세션·83만 토큰)를 "쉬는 날"로 오판.
+- 수정: `assemble_brief`의 작업 신호를 전 host 합산으로 — totals(`daily_rollup` host 필터 제거), findings(`findings_for_date_all`: scope_host를 세션 host와 상관), tool_usage·work_context·work_log·`days_since_last_active` 모두 host 무관. `host` 파라미터는 diary_index 저장·recent_diaries 조회의 정규 스코프로만 유지.
+- WSL git 커밋: `host`가 `wsl:<distro>`면 `wsl -d <distro> -- git`으로 WSL 안에서 실행(리눅스 경로). Windows는 네이티브 git. best-effort — WSL 미설치/실패는 빈 벡터→topics 폴백(무-WSL 사용자 무영향). 실데이터 검증: 07-09 avatar-meter 커밋 정상 수집.
+- 무활동일 판정도 자동 교정: 어느 host든 활동 있으면 totals>0 → 작업 일기(무활동일 상상 일기는 진짜 전무한 날만).
+
 ### 묶음 B — 잡담 (Mascot, 신규 PR)
 
 `compute_chatter_pool`이 쓰는 컨텍스트에 근무 맥락(오늘 주말 여부·오늘 세션 수) 추가 →
