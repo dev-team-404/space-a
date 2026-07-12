@@ -383,7 +383,7 @@ fn collect_tool_usage(store: &SqliteStore, date: &str) -> ToolUsage {
 
 /// 근무 맥락: 요일(주말)과 그날 몰입 시간. 몰입 시간은 연속 이벤트 간격 중 IDLE_GAP_SECS(30분)
 /// 이하인 것만 합산 — 첫~마지막 span은 중간 공백(점심·회의 등)까지 포함해 과장되므로 쓰지 않는다.
-fn collect_work_context(store: &SqliteStore, date: &str, today: NaiveDate) -> WorkContext {
+pub fn collect_work_context(store: &SqliteStore, date: &str, today: NaiveDate) -> WorkContext {
     let ts: Vec<f64> = store
         .conn
         .prepare(
