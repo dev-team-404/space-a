@@ -469,24 +469,41 @@ fn git_commits_for(host: &str, cwd: &str, date: &str) -> Vec<String> {
 
 /// 그날 실제 한 작업 — 전 host 활동 repo의 git 커밋 제목(우선) + 세션 갈래(브랜치·정제 첫 프롬프트, 폴백/보조).
 fn collect_work_log(store: &SqliteStore, date: &str) -> WorkLog {
-    let rows: Vec<(String, Option<String>, Option<String>, Option<String>)> = store
+    let rows: Vec<(String, String, Option<String>, Option<String>, Option<String>)> = store
         .conn
         .prepare(
-            "SELECT DISTINCT host, cwd, git_branch, first_prompt_preview FROM sessions
+            "SELECT DISTINCT host, project_id, cwd, git_branch, first_prompt_preview FROM sessions
              WHERE date(first_ts,'localtime')=?1",
         )
         .and_then(|mut s| {
             let r = s.query_map(params![date], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
             })?;
             r.collect::<rusqlite::Result<Vec<_>>>()
+        })
+        .unwrap_or_default();
+
+    // cwd 없는 옛 세션 보완: 같은 (host, project_id)를 cwd와 함께 기록한 다른 세션의 cwd를 재사용.
+    // (옛 세션은 cwd 미수집 + 트랜스크립트도 삭제돼 재스캔 불가 — 프로젝트 매핑으로 repo 위치 복원)
+    let known: std::collections::HashMap<(String, String), String> = store
+        .conn
+        .prepare("SELECT host, project_id, cwd FROM sessions WHERE cwd IS NOT NULL")
+        .and_then(|mut s| {
+            let r = s.query_map([], |r| {
+                Ok(((r.get::<_, String>(0)?, r.get::<_, String>(1)?), r.get::<_, String>(2)?))
+            })?;
+            r.collect::<rusqlite::Result<std::collections::HashMap<_, _>>>()
         })
         .unwrap_or_default();
 
     // 커밋: 그날 활동한 distinct (host, repo)에서 — host별로 git 실행 방식 분기(Windows/WSL)
     let mut host_cwds: Vec<(String, String)> = rows
         .iter()
-        .filter_map(|(h, c, _, _)| c.clone().map(|c| (h.clone(), c)))
+        .filter_map(|(h, pid, cwd, _, _)| {
+            cwd.clone()
+                .or_else(|| known.get(&(h.clone(), pid.clone())).cloned())
+                .map(|c| (h.clone(), c))
+        })
         .collect();
     host_cwds.sort();
     host_cwds.dedup();
@@ -499,7 +516,7 @@ fn collect_work_log(store: &SqliteStore, date: &str) -> WorkLog {
 
     // 토픽: 브랜치(main/master/HEAD 제외) + 정제된 첫 프롬프트 — 여러 갈래면 멀티태스킹 신호
     let mut topics: Vec<String> = Vec::new();
-    for (_, _, br, fp) in &rows {
+    for (_, _, _, br, fp) in &rows {
         if let Some(b) = br {
             if !matches!(b.as_str(), "main" | "master" | "HEAD" | "") {
                 topics.push(b.clone());
@@ -971,6 +988,43 @@ mod tests {
         assert!(wl.topics.contains(&"마스코트 한마디 구현".to_string()), "정제된 프롬프트 포함");
         assert!(!wl.topics.contains(&"main".to_string()), "main 브랜치 제외");
         assert!(!wl.topics.iter().any(|t| t.contains("task-notification")), "노이즈 프롬프트 제외");
+    }
+
+    #[test]
+    fn collect_work_log_recovers_cwd_from_known_project_mapping() {
+        use std::process::Command;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+        let run = |args: &[&str]| {
+            Command::new("git").args(["-C", dir]).args(args)
+                .env("GIT_AUTHOR_DATE", "2026-07-05T12:00:00")
+                .env("GIT_COMMITTER_DATE", "2026-07-05T12:00:00")
+                .output().unwrap()
+        };
+        Command::new("git").args(["init", "-q", dir]).output().unwrap();
+        run(&["config", "user.email", "t@example.com"]);
+        run(&["config", "user.name", "t"]);
+        run(&["commit", "--allow-empty", "-q", "-m", "feat: 옛 세션 repo 커밋"]);
+
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 07-07 세션: 같은 project를 cwd(=temp repo)와 함께 기록. 07-05 세션: 같은 project, cwd 없음.
+        store.conn.execute(
+            "INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, cwd)
+             VALUES ('s7','Windows','pid1','claude-code','2026-07-07T10:00:00Z','2026-07-07T10:00:00Z',?1)",
+            rusqlite::params![dir],
+        ).unwrap();
+        store.conn.execute(
+            "INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, cwd)
+             VALUES ('s5','Windows','pid1','claude-code','2026-07-05T10:00:00Z','2026-07-05T10:00:00Z',NULL)",
+            [],
+        ).unwrap();
+
+        // 07-05는 cwd가 없지만 project 매핑으로 repo를 복원해 그날 커밋을 읽어야 함
+        let wl = super::collect_work_log(&store, "2026-07-05");
+        assert!(
+            wl.commits.iter().any(|s| s.contains("옛 세션 repo 커밋")),
+            "project 매핑으로 cwd 복원: {:?}", wl.commits
+        );
     }
 
     #[test]
