@@ -240,7 +240,7 @@ pub fn assemble_brief(
 
     // 직전 며칠 일기를 브리프에 실어 서사 반복을 막는다 — 로컬 vault 파일만 읽으므로 프라이버시 경계 불변.
     let recent_diaries = match today {
-        Some(d) => collect_recent_diaries(store, d),
+        Some(d) => collect_recent_diaries(store, host, d),
         None => Vec::new(),
     };
 
@@ -258,15 +258,16 @@ pub fn assemble_brief(
 const RECENT_DIARY_LOOKBACK: i64 = 3;
 const RECENT_DIARY_EXCERPT_CAP: usize = 500;
 
-/// 직전 N일(오래된 것부터) 중 vault에 실재하는 일기 본문을 발췌해 온다.
+/// 직전 N일(오래된 것부터) 중 해당 host의 vault 일기 본문을 발췌해 온다.
 /// backfill이 오래된 날짜부터 재생성하므로(missing_diary_dates) 오늘 생성 시 직전 날짜 일기는 이미 존재.
+/// diary_index가 (date, scope) 키라 조회를 host로 좁힌다(다른 host 일기 혼입 방지).
 /// 파일 없음·읽기 실패는 조용히 스킵 — 브리프 조립을 막지 않는다.
-fn collect_recent_diaries(store: &SqliteStore, today: NaiveDate) -> Vec<RecentDiary> {
+fn collect_recent_diaries(store: &SqliteStore, host: &str, today: NaiveDate) -> Vec<RecentDiary> {
     (1..=RECENT_DIARY_LOOKBACK)
         .rev()
         .filter_map(|i| {
             let date = (today - chrono::Duration::days(i)).format("%Y-%m-%d").to_string();
-            let path = store.diary_path_for(&date).ok().flatten()?;
+            let path = store.diary_path_for_scope(&date, host).ok().flatten()?;
             let body = std::fs::read_to_string(&path).ok()?;
             // 토큰 푸터(render_diary가 붙임)는 제외 — 발췌 예시로 들어가면 LLM이 흉내내 이중 푸터가 생김.
             let narrative = body.split("\n\n*—").next().unwrap_or(&body).trim();
@@ -576,6 +577,26 @@ mod tests {
         let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
         let brief = assemble_brief(&store, "Windows", "2026-07-10", &cfg).unwrap();
         assert!(brief.recent_diaries.is_empty());
+    }
+
+    #[test]
+    fn assemble_brief_recent_diaries_scoped_by_host() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        // 같은 날짜(07-09)에 host별로 다른 경로의 일기가 diary_index에 있을 때 — 브리프 host만 참조해야 함.
+        // 비대상 host(WSL)를 먼저 넣어, date-only 조회였다면 이 행을 집도록(회귀 방어).
+        let wsl = tmp.path().join("wsl-2026-07-09.md");
+        let win = tmp.path().join("win-2026-07-09.md");
+        std::fs::write(&wsl, "다른 호스트 일기").unwrap();
+        std::fs::write(&win, "윈도우 어제 일기").unwrap();
+        store.upsert_diary_index("2026-07-09", "WSL:Ubuntu", &wsl.to_string_lossy(), 10, "mock").unwrap();
+        store.upsert_diary_index("2026-07-09", "Windows", &win.to_string_lossy(), 10, "mock").unwrap();
+
+        let brief = assemble_brief(&store, "Windows", "2026-07-10", &cfg).unwrap();
+        assert_eq!(brief.recent_diaries.len(), 1);
+        assert!(brief.recent_diaries[0].excerpt.contains("윈도우 어제 일기"));
+        assert!(!brief.recent_diaries[0].excerpt.contains("다른 호스트"));
     }
 
     #[test]

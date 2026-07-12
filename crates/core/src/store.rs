@@ -590,6 +590,21 @@ impl SqliteStore {
         Ok(v)
     }
 
+    /// diary_path_for의 host(scope) 인지 버전. diary_index PK가 (date, scope)이므로
+    /// 다중 host DB에서 date-only 조회는 다른 host의 일기를 집을 수 있다 — 브리프는 host 스코프라
+    /// 최근 일기 참조도 같은 host로 좁힌다.
+    pub fn diary_path_for_scope(&self, date: &str, scope: &str) -> Result<Option<String>> {
+        let v: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT path FROM diary_index WHERE date=?1 AND scope=?2",
+                params![date, scope],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(v)
+    }
+
     pub fn get_setting(&self, key: &str) -> Result<Option<String>> {
         let v: Option<String> = self
             .conn
