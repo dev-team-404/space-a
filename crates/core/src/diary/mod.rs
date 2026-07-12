@@ -617,18 +617,61 @@ pub struct RenderedDiary {
     pub engine_name: String,
 }
 
+/// 일기 본문 + 토큰 푸터. render_diary·render_idle_diary 공용(푸터 포맷 드리프트 방지).
+fn diary_body(text: &str, tokens: u64, engine: &str) -> String {
+    format!("{text}\n\n*— 이 일기 ~{tokens} 토큰 (엔진: {engine})*\n")
+}
+
 /// 네트워크(LLM)만 — store 접근 없음. 락 밖에서 호출 가능.
 pub fn render_diary(engine: &dyn Engine, brief: &Brief, cfg: &DiaryConfig) -> Result<RenderedDiary> {
     let system = build_system_prompt(cfg);
     let user = serde_json::to_string_pretty(brief)?;
     let out = engine.generate(&system, &user)?;
-    let body = format!(
-        "{narrative}\n\n*— 이 일기 ~{tokens} 토큰 (엔진: {engine})*\n",
-        narrative = out.text,
-        tokens = out.tokens_used,
-        engine = engine.name(),
-    );
-    Ok(RenderedDiary { body, tokens_used: out.tokens_used, engine_name: engine.name() })
+    Ok(RenderedDiary {
+        body: diary_body(&out.text, out.tokens_used, &engine.name()),
+        tokens_used: out.tokens_used,
+        engine_name: engine.name(),
+    })
+}
+
+/// 무활동일(작업 기록 0) 일기용 컨텍스트 — 작업 사실 없이 마스코트 페르소나만.
+#[derive(Debug, Clone, Serialize)]
+pub struct IdleContext {
+    pub date: String,
+    pub is_weekend: bool,
+    pub days_idle: Option<i64>, // 마지막 활동일로부터 며칠째 조용한지(모르면 None)
+    pub occasions: Vec<Occasion>,
+}
+
+/// 무활동일 일기 시스템 프롬프트 — 작업 사실 없이 마스코트의 자유 시간을 능청스러운 상상 일기로.
+pub fn build_idle_prompt(cfg: &DiaryConfig) -> String {
+    format!(
+        "당신은 {honorific}의 AI 코딩 여정을 함께하는 마스코트입니다. \
+         오늘은 {honorific}이 한 번도 찾아오지 않은 '조용한 날' — 나(마스코트)의 자유 시간입니다. \
+         {voice} \
+         단, 이건 작업 기록이 아니라 마스코트의 상상 일기입니다 — 위 문체 가이드의 '브리프 사실만' 조항은 여기선 무시하고 \
+         (문체·자연스러움 규칙은 그대로 지키되) 나만의 하루를 맘껏 능청스럽게 지어내세요. 업무 이야기는 하지 마세요. \
+         나에겐 옆 동네 다른 에이전트 친구들이 있습니다 — 쉬는 날엔 걔들과 만나 놀거나 소소한 일을 합니다 \
+         (예: '옆 동네 봇이랑 산책하며 로그 구경했다', '친구 에이전트가 놀러 와 수다 떨었다'). \
+         `occasions`에 명절·기념일이 있으면 그 분위기에 맞춰 특별하게 \
+         (추석이면 이웃 에이전트들과 송편 빚기, 크리스마스면 다 같이 트리 장식 등). \
+         `days_idle`(며칠째 조용한지)·`is_weekend`도 살려 {honorific}의 안부를 슬쩍 궁금해하세요('그나저나 주인 잘 노나?'). \
+         짧게 — 1~2문장(특별한 날은 2~3문장까지), 한 문단. 이모지는 0~1개. 그날 컨텍스트로 매번 다르게.",
+        honorific = cfg.honorific,
+        voice = voice_guidance(),
+    )
+}
+
+/// 무활동일 일기 렌더 — 네트워크(LLM)만, store 접근 없음. 락 밖에서 호출 가능.
+pub fn render_idle_diary(engine: &dyn Engine, idle: &IdleContext, cfg: &DiaryConfig) -> Result<RenderedDiary> {
+    let system = build_idle_prompt(cfg);
+    let user = serde_json::to_string_pretty(idle)?;
+    let out = engine.generate(&system, &user)?;
+    Ok(RenderedDiary {
+        body: diary_body(&out.text, out.tokens_used, &engine.name()),
+        tokens_used: out.tokens_used,
+        engine_name: engine.name(),
+    })
 }
 
 /// 파일 쓰기 + diary_index upsert — 빠른 로컬 작업만.
@@ -931,6 +974,40 @@ mod tests {
         // git repo 아닌 경로 → 빈 벡터(패닉 없음)
         let nogit = tempfile::tempdir().unwrap();
         assert!(super::git_commits_for(nogit.path().to_str().unwrap(), "2026-07-08").is_empty());
+    }
+
+    #[test]
+    fn idle_prompt_directs_imaginative_persona() {
+        let p = build_idle_prompt(&DiaryConfig::default());
+        assert!(p.contains("조용한 날"));        // 무활동일 프레이밍
+        assert!(p.contains("지어내"));           // 상상 일기(사실 규율 해제)
+        assert!(p.contains("에이전트 친구"));    // 동료 에이전트 설정
+        assert!(p.contains("송편") || p.contains("명절")); // occasion 테마
+        assert!(p.contains("days_idle"));        // 며칠째 조용 신호
+    }
+
+    #[test]
+    fn render_idle_diary_writes_persona_with_footer() {
+        use crate::diary::engine::MockEngine;
+        let cfg = DiaryConfig::default();
+        let idle = IdleContext {
+            date: "2026-07-11".into(), is_weekend: true, days_idle: Some(2), occasions: vec![],
+        };
+        let engine = MockEngine { canned: "옆 동네 봇이랑 놀았다.".into() };
+        let r = render_idle_diary(&engine, &idle, &cfg).unwrap();
+        assert!(r.body.contains("옆 동네 봇이랑 놀았다."));
+        assert!(r.body.contains("토큰"), "footer meters tokens");
+    }
+
+    #[test]
+    fn days_since_last_active_counts_gap() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_events(&[turn_event("Windows", "p", "s1", "u1", "2026-07-08T10:00:00Z")]).unwrap();
+        store.rebuild_rollup().unwrap();
+        // 07-10 기준 마지막 활동 07-08 → 2일째
+        assert_eq!(store.days_since_last_active("Windows", "2026-07-10").unwrap(), Some(2));
+        // 활동일(07-08) 이전엔 이력 없음 → None
+        assert_eq!(store.days_since_last_active("Windows", "2026-07-08").unwrap(), None);
     }
 
     #[test]

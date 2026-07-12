@@ -91,6 +91,13 @@ Windows 다이어리는 `findings_for_date("Windows", date)`만 소재로 쓰는
 - `active_hours`: 세션 span 합(다일 세션 24h 초과 버그)→**그날 이벤트 첫~마지막 중 30분 이하 간격만 합산한 몰입 시간**(`IDLE_GAP_SECS=1800`). `LONG_WORK_HOURS` 5→**7**(매일 발동 방지).
 - 단조로움: 프롬프트에 "작업 시간으로 시작·매번 위로로 끝맺기 금지, 여는 방식 다양화", 위로는 긴 날/주말만·다마고치 능청("주말에 또? 일중독"·"배터리 방전"), 유머 강화.
 
+**A6. 무활동일 일기 (2026-07-12 추가 결정)** — 활동 0인 날도 재미 요소로 일기 생성.
+
+- backfill(app pipeline)이 `session_count==0`이면 건너뛰던 것을 **`render_idle_diary`로 생성**하도록 변경(today는 대상 아님=과거일만이라 활동 완료 후 판정, 안정적).
+- `IdleContext { date, is_weekend, days_idle, occasions }` — `days_idle`=`store.days_since_last_active`(마지막 활동일로부터 경과일, 변화 요소).
+- `build_idle_prompt`: 작업 사실 없음 → **마스코트의 능청스러운 상상 일기**(작업 일기의 "브리프 사실만" 규율은 여기서 명시적 해제). 설정: 마스코트에겐 옆 동네 에이전트 친구들이 있고 쉬는 날 걔들과 논다. `occasions`면 테마대로(추석→이웃과 송편, 크리스마스→트리). 짧게 1~2문장(특별한 날 2~3문장), 며칠째·주말로 변화, 주인 안부 슬쩍.
+- 반복 방지: `days_idle`/요일/occasion으로 연속 무활동일도 다르게.
+
 ### 묶음 B — 잡담 (Mascot, 신규 PR)
 
 `compute_chatter_pool`이 쓰는 컨텍스트에 근무 맥락(오늘 주말 여부·오늘 세션 수) 추가 →

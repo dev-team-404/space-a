@@ -605,6 +605,24 @@ impl SqliteStore {
         Ok(v)
     }
 
+    /// host에서 date 이전 마지막 활동(세션>0)일로부터 며칠 지났는지. 활동 이력 없으면 None.
+    /// 무활동일 일기가 "며칠째 조용한지"로 변화를 주는 데 쓴다.
+    pub fn days_since_last_active(&self, host: &str, date: &str) -> Result<Option<i64>> {
+        let last: Option<String> = self.conn.query_row(
+            "SELECT MAX(date) FROM daily_rollup WHERE host=?1 AND date<?2 AND session_count>0",
+            params![host, date],
+            |r| r.get::<_, Option<String>>(0),
+        )?;
+        let Some(last) = last else { return Ok(None) };
+        let (Ok(d), Ok(l)) = (
+            chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d"),
+            chrono::NaiveDate::parse_from_str(&last, "%Y-%m-%d"),
+        ) else {
+            return Ok(None);
+        };
+        Ok(Some((d - l).num_days()))
+    }
+
     pub fn get_setting(&self, key: &str) -> Result<Option<String>> {
         let v: Option<String> = self
             .conn
