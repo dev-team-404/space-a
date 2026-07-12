@@ -452,6 +452,53 @@ impl SqliteStore {
         Ok(out)
     }
 
+    /// findings_for_date의 전 host 합산 버전 — 다이어리는 주인의 하루(Windows+WSL)라 host를 고정하지 않고
+    /// finding의 scope_host가 그날 활동한 host와 일치하면 포함한다.
+    pub fn findings_for_date_all(&self, date: &str) -> Result<Vec<Finding>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
+                    evidence_json, est_tokens_saved, prescription_json, dedup_key
+             FROM findings f
+             WHERE EXISTS (
+                 SELECT 1 FROM sessions s
+                 WHERE date(s.first_ts, 'localtime') = ?1 AND s.host = f.scope_host
+                   AND ( (f.scope_kind = 'session' AND s.session_id = f.scope_ref)
+                      OR (f.scope_kind = 'project' AND s.project_id = f.scope_project)
+                      OR (f.scope_kind = 'host') )
+               )
+             ORDER BY est_tokens_saved DESC",
+        )?;
+        let rows = stmt.query_map(params![date], |r| {
+            let sev = match r.get::<_, String>(1)?.as_str() {
+                "warn" => Severity::Warn,
+                "suggest" => Severity::Suggest,
+                _ => Severity::Info,
+            };
+            let evidence: serde_json::Value =
+                serde_json::from_str(&r.get::<_, String>(6)?).unwrap_or(serde_json::Value::Null);
+            let presc: Option<Prescription> = r
+                .get::<_, Option<String>>(8)?
+                .and_then(|s| serde_json::from_str(&s).ok());
+            Ok(Finding {
+                rule_id: r.get(0)?,
+                severity: sev,
+                scope_host: r.get(2)?,
+                scope_project: r.get(3)?,
+                scope_kind: r.get(4)?,
+                scope_ref: r.get(5)?,
+                evidence,
+                est_tokens_saved: r.get::<_, i64>(7)? as u64,
+                prescription: presc,
+                dedup_key: r.get(9)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
     pub fn summary_for_date(&self, date: &str) -> Result<DaySummary> {
         let row = self.conn.query_row(
             "SELECT COALESCE(SUM(session_count),0), COALESCE(SUM(tok_input),0),
@@ -588,6 +635,39 @@ impl SqliteStore {
             .query_row("SELECT path FROM diary_index WHERE date=?1 LIMIT 1", params![date], |r| r.get(0))
             .optional()?;
         Ok(v)
+    }
+
+    /// diary_path_for의 host(scope) 인지 버전. diary_index PK가 (date, scope)이므로
+    /// 다중 host DB에서 date-only 조회는 다른 host의 일기를 집을 수 있다 — 브리프는 host 스코프라
+    /// 최근 일기 참조도 같은 host로 좁힌다.
+    pub fn diary_path_for_scope(&self, date: &str, scope: &str) -> Result<Option<String>> {
+        let v: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT path FROM diary_index WHERE date=?1 AND scope=?2",
+                params![date, scope],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(v)
+    }
+
+    /// date 이전 마지막 활동(전 host, 세션>0)일로부터 며칠 지났는지. 활동 이력 없으면 None.
+    /// 무활동일 일기가 "며칠째 조용한지"로 변화를 주는 데 쓴다(다이어리는 주인의 하루라 host 무관).
+    pub fn days_since_last_active(&self, date: &str) -> Result<Option<i64>> {
+        let last: Option<String> = self.conn.query_row(
+            "SELECT MAX(date) FROM daily_rollup WHERE date<?1 AND session_count>0",
+            params![date],
+            |r| r.get::<_, Option<String>>(0),
+        )?;
+        let Some(last) = last else { return Ok(None) };
+        let (Ok(d), Ok(l)) = (
+            chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d"),
+            chrono::NaiveDate::parse_from_str(&last, "%Y-%m-%d"),
+        ) else {
+            return Ok(None);
+        };
+        Ok(Some((d - l).num_days()))
     }
 
     pub fn get_setting(&self, key: &str) -> Result<Option<String>> {

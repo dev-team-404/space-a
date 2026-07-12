@@ -5,7 +5,7 @@ use crate::diary::engine::Engine;
 use crate::diary::occasions::{compute_occasions, Occasion};
 use crate::store::SqliteStore;
 use anyhow::Result;
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use rusqlite::params;
 use serde::Serialize;
 use std::path::PathBuf;
@@ -18,6 +18,35 @@ pub struct BriefTotals {
     pub session_count: u64,
 }
 
+/// 그날 (host,date) 도구 사용 집계 — 일기의 "그날 리듬" 소재.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct ToolUsage {
+    pub total_calls: u64,
+    pub by_kind: Vec<(String, u64)>, // 0 아닌 kind만, count 내림차순
+    pub skills: Vec<String>,         // distinct 스킬 타깃, 최대 8
+    pub mcp_servers: Vec<String>,    // distinct MCP 서버, 최대 8
+}
+
+/// 근무 맥락 — 위로/응원 트리거 신호.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct WorkContext {
+    pub is_weekend: bool,
+    pub active_hours: f64, // 몰입 시간(연속 이벤트 간 30분 이하 간격 합, 시간·소수 1자리)
+    pub long_work: bool,   // active_hours >= LONG_WORK_HOURS
+}
+
+const LONG_WORK_HOURS: f64 = 7.0;  // 몰입 시간 기준 — 이 이상이면 "유난히 긴 날"(매일 아님)
+const IDLE_GAP_SECS: f64 = 1800.0; // 30분 이상 공백은 휴식으로 보고 몰입 시간에서 제외
+
+/// 그날 실제로 한 작업 — "열심히 달렸다"가 아니라 무슨 작업이었는지 일기에 담을 재료.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct WorkLog {
+    pub commits: Vec<String>, // 그날 활동 repo의 git 커밋 제목(정제·최대 WORK_LOG_CAP)
+    pub topics: Vec<String>,  // 폴백/보조: 브랜치명·정제된 첫 프롬프트(여러 갈래=멀티태스킹 신호)
+}
+
+const WORK_LOG_CAP: usize = 8;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct BriefFinding {
     pub rule_id: String,
@@ -29,6 +58,13 @@ pub struct BriefFinding {
     pub suggested_action: String,
 }
 
+/// 직전 며칠간 내가 쓴 일기의 발췌 — LLM이 어제와 다른 이야기를 쓰도록 브리프에 싣는 컨텍스트.
+#[derive(Debug, Clone, Serialize)]
+pub struct RecentDiary {
+    pub date: String,
+    pub excerpt: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Brief {
     pub date: String,
@@ -36,6 +72,10 @@ pub struct Brief {
     pub totals: BriefTotals,
     pub findings: Vec<BriefFinding>,
     pub occasions: Vec<Occasion>,
+    pub recent_diaries: Vec<RecentDiary>,
+    pub tool_usage: ToolUsage,
+    pub work_context: WorkContext,
+    pub work_log: WorkLog,
 }
 
 /// rule_id + evidence에서 사람이 읽는 근거(detail)와 개선방향(suggested_action)을 결정론적으로 생성.
@@ -179,18 +219,20 @@ pub fn finding_advice(
     }
 }
 
+/// 다이어리는 "주인의 하루"다 — 작업 신호(totals·findings·tool_usage·work_context·work_log)는
+/// 모든 host(Windows+WSL)를 합산한다. `host`는 diary_index 저장·recent_diaries 조회의 정규 스코프로만 쓴다.
 pub fn assemble_brief(
     store: &SqliteStore,
     host: &str,
     date: &str,
     cfg: &DiaryConfig,
 ) -> Result<Brief> {
-    // 해당 host+date의 rollup 합산(여러 프로젝트 합)
+    // 그날 전 host rollup 합산(여러 프로젝트·Windows+WSL 모두 주인의 하루) — host로 필터하지 않는다.
     let totals = store.conn.query_row(
         "SELECT COALESCE(SUM(tok_input),0), COALESCE(SUM(tok_output),0),
                 COALESCE(SUM(tok_cache_create),0), COALESCE(SUM(session_count),0)
-         FROM daily_rollup WHERE host=?1 AND date=?2",
-        params![host, date],
+         FROM daily_rollup WHERE date=?1",
+        params![date],
         |r| {
             Ok(BriefTotals {
                 tok_input: r.get::<_, i64>(0)? as u64,
@@ -201,9 +243,29 @@ pub fn assemble_brief(
         },
     )?;
 
+    let locale = resolve_locale(cfg);
+    let today = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok();
+
+    // 직전 며칠 일기(서사 반복 방지) — 먼저 계산해야 recently_covered 판정에 쓸 수 있다.
+    // 로컬 vault 파일만 읽으므로 프라이버시 경계 불변.
+    let recent_diaries = match today {
+        Some(d) => collect_recent_diaries(store, host, d),
+        None => Vec::new(),
+    };
+    // 최근 일기가 있던 날들의 finding dedup_key 집합 — 오늘 finding이 여기 있으면 "이미 다룬 상시 이슈".
+    let recent_keys: std::collections::HashSet<String> = recent_diaries
+        .iter()
+        .filter_map(|rd| store.findings_for_date_all(&rd.date).ok())
+        .flatten()
+        .map(|f| f.dedup_key)
+        .collect();
+
     let findings = store
-        .findings_for_date(host, date)?
+        .findings_for_date_all(date)?
         .into_iter()
+        // 요 며칠 일기에서 이미 다룬 상시 이슈는 브리프에서 제외 — 매일 같은 지적 반복 방지.
+        // (코칭 자체는 Coach 탭이 계속 보여준다. 다이어리는 그날의 새 이야기에 집중.)
+        .filter(|f| !recent_keys.contains(&f.dedup_key))
         .map(|f| {
             let (detail, suggested_action) = finding_advice(&f.rule_id, &f.evidence, f.est_tokens_saved);
             BriefFinding {
@@ -220,8 +282,6 @@ pub fn assemble_brief(
         })
         .collect();
 
-    let locale = resolve_locale(cfg);
-    let today = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok();
     let anchor = store
         .earliest_session_ts()?
         .and_then(|ts| local_date_of(&ts));
@@ -230,7 +290,247 @@ pub fn assemble_brief(
         None => Vec::new(),
     };
 
-    Ok(Brief { date: date.to_string(), host: host.to_string(), totals, findings, occasions })
+    let tool_usage = collect_tool_usage(store, date);
+    let work_context = match today {
+        Some(d) => collect_work_context(store, date, d),
+        None => WorkContext::default(),
+    };
+    let work_log = collect_work_log(store, date);
+
+    Ok(Brief {
+        date: date.to_string(),
+        host: host.to_string(),
+        totals,
+        findings,
+        occasions,
+        recent_diaries,
+        tool_usage,
+        work_context,
+        work_log,
+    })
+}
+
+/// 직전 며칠간 서사 반복을 막기 위해 브리프에 싣는 최근 일기 발췌 파라미터.
+const RECENT_DIARY_LOOKBACK: i64 = 3;
+const RECENT_DIARY_EXCERPT_CAP: usize = 500;
+
+/// 직전 N일(오래된 것부터) 중 해당 host의 vault 일기 본문을 발췌해 온다.
+/// backfill이 오래된 날짜부터 재생성하므로(missing_diary_dates) 오늘 생성 시 직전 날짜 일기는 이미 존재.
+/// diary_index가 (date, scope) 키라 조회를 host로 좁힌다(다른 host 일기 혼입 방지).
+/// 파일 없음·읽기 실패는 조용히 스킵 — 브리프 조립을 막지 않는다.
+fn collect_recent_diaries(store: &SqliteStore, host: &str, today: NaiveDate) -> Vec<RecentDiary> {
+    (1..=RECENT_DIARY_LOOKBACK)
+        .rev()
+        .filter_map(|i| {
+            let date = (today - chrono::Duration::days(i)).format("%Y-%m-%d").to_string();
+            let path = store.diary_path_for_scope(&date, host).ok().flatten()?;
+            let body = std::fs::read_to_string(&path).ok()?;
+            // 토큰 푸터(render_diary가 붙임)는 제외 — 발췌 예시로 들어가면 LLM이 흉내내 이중 푸터가 생김.
+            let narrative = body.split("\n\n*—").next().unwrap_or(&body).trim();
+            Some(RecentDiary { date, excerpt: cap_chars(narrative, RECENT_DIARY_EXCERPT_CAP) })
+        })
+        .collect()
+}
+
+/// char 경계에서 안전하게 앞 max개 문자만 취한다(멀티바이트 한글·이모지 절단 방지).
+fn cap_chars(s: &str, max: usize) -> String {
+    match s.char_indices().nth(max) {
+        Some((idx, _)) => s[..idx].to_string(),
+        None => s.to_string(),
+    }
+}
+
+/// 그날 (host,date)의 도구 호출을 집계한다. tool_kind별 카운트 + distinct 스킬/서버.
+/// 실패(쿼리 오류)는 빈 집계로 처리 — 브리프 조립을 막지 않는다.
+fn collect_tool_usage(store: &SqliteStore, date: &str) -> ToolUsage {
+    let by_kind: Vec<(String, u64)> = store
+        .conn
+        .prepare(
+            "SELECT tool_kind, COUNT(*) FROM events
+             WHERE date(ts,'localtime')=?1 AND tool_kind IS NOT NULL AND tool_kind <> ''
+             GROUP BY tool_kind ORDER BY COUNT(*) DESC, tool_kind",
+        )
+        .and_then(|mut s| {
+            let rows = s.query_map(params![date], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
+            })?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()
+        })
+        .unwrap_or_default();
+    let total_calls: u64 = by_kind.iter().map(|(_, n)| *n).sum();
+
+    let distinct = |col: &str, kind: &str| -> Vec<String> {
+        store
+            .conn
+            .prepare(&format!(
+                "SELECT {col} FROM events
+                 WHERE date(ts,'localtime')=?1 AND tool_kind=?2 AND {col} IS NOT NULL
+                 GROUP BY {col} ORDER BY COUNT(*) DESC, {col} LIMIT 8"
+            ))
+            .and_then(|mut s| {
+                let rows = s.query_map(params![date, kind], |r| r.get::<_, String>(0))?;
+                rows.collect::<rusqlite::Result<Vec<_>>>()
+            })
+            .unwrap_or_default()
+    };
+    ToolUsage {
+        total_calls,
+        by_kind,
+        skills: distinct("tool_target", "skill"),
+        mcp_servers: distinct("tool_server", "mcp_call"),
+    }
+}
+
+/// 근무 맥락: 요일(주말)과 그날 몰입 시간. 몰입 시간은 연속 이벤트 간격 중 IDLE_GAP_SECS(30분)
+/// 이하인 것만 합산 — 첫~마지막 span은 중간 공백(점심·회의 등)까지 포함해 과장되므로 쓰지 않는다.
+fn collect_work_context(store: &SqliteStore, date: &str, today: NaiveDate) -> WorkContext {
+    let ts: Vec<f64> = store
+        .conn
+        .prepare(
+            "SELECT julianday(ts)*86400.0 FROM events
+             WHERE date(ts,'localtime')=?1 AND ts IS NOT NULL ORDER BY ts",
+        )
+        .and_then(|mut s| {
+            let rows = s.query_map(params![date], |r| r.get::<_, f64>(0))?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()
+        })
+        .unwrap_or_default();
+    let engaged_secs: f64 = ts
+        .windows(2)
+        .map(|w| w[1] - w[0])
+        .filter(|&g| g > 0.0 && g <= IDLE_GAP_SECS)
+        .sum();
+    let active_hours = (engaged_secs / 3600.0 * 10.0).round() / 10.0;
+    WorkContext {
+        is_weekend: matches!(today.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun),
+        active_hours,
+        long_work: active_hours >= LONG_WORK_HOURS,
+    }
+}
+
+/// 첫 프롬프트에서 명령 에코·시스템 마커 등 노이즈를 걸러 사람이 읽는 작업 설명만 남긴다.
+/// 노이즈면 None(예: `<task-notification>`, `<local-command-stdout>…`, 모델 전환 에코).
+fn clean_prompt(s: &str) -> Option<String> {
+    let t = s.trim();
+    if t.is_empty() || t.starts_with('<') || t.starts_with('[') {
+        return None;
+    }
+    if t.contains("Set model to") || t.contains("local-command") || t.contains("task-notification") {
+        return None;
+    }
+    Some(cap_chars(t, 60))
+}
+
+/// 그날(로컬 날짜) 해당 repo(host,cwd)에서 그 repo 작성자가 남긴 커밋 제목들. best-effort — 실패는 빈 벡터.
+/// host가 `wsl:<distro>`면 `wsl -d <distro> -- git`으로 WSL 안에서 실행(리눅스 경로), 아니면 네이티브 git.
+/// WSL 미설치·distro 부재 등은 spawn 에러 → 빈 벡터 → 상위에서 topics로 폴백.
+fn git_commits_for(host: &str, cwd: &str, date: &str) -> Vec<String> {
+    use std::process::Command;
+    let Some(next) = NaiveDate::parse_from_str(date, "%Y-%m-%d")
+        .ok()
+        .and_then(|d| d.succ_opt())
+        .map(|d| d.format("%Y-%m-%d").to_string())
+    else {
+        return Vec::new();
+    };
+    let wsl_distro = host.strip_prefix("wsl:");
+    // git 인자를 받아 host에 맞는 방식으로 실행하고 성공 시 stdout 반환.
+    let run = |git_args: &[String]| -> Option<String> {
+        let mut cmd = match wsl_distro {
+            Some(distro) => {
+                let mut c = Command::new("wsl");
+                c.args(["-d", distro, "--", "git"]);
+                c
+            }
+            None => Command::new("git"),
+        };
+        cmd.args(git_args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+    };
+    // 다중 개발자 repo에서 남의 커밋 혼입 방지 — 해당 repo 작성자 이메일로 필터.
+    let email = run(&["-C".into(), cwd.into(), "config".into(), "user.email".into()])
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+    let mut args: Vec<String> = vec![
+        "-C".into(), cwd.into(), "log".into(), "--no-merges".into(), "--format=%s".into(),
+        format!("--since={date} 00:00:00"), format!("--until={next} 00:00:00"),
+    ];
+    if !email.is_empty() {
+        args.push(format!("--author={email}"));
+    }
+    match run(&args) {
+        Some(out) => out.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
+        None => Vec::new(),
+    }
+}
+
+/// 그날 실제 한 작업 — 전 host 활동 repo의 git 커밋 제목(우선) + 세션 갈래(브랜치·정제 첫 프롬프트, 폴백/보조).
+fn collect_work_log(store: &SqliteStore, date: &str) -> WorkLog {
+    let rows: Vec<(String, String, Option<String>, Option<String>, Option<String>)> = store
+        .conn
+        .prepare(
+            "SELECT DISTINCT host, project_id, cwd, git_branch, first_prompt_preview FROM sessions
+             WHERE date(first_ts,'localtime')=?1",
+        )
+        .and_then(|mut s| {
+            let r = s.query_map(params![date], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+            })?;
+            r.collect::<rusqlite::Result<Vec<_>>>()
+        })
+        .unwrap_or_default();
+
+    // cwd 없는 옛 세션 보완: 같은 (host, project_id)를 cwd와 함께 기록한 다른 세션의 cwd를 재사용.
+    // (옛 세션은 cwd 미수집 + 트랜스크립트도 삭제돼 재스캔 불가 — 프로젝트 매핑으로 repo 위치 복원)
+    let known: std::collections::HashMap<(String, String), String> = store
+        .conn
+        .prepare("SELECT host, project_id, cwd FROM sessions WHERE cwd IS NOT NULL")
+        .and_then(|mut s| {
+            let r = s.query_map([], |r| {
+                Ok(((r.get::<_, String>(0)?, r.get::<_, String>(1)?), r.get::<_, String>(2)?))
+            })?;
+            r.collect::<rusqlite::Result<std::collections::HashMap<_, _>>>()
+        })
+        .unwrap_or_default();
+
+    // 커밋: 그날 활동한 distinct (host, repo)에서 — host별로 git 실행 방식 분기(Windows/WSL)
+    let mut host_cwds: Vec<(String, String)> = rows
+        .iter()
+        .filter_map(|(h, pid, cwd, _, _)| {
+            cwd.clone()
+                .or_else(|| known.get(&(h.clone(), pid.clone())).cloned())
+                .map(|c| (h.clone(), c))
+        })
+        .collect();
+    host_cwds.sort();
+    host_cwds.dedup();
+    let mut commits: Vec<String> = host_cwds
+        .iter()
+        .flat_map(|(h, c)| git_commits_for(h, c, date))
+        .collect();
+    commits.dedup();
+    commits.truncate(WORK_LOG_CAP);
+
+    // 토픽: 브랜치(main/master/HEAD 제외) + 정제된 첫 프롬프트 — 여러 갈래면 멀티태스킹 신호
+    let mut topics: Vec<String> = Vec::new();
+    for (_, _, _, br, fp) in &rows {
+        if let Some(b) = br {
+            if !matches!(b.as_str(), "main" | "master" | "HEAD" | "") {
+                topics.push(b.clone());
+            }
+        }
+        if let Some(p) = fp.as_deref().and_then(clean_prompt) {
+            topics.push(p);
+        }
+    }
+    topics.sort();
+    topics.dedup();
+    topics.truncate(WORK_LOG_CAP);
+
+    WorkLog { commits, topics }
 }
 
 #[derive(Debug, Clone)]
@@ -321,9 +621,28 @@ pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
          자연스럽고 다정하게 언급하세요(예: 오늘이 크리스마스이거나 함께한 지 100일 등). \
          비어있으면 언급하지 마세요. \
          \
-         형식: 일기는 짧게 — 2~3문단, 전체 350자 이내로 쓰세요. \
-         그날의 핵심 한두 가지만 골라 쓰고 나머지 사실은 과감히 버리세요. \
-         이모지는 적당히 — 문단당 0~1개, 감정이 실리는 자리에만 쓰세요.",
+         브리프의 `recent_diaries`는 직전 며칠간 내가 쓴 일기입니다. \
+         거기서 이미 다룬 지적·화제는 되풀이하지 말고(꼭 필요하면 한 줄로만 스치듯), \
+         오늘 브리프의 오늘만의 사실과 기분에 집중해 어제와는 다른 이야기로 쓰세요. \
+         비어있으면 신경 쓰지 마세요. \
+         \
+         오늘 하루의 재료는 이렇습니다: `work_log`(그날 한 작업 — git 커밋 제목이나 작업 갈래), \
+         `tool_usage`(도구 사용량), `work_context`(주말 여부·몰입 시간), `findings`(오늘 새 코칭거리), `occasions`. \
+         이 재료들을 종류별로 문단을 나눠 나열하지 마세요 — '도구 문단 / 커밋 문단 / MCP 문단'처럼 쓰면 실패입니다. \
+         그날을 가장 잘 말해주는 한 가지(대개 무슨 작업을 했는지)를 중심 줄기로 잡고, 나머지는 곁들이듯 흘려 \
+         하나의 자연스러운 하루 이야기로 엮으세요. 모든 재료를 억지로 다 넣지 말고 골라 쓰세요. \
+         특히 '몇 시간 붙어 있었다'처럼 작업 시간 수치로 일기를 시작하지 마세요. \
+         \
+         `work_log`가 있으면 무슨 작업을 했는지 구체적으로(여러 갈래면 '여러 일을 오갔다'는 분주함도 슬쩍). \
+         `findings`는 있으면 하나만 스치듯 — 이미 다룬 상시 이슈는 빠져 있으니 되풀이 금지, 없으면 억지로 만들지 말 것. \
+         위로·응원은 매일이 아니라 `work_context.long_work`(유난히 긴 날)나 `is_weekend`(주말 근무) 때만, \
+         그것도 판박이 대신 다마고치 능청으로(주말이면 '주말에 또? 일중독인가 봐', 긴 날이면 '오늘 좀 과했다, 배터리 방전 직전'). \
+         평범한 날은 위로 없이 담백하게 끝내세요. 발렌타인·파이데이 같은 재미 기념일은 위로 대상이 아닙니다. \
+         \
+         형식: 일기는 2~4문단, 전체 500자 안팎으로 쓰세요 \
+         (작업 내용을 담느라 한 문단 늘어도 좋지만 여전히 간결하게). \
+         그날의 핵심을 골라 쓰고 덜 중요한 사실은 과감히 버리세요. \
+         이모지는 문단마다 1~2개, 감정이 실리는 자연스러운 자리에 넣되 같은 이모지를 반복하지 마세요.",
         honorific = cfg.honorific,
         tone = cfg.tone,
         voice = voice_guidance(),
@@ -336,18 +655,61 @@ pub struct RenderedDiary {
     pub engine_name: String,
 }
 
+/// 일기 본문 + 토큰 푸터. render_diary·render_idle_diary 공용(푸터 포맷 드리프트 방지).
+fn diary_body(text: &str, tokens: u64, engine: &str) -> String {
+    format!("{text}\n\n*— 이 일기 ~{tokens} 토큰 (엔진: {engine})*\n")
+}
+
 /// 네트워크(LLM)만 — store 접근 없음. 락 밖에서 호출 가능.
 pub fn render_diary(engine: &dyn Engine, brief: &Brief, cfg: &DiaryConfig) -> Result<RenderedDiary> {
     let system = build_system_prompt(cfg);
     let user = serde_json::to_string_pretty(brief)?;
     let out = engine.generate(&system, &user)?;
-    let body = format!(
-        "{narrative}\n\n*— 이 일기 ~{tokens} 토큰 (엔진: {engine})*\n",
-        narrative = out.text,
-        tokens = out.tokens_used,
-        engine = engine.name(),
-    );
-    Ok(RenderedDiary { body, tokens_used: out.tokens_used, engine_name: engine.name() })
+    Ok(RenderedDiary {
+        body: diary_body(&out.text, out.tokens_used, &engine.name()),
+        tokens_used: out.tokens_used,
+        engine_name: engine.name(),
+    })
+}
+
+/// 무활동일(작업 기록 0) 일기용 컨텍스트 — 작업 사실 없이 마스코트 페르소나만.
+#[derive(Debug, Clone, Serialize)]
+pub struct IdleContext {
+    pub date: String,
+    pub is_weekend: bool,
+    pub days_idle: Option<i64>, // 마지막 활동일로부터 며칠째 조용한지(모르면 None)
+    pub occasions: Vec<Occasion>,
+}
+
+/// 무활동일 일기 시스템 프롬프트 — 작업 사실 없이 마스코트의 자유 시간을 능청스러운 상상 일기로.
+pub fn build_idle_prompt(cfg: &DiaryConfig) -> String {
+    format!(
+        "당신은 {honorific}의 AI 코딩 여정을 함께하는 마스코트입니다. \
+         오늘은 {honorific}이 한 번도 찾아오지 않은 '조용한 날' — 나(마스코트)의 자유 시간입니다. \
+         {voice} \
+         단, 이건 작업 기록이 아니라 마스코트의 상상 일기입니다 — 위 문체 가이드의 '브리프 사실만' 조항은 여기선 무시하고 \
+         (문체·자연스러움 규칙은 그대로 지키되) 나만의 하루를 맘껏 능청스럽게 지어내세요. 업무 이야기는 하지 마세요. \
+         나에겐 옆 동네 다른 에이전트 친구들이 있습니다 — 쉬는 날엔 걔들과 만나 놀거나 소소한 일을 합니다 \
+         (예: '옆 동네 봇이랑 산책하며 로그 구경했다', '친구 에이전트가 놀러 와 수다 떨었다'). \
+         `occasions`에 명절·기념일이 있으면 그 분위기에 맞춰 특별하게 \
+         (추석이면 이웃 에이전트들과 송편 빚기, 크리스마스면 다 같이 트리 장식 등). \
+         `days_idle`(며칠째 조용한지)·`is_weekend`도 살려 {honorific}의 안부를 슬쩍 궁금해하세요('그나저나 주인 잘 노나?'). \
+         짧게 — 1~2문장(특별한 날은 2~3문장까지), 한 문단. 이모지는 0~1개. 그날 컨텍스트로 매번 다르게.",
+        honorific = cfg.honorific,
+        voice = voice_guidance(),
+    )
+}
+
+/// 무활동일 일기 렌더 — 네트워크(LLM)만, store 접근 없음. 락 밖에서 호출 가능.
+pub fn render_idle_diary(engine: &dyn Engine, idle: &IdleContext, cfg: &DiaryConfig) -> Result<RenderedDiary> {
+    let system = build_idle_prompt(cfg);
+    let user = serde_json::to_string_pretty(idle)?;
+    let out = engine.generate(&system, &user)?;
+    Ok(RenderedDiary {
+        body: diary_body(&out.text, out.tokens_used, &engine.name()),
+        tokens_used: out.tokens_used,
+        engine_name: engine.name(),
+    })
 }
 
 /// 파일 쓰기 + diary_index upsert — 빠른 로컬 작업만.
@@ -428,6 +790,10 @@ mod tests {
             totals: BriefTotals { tok_cache_create: 55000, session_count: 3, ..Default::default() },
             findings: vec![],
             occasions: vec![],
+            recent_diaries: vec![],
+            tool_usage: ToolUsage::default(),
+            work_context: WorkContext::default(),
+            work_log: WorkLog::default(),
         };
         let tmp = tempfile::tempdir().unwrap();
         let cfg = DiaryConfig {
@@ -482,6 +848,356 @@ mod tests {
         // 2026-04-11 = 2026-01-01 + 100일
         let brief = assemble_brief(&store, "Windows", "2026-04-11", &cfg).unwrap();
         assert!(brief.occasions.iter().any(|o| o.label == "함께한 지 100일"));
+    }
+
+    /// 테스트 vault에 일기 한 편을 심는다(파일 + diary_index).
+    fn seed_diary(store: &SqliteStore, cfg: &DiaryConfig, date: &str, narrative: &str) {
+        let rendered = RenderedDiary {
+            body: format!("{narrative}\n\n*— 이 일기 ~10 토큰 (엔진: mock)*\n"),
+            tokens_used: 10,
+            engine_name: "mock".into(),
+        };
+        persist_diary(store, date, "Windows", &rendered, cfg).unwrap();
+    }
+
+    /// 특정 host/project/session/ts의 assistant turn 이벤트 하나(sessions.first_ts/last_ts·rollup 채움용).
+    fn turn_event(host: &str, project: &str, session: &str, uuid: &str, ts: &str) -> NormalizedEvent {
+        NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: host.into(), project_id: project.into(),
+            session_id: session.into(), uuid: Some(uuid.into()), parent_uuid: None,
+            is_sidechain: false, ts: Some(ts.into()),
+            source_file: "s.jsonl".into(), source_offset: 0,
+            kind: EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-opus-4-8"),
+                usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
+            },
+        }
+    }
+
+    /// 특정 host/session/ts의 도구 호출 이벤트(tool_kind/서버/타깃 적재용).
+    /// off는 고유 source_offset — events dedup_key(uuid 없을 때 source_file:offset)가 겹치지 않게.
+    fn tool_event(host: &str, session: &str, ts: &str, off: usize, kind: ToolKind, raw: &str, target: Option<&str>) -> NormalizedEvent {
+        NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: host.into(), project_id: "p".into(),
+            session_id: session.into(), uuid: None, parent_uuid: None,
+            is_sidechain: false, ts: Some(ts.into()),
+            source_file: "s.jsonl".into(), source_offset: off as u64,
+            kind: EventKind::ToolCall {
+                kind, raw_name: raw.into(),
+                target: target.map(|s| s.to_string()), tool_use_id: None,
+            },
+        }
+    }
+
+    #[test]
+    fn assemble_brief_collects_tool_usage() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        // 07-10: 스킬 2종(brainstorming×2, writing-plans×1), 파일읽기×3, MCP(context7)×1
+        store.upsert_events(&[
+            tool_event("Windows", "s1", "2026-07-10T10:00:00Z", 0, ToolKind::Skill { name: "brainstorming".into() }, "Skill", Some("superpowers:brainstorming")),
+            tool_event("Windows", "s1", "2026-07-10T10:01:00Z", 1, ToolKind::Skill { name: "brainstorming".into() }, "Skill", Some("superpowers:brainstorming")),
+            tool_event("Windows", "s1", "2026-07-10T10:02:00Z", 2, ToolKind::Skill { name: "writing-plans".into() }, "Skill", Some("superpowers:writing-plans")),
+            tool_event("Windows", "s1", "2026-07-10T10:03:00Z", 3, ToolKind::FileRead, "Read", Some("a.rs")),
+            tool_event("Windows", "s1", "2026-07-10T10:04:00Z", 4, ToolKind::FileRead, "Read", Some("b.rs")),
+            tool_event("Windows", "s1", "2026-07-10T10:05:00Z", 5, ToolKind::FileRead, "Read", Some("c.rs")),
+            tool_event("Windows", "s1", "2026-07-10T10:06:00Z", 6, ToolKind::McpCall { server: "context7".into(), tool: "query".into() }, "mcp__context7__query", None),
+        ]).unwrap();
+
+        let brief = assemble_brief(&store, "Windows", "2026-07-10", &cfg).unwrap();
+        let tu = &brief.tool_usage;
+        assert_eq!(tu.total_calls, 7);
+        // by_kind는 count 내림차순 — skill(3)·file_read(3)·mcp_call(1)
+        assert_eq!(tu.by_kind.iter().find(|(k, _)| k.as_str() == "skill").unwrap().1, 3);
+        assert_eq!(tu.by_kind.iter().find(|(k, _)| k.as_str() == "file_read").unwrap().1, 3);
+        assert_eq!(tu.by_kind.iter().find(|(k, _)| k.as_str() == "mcp_call").unwrap().1, 1);
+        // distinct 스킬 2종·MCP 서버 1종
+        assert_eq!(tu.skills.len(), 2);
+        assert!(tu.skills.contains(&"superpowers:brainstorming".to_string()));
+        assert_eq!(tu.mcp_servers, vec!["context7".to_string()]);
+    }
+
+    #[test]
+    fn assemble_brief_work_context_weekend_and_long_work() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        // 2026-07-11 = 토요일. 20분 간격 밀집 이벤트 22개 → 21×20분 = 7.0h 몰입.
+        // 00:00Z~07:00Z는 KST(UTC+9)에서 09:00~16:00 07-11이라 로컬 날짜 07-11에 다 들어감.
+        let mut evs = Vec::new();
+        for i in 0..22u64 {
+            let m = i * 20;
+            evs.push(turn_event("Windows", "p", "s1", &format!("u{i}"),
+                &format!("2026-07-11T{:02}:{:02}:00Z", m / 60, m % 60)));
+        }
+        store.upsert_events(&evs).unwrap();
+        let brief = assemble_brief(&store, "Windows", "2026-07-11", &cfg).unwrap();
+        assert!(brief.work_context.is_weekend, "07-11은 토요일");
+        assert!((brief.work_context.active_hours - 7.0).abs() < 0.05, "몰입 7.0h");
+        assert!(brief.work_context.long_work, "7.0h >= 7.0 임계");
+    }
+
+    #[test]
+    fn assemble_brief_work_context_excludes_idle_and_short_weekday() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        // 2026-07-08 = 수요일. 10분 간격 3개(20분) + 160분 공백 + 10분 간격 2개(10분) → 몰입 0.5h.
+        store.upsert_events(&[
+            turn_event("Windows", "p", "s1", "u1", "2026-07-08T02:00:00Z"),
+            turn_event("Windows", "p", "s1", "u2", "2026-07-08T02:10:00Z"),
+            turn_event("Windows", "p", "s1", "u3", "2026-07-08T02:20:00Z"),
+            turn_event("Windows", "p", "s1", "u4", "2026-07-08T05:00:00Z"), // 160분 공백 → 제외
+            turn_event("Windows", "p", "s1", "u5", "2026-07-08T05:10:00Z"),
+        ]).unwrap();
+        let brief = assemble_brief(&store, "Windows", "2026-07-08", &cfg).unwrap();
+        assert!(!brief.work_context.is_weekend, "07-08은 수요일");
+        assert!((brief.work_context.active_hours - 0.5).abs() < 0.05, "긴 공백 제외 → 0.5h");
+        assert!(!brief.work_context.long_work);
+    }
+
+    #[test]
+    fn clean_prompt_filters_noise() {
+        assert_eq!(super::clean_prompt("<task-notification>"), None);
+        assert_eq!(super::clean_prompt("<local-command-stdout>Set model to X"), None);
+        assert_eq!(super::clean_prompt("  Set model to Fable 5  "), None);
+        assert_eq!(super::clean_prompt(""), None);
+        assert_eq!(super::clean_prompt("코칭 v2.1 PR② 구현").as_deref(), Some("코칭 v2.1 PR② 구현"));
+    }
+
+    #[test]
+    fn collect_work_log_falls_back_to_branch_and_prompt() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let seed = |sid: &str, ts: &str, br: &str, fp: &str| {
+            store.conn.execute(
+                "INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, git_branch, cwd, first_prompt_preview)
+                 VALUES (?1,'Windows','p','claude-code',?2,?2,?3,NULL,?4)",
+                rusqlite::params![sid, ts, br, fp],
+            ).unwrap();
+        };
+        // cwd 없는(=git 불가) 세션 둘 — 서로 다른 브랜치·프롬프트(멀티태스킹), 하나는 노이즈 프롬프트
+        seed("s1", "2026-07-08T02:00:00Z", "feat/mascot-daily-line", "마스코트 한마디 구현");
+        seed("s2", "2026-07-08T03:00:00Z", "main", "<task-notification>");
+
+        let wl = super::collect_work_log(&store, "2026-07-08");
+        assert!(wl.commits.is_empty(), "cwd 없어 git 커밋 없음");
+        assert!(wl.topics.contains(&"feat/mascot-daily-line".to_string()), "서술적 브랜치 포함");
+        assert!(wl.topics.contains(&"마스코트 한마디 구현".to_string()), "정제된 프롬프트 포함");
+        assert!(!wl.topics.contains(&"main".to_string()), "main 브랜치 제외");
+        assert!(!wl.topics.iter().any(|t| t.contains("task-notification")), "노이즈 프롬프트 제외");
+    }
+
+    #[test]
+    fn collect_work_log_recovers_cwd_from_known_project_mapping() {
+        use std::process::Command;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+        let run = |args: &[&str]| {
+            Command::new("git").args(["-C", dir]).args(args)
+                .env("GIT_AUTHOR_DATE", "2026-07-05T12:00:00")
+                .env("GIT_COMMITTER_DATE", "2026-07-05T12:00:00")
+                .output().unwrap()
+        };
+        Command::new("git").args(["init", "-q", dir]).output().unwrap();
+        run(&["config", "user.email", "t@example.com"]);
+        run(&["config", "user.name", "t"]);
+        run(&["commit", "--allow-empty", "-q", "-m", "feat: 옛 세션 repo 커밋"]);
+
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 07-07 세션: 같은 project를 cwd(=temp repo)와 함께 기록. 07-05 세션: 같은 project, cwd 없음.
+        store.conn.execute(
+            "INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, cwd)
+             VALUES ('s7','Windows','pid1','claude-code','2026-07-07T10:00:00Z','2026-07-07T10:00:00Z',?1)",
+            rusqlite::params![dir],
+        ).unwrap();
+        store.conn.execute(
+            "INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, cwd)
+             VALUES ('s5','Windows','pid1','claude-code','2026-07-05T10:00:00Z','2026-07-05T10:00:00Z',NULL)",
+            [],
+        ).unwrap();
+
+        // 07-05는 cwd가 없지만 project 매핑으로 repo를 복원해 그날 커밋을 읽어야 함
+        let wl = super::collect_work_log(&store, "2026-07-05");
+        assert!(
+            wl.commits.iter().any(|s| s.contains("옛 세션 repo 커밋")),
+            "project 매핑으로 cwd 복원: {:?}", wl.commits
+        );
+    }
+
+    #[test]
+    fn git_commits_for_reads_dated_authored_subjects() {
+        use std::process::Command;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().to_str().unwrap();
+        let run = |args: &[&str]| {
+            Command::new("git").args(["-C", dir]).args(args)
+                .env("GIT_AUTHOR_DATE", "2026-07-08T12:00:00")
+                .env("GIT_COMMITTER_DATE", "2026-07-08T12:00:00")
+                .output().unwrap()
+        };
+        Command::new("git").args(["init", "-q", dir]).output().unwrap();
+        run(&["config", "user.email", "t@example.com"]);
+        run(&["config", "user.name", "t"]);
+        run(&["commit", "--allow-empty", "-q", "-m", "feat: work_log 다이어리 반영"]);
+
+        let subs = super::git_commits_for("Windows", dir, "2026-07-08");
+        assert!(subs.iter().any(|s| s.contains("work_log 다이어리 반영")), "그날 커밋 제목: {subs:?}");
+        assert!(super::git_commits_for("Windows", dir, "2026-07-09").is_empty(), "다른 날짜엔 없음");
+        // git repo 아닌 경로 → 빈 벡터(패닉 없음)
+        let nogit = tempfile::tempdir().unwrap();
+        assert!(super::git_commits_for("Windows", nogit.path().to_str().unwrap(), "2026-07-08").is_empty());
+    }
+
+    #[test]
+    fn idle_prompt_directs_imaginative_persona() {
+        let p = build_idle_prompt(&DiaryConfig::default());
+        assert!(p.contains("조용한 날"));        // 무활동일 프레이밍
+        assert!(p.contains("지어내"));           // 상상 일기(사실 규율 해제)
+        assert!(p.contains("에이전트 친구"));    // 동료 에이전트 설정
+        assert!(p.contains("송편") || p.contains("명절")); // occasion 테마
+        assert!(p.contains("days_idle"));        // 며칠째 조용 신호
+    }
+
+    #[test]
+    fn render_idle_diary_writes_persona_with_footer() {
+        use crate::diary::engine::MockEngine;
+        let cfg = DiaryConfig::default();
+        let idle = IdleContext {
+            date: "2026-07-11".into(), is_weekend: true, days_idle: Some(2), occasions: vec![],
+        };
+        let engine = MockEngine { canned: "옆 동네 봇이랑 놀았다.".into() };
+        let r = render_idle_diary(&engine, &idle, &cfg).unwrap();
+        assert!(r.body.contains("옆 동네 봇이랑 놀았다."));
+        assert!(r.body.contains("토큰"), "footer meters tokens");
+    }
+
+    #[test]
+    fn days_since_last_active_counts_gap() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_events(&[turn_event("Windows", "p", "s1", "u1", "2026-07-08T10:00:00Z")]).unwrap();
+        store.rebuild_rollup().unwrap();
+        // 07-10 기준 마지막 활동 07-08 → 2일째
+        assert_eq!(store.days_since_last_active("2026-07-10").unwrap(), Some(2));
+        // 활동일(07-08) 이전엔 이력 없음 → None
+        assert_eq!(store.days_since_last_active("2026-07-08").unwrap(), None);
+    }
+
+    #[test]
+    fn assemble_brief_aggregates_all_hosts_not_just_windows() {
+        // 07-09에 WSL만 활동(Windows 0) — 다이어리는 주인의 하루라 이걸 무활동으로 보면 안 됨(이전 버그).
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        store.upsert_events(&[
+            turn_event("wsl:Ubuntu-22.04", "avatar-meter", "w1", "u1", "2026-07-09T10:00:00Z"),
+        ]).unwrap();
+        store.rebuild_rollup().unwrap();
+        let brief = assemble_brief(&store, "Windows", "2026-07-09", &cfg).unwrap();
+        assert!(brief.totals.session_count > 0, "WSL 활동도 합산되어 무활동일이 아님");
+    }
+
+    #[test]
+    fn assemble_brief_excludes_recently_covered_findings() {
+        use crate::finding::{Finding, Severity};
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+
+        // 07-09·07-10 각각 세션(host 스코프 finding이 두 날 모두 활성이 되도록 별개 세션)
+        store.upsert_events(&[
+            turn_event("Windows", "p", "s1", "u1", "2026-07-09T10:00:00Z"),
+            turn_event("Windows", "p", "s2", "u2", "2026-07-10T10:00:00Z"),
+        ]).unwrap();
+        store.rebuild_rollup().unwrap();
+
+        // 상시(host) finding — 두 날 모두 findings_for_date에 잡히는 것
+        store.upsert_finding(&Finding {
+            rule_id: "R1".into(), severity: Severity::Warn,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "host".into(), scope_ref: "Windows".into(),
+            evidence: serde_json::json!({"server":"context7"}),
+            est_tokens_saved: 2500, prescription: None,
+            dedup_key: "R1|Windows|Windows|context7".into(),
+        }, "2026-07-09T10:00:00Z").unwrap();
+        // 오늘(s2)만의 세션 스코프 finding — 어제 일기엔 없던 새것
+        store.upsert_finding(&Finding {
+            rule_id: "R9".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: Some("p".into()),
+            scope_kind: "session".into(), scope_ref: "s2".into(),
+            evidence: serde_json::json!({"web_search":20,"web_fetch":0,"total_requests":20}),
+            est_tokens_saved: 40000, prescription: None, dedup_key: "R9|s2".into(),
+        }, "2026-07-10T10:00:00Z").unwrap();
+
+        // 어제(07-09) 일기 존재 → recent_diaries에 포함 → 그날 finding(R1)이 "이미 다룸"
+        seed_diary(&store, &cfg, "2026-07-09", "어제도 context7 얘기");
+
+        let brief = assemble_brief(&store, "Windows", "2026-07-10", &cfg).unwrap();
+        // 이미 다룬 상시(R1)는 브리프에서 제외, 오늘만의 새 finding(R9)은 포함
+        assert!(brief.findings.iter().all(|f| f.rule_id != "R1"), "이미 다룬 상시 finding 제외");
+        assert!(brief.findings.iter().any(|f| f.rule_id == "R9"), "오늘만의 새 finding 포함");
+    }
+
+    #[test]
+    fn assemble_brief_includes_recent_diaries() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        // 그저께·어제 일기를 vault에 심는다 (07-08, 07-09) → 오늘 07-10 브리프가 참조
+        seed_diary(&store, &cfg, "2026-07-08", "그저께 일기 본문");
+        seed_diary(&store, &cfg, "2026-07-09", "어제 일기 본문");
+
+        let brief = assemble_brief(&store, "Windows", "2026-07-10", &cfg).unwrap();
+        assert_eq!(brief.recent_diaries.len(), 2);
+        // 오래된 것부터 (missing_diary_dates 재생성 순서와 정합)
+        assert_eq!(brief.recent_diaries[0].date, "2026-07-08");
+        assert_eq!(brief.recent_diaries[1].date, "2026-07-09");
+        assert!(brief.recent_diaries[1].excerpt.contains("어제 일기 본문"));
+        // 토큰 푸터는 발췌에서 제외됨
+        assert!(!brief.recent_diaries[1].excerpt.contains("토큰"));
+    }
+
+    #[test]
+    fn assemble_brief_recent_diaries_absent_when_none() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        let brief = assemble_brief(&store, "Windows", "2026-07-10", &cfg).unwrap();
+        assert!(brief.recent_diaries.is_empty());
+    }
+
+    #[test]
+    fn assemble_brief_recent_diaries_scoped_by_host() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        // 같은 날짜(07-09)에 host별로 다른 경로의 일기가 diary_index에 있을 때 — 브리프 host만 참조해야 함.
+        // 비대상 host(WSL)를 먼저 넣어, date-only 조회였다면 이 행을 집도록(회귀 방어).
+        let wsl = tmp.path().join("wsl-2026-07-09.md");
+        let win = tmp.path().join("win-2026-07-09.md");
+        std::fs::write(&wsl, "다른 호스트 일기").unwrap();
+        std::fs::write(&win, "윈도우 어제 일기").unwrap();
+        store.upsert_diary_index("2026-07-09", "WSL:Ubuntu", &wsl.to_string_lossy(), 10, "mock").unwrap();
+        store.upsert_diary_index("2026-07-09", "Windows", &win.to_string_lossy(), 10, "mock").unwrap();
+
+        let brief = assemble_brief(&store, "Windows", "2026-07-10", &cfg).unwrap();
+        assert_eq!(brief.recent_diaries.len(), 1);
+        assert!(brief.recent_diaries[0].excerpt.contains("윈도우 어제 일기"));
+        assert!(!brief.recent_diaries[0].excerpt.contains("다른 호스트"));
+    }
+
+    #[test]
+    fn assemble_brief_recent_diaries_caps_excerpt_at_500_chars() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
+        // 멀티바이트(한글 3바이트) 700자 → char 경계 캡이 정확히 500자, 바이트 슬라이스면 패닉
+        seed_diary(&store, &cfg, "2026-07-09", &"가".repeat(700));
+        let brief = assemble_brief(&store, "Windows", "2026-07-10", &cfg).unwrap();
+        assert_eq!(brief.recent_diaries.len(), 1);
+        assert_eq!(brief.recent_diaries[0].excerpt.chars().count(), 500);
     }
 
     #[test]
@@ -586,11 +1302,31 @@ mod tests {
     #[test]
     fn system_prompt_directs_short_length_and_moderate_emoji() {
         let p = build_system_prompt(&DiaryConfig::default());
-        assert!(p.contains("2~3문단"));   // 길이 상한(문단)
-        assert!(p.contains("350자"));     // 길이 상한(글자)
+        assert!(p.contains("2~4문단"));   // 길이 상한(문단, 작업 내용용 한 문단 허용)
+        assert!(p.contains("500자"));     // 길이 상한(글자)
         assert!(p.contains("골라"));      // 핵심만 골라 쓰기(장황함 차단)
         assert!(p.contains("이모지"));    // 이모지 지시
-        assert!(p.contains("0~1개"));     // 문단당 사용량
+        assert!(p.contains("문단마다 1~2개")); // 사용량 상향(1개 정도 → 1~2개)
+    }
+
+    #[test]
+    fn system_prompt_directs_context_signals_and_comfort() {
+        let p = build_system_prompt(&DiaryConfig::default());
+        assert!(p.contains("상시 이슈"));         // 이미 다룬 상시 이슈 제외 언급
+        assert!(p.contains("tool_usage"));        // 도구 텍스처 지시
+        assert!(p.contains("work_context"));      // 근무 맥락
+        assert!(p.contains("위로"));              // 주말/장시간 위로
+        assert!(p.contains("일중독"));            // 주말 능청 예시(유머·주말 강화)
+        assert!(p.contains("나열하지"));          // 종류별 문단 나열 금지(자연스러운 흐름)
+        assert!(p.contains("work_log"));          // 그날 한 작업(커밋/토픽) 지시
+    }
+
+    #[test]
+    fn system_prompt_directs_recent_diary_variety() {
+        let p = build_system_prompt(&DiaryConfig::default());
+        assert!(p.contains("recent_diaries")); // 최근 일기 참조 지시
+        assert!(p.contains("되풀이하지"));      // 이미 다룬 화제 반복 금지
+        assert!(p.contains("다른 이야기"));     // 어제와 다른 서사
     }
 
     #[test]

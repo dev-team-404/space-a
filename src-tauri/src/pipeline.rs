@@ -10,7 +10,9 @@ mod runtime {
     use super::*;
     use crate::AppState;
     use agent_mentor::diary::engine::OpenAiCompatEngine;
-    use agent_mentor::diary::{assemble_brief, persist_diary, render_diary, DiaryConfig};
+    use agent_mentor::diary::{
+        assemble_brief, persist_diary, render_diary, render_idle_diary, DiaryConfig, IdleContext,
+    };
     use agent_mentor::hosts::enumerate_hosts;
     use agent_mentor::store::SqliteStore;
     use notify::Watcher;
@@ -144,23 +146,37 @@ mod runtime {
 
         for date in dates {
             // ① 락 획득 → assemble_brief + session_count 체크 → 즉시 해제
-            let (brief, cfg) = match store_mutex.lock() {
+            let (brief, cfg, days_idle) = match store_mutex.lock() {
                 Ok(store) => {
                     let cfg = DiaryConfig { vault_dir: vault.clone(), ..DiaryConfig::default() };
                     match assemble_brief(&store, "Windows", &date, &cfg) {
-                        Ok(brief) => (brief, cfg),
+                        Ok(brief) => {
+                            let days_idle = store.days_since_last_active(&date).ok().flatten();
+                            (brief, cfg, days_idle)
+                        }
                         Err(e) => { log::warn!("assemble_brief({date}) 실패: {e}"); continue; }
                     }
                 }
                 Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
             }; // guard drops here
 
-            if brief.totals.session_count == 0 { continue; }
-
-            // ② 락 없이 render_diary (네트워크 I/O)
-            let rendered = match render_diary(&engine, &brief, &cfg) {
-                Ok(r) => r,
-                Err(e) => { log::warn!("render_diary({date}) 실패: {e}"); continue; }
+            // ② 락 없이 렌더 (네트워크 I/O). 활동 0인 날은 작업 사실 없이 마스코트 상상 일기(무활동일).
+            let rendered = if brief.totals.session_count == 0 {
+                let idle = IdleContext {
+                    date: date.clone(),
+                    is_weekend: brief.work_context.is_weekend,
+                    days_idle,
+                    occasions: brief.occasions.clone(),
+                };
+                match render_idle_diary(&engine, &idle, &cfg) {
+                    Ok(r) => r,
+                    Err(e) => { log::warn!("render_idle_diary({date}) 실패: {e}"); continue; }
+                }
+            } else {
+                match render_diary(&engine, &brief, &cfg) {
+                    Ok(r) => r,
+                    Err(e) => { log::warn!("render_diary({date}) 실패: {e}"); continue; }
+                }
             };
 
             // ③ 락 획득 → persist_diary (로컬 파일·DB) → 즉시 해제
