@@ -62,8 +62,8 @@ GPU 클러스터는 **빌려 쓰는 것**이고, 프론트엔드는 **내 API의
 
 | # | 계약 | 대상 | 형태 | 고정 시점 |
 |---|---|---|---|---|
-| **C1** | MCP Tool 시그니처 | Pillar 1 / 임직원 에이전트 | `search_knowledge`, `report_issue`, `get_skill_candidates` | **가장 먼저** |
-| **C2** | 읽기 전용 REST | Pillar 3 시각화 | `GET /graph`, `GET /stats`, `GET /activity` | 초반 |
+| **C1** | MCP Tool 시그니처 | Pillar 1 / 임직원 에이전트 | `search_knowledge`, `open_issue`, `cite_knowledge`, `resolve_issue`, `get_skill_candidates` | ✅ 확정 (v2) |
+| **C2** | 읽기 전용 REST | Pillar 3 시각화 | `/spaces`, `/spaces/{id}`, `/reuse-events`, `/graph`, `/stats`, `/activity` | ✅ 확정 (v2) |
 | **C3** | LLM 엔드포인트 | ← 공용 클러스터 | OpenAI 호환 (`/v1/chat/completions`, `/v1/embeddings`) | 초반 |
 
 > **C3이 OpenAI 호환이라는 점이 결정적이다.** 클러스터가 아직 없어도 개발이 멈추지 않는다 (§6).

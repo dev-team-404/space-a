@@ -1,34 +1,245 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Space A Hub — C2: Read-only REST Contract",
-  "version": "1.0.0",
-  "description": "Read-only endpoints consumed by Pillar 3 (community visualization). Pillar 3 does NOT connect to the graph DB directly: doing so would turn the graph schema into a public API and freeze it. These three endpoints are the entire surface. The only write path into Space A is C1 (MCP).",
+  "version": "2.0.0",
+  "supersedes": "1.0.0",
+  "description": "Read-only endpoints consumed by Pillar 3 (community visualization). v2 is aligned with Pillar 3's actual data contract (docs/design/frontend-viz/03-architecture.md §4): Space is a first-class entity, ReuseEvent is a first-class event, issues carry a transition timeline, and narrative text is precomputed server-side. Pillar 3 does NOT connect to the graph DB directly: doing so would turn the graph schema into a public API and freeze it. The only write path into Space A is C1 (MCP).",
+
+  "permissionModel": {
+    "description": "Visibility tiers mirror docs/design/frontend-viz/01-product.md §5. The server enforces these; the frontend must not be trusted to hide anything.",
+    "tiers": {
+      "lobby": "Org-wide. Aggregate numbers + one-line highlight. No narrative detail.",
+      "guest": "Org-wide, on entering a Space you are not a member of. Spatial + aggregate views in full; narrative at title level only; raw bodies locked. ('glass wall')",
+      "member": "Full narrative (timelines, feeds) + raw bodies + citation graph.",
+      "manager": "Member, plus Space settings and invitations."
+    },
+    "note": "The same rule governs C1 (MCP). An agent must not be able to fetch what its owner cannot see in the UI."
+  },
 
   "$defs": {
-    "nodeType": {
-      "type": "string",
-      "enum": ["Agent", "Task", "Issue", "MCP_Tool", "Skill"]
-    },
+    "spaceId": { "type": "string", "examples": ["sw-innov", "data-platform"] },
+    "issueStatus": { "type": "string", "enum": ["open", "knowledge_linked", "resolved"] },
+    "visibility": { "type": "string", "enum": ["org", "space"] },
+    "viewerTier": { "type": "string", "enum": ["lobby", "guest", "member", "manager"] },
+    "nodeType": { "type": "string", "enum": ["Agent", "Space", "Task", "Issue", "Knowledge", "MCP_Tool", "Skill"] },
     "edgeType": {
       "type": "string",
-      "enum": ["USED_BY", "RESOLVED", "DEPENDS_ON", "REUSED", "PROMOTED_TO"],
-      "description": "REUSED is the money edge: agent B reused what agent A solved. That is knowledge crossing a team boundary — the core story of this project."
+      "enum": ["MEMBER_OF", "OPENED", "RESOLVED", "AUTHORED", "CITED", "DEPENDS_ON", "PROMOTED_TO"],
+      "description": "CITED is the money edge: an agent in Space B reused knowledge authored in Space A. That is knowledge crossing a team boundary — the core story of this project, and what ReuseEvent records."
     },
-    "eventType": {
-      "type": "string",
-      "enum": ["recorded", "reused", "condensed", "skill_proposed"]
+    "eventType": { "type": "string", "enum": ["issue_opened", "knowledge_created", "reused", "condensed", "skill_proposed"] },
+    "timelineEntry": {
+      "type": "object",
+      "required": ["step", "label", "actor", "at"],
+      "properties": {
+        "step": { "$ref": "#/$defs/issueStatus" },
+        "label": { "type": "string", "description": "Ready-to-render Korean label, e.g. '지식 연결'. Composed server-side." },
+        "actor": { "type": "string", "description": "Agent display name." },
+        "at": { "type": "string", "format": "date-time" },
+        "note": { "type": "string", "description": "One-line detail, rendered verbatim. Member tier only." }
+      }
     }
   },
 
   "endpoints": [
     {
       "method": "GET",
-      "path": "/graph",
-      "summary": "Nodes and edges for the knowledge network map. Private knowledge is filtered out server-side and never appears here.",
+      "path": "/spaces",
+      "summary": "All Spaces (floors of the building) for the lobby view. Aggregate + one-line highlight only — no narrative detail, so this is safe org-wide.",
+      "response": {
+        "type": "object",
+        "required": ["spaces"],
+        "properties": {
+          "spaces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["space_id", "name", "stats"],
+              "properties": {
+                "space_id": { "$ref": "#/$defs/spaceId" },
+                "name": { "type": "string" },
+                "motto": { "type": "string" },
+                "floor": { "type": "integer" },
+                "seed": { "type": "boolean", "description": "Whether this is a seeded team Space." },
+                "token_budget": { "type": "integer" },
+                "token_used": { "type": "integer" },
+                "status": { "type": "string", "examples": ["정상", "혼잡"] },
+                "activity": { "type": "integer", "minimum": 0, "maximum": 3, "description": "Activity heat, drives the floor glow." },
+                "members_online": { "type": "integer" },
+                "stats": {
+                  "type": "object",
+                  "properties": {
+                    "knowledge": { "type": "integer" },
+                    "reuse": { "type": "integer" },
+                    "resolved": { "type": "integer" }
+                  }
+                },
+                "highlight": {
+                  "type": "string",
+                  "description": "Today's one-line narrative, PRECOMPUTED server-side. The frontend must not assemble this — see Pillar 3 request #2."
+                },
+                "viewer_tier": { "$ref": "#/$defs/viewerTier", "description": "What the calling user gets in this Space. The frontend uses it to pick a view; the server independently enforces it." }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    {
+      "method": "GET",
+      "path": "/spaces/{space_id}",
+      "summary": "One Space in detail: its agents, issues and knowledge. Response is TRIMMED BY TIER — a guest simply does not receive narrative notes or bodies. The frontend does not filter; it renders what it gets.",
+      "response": {
+        "type": "object",
+        "required": ["space_id", "viewer_tier", "agents", "issues", "knowledge"],
+        "properties": {
+          "space_id": { "$ref": "#/$defs/spaceId" },
+          "viewer_tier": { "$ref": "#/$defs/viewerTier" },
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["agent_id", "name", "status"],
+              "properties": {
+                "agent_id": { "type": "string" },
+                "name": { "type": "string" },
+                "role": { "type": "string" },
+                "owner": { "type": "string", "description": "The human who owns this agent." },
+                "status": { "type": "string", "examples": ["working", "idle"] },
+                "status_line": {
+                  "type": "string",
+                  "description": "Speech-bubble text, PRECOMPUTED server-side (Pillar 3 request #2). Guest tier receives a title-level line; member tier receives the detailed one."
+                },
+                "last_active_at": { "type": "string", "format": "date-time" }
+              }
+            }
+          },
+          "issues": {
+            "type": "array",
+            "description": "Member tier only. Guests receive an empty array — issues are internal activity.",
+            "items": {
+              "type": "object",
+              "required": ["issue_id", "title", "status"],
+              "properties": {
+                "issue_id": { "type": "string" },
+                "title": { "type": "string" },
+                "status": { "$ref": "#/$defs/issueStatus" },
+                "opened_by": { "type": "string" },
+                "timeline": {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/timelineEntry" },
+                  "description": "Full transition history, not just the current state — Pillar 3 draws the L2 timeline from this (request #3)."
+                }
+              }
+            }
+          },
+          "knowledge": {
+            "type": "array",
+            "description": "visibility='org' docs are visible to everyone; visibility='space' docs only to members.",
+            "items": {
+              "type": "object",
+              "required": ["doc_id", "title", "visibility"],
+              "properties": {
+                "doc_id": { "type": "string" },
+                "title": { "type": "string" },
+                "author_agent": { "type": "string" },
+                "visibility": { "$ref": "#/$defs/visibility" },
+                "summary": { "type": "string" },
+                "body": {
+                  "type": "object",
+                  "description": "Raw document body. Present for org-visible docs, or for members. Absent (locked) for guests reading space-scoped docs.",
+                  "additionalProperties": { "type": "string" }
+                },
+                "cited_by": {
+                  "type": "array",
+                  "description": "Who reused this, and from where. The cross-Space citation chain.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "space_id": { "$ref": "#/$defs/spaceId" },
+                      "issue_title": { "type": "string" },
+                      "at": { "type": "string", "format": "date-time" }
+                    }
+                  }
+                },
+                "reuse_count": { "type": "integer" }
+              }
+            }
+          },
+          "visits": {
+            "type": "object",
+            "properties": {
+              "today": { "type": "integer" },
+              "total": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+
+    {
+      "method": "GET",
+      "path": "/reuse-events",
+      "summary": "First-class reuse events — the knowledge-reuse feed. This is the north-star metric of the whole project: one team's knowledge solving another team's problem.",
       "query": {
         "type": "object",
         "properties": {
-          "team": { "type": "string", "description": "Filter to one team. Omit for org-wide." },
+          "space_id": { "$ref": "#/$defs/spaceId", "description": "Filter to events consumed by, or sourced from, this Space." },
+          "since": { "type": "string", "format": "date-time" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["events"],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["reuse_id", "doc_id", "consumer_space", "at"],
+              "properties": {
+                "reuse_id": { "type": "string" },
+                "doc_id": { "type": "string" },
+                "source_space": { "$ref": "#/$defs/spaceId", "description": "Where the knowledge came from." },
+                "consumer_space": { "$ref": "#/$defs/spaceId", "description": "Where it was reused. source != consumer is the interesting case." },
+                "consumer_agent": { "type": "string" },
+                "issue_id": { "type": "string" },
+                "issue_title": { "type": "string" },
+                "at": { "type": "string", "format": "date-time" },
+                "chain": {
+                  "type": "array",
+                  "description": "Narrative steps of the reuse, precomputed. e.g. 유사 이슈 발견 -> 기존 해결 방법 링크 공유 -> 재사용하여 해결.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "label": { "type": "string" },
+                      "actor": { "type": "string" },
+                      "at": { "type": "string", "format": "date-time" }
+                    }
+                  }
+                },
+                "est_saved_tokens": {
+                  "type": "integer",
+                  "description": "ESTIMATE, per reuse event (Pillar 3 request #6). Candidate formula: what it originally cost to solve the source issue. Precision is not the point; a consistent formula honestly labelled '~' is. The frontend MUST render it with a '~' prefix."
+                },
+                "est_saved_minutes": { "type": "integer", "description": "Same caveat as est_saved_tokens." }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    {
+      "method": "GET",
+      "path": "/graph",
+      "summary": "Nodes and edges for the knowledge network map. Space-scoped knowledge the caller cannot see is filtered out server-side and never appears here.",
+      "query": {
+        "type": "object",
+        "properties": {
+          "space_id": { "$ref": "#/$defs/spaceId" },
           "since": { "type": "string", "format": "date-time" },
           "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 }
         }
@@ -46,7 +257,7 @@
                 "id": { "type": "string" },
                 "type": { "$ref": "#/$defs/nodeType" },
                 "label": { "type": "string", "description": "Human-readable, ready to render. Do not build this on the frontend." },
-                "team": { "type": "string" },
+                "space_id": { "$ref": "#/$defs/spaceId" },
                 "reuse_count": { "type": "integer" }
               }
             }
@@ -71,10 +282,11 @@
     {
       "method": "GET",
       "path": "/stats",
-      "summary": "Aggregate dashboard numbers.",
+      "summary": "Aggregate dashboard numbers. Safe at every tier — aggregates carry no work content.",
       "query": {
         "type": "object",
         "properties": {
+          "space_id": { "$ref": "#/$defs/spaceId" },
           "from": { "type": "string", "format": "date" },
           "to": { "type": "string", "format": "date" }
         }
@@ -94,7 +306,7 @@
             "type": "object",
             "properties": {
               "issues": { "type": "integer" },
-              "solutions": { "type": "integer" },
+              "knowledge": { "type": "integer" },
               "skills": { "type": "integer" },
               "reuses": { "type": "integer" }
             }
@@ -110,28 +322,28 @@
               }
             }
           },
-          "top_issues": {
+          "top_knowledge": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "issue_id": { "type": "string" },
+                "doc_id": { "type": "string" },
                 "title": { "type": "string" },
-                "occurrences": { "type": "integer" }
+                "reuse_count": { "type": "integer" }
               }
             }
           },
           "tokens_saved_est": {
             "type": "integer",
-            "description": "ESTIMATE. Tokens avoided versus injecting the raw logs. The frontend must label this with '~' — never present it as measured."
+            "description": "ESTIMATE — the sum of per-event est_saved_tokens. The frontend must label this with '~'; never present it as measured."
           },
-          "by_team": {
+          "by_space": {
             "type": "array",
-            "description": "contributed vs reused shows which teams are net givers and which are net takers of knowledge.",
+            "description": "contributed vs reused shows which Spaces are net givers and which are net takers of knowledge.",
             "items": {
               "type": "object",
               "properties": {
-                "team": { "type": "string" },
+                "space_id": { "$ref": "#/$defs/spaceId" },
                 "contributed": { "type": "integer" },
                 "reused": { "type": "integer" }
               }
@@ -148,6 +360,7 @@
       "query": {
         "type": "object",
         "properties": {
+          "space_id": { "$ref": "#/$defs/spaceId" },
           "since": { "type": "string", "format": "date-time" },
           "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
         }
@@ -165,7 +378,9 @@
                 "at": { "type": "string", "format": "date-time" },
                 "type": { "$ref": "#/$defs/eventType" },
                 "actor": { "type": "string" },
+                "space_id": { "$ref": "#/$defs/spaceId" },
                 "issue_id": { "type": "string" },
+                "doc_id": { "type": "string" },
                 "skill_id": { "type": "string" },
                 "summary": {
                   "type": "string",

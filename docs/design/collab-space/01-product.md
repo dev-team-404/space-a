@@ -95,7 +95,7 @@ Pillar 2는 세 축의 **데이터 심장**이다. Pillar 1이 관찰한 것이 
 ```
 CLAUDE.md: "에러가 나면 상상해서 풀지 마라.
             반드시 Space A MCP 의 search_knowledge 를 먼저 호출하고,
-            해결한 뒤엔 report_issue 로 과정을 기록해라."
+            해결한 뒤엔 resolve_issue 로 과정을 기록해라."
    ↓
 에러 발생 → 에이전트가 지시를 읽고 → MCP 호출 → 그래프 DB에서 해결책 확보
         → 해결 → MCP로 새 지식 기록 → 다음 사람의 에이전트가 재사용

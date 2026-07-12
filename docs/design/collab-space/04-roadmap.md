@@ -65,11 +65,11 @@
 
 이게 안 정해지면 **다른 두 팀원이 일을 시작할 수 없다.**
 
-- [x] **C1: MCP Tool 시그니처 확정** → [05-contracts.md](05-contracts.md) · [`/contracts/c1-mcp-tools.json`](../../../contracts/c1-mcp-tools.json)
-- [x] **C2: 시각화용 읽기 REST 스키마 확정** → [`/contracts/c2-rest-api.json`](../../../contracts/c2-rest-api.json)
-- [x] **Pillar 3용 픽스처 전달** → [`/contracts/fixtures/`](../../../contracts/fixtures/) — **서버 없이 프론트 작업 시작 가능**
-- [ ] Pillar 1 / Pillar 3 담당자 **리뷰** → 이견 없으면 ADR로 승격
-- [ ] **로컬 LLM 클러스터의 소유권 합의** — Pillar 2 밖의 공용 인프라로 둘 것 ([03 §1](03-architecture.md#1-컴포넌트-경계--가장-큰-함정-두-가지))
+- [x] **C1 / C2 계약 확정 (v2)** → [05-contracts.md](05-contracts.md) · [`/contracts/`](../../../contracts/)
+- [x] **Pillar 3용 픽스처 전달** — **서버 없이 프론트 작업 시작 가능**
+- [x] **로컬 LLM 클러스터 소유권 합의 완료** — Pillar 2 밖의 공용 인프라
+- [ ] **Pillar 3 담당자 확인** — 내가 그쪽 데이터 계약을 맞게 읽었는지
+- [ ] **Pillar 1 담당자 확인** — 이슈 생애주기 3단계 호출이 부담은 아닌지
 - [ ] **레포 구성 결정** → 되돌리기 어려우므로 **ADR로 기록**
 
 > **계약이 확정되었으므로 ①단계는 끝났다.** 이제 세 컴포넌트가 병렬로 움직일 수 있다.
@@ -106,7 +106,7 @@
 | 리스크 | 내용 | 대응 | 문서 |
 |---|---|---|---|
 | **환각의 전염** | 한 에이전트의 오답 → 다른 에이전트가 정답으로 학습 → 전체 오염 | 기록 전 Cross-check, 선택적 사람 Approve | [02 §6.1](02-features.md#61-환각-전염-차단) |
-| **데이터 교차 오염** | A의 사내 기밀이 B의 에이전트에 노출 | Public/Team/Private 태깅 (**설계 초반**) | [02 §6.2](02-features.md#62-권한-분리-cross-contamination-방지) |
+| **데이터 교차 오염** | A의 사내 기밀이 B의 에이전트에 노출 | `org`/`space` 태깅 + **C1·C2 동일 권한 모델** | [05 §2](05-contracts.md#2-권한-모델--하나의-모델-두-개의-경로) |
 | **무한 루프 / 과금 폭주** | 에이전트끼리 질문·답변 핑퐁 | 호출 뎁스 제한 + Circuit Breaker | [02 §6.3](02-features.md#63-무한-루프--과금-폭주-방지) |
 | **지식 베이스 비대화** | 날것 로그 누적 → 검색 토큰 폭발 | 심야 지식 압축 루프 | [02 §3](02-features.md#3-심야-지식-압축-루프-knowledge-condensation) |
 | **C1 시그니처 변경** | Pillar 1이 깨진다 | 초반 고정, **필드 추가만** 허용 | [03 §8](03-architecture.md#8-이-구성의-잔여-리스크) |

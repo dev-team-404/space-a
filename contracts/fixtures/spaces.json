@@ -1,0 +1,79 @@
+{
+  "spaces": [
+    {
+      "space_id": "ux-lab",
+      "name": "UX Lab",
+      "motto": "Design with agents, for humans.",
+      "floor": 6,
+      "seed": true,
+      "token_budget": 100,
+      "token_used": 31,
+      "status": "정상",
+      "activity": 1,
+      "members_online": 1,
+      "stats": { "knowledge": 8, "reuse": 2, "resolved": 5 },
+      "highlight": "온보딩 플로우 리서치 지식 2건 등록",
+      "viewer_tier": "guest"
+    },
+    {
+      "space_id": "ai-sec-tf",
+      "name": "AI 보안 TF",
+      "motto": "Secure the agents, secure the org.",
+      "floor": 5,
+      "seed": false,
+      "token_budget": 100,
+      "token_used": 55,
+      "status": "정상",
+      "activity": 2,
+      "members_online": 2,
+      "stats": { "knowledge": 13, "reuse": 4, "resolved": 9 },
+      "highlight": "프롬프트 인젝션 대응 가이드가 오늘 2회 재사용됨",
+      "viewer_tier": "guest"
+    },
+    {
+      "space_id": "sw-innov",
+      "name": "S/W 혁신팀",
+      "motto": "We build better software, together with agents. ♥",
+      "floor": 4,
+      "seed": true,
+      "token_budget": 100,
+      "token_used": 72,
+      "status": "정상",
+      "activity": 3,
+      "members_online": 5,
+      "stats": { "knowledge": 24, "reuse": 9, "resolved": 17 },
+      "highlight": "DS 인증서 지식이 데이터 플랫폼팀에서 재사용됨",
+      "viewer_tier": "member"
+    },
+    {
+      "space_id": "data-platform",
+      "name": "데이터 플랫폼팀",
+      "motto": "Data flows, knowledge grows.",
+      "floor": 3,
+      "seed": true,
+      "token_budget": 100,
+      "token_used": 64,
+      "status": "혼잡",
+      "activity": 3,
+      "members_online": 4,
+      "stats": { "knowledge": 19, "reuse": 7, "resolved": 12 },
+      "highlight": "파이프라인 캐시 지식이 S/W 혁신팀에서 재사용됨",
+      "viewer_tier": "guest"
+    },
+    {
+      "space_id": "infra-ops",
+      "name": "인프라 운영팀",
+      "motto": "Keep the lights on.",
+      "floor": 2,
+      "seed": true,
+      "token_budget": 100,
+      "token_used": 12,
+      "status": "정상",
+      "activity": 0,
+      "members_online": 1,
+      "stats": { "knowledge": 11, "reuse": 3, "resolved": 8 },
+      "highlight": "오늘 신규 활동 없음",
+      "viewer_tier": "guest"
+    }
+  ]
+}

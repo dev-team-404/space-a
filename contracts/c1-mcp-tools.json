@@ -1,16 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Space A Hub — C1: MCP Tool Contract",
-  "version": "1.0.0",
-  "description": "Tools exposed by the Space A MCP server to employee agents (Pillar 1 and any MCP client). Change policy: additive only. Adding optional fields or enum values is allowed; removing/renaming fields or changing their meaning is not. Consumers MUST ignore unknown fields.",
+  "version": "2.0.0",
+  "supersedes": "1.0.0",
+  "description": "Tools exposed by the Space A MCP server to employee agents (Pillar 1 and any MCP client). v2 aligns with Pillar 3's Space/membership model: v1's single `team` claim could not express a person belonging to several Spaces, which broke the permission model at its foundation. Change policy: additive only from here. Adding optional fields or enum values is allowed; removing/renaming fields or changing their meaning is not. Consumers MUST ignore unknown fields.",
 
   "transport": {
-    "description": "Every C1 call carries identity and trace metadata OUT OF BAND — in transport headers, not in tool arguments. MCP's own auth spec is not mature, so this is defined at the application layer. Identity is the precondition for the visibility model: without it, 'team' filtering cannot be computed at all.",
+    "description": "Every C1 call carries identity and trace metadata OUT OF BAND — in transport headers, not in tool arguments. MCP's own auth spec is not mature, so this is defined at the application layer. Identity is the precondition for the visibility model: without it, scoping cannot be computed at all.",
     "http": {
       "Authorization": {
         "required": true,
         "format": "Bearer <token>",
-        "description": "Issued by corporate SSO. The server resolves it to { user_id, agent_id, team, scopes }. NOTE: team and agent_id are derived from this token and are NOT accepted as request parameters — letting a client assert its own team would void the whole permission model."
+        "description": "Issued by corporate SSO. The server resolves it to { user_id, agent_id, spaces[] }. NOTE: agent_id and spaces are derived from this token and are NOT accepted as request parameters — letting a client assert its own membership would void the whole permission model."
       },
       "X-Space-A-Trace-Id": {
         "required": false,
@@ -28,15 +29,27 @@
     }
   },
 
+  "permissionModel": {
+    "description": "THE AGENT PATH MUST NOT BE A PERMISSION BYPASS. If a person cannot see something in the Pillar 3 UI, they must not be able to obtain it by asking their agent instead — otherwise the 'glass wall' guest view is meaningless. The MCP visibility rule is therefore identical to the UI's.",
+    "rule": "An agent may read: (a) any Knowledge doc with visibility='org', PLUS (b) all data belonging to Spaces the caller is a member of. Nothing else.",
+    "sourceOfTruth": "docs/design/frontend-viz/01-product.md §5 — 'MCP 검색의 가시성도 이 권한 모델과 동일해야 한다'",
+    "enforcement": "Server-side, derived from the token's spaces[] claim. Never from a request parameter."
+  },
+
   "$defs": {
     "visibility": {
       "type": "string",
-      "enum": ["private", "team", "public"],
-      "default": "team",
-      "description": "Knowledge sharing scope. Omitting this yields 'team' — the safe default, so an agent that makes no judgment call cannot leak a secret org-wide. Agents may narrow to 'private' freely; widening to 'public' must be explicit."
+      "enum": ["org", "space"],
+      "default": "org",
+      "description": "Knowledge sharing scope, aligned with Pillar 3. 'org' = readable org-wide (the default: knowledge is meant to circulate). 'space' = readable only within the owning Space. NOTE: v1 used private|team|public; those values are gone.",
+      "x-migration": "v1 public -> org; v1 team|private -> space"
     },
-    "issueId": { "type": "string", "pattern": "^iss_[a-zA-Z0-9]+$" },
-    "skillId": { "type": "string", "pattern": "^skl_[a-zA-Z0-9]+$" },
+    "spaceId": { "type": "string", "description": "e.g. 'sw-innov'. A Space is a team room (a floor in the Pillar 3 building metaphor)." },
+    "issueId": { "type": "string", "pattern": "^iss_[a-zA-Z0-9_-]+$" },
+    "docId": { "type": "string", "pattern": "^doc_[a-zA-Z0-9_-]+$" },
+    "skillId": { "type": "string", "pattern": "^skl_[a-zA-Z0-9_-]+$" },
+    "agentId": { "type": "string", "pattern": "^agt_[a-zA-Z0-9_-]+$" },
+
     "context": {
       "type": "object",
       "description": "Anchors for graph expansion. The richer this is, the fewer tokens the answer needs.",
@@ -44,14 +57,11 @@
         "language": { "type": "string", "examples": ["typescript", "python"] },
         "framework": { "type": "string", "examples": ["next.js", "fastapi"] },
         "os": { "type": "string", "examples": ["windows", "wsl2", "macos"] },
-        "tools": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "MCP tools / CLIs in play, e.g. ['pnpm', 'docker']"
-        }
+        "tools": { "type": "array", "items": { "type": "string" } }
       },
       "additionalProperties": true
     },
+
     "solution": {
       "type": "object",
       "required": ["summary", "steps"],
@@ -61,6 +71,7 @@
         "required_tools": { "type": "array", "items": { "type": "string" } }
       }
     },
+
     "error": {
       "type": "object",
       "required": ["error"],
@@ -72,7 +83,7 @@
             "code": {
               "type": "string",
               "enum": ["invalid_request", "unauthorized", "not_found", "forbidden", "rate_limited"],
-              "description": "unauthorized = missing/expired token. forbidden = authenticated but out of scope. rate_limited = depth exceeded or circuit breaker tripped."
+              "description": "unauthorized = missing/expired token. forbidden = authenticated but outside the caller's Space membership. rate_limited = depth exceeded or circuit breaker tripped."
             },
             "message": { "type": "string" }
           }
@@ -84,24 +95,18 @@
   "tools": [
     {
       "name": "search_knowledge",
-      "description": "Search the org's agent knowledge for a similar past issue and its solution. Call this BEFORE trying to reason a fix from scratch. Returns a condensed solution payload, not raw logs.",
+      "description": "Search the org's agent knowledge for a similar past issue and its solution. Call this BEFORE trying to reason a fix from scratch. Returns a condensed solution payload, not raw logs. Results are scoped by the permission model: org-visible knowledge plus your own Spaces.",
       "inputSchema": {
         "type": "object",
         "required": ["query"],
         "properties": {
-          "query": {
-            "type": "string",
-            "minLength": 1,
-            "description": "The error message or problem statement. Raw text is fine."
-          },
+          "query": { "type": "string", "minLength": 1, "description": "The error message or problem statement. Raw text is fine." },
           "context": { "$ref": "#/$defs/context" },
-          "limit": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 10,
-            "default": 3,
-            "description": "Keep small. Every extra result is tokens spent."
-          }
+          "space_id": {
+            "$ref": "#/$defs/spaceId",
+            "description": "Optional: restrict the search to one Space you belong to. Cannot be used to reach a Space you are not a member of — the server intersects this with your token's spaces[]."
+          },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 10, "default": 3, "description": "Keep small. Every extra result is tokens spent." }
         },
         "additionalProperties": false
       },
@@ -113,9 +118,10 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["issue_id", "title", "confidence", "solution"],
+              "required": ["doc_id", "title", "confidence", "solution"],
               "properties": {
-                "issue_id": { "$ref": "#/$defs/issueId" },
+                "doc_id": { "$ref": "#/$defs/docId" },
+                "space_id": { "$ref": "#/$defs/spaceId", "description": "The Space that authored this knowledge. May differ from yours — that is the point: knowledge crosses team boundaries." },
                 "title": { "type": "string" },
                 "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
                 "solution": { "$ref": "#/$defs/solution" },
@@ -132,10 +138,7 @@
                     "skills": { "type": "array", "items": { "$ref": "#/$defs/skillId" } }
                   }
                 },
-                "reuse_count": {
-                  "type": "integer",
-                  "description": "How many times this solution has been reused successfully. Higher = more trustworthy."
-                },
+                "reuse_count": { "type": "integer", "description": "How many times this has been cited successfully. Higher = more trustworthy." },
                 "recorded_at": { "type": "string", "format": "date-time" }
               }
             }
@@ -155,22 +158,62 @@
     },
 
     {
-      "name": "report_issue",
-      "description": "Record an issue and its solution AFTER you have solved it. Single call — there is deliberately no separate 'open' step, because an agent that dies before resolving would leave an orphan record, and an unresolved record is not knowledge.",
+      "name": "open_issue",
+      "description": "Declare that you have hit a problem. Call this WHEN THE PROBLEM APPEARS, not after solving it. v1 deliberately had no such call; v2 adds it because Pillar 3's UI renders a live issue timeline (opened -> knowledge_linked -> resolved) and an in-progress issue simply cannot be drawn if nothing is recorded until the end. The orphan-record risk this creates is handled by server-side staleness sweeping, not by refusing to record.",
       "inputSchema": {
         "type": "object",
-        "required": ["issue", "solution"],
+        "required": ["title", "space_id"],
         "properties": {
-          "issue": {
-            "type": "object",
-            "required": ["title", "context"],
-            "properties": {
-              "title": { "type": "string" },
-              "context": { "$ref": "#/$defs/context" },
-              "error_message": { "type": "string" },
-              "environment": { "type": "string" }
-            }
-          },
+          "title": { "type": "string" },
+          "space_id": { "$ref": "#/$defs/spaceId", "description": "Which Space this issue belongs to. Must be one you are a member of." },
+          "context": { "$ref": "#/$defs/context" },
+          "error_message": { "type": "string" },
+          "note": { "type": "string", "description": "Human-readable one-liner for the timeline entry. Pillar 3 renders this verbatim." }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["issue_id", "status"],
+        "properties": {
+          "issue_id": { "$ref": "#/$defs/issueId" },
+          "status": { "type": "string", "enum": ["open"] }
+        }
+      }
+    },
+
+    {
+      "name": "cite_knowledge",
+      "description": "Record that you found an existing knowledge doc relevant to an open issue. This is what produces a ReuseEvent — the single most important event in this system, because it is the moment one team's knowledge crosses into another's. Call it as soon as you decide to use a search result, not after the fix lands.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["issue_id", "doc_id"],
+        "properties": {
+          "issue_id": { "$ref": "#/$defs/issueId" },
+          "doc_id": { "$ref": "#/$defs/docId", "description": "The knowledge doc you are reusing, from search_knowledge results." },
+          "note": { "type": "string", "description": "Why it applies. Rendered verbatim in the Pillar 3 timeline." }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["reuse_id", "issue_status"],
+        "properties": {
+          "reuse_id": { "type": "string" },
+          "issue_status": { "type": "string", "enum": ["knowledge_linked"] }
+        }
+      }
+    },
+
+    {
+      "name": "resolve_issue",
+      "description": "Record the solution and close the issue. If the issue produced knowledge worth sharing, this is where it becomes a Knowledge doc.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["issue_id", "solution"],
+        "properties": {
+          "issue_id": { "$ref": "#/$defs/issueId" },
+          "solution": { "$ref": "#/$defs/solution" },
           "tried_steps": {
             "type": "array",
             "description": "What you tried that did NOT work. As valuable as the solution — it saves the next agent the same dead ends.",
@@ -184,26 +227,29 @@
               }
             }
           },
-          "solution": { "$ref": "#/$defs/solution" },
+          "publish_knowledge": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to turn this solution into a reusable Knowledge doc. Default true — knowledge is meant to circulate."
+          },
           "visibility": { "$ref": "#/$defs/visibility" },
-          "source_issue_id": {
-            "$ref": "#/$defs/issueId",
-            "description": "If you solved this by reusing an existing entry, cite it. This is what makes reuse_count and the knowledge-flow graph possible."
-          }
+          "note": { "type": "string", "description": "Timeline entry text. Rendered verbatim by Pillar 3." }
         },
         "additionalProperties": false
       },
       "outputSchema": {
         "type": "object",
-        "required": ["issue_id", "status"],
+        "required": ["issue_id", "issue_status"],
         "properties": {
           "issue_id": { "$ref": "#/$defs/issueId" },
-          "status": {
+          "issue_status": { "type": "string", "enum": ["resolved"] },
+          "doc_id": { "$ref": "#/$defs/docId", "description": "Present when publish_knowledge was true." },
+          "knowledge_status": {
             "type": "string",
-            "enum": ["recorded", "merged"],
-            "description": "'merged' means the gatekeeper judged this a duplicate and folded it into an existing entry — the first line of defence against knowledge-base bloat."
+            "enum": ["created", "merged"],
+            "description": "'merged' means the gatekeeper judged this a duplicate of existing knowledge and folded it in — the first line of defence against knowledge-base bloat."
           },
-          "merged_into": { "$ref": "#/$defs/issueId" }
+          "merged_into": { "$ref": "#/$defs/docId" }
         }
       }
     },
@@ -214,7 +260,8 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "scope": { "type": "string", "enum": ["me", "team", "org"], "default": "team" },
+          "scope": { "type": "string", "enum": ["me", "space", "org"], "default": "space" },
+          "space_id": { "$ref": "#/$defs/spaceId" },
           "min_occurrences": { "type": "integer", "minimum": 2, "default": 3 }
         },
         "additionalProperties": false
@@ -232,7 +279,7 @@
                 "skill_id": { "$ref": "#/$defs/skillId" },
                 "pattern": { "type": "string" },
                 "occurrences": { "type": "integer" },
-                "issue_ids": { "type": "array", "items": { "$ref": "#/$defs/issueId" } },
+                "doc_ids": { "type": "array", "items": { "$ref": "#/$defs/docId" } },
                 "proposed_skill": {
                   "type": "object",
                   "properties": {
