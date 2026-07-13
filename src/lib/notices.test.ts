@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pushNotice, type Notice } from './notices';
+import { diaryNotice, findingNotice, noticeDest, occasionNotice, pushNotice, type Notice } from './notices';
 
 const n = (text: string): Notice => ({ ts: '2026-07-05T10:00:00Z', kind: 'finding', text });
 
@@ -16,5 +16,50 @@ describe('pushNotice', () => {
     const next = pushNotice(orig, n('b'));
     expect(orig.length).toBe(1);
     expect(next[0].text).toBe('b');
+  });
+});
+
+describe('notice 팩토리', () => {
+  it('finding: N건 문구 + 절약량 1위 dedup_key가 target', () => {
+    const n = findingNotice(
+      [
+        { dedup_key: 'k-low', est_tokens_saved: 10 },
+        { dedup_key: 'k-top', est_tokens_saved: 500 },
+      ],
+      '2026-07-12T10:00:00Z',
+    );
+    expect(n.kind).toBe('finding');
+    expect(n.text).toBe('코칭 지적 2건이 도착했어요');
+    expect(n.target).toBe('k-top');
+    expect(n.ts).toBe('2026-07-12T10:00:00Z');
+  });
+  it('diary: 날짜 문구 + 날짜가 target', () => {
+    const n = diaryNotice('2026-07-11', '2026-07-12T07:00:00Z');
+    expect(n.kind).toBe('diary');
+    expect(n.text).toBe('2026-07-11 일기가 나왔어요');
+    expect(n.target).toBe('2026-07-11');
+  });
+  it('occasion: 첫 라벨 문구, target 없음', () => {
+    const n = occasionNotice(['크리스마스', '함께한 지 100일'], '2026-07-12T00:00:00Z');
+    expect(n.kind).toBe('occasion');
+    expect(n.text).toBe('오늘은 크리스마스!');
+    expect(n.target).toBeUndefined();
+  });
+});
+
+describe('noticeDest', () => {
+  it('finding→coach, diary→diary로 매핑', () => {
+    expect(noticeDest({ ts: 't', kind: 'finding', text: '', target: 'k1' })).toEqual({
+      tab: 'coach',
+      target: 'k1',
+    });
+    expect(noticeDest({ ts: 't', kind: 'diary', text: '', target: '2026-07-11' })).toEqual({
+      tab: 'diary',
+      target: '2026-07-11',
+    });
+  });
+  it('target 없는 알림(occasion·구버전 저장분)은 null — 클릭 불가', () => {
+    expect(noticeDest({ ts: 't', kind: 'occasion', text: '오늘은 X!' })).toBeNull();
+    expect(noticeDest({ ts: 't', kind: 'finding', text: '구버전' })).toBeNull();
   });
 });

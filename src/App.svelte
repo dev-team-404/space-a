@@ -9,7 +9,9 @@
     getSummary, getDailyLine, listFindings, onScanDone, onGotoTab,
     onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, type Summary,
   } from './lib/api';
-  import { loadNotices, pushNotice, saveNotices, type Notice } from './lib/notices';
+  import {
+    diaryNotice, findingNotice, loadNotices, occasionNotice, pushNotice, saveNotices, type Notice,
+  } from './lib/notices';
 
   type Tab = 'home' | 'diary' | 'coach' | 'chat';
   const TABS: { id: Tab; label: string }[] = [
@@ -37,16 +39,16 @@
     if (t === 'home' || t === 'diary' || t === 'coach' || t === 'chat') tab = t;
   });
 
-  // 알림 히스토리 기록 (스펙 §2 — 창이 숨김이어도 수신됨)
-  function record(kind: Notice['kind'], text: string) {
-    notices = pushNotice(notices, { ts: new Date().toISOString(), kind, text });
+  // 알림 히스토리 기록 (스펙 §2 — 창이 숨김이어도 수신됨). 문구·target 조합은 notices.ts 헬퍼.
+  function record(n: Notice) {
+    notices = pushNotice(notices, n);
     saveNotices(notices);
   }
   $effect(() => {
     const subs = [
-      onNewFindings((rows) => rows.length && record('finding', `코칭 지적 ${rows.length}건이 도착했어요`)),
-      onDiaryReady((date) => record('diary', `${date} 일기가 나왔어요`)),
-      onOccasionToday((labels) => labels.length && record('occasion', `오늘은 ${labels[0]}!`)),
+      onNewFindings((rows) => rows.length && record(findingNotice(rows, new Date().toISOString()))),
+      onDiaryReady((date) => record(diaryNotice(date, new Date().toISOString()))),
+      onOccasionToday((labels) => labels.length && record(occasionNotice(labels, new Date().toISOString()))),
       onDailyLine((text) => { dailyLine = text; }),
     ];
     return () => { subs.forEach((p) => p.then((u) => u())); };
