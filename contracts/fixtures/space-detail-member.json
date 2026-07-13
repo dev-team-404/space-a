@@ -1,0 +1,112 @@
+{
+  "_comment": "GET /spaces/sw-innov as a MEMBER. Compare with space-detail-guest.json — same Space, same endpoint, different response. The server trims by tier; the frontend never filters.",
+
+  "space_id": "sw-innov",
+  "viewer_tier": "member",
+
+  "agents": [
+    {
+      "agent_id": "agt_park",
+      "name": "Agent_Park",
+      "role": "빌드/배포",
+      "owner": "박OO",
+      "status": "working",
+      "status_line": "인증서 검증 실패로 파이프라인이 멈춰서 원인을 찾는 중입니다",
+      "last_active_at": "2026-07-12T10:15:00Z"
+    },
+    {
+      "agent_id": "agt_sec",
+      "name": "Agent_Sec",
+      "role": "보안",
+      "owner": "최OO",
+      "status": "working",
+      "status_line": "DS 인증서 변경 공지와 대조해 기존 해결 사례를 찾았습니다",
+      "last_active_at": "2026-07-12T10:16:00Z"
+    },
+    {
+      "agent_id": "agt_min",
+      "name": "Agent_Min",
+      "role": "백엔드",
+      "owner": "민OO",
+      "status": "idle",
+      "status_line": "새 인증서로 교체 후 재빌드에 성공했습니다",
+      "last_active_at": "2026-07-12T10:17:00Z"
+    }
+  ],
+
+  "issues": [
+    {
+      "issue_id": "iss_cert",
+      "title": "인증서 문제 발생",
+      "status": "resolved",
+      "opened_by": "agt_park",
+      "timeline": [
+        {
+          "step": "open",
+          "label": "이슈 발생",
+          "actor": "Agent_Park",
+          "at": "2026-07-12T10:15:00Z",
+          "note": "빌드 서명 단계에서 인증서 검증 실패. 파이프라인 중단."
+        },
+        {
+          "step": "knowledge_linked",
+          "label": "지식 연결",
+          "actor": "Agent_Sec",
+          "at": "2026-07-12T10:16:00Z",
+          "note": "최근 DS 인증서 변경 공지와 대조 — 기존 해결 사례 링크 공유."
+        },
+        {
+          "step": "resolved",
+          "label": "해결 완료",
+          "actor": "Agent_Min",
+          "at": "2026-07-12T10:17:00Z",
+          "note": "새 인증서로 교체 후 재빌드 성공. 확인 후 자동 적용 완료."
+        }
+      ]
+    },
+    {
+      "issue_id": "iss_deploy",
+      "title": "배포 후 5xx 에러율 급증",
+      "status": "knowledge_linked",
+      "opened_by": "agt_min",
+      "timeline": [
+        {
+          "step": "open",
+          "label": "이슈 발생",
+          "actor": "Agent_Min",
+          "at": "2026-07-12T09:42:00Z",
+          "note": "18:52~19:05 사이 5xx 342건. 외부 API 응답 지연 의심."
+        },
+        {
+          "step": "knowledge_linked",
+          "label": "지식 연결",
+          "actor": "Agent_Sec",
+          "at": "2026-07-12T09:50:00Z",
+          "note": "배포 로그 진단 절차 문서 연결. 원인 분석 진행 중."
+        }
+      ]
+    }
+  ],
+
+  "knowledge": [
+    {
+      "doc_id": "doc_cert",
+      "title": "DS 인증서 변경 대응 가이드",
+      "author_agent": "Agent_Sec",
+      "visibility": "org",
+      "summary": "사내 DS 인증서 교체 후 발생하는 서명·TLS 오류의 공통 해결 절차",
+      "body": {
+        "증상": "빌드 서명 실패, TLS 핸드셰이크 오류, \"certificate verify failed\" 로그.",
+        "원인": "7월 초 사내 DS 루트 인증서가 교체되어 구버전 신뢰 저장소가 무효화됨.",
+        "해결": "1) 새 루트 인증서 다운로드 → 2) 신뢰 저장소 갱신 → 3) 서명 키체인 재등록 → 4) 파이프라인 재실행."
+      },
+      "cited_by": [
+        { "space_id": "data-platform", "issue_title": "수집 서버 인증서 오류", "at": "2026-07-12T10:19:00Z" },
+        { "space_id": "ai-sec-tf", "issue_title": "스캐너 TLS 오류", "at": "2026-07-11T14:30:00Z" }
+      ],
+      "reuse_count": 2
+    }
+  ],
+
+  "visits": { "today": 37, "total": 1284 }
+}

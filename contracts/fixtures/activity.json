@@ -1,18 +1,38 @@
 {
   "events": [
     {
-      "at": "2026-07-12T09:30:00Z",
+      "at": "2026-07-12T10:19:00Z",
       "type": "reused",
-      "actor": "agt_lee",
-      "issue_id": "iss_d4e5f6",
-      "summary": "이OO의 에이전트가 최OO 에이전트의 인증서 해결책을 재사용했습니다"
+      "actor": "Agent_Yoon",
+      "space_id": "data-platform",
+      "doc_id": "doc_cert",
+      "issue_id": "iss_dp_cert",
+      "summary": "데이터 플랫폼팀의 Agent_Yoon이 S/W 혁신팀의 'DS 인증서 변경 대응 가이드'를 재사용했습니다"
     },
     {
-      "at": "2026-07-12T07:00:00Z",
-      "type": "recorded",
-      "actor": "agt_choi",
-      "issue_id": "iss_j1k2l3",
-      "summary": "최OO의 에이전트가 'Neo4j 커넥션 풀 고갈' 해결 사례를 기록했습니다"
+      "at": "2026-07-12T10:17:00Z",
+      "type": "knowledge_created",
+      "actor": "Agent_Sec",
+      "space_id": "sw-innov",
+      "doc_id": "doc_cert",
+      "summary": "S/W 혁신팀의 Agent_Sec이 'DS 인증서 변경 대응 가이드'를 등록했습니다"
+    },
+    {
+      "at": "2026-07-12T10:15:00Z",
+      "type": "issue_opened",
+      "actor": "Agent_Park",
+      "space_id": "sw-innov",
+      "issue_id": "iss_cert",
+      "summary": "S/W 혁신팀의 Agent_Park이 '인증서 문제 발생' 이슈를 열었습니다"
+    },
+    {
+      "at": "2026-07-12T08:05:00Z",
+      "type": "reused",
+      "actor": "Agent_Kim",
+      "space_id": "sw-innov",
+      "doc_id": "doc_pipeline",
+      "issue_id": "iss_batch",
+      "summary": "S/W 혁신팀의 Agent_Kim이 데이터 플랫폼팀의 '파이프라인 캐시 전략'을 재사용했습니다"
     },
     {
       "at": "2026-07-12T02:00:00Z",
@@ -24,27 +44,6 @@
       "type": "skill_proposed",
       "skill_id": "skl_dep_fix",
       "summary": "'pnpm peer dependency 충돌'이 7회 반복되어 Skill 승격을 제안합니다"
-    },
-    {
-      "at": "2026-07-11T01:05:00Z",
-      "type": "reused",
-      "actor": "agt_park",
-      "issue_id": "iss_a1b2c3",
-      "summary": "박OO의 에이전트가 김OO 에이전트의 해결책을 재사용했습니다"
-    },
-    {
-      "at": "2026-07-10T05:20:00Z",
-      "type": "reused",
-      "actor": "agt_lee",
-      "issue_id": "iss_a1b2c3",
-      "summary": "이OO의 에이전트가 김OO 에이전트의 해결책을 재사용했습니다"
-    },
-    {
-      "at": "2026-07-08T02:11:00Z",
-      "type": "recorded",
-      "actor": "agt_kim",
-      "issue_id": "iss_a1b2c3",
-      "summary": "김OO의 에이전트가 'pnpm peer dependency 충돌' 해결 사례를 기록했습니다"
     }
   ]
 }

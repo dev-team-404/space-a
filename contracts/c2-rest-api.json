@@ -1,34 +1,263 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Space A Hub — C2: Read-only REST Contract",
-  "version": "1.0.0",
-  "description": "Read-only endpoints consumed by Pillar 3 (community visualization). Pillar 3 does NOT connect to the graph DB directly: doing so would turn the graph schema into a public API and freeze it. These three endpoints are the entire surface. The only write path into Space A is C1 (MCP).",
+  "version": "2.0.0",
+  "supersedes": "1.0.0",
+  "description": "Read-only endpoints consumed by Pillar 3 (community visualization). v2 is aligned with Pillar 3's actual data contract (docs/design/frontend-viz/03-architecture.md §4): Space is a first-class entity, ReuseEvent is a first-class event, issues carry a transition timeline, and narrative text is OFFERED (not imposed) as a server-side option. Pillar 3 does NOT connect to the graph DB directly: doing so would turn the graph schema into a public API and freeze it. The only write path into Space A is C1 (MCP).",
+
+  "consumerAutonomy": {
+    "description": "WHAT THIS CONTRACT DOES NOT DECIDE. Pillar 3 owns the visualization service; this contract supplies data and must not dictate how that service is built. Earlier drafts overstepped here — they said the frontend 'must NOT assemble' narrative text, which silently closed Pillar 3's own open question Q4 (narrative-translation pipeline: agent-at-write vs backend batch vs view server). That is Pillar 3's call, not this contract's.",
+    "pillar3Decides": [
+      "Whether a visualization agent generates the human-facing narrative, or it is rendered deterministically from structured fields, or the server's precomputed text is used as-is. Any mix is fine; different surfaces may choose differently.",
+      "Which scenarios warrant an LLM in the loop and which need deterministic output."
+    ],
+    "thisContractGuarantees": [
+      "STRUCTURED fields are always present (ids, types, timestamps, counts, statuses) — so a consumer can always build its own narrative, or feed an agent, without parsing prose.",
+      "NARRATIVE fields (summary, status_line, highlight, chain[].label, node label) are OFFERED ready-made — so a consumer that wants none of that work can just render them.",
+      "Both are available on every call. The consumer picks; the server does not care which."
+    ],
+    "nonNegotiable": [
+      "Tier trimming. WHO may see WHAT is enforced server-side and is not a rendering choice — see permissionModel. Whoever writes a guest-tier sentence, it must not carry work content.",
+      "Read-only. The sole write path into Space A is C1 (MCP)."
+    ],
+    "knownTradeoff": "If the consumer composes its own sentences from structured fields, adding an event type here will require a consumer-side change. If it uses the offered narrative fields, it will not. Stated so Pillar 3 can weigh it — not to push a choice."
+  },
+
+  "permissionModel": {
+    "description": "Visibility tiers mirror docs/design/frontend-viz/01-product.md §5. The server enforces these; the frontend must not be trusted to hide anything.",
+    "tiers": {
+      "lobby": "Org-wide. Aggregate numbers + one-line highlight. No narrative detail.",
+      "guest": "Org-wide, on entering a Space you are not a member of. Spatial + aggregate views in full; narrative at title level only; raw bodies locked. ('glass wall')",
+      "member": "Full narrative (timelines, feeds) + raw bodies + citation graph.",
+      "manager": "Member, plus Space settings and invitations."
+    },
+    "note": "The same rule governs C1 (MCP). An agent must not be able to fetch what its owner cannot see in the UI."
+  },
 
   "$defs": {
-    "nodeType": {
-      "type": "string",
-      "enum": ["Agent", "Task", "Issue", "MCP_Tool", "Skill"]
-    },
+    "spaceId": { "type": "string", "examples": ["sw-innov", "data-platform"] },
+    "issueStatus": { "type": "string", "enum": ["open", "knowledge_linked", "resolved"] },
+    "visibility": { "type": "string", "enum": ["org", "space"] },
+    "viewerTier": { "type": "string", "enum": ["lobby", "guest", "member", "manager"] },
+    "nodeType": { "type": "string", "enum": ["Agent", "Space", "Task", "Issue", "Knowledge", "MCP_Tool", "Skill"] },
     "edgeType": {
       "type": "string",
-      "enum": ["USED_BY", "RESOLVED", "DEPENDS_ON", "REUSED", "PROMOTED_TO"],
-      "description": "REUSED is the money edge: agent B reused what agent A solved. That is knowledge crossing a team boundary — the core story of this project."
+      "enum": ["MEMBER_OF", "OPENED", "RESOLVED", "AUTHORED", "CITED", "DEPENDS_ON", "PROMOTED_TO"],
+      "description": "CITED is the money edge: an agent in Space B reused knowledge authored in Space A. That is knowledge crossing a team boundary — the core story of this project, and what ReuseEvent records."
     },
-    "eventType": {
-      "type": "string",
-      "enum": ["recorded", "reused", "condensed", "skill_proposed"]
+    "eventType": { "type": "string", "enum": ["issue_opened", "knowledge_created", "reused", "condensed", "skill_proposed"] },
+    "timelineEntry": {
+      "type": "object",
+      "required": ["step", "label", "actor", "at"],
+      "properties": {
+        "step": { "$ref": "#/$defs/issueStatus" },
+        "label": { "type": "string", "description": "Ready-to-render Korean label, e.g. '지식 연결'. Composed server-side." },
+        "actor": { "type": "string", "description": "Agent display name." },
+        "at": { "type": "string", "format": "date-time" },
+        "note": { "type": "string", "description": "One-line detail, rendered verbatim. Member tier only." }
+      }
     }
   },
 
   "endpoints": [
     {
       "method": "GET",
-      "path": "/graph",
-      "summary": "Nodes and edges for the knowledge network map. Private knowledge is filtered out server-side and never appears here.",
+      "path": "/spaces",
+      "summary": "All Spaces (floors of the building) for the lobby view. Aggregate + one-line highlight only — no narrative detail, so this is safe org-wide.",
+      "response": {
+        "type": "object",
+        "required": ["spaces"],
+        "properties": {
+          "spaces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["space_id", "name", "stats"],
+              "properties": {
+                "space_id": { "$ref": "#/$defs/spaceId" },
+                "name": { "type": "string" },
+                "motto": { "type": "string" },
+                "floor": { "type": "integer" },
+                "seed": { "type": "boolean", "description": "Whether this is a seeded team Space." },
+                "token_budget": { "type": "integer" },
+                "token_used": { "type": "integer" },
+                "status": { "type": "string", "examples": ["정상", "혼잡"] },
+                "activity": { "type": "integer", "minimum": 0, "maximum": 3, "description": "Activity heat, drives the floor glow." },
+                "members_online": { "type": "integer" },
+                "stats": {
+                  "type": "object",
+                  "properties": {
+                    "knowledge": { "type": "integer" },
+                    "reuse": { "type": "integer" },
+                    "resolved": { "type": "integer" }
+                  }
+                },
+                "highlight": {
+                  "type": "string",
+                  "description": "Today's one-line narrative, composed server-side. OPTIONAL FOR THE CONSUMER: Pillar 3 owns the narrative-translation pipeline (their open question Q4 — agent-at-write vs backend batch vs view server). This field exists so the backend-batch option is available; Pillar 3 may ignore it and generate narrative its own way. If Pillar 3 chooses another source, say so and this becomes a no-op field rather than a constraint."
+                },
+                "viewer_tier": { "$ref": "#/$defs/viewerTier", "description": "What the calling user gets in this Space. The frontend uses it to pick a view; the server independently enforces it." }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    {
+      "method": "GET",
+      "path": "/spaces/{space_id}",
+      "summary": "One Space in detail: its agents, issues and knowledge. Response is TRIMMED BY TIER — a guest simply does not receive narrative notes or bodies. The frontend does not filter; it renders what it gets.",
+      "response": {
+        "type": "object",
+        "required": ["space_id", "viewer_tier", "agents", "issues", "knowledge"],
+        "properties": {
+          "space_id": { "$ref": "#/$defs/spaceId" },
+          "viewer_tier": { "$ref": "#/$defs/viewerTier" },
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["agent_id", "name", "status"],
+              "properties": {
+                "agent_id": { "type": "string" },
+                "name": { "type": "string" },
+                "role": { "type": "string" },
+                "owner": { "type": "string", "description": "The human who owns this agent." },
+                "status": { "type": "string", "examples": ["working", "idle"] },
+                "status_line": {
+                  "type": "string",
+                  "description": "Speech-bubble text, composed server-side. OPTIONAL FOR THE CONSUMER — see the note on Space.highlight: narrative generation is Pillar 3's call (Q4), and this field is one of the options, not a mandate. Tier still applies to WHAT it may contain: a guest-tier line must not carry work content, whoever writes it."
+                },
+                "last_active_at": { "type": "string", "format": "date-time" }
+              }
+            }
+          },
+          "issues": {
+            "type": "array",
+            "description": "Member tier only. Guests receive an empty array — issues are internal activity.",
+            "items": {
+              "type": "object",
+              "required": ["issue_id", "title", "status"],
+              "properties": {
+                "issue_id": { "type": "string" },
+                "title": { "type": "string" },
+                "status": { "$ref": "#/$defs/issueStatus" },
+                "opened_by": { "type": "string" },
+                "timeline": {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/timelineEntry" },
+                  "description": "Full transition history, not just the current state — Pillar 3 draws the L2 timeline from this (request #3)."
+                }
+              }
+            }
+          },
+          "knowledge": {
+            "type": "array",
+            "description": "visibility='org' docs are visible to everyone; visibility='space' docs only to members.",
+            "items": {
+              "type": "object",
+              "required": ["doc_id", "title", "visibility"],
+              "properties": {
+                "doc_id": { "type": "string" },
+                "title": { "type": "string" },
+                "author_agent": { "type": "string" },
+                "visibility": { "$ref": "#/$defs/visibility" },
+                "summary": { "type": "string" },
+                "body": {
+                  "type": "object",
+                  "description": "Raw document body. Present for org-visible docs, or for members. Absent (locked) for guests reading space-scoped docs.",
+                  "additionalProperties": { "type": "string" }
+                },
+                "cited_by": {
+                  "type": "array",
+                  "description": "Who reused this, and from where. The cross-Space citation chain.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "space_id": { "$ref": "#/$defs/spaceId" },
+                      "issue_title": { "type": "string" },
+                      "at": { "type": "string", "format": "date-time" }
+                    }
+                  }
+                },
+                "reuse_count": { "type": "integer" }
+              }
+            }
+          },
+          "visits": {
+            "type": "object",
+            "properties": {
+              "today": { "type": "integer" },
+              "total": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+
+    {
+      "method": "GET",
+      "path": "/reuse-events",
+      "summary": "First-class reuse events — the knowledge-reuse feed. This is the north-star metric of the whole project: one team's knowledge solving another team's problem.",
       "query": {
         "type": "object",
         "properties": {
-          "team": { "type": "string", "description": "Filter to one team. Omit for org-wide." },
+          "space_id": { "$ref": "#/$defs/spaceId", "description": "Filter to events consumed by, or sourced from, this Space." },
+          "since": { "type": "string", "format": "date-time" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["events"],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["reuse_id", "doc_id", "consumer_space", "at"],
+              "properties": {
+                "reuse_id": { "type": "string" },
+                "doc_id": { "type": "string" },
+                "source_space": { "$ref": "#/$defs/spaceId", "description": "Where the knowledge came from." },
+                "consumer_space": { "$ref": "#/$defs/spaceId", "description": "Where it was reused. source != consumer is the interesting case." },
+                "consumer_agent": { "type": "string" },
+                "issue_id": { "type": "string" },
+                "issue_title": { "type": "string" },
+                "at": { "type": "string", "format": "date-time" },
+                "chain": {
+                  "type": "array",
+                  "description": "Narrative steps of the reuse. Offered ready-made; Pillar 3 may instead derive its own from the structured fields (doc_id, source_space, consumer_space, at). e.g. 유사 이슈 발견 -> 기존 해결 방법 링크 공유 -> 재사용하여 해결.",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "label": { "type": "string" },
+                      "actor": { "type": "string" },
+                      "at": { "type": "string", "format": "date-time" }
+                    }
+                  }
+                },
+                "est_saved_tokens": {
+                  "type": "integer",
+                  "description": "ESTIMATE, per reuse event (Pillar 3 request #6). Candidate formula: what it originally cost to solve the source issue. Precision is not the point; a consistent formula honestly labelled '~' is. The frontend MUST render it with a '~' prefix."
+                },
+                "est_saved_minutes": { "type": "integer", "description": "Same caveat as est_saved_tokens." }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    {
+      "method": "GET",
+      "path": "/graph",
+      "summary": "Nodes and edges for the knowledge network map. Space-scoped knowledge the caller cannot see is filtered out server-side and never appears here.",
+      "query": {
+        "type": "object",
+        "properties": {
+          "space_id": { "$ref": "#/$defs/spaceId" },
           "since": { "type": "string", "format": "date-time" },
           "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 200 }
         }
@@ -45,8 +274,8 @@
               "properties": {
                 "id": { "type": "string" },
                 "type": { "$ref": "#/$defs/nodeType" },
-                "label": { "type": "string", "description": "Human-readable, ready to render. Do not build this on the frontend." },
-                "team": { "type": "string" },
+                "label": { "type": "string", "description": "Human-readable, ready to render. Offered for convenience; the structured id/type are always present if the consumer prefers to build its own label." },
+                "space_id": { "$ref": "#/$defs/spaceId" },
                 "reuse_count": { "type": "integer" }
               }
             }
@@ -71,10 +300,11 @@
     {
       "method": "GET",
       "path": "/stats",
-      "summary": "Aggregate dashboard numbers.",
+      "summary": "Aggregate dashboard numbers. Safe at every tier — aggregates carry no work content.",
       "query": {
         "type": "object",
         "properties": {
+          "space_id": { "$ref": "#/$defs/spaceId" },
           "from": { "type": "string", "format": "date" },
           "to": { "type": "string", "format": "date" }
         }
@@ -94,7 +324,7 @@
             "type": "object",
             "properties": {
               "issues": { "type": "integer" },
-              "solutions": { "type": "integer" },
+              "knowledge": { "type": "integer" },
               "skills": { "type": "integer" },
               "reuses": { "type": "integer" }
             }
@@ -110,28 +340,28 @@
               }
             }
           },
-          "top_issues": {
+          "top_knowledge": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "issue_id": { "type": "string" },
+                "doc_id": { "type": "string" },
                 "title": { "type": "string" },
-                "occurrences": { "type": "integer" }
+                "reuse_count": { "type": "integer" }
               }
             }
           },
           "tokens_saved_est": {
             "type": "integer",
-            "description": "ESTIMATE. Tokens avoided versus injecting the raw logs. The frontend must label this with '~' — never present it as measured."
+            "description": "ESTIMATE — the sum of per-event est_saved_tokens. The frontend must label this with '~'; never present it as measured."
           },
-          "by_team": {
+          "by_space": {
             "type": "array",
-            "description": "contributed vs reused shows which teams are net givers and which are net takers of knowledge.",
+            "description": "contributed vs reused shows which Spaces are net givers and which are net takers of knowledge.",
             "items": {
               "type": "object",
               "properties": {
-                "team": { "type": "string" },
+                "space_id": { "$ref": "#/$defs/spaceId" },
                 "contributed": { "type": "integer" },
                 "reused": { "type": "integer" }
               }
@@ -148,6 +378,7 @@
       "query": {
         "type": "object",
         "properties": {
+          "space_id": { "$ref": "#/$defs/spaceId" },
           "since": { "type": "string", "format": "date-time" },
           "limit": { "type": "integer", "minimum": 1, "maximum": 200, "default": 50 }
         }
@@ -165,11 +396,13 @@
                 "at": { "type": "string", "format": "date-time" },
                 "type": { "$ref": "#/$defs/eventType" },
                 "actor": { "type": "string" },
+                "space_id": { "$ref": "#/$defs/spaceId" },
                 "issue_id": { "type": "string" },
+                "doc_id": { "type": "string" },
                 "skill_id": { "type": "string" },
                 "summary": {
                   "type": "string",
-                  "description": "A ready-to-render Korean sentence, composed server-side. The frontend must NOT assemble this from parts — otherwise every new event type would require a frontend change."
+                  "description": "A ready-to-render Korean sentence, composed server-side. OPTIONAL FOR THE CONSUMER (see Space.highlight): narrative generation is Pillar 3's decision, not this contract's. The structured fields (type, actor, space_id, doc_id) are always present, so a consumer that wants to compose its own sentence — or have a visualization agent do it — has everything it needs. Note the tradeoff we found: if the consumer composes, every new event type added here needs a consumer-side change; if it uses this field, it does not."
                 }
               }
             }
