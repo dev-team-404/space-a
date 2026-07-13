@@ -385,9 +385,18 @@ pub(crate) fn valid_tab(tab: &str) -> bool {
     matches!(tab, "home" | "diary" | "coach" | "chat")
 }
 
+/// chat:goto-tab payload — target은 탭 문맥으로 해석(coach→dedup_key, diary→YYYY-MM-DD).
+/// 백엔드는 내용을 해석하지 않는다(스펙 §1-4).
+#[derive(Debug, Clone, Serialize)]
+pub struct GotoTabPayload {
+    pub tab: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>, // None이면 필드 생략 — 프론트 `target?: string`과 정합
+}
+
 #[cfg_attr(test, allow(dead_code))]
 #[tauri::command]
-pub fn open_chat_tab(app: tauri::AppHandle, tab: String) -> Result<(), String> {
+pub fn open_chat_tab(app: tauri::AppHandle, tab: String, target: Option<String>) -> Result<(), String> {
     use tauri::{Emitter, Manager};
     if !valid_tab(&tab) {
         return Err(format!("허용되지 않은 탭: {tab}"));
@@ -397,7 +406,8 @@ pub fn open_chat_tab(app: tauri::AppHandle, tab: String) -> Result<(), String> {
         let _ = w.unminimize();
         let _ = w.set_focus();
     }
-    app.emit("chat:goto-tab", &tab).map_err(|e| e.to_string())
+    app.emit("chat:goto-tab", GotoTabPayload { tab, target })
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -409,6 +419,18 @@ mod tests {
     fn open_chat_tab_validates_tab() {
         assert!(valid_tab("home") && valid_tab("diary") && valid_tab("coach") && valid_tab("chat"));
         assert!(!valid_tab("etc") && !valid_tab(""));
+    }
+
+    #[test]
+    fn goto_tab_payload_serializes_target_optionally() {
+        let with = GotoTabPayload { tab: "diary".into(), target: Some("2026-07-11".into()) };
+        assert_eq!(
+            serde_json::to_string(&with).unwrap(),
+            r#"{"tab":"diary","target":"2026-07-11"}"#
+        );
+        // None이면 target 필드 자체를 생략 — 프론트 `target?: string`(undefined)과 정합
+        let without = GotoTabPayload { tab: "home".into(), target: None };
+        assert_eq!(serde_json::to_string(&without).unwrap(), r#"{"tab":"home"}"#);
     }
 
     #[test]
