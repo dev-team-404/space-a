@@ -10,7 +10,8 @@
     onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, type Summary,
   } from './lib/api';
   import {
-    diaryNotice, findingNotice, loadNotices, occasionNotice, pushNotice, saveNotices, type Notice,
+    diaryNotice, findingNotice, loadNotices, occasionNotice, pushNotice, saveNotices,
+    type Notice, type NoticeDest,
   } from './lib/notices';
 
   type Tab = 'home' | 'diary' | 'coach' | 'chat';
@@ -26,6 +27,7 @@
   let dailyLine = $state<string | null>(null);
   let activeCount = $state(0);
   let coachFocus = $state<string | null>(null);
+  let diaryFocus = $state<string | null>(null);
   let notices = $state<Notice[]>(loadNotices());
 
   async function refresh() {
@@ -35,8 +37,11 @@
   }
   refresh();
   onScanDone(() => refresh());
-  onGotoTab(({ tab: t }) => {
-    if (t === 'home' || t === 'diary' || t === 'coach' || t === 'chat') tab = t;
+  onGotoTab(({ tab: t, target }) => {
+    if (!(t === 'home' || t === 'diary' || t === 'coach' || t === 'chat')) return;
+    if (target && t === 'coach') gotoCoach(target);
+    else if (target && t === 'diary') gotoDiary(target);
+    else tab = t;
   });
 
   // 알림 히스토리 기록 (스펙 §2 — 창이 숨김이어도 수신됨). 문구·target 조합은 notices.ts 헬퍼.
@@ -57,6 +62,17 @@
   function gotoCoach(dedupKey: string) {
     coachFocus = dedupKey;
     tab = 'coach';
+  }
+
+  function gotoDiary(date: string) {
+    diaryFocus = date;
+    tab = 'diary';
+  }
+
+  // NoticeLog 클릭 착지 — dest.tab에 따라 코칭 카드/다이어리 날짜로
+  function gotoDest(dest: NoticeDest) {
+    if (dest.tab === 'coach') gotoCoach(dest.target);
+    else gotoDiary(dest.target);
   }
 
   const mood = $derived(
@@ -80,11 +96,11 @@
       </aside>
       <main class="content">
         {#if tab === 'home'}
-          <HomeTab {summary} onGotoCoach={gotoCoach} />
+          <HomeTab {summary} onGotoCoach={gotoCoach} onGotoNotice={gotoDest} />
         {:else if tab === 'coach'}
           <CoachTab focusKey={coachFocus} onChanged={refresh} />
         {:else if tab === 'diary'}
-          <DiaryTab />
+          <DiaryTab focusDate={diaryFocus} />
         {:else}
           <ChatTab />
         {/if}

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { Notice } from '../../notices';
-  let { notices }: { notices: Notice[] } = $props();
+  import { noticeDest, type Notice, type NoticeDest } from '../../notices';
+  let { notices, onGoto }: { notices: Notice[]; onGoto: (dest: NoticeDest) => void } = $props();
   const ICON: Record<Notice['kind'], string> = { finding: '💡', diary: '📓', occasion: '🎉' };
   const hhmm = (ts: string) => {
     const d = new Date(ts);
@@ -15,7 +15,16 @@
   {:else}
     <ul>
       {#each notices.slice(0, 6) as n (n.ts + n.text)}
-        <li><span>{ICON[n.kind]}</span><span class="text">{n.text}</span><time>{hhmm(n.ts)}</time></li>
+        {@const dest = noticeDest(n)}
+        <li>
+          <span>{ICON[n.kind]}</span>
+          {#if dest}
+            <button class="text" onclick={() => onGoto(dest)}>{n.text}</button>
+          {:else}
+            <span class="text">{n.text}</span>
+          {/if}
+          <time>{hhmm(n.ts)}</time>
+        </li>
       {/each}
     </ul>
   {/if}
@@ -28,5 +37,10 @@
   ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
   li { display: flex; gap: 6px; align-items: baseline; }
   .text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  button.text {
+    border: none; background: none; font: inherit; color: inherit;
+    padding: 0; cursor: pointer; text-align: left;
+  }
+  button.text:hover { color: var(--accent); text-decoration: underline; }
   time { color: var(--ink-soft); font-size: 10px; }
 </style>
