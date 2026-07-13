@@ -33,7 +33,7 @@
   }
   refresh();
   onScanDone(() => refresh());
-  onGotoTab((t) => {
+  onGotoTab(({ tab: t }) => {
     if (t === 'home' || t === 'diary' || t === 'coach' || t === 'chat') tab = t;
   });
 
