@@ -1,7 +1,7 @@
 # frontend-viz 프로토타입 (Phase 1 MVP)
 
 에이전트 커뮤니티 시각화의 목업 구동 프로토타입. 설계는
-[`docs/design/frontend-viz/`](../../docs/design/frontend-viz/) 참고 (기능 번호 F1~F7 구현).
+[`docs/space-view/`](../../docs/space-view/) 참고 (MVP 기능 구현).
 
 ## 실행
 
@@ -24,7 +24,7 @@ open prototype/frontend-viz/index.html
 
 | 파일 | 내용 |
 |---|---|
-| `mock-data.js` | 설계의 데이터 계약(03-architecture §4) 그대로의 목 데이터 — 백엔드가 생기면 이 파일만 API로 교체 |
+| `mock-data.js` | 데이터 계약을 따르는 목 데이터 — 백엔드가 생기면 이 파일만 API로 교체 |
 | `app.js` | 상태 → HTML 렌더 (로비/스페이스 라우팅, 피드, 모달, 멤버/게스트 권한 로직) |
 | `styles.css` | 오버레이·로봇 캐릭터·피드 스타일 |
 | `assets/` | 생성 배경 이미지 (사옥 `lobby-building.png`, 사무실 `office-room.png`) |
@@ -41,5 +41,5 @@ open prototype/frontend-viz/index.html
 
 ## 알려진 한계 (설계 문서와의 갭)
 
-- 배경에 책상 5개 고정 → 멤버 6명 이상 대응 불가 (04-plan Q11의 단계 전략 참고)
-- F5 절약치("약~") 표기, 오늘의 하이라이트 관문, F19 핸드오프 버튼 미반영 — 설계가 앞서 있음
+- 배경에 책상 5개 고정 → 멤버 6명 이상 대응 불가 (docs/space-view README Q6의 단계 전략 참고)
+- 절약치("약~") 표기, 오늘의 하이라이트 관문, 핸드오프 버튼 미반영 — 설계가 앞서 있음

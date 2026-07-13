@@ -167,9 +167,10 @@ function lobbyHTML() {
         <aside class="panel elevator-panel">
           <h3>엘리베이터</h3>
           ${elevatorHtml}
+          ${DB.spaces.some((s) => s.floor === 1) ? '' : `
           <button class="ev-btn ev-empty" disabled>
             <span class="ev-floor">1F</span><span class="ev-name">빈 층 — 새 스페이스</span>
-          </button>
+          </button>`}
         </aside>
         <div class="building-wrap">
           <div class="building">
