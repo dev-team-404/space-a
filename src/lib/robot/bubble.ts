@@ -4,7 +4,8 @@ export interface Bubble {
   kind: BubbleKind;
   text: string;
   tab: 'home' | 'diary' | 'coach';
-  key?: string;
+  /** 딥링크 대상 — tab 문맥으로 해석(coach→dedup_key, diary→YYYY-MM-DD). 없으면 탭 이동만. */
+  target?: string;
 }
 
 const RULE_LINE: Record<string, string> = {
@@ -16,7 +17,7 @@ const RULE_LINE: Record<string, string> = {
 };
 
 export function findingBubble(
-  rows: { rule_id: string; est_tokens_saved: number; severity: string }[],
+  rows: { rule_id: string; est_tokens_saved: number; severity: string; dedup_key: string }[],
 ): Bubble {
   const top = [...rows].sort((a, b) => b.est_tokens_saved - a.est_tokens_saved)[0];
   const line = RULE_LINE[top.rule_id] ?? '아낄 수 있는 게 보여요';
@@ -24,12 +25,13 @@ export function findingBubble(
   return {
     kind: 'finding',
     tab: 'coach',
+    target: top.dedup_key,
     text: `주인, ${line} (~${top.est_tokens_saved.toLocaleString()} tok)${more}`,
   };
 }
 
 export function diaryBubble(date: string): Bubble {
-  return { kind: 'diary', tab: 'diary', text: `${date} 일기 다 썼어요! 보러 올래요?` };
+  return { kind: 'diary', tab: 'diary', target: date, text: `${date} 일기 다 썼어요! 보러 올래요?` };
 }
 
 export function occasionBubble(labels: string[]): Bubble {
@@ -55,9 +57,9 @@ const CHATTER: ((n: number | null) => string)[] = [
 ];
 
 /** realtime_advice 옵트인: 스캔 후 최상위 활성 advice를 말풍선으로 (스펙 §6).
- *  key(dedup_key)로 직전과 같은 조언 반복을 호출측에서 방지한다. */
+ *  target(dedup_key)은 코칭 카드 딥링크 대상 — 같은 조언 반복 방지는 호출측이 dedup_key로 수행. */
 export function adviceBubble(f: { dedup_key: string; detail: string }): Bubble {
-  return { kind: 'finding', tab: 'coach', text: `주인, ${f.detail}`, key: f.dedup_key };
+  return { kind: 'finding', tab: 'coach', text: `주인, ${f.detail}`, target: f.dedup_key };
 }
 
 /** 잡담 후보 전체 — LLM 풀(사용기록 연계) + 정적 큐레이션(잡담/응원, summary 렌더). */

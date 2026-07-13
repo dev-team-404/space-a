@@ -92,7 +92,8 @@ export const getSessionTranscript = (sessionId: string) =>
   invoke<TranscriptEntry[]>('get_session_transcript', { sessionId });
 export const runScanNow = () => invoke<void>('run_scan_now');
 export const getMascotSeed = () => invoke<RobotSpec>('get_mascot_seed');
-export const openChatTab = (tab: string) => invoke<void>('open_chat_tab', { tab });
+export const openChatTab = (tab: string, target?: string) =>
+  invoke<void>('open_chat_tab', { tab, target });
 export const getSettings = () => invoke<Record<string, string>>('get_settings');
 export const setSetting = (key: string, value: string) => invoke<void>('set_setting', { key, value });
 export const listDiaryDates = () => invoke<string[]>('list_diary_dates');
@@ -112,6 +113,12 @@ export interface ScanProgress {
   total: number;
 }
 
+/** chat:goto-tab payload — target은 탭 문맥으로 해석(coach→dedup_key, diary→YYYY-MM-DD) */
+export interface GotoTabPayload {
+  tab: string;
+  target?: string;
+}
+
 export const onScanProgress = (cb: (p: ScanProgress) => void): Promise<UnlistenFn> =>
   listen<ScanProgress>('scan:progress', (e) => cb(e.payload));
 
@@ -125,7 +132,7 @@ export const onDailyLine = (cb: (text: string) => void): Promise<UnlistenFn> =>
   listen<string>('daily-line:ready', (e) => cb(e.payload));
 export const onOccasionToday = (cb: (labels: string[]) => void): Promise<UnlistenFn> =>
   listen<string[]>('occasion:today', (e) => cb(e.payload));
-export const onGotoTab = (cb: (tab: string) => void): Promise<UnlistenFn> =>
-  listen<string>('chat:goto-tab', (e) => cb(e.payload));
+export const onGotoTab = (cb: (p: GotoTabPayload) => void): Promise<UnlistenFn> =>
+  listen<GotoTabPayload>('chat:goto-tab', (e) => cb(e.payload));
 export const onSettingsChanged = (cb: () => void): Promise<UnlistenFn> =>
   listen('settings:changed', () => cb());

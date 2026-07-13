@@ -4,6 +4,8 @@
   import { getDiary, listDiaryDates, onDiaryReady } from '../api';
   import { monthGrid, shiftMonth } from './calendar';
 
+  let { focusDate = null }: { focusDate?: string | null } = $props();
+
   const now = new Date();
   let year = $state(now.getFullYear());
   let month = $state(now.getMonth() + 1);
@@ -20,6 +22,18 @@
   $effect(() => {
     const p = onDiaryReady(() => loadDates());
     return () => { p.then((u) => u()); };
+  });
+
+  // 딥링크: focusDate가 dates에 실리면(비동기 로드 대기) 그 달로 이동해 일기를 연다.
+  // consumedFocus: 같은 값 1회만 적용 — dates 재로드(diary:ready)로 effect가 재실행돼도
+  // 사용자가 넘겨보던 달에서 끌려오지 않게 함. 렌더에 안 쓰이므로 $state 아님.
+  let consumedFocus: string | null = null;
+  $effect(() => {
+    if (!focusDate || focusDate === consumedFocus || !dates.has(focusDate)) return;
+    consumedFocus = focusDate;
+    year = +focusDate.slice(0, 4);
+    month = +focusDate.slice(5, 7);
+    pick(focusDate);
   });
 
   async function pick(date: string) {

@@ -34,7 +34,7 @@
     if (!b) return;
     bubble = null;
     await expand(false);
-    if (openTab) openChatTab(b.tab);
+    if (openTab) openChatTab(b.tab, b.target);
   }
 
   async function expand(on: boolean) {

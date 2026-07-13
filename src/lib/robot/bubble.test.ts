@@ -2,25 +2,32 @@ import { describe, expect, it } from 'vitest';
 import { adviceBubble, chatterCandidates, diaryBubble, findingBubble, occasionBubble, pickChatter } from './bubble';
 
 describe('bubble 팩토리', () => {
-  it('finding: 최대 절약 1건 + 외 N건, coach 탭', () => {
+  it('finding: 최대 절약 1건 + 외 N건, coach 탭, top dedup_key가 target', () => {
     const b = findingBubble([
-      { rule_id: 'R5', est_tokens_saved: 100, severity: 'suggest' },
-      { rule_id: 'R1', est_tokens_saved: 30000, severity: 'warn' },
+      { rule_id: 'R5', est_tokens_saved: 100, severity: 'suggest', dedup_key: 'k-r5' },
+      { rule_id: 'R1', est_tokens_saved: 30000, severity: 'warn', dedup_key: 'k-r1' },
     ]);
     expect(b.tab).toBe('coach');
     expect(b.text).toContain('외 1건');
     expect(b.text.includes('MCP')).toBe(true); // R1 문구가 대표
+    expect(b.target).toBe('k-r1');
   });
-  it('advice: detail을 싣고 dedup_key를 반복 방지 키로', () => {
+  it('advice: detail을 싣고 dedup_key를 딥링크 target으로', () => {
     const b = adviceBubble({ dedup_key: 'k1', detail: '`playwright`가 상주하는데 호출 0회' });
     expect(b.kind).toBe('finding');
     expect(b.tab).toBe('coach');
-    expect(b.key).toBe('k1');
+    expect(b.target).toBe('k1');
     expect(b.text).toContain('playwright');
   });
-  it('diary는 diary 탭, occasion은 첫 라벨', () => {
-    expect(diaryBubble('2026-07-02').tab).toBe('diary');
+  it('diary는 diary 탭 + 날짜가 target, occasion은 첫 라벨', () => {
+    const d = diaryBubble('2026-07-02');
+    expect(d.tab).toBe('diary');
+    expect(d.target).toBe('2026-07-02');
     expect(occasionBubble(['크리스마스', '함께한 지 100일']).text).toContain('크리스마스');
+  });
+  it('occasion·chatter는 target 없음(탭 이동만)', () => {
+    expect(occasionBubble(['크리스마스']).target).toBeUndefined();
+    expect(pickChatter(['풀A'], null, [], () => 0).target).toBeUndefined();
   });
 });
 

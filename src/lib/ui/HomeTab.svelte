@@ -3,14 +3,18 @@
     getWeekSummary, listFindings, onScanDone, onScanProgress, runScanNow,
     type CoachFinding, type DayStat, type ScanProgress, type Summary,
   } from '../api';
-  import { loadNotices, type Notice } from '../notices';
+  import { loadNotices, type Notice, type NoticeDest } from '../notices';
   import WeekTrend from './home/WeekTrend.svelte';
   import ModelMix from './home/ModelMix.svelte';
   import SaveTop3 from './home/SaveTop3.svelte';
   import NoticeLog from './home/NoticeLog.svelte';
   import MiniRoom from './MiniRoom.svelte';
 
-  let { summary, onGotoCoach }: { summary: Summary | null; onGotoCoach: (k: string) => void } = $props();
+  let { summary, onGotoCoach, onGotoNotice }: {
+    summary: Summary | null;
+    onGotoCoach: (k: string) => void;
+    onGotoNotice: (dest: NoticeDest) => void;
+  } = $props();
 
   const fmt = (n: number | undefined) => (n ?? 0).toLocaleString();
   let scanning = $state(false);
@@ -59,7 +63,7 @@
     <WeekTrend {days} />
     <ModelMix />
     <SaveTop3 {findings} onGoto={onGotoCoach} />
-    <NoticeLog {notices} />
+    <NoticeLog {notices} onGoto={onGotoNotice} />
   </div>
 
   <MiniRoom advice={topAdvice} />
