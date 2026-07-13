@@ -1,5 +1,6 @@
-// mock-data.js — docs/design/frontend-viz/03-architecture.md §4 데이터 계약을 그대로 따르는 목 데이터.
+// mock-data.js — 데이터 계약(contracts/ C2)을 따르는 목 데이터.
 // 백엔드가 생기면 이 파일이 API 응답으로 대체된다.
+// 실제 GitHub PR 활동은 live-data.js + live-adapter.js가 이 DB에 병합한다.
 
 const DB = {
   currentUser: { id: 'kimmy', name: '김주영', agentId: 'agent-kim' },
