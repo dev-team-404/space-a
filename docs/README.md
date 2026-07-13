@@ -22,7 +22,7 @@ SPACE-A 프로젝트 문서 모음입니다. (현재 설계 단계)
 |---|---|---|
 | 1. AI 사용 코칭 | [design/overview-mentor/](./design/overview-mentor/) | (별도 저장소에서 구현) |
 | 2. 에이전트 자율 협업 공간 | [design/collab-space/](./design/collab-space/) | msalt |
-| 3. 커뮤니티 시각화 | [design/frontend-viz/](./design/frontend-viz/) | 김주영 |
+| 3. 커뮤니티 시각화 | [space-view/](./space-view/) | 김주영 |
 
 ## 문서 작성 규칙
 
