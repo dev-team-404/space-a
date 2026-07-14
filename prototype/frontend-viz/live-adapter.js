@@ -7,12 +7,12 @@
   const SPACE_ID = 'space-a-dev';
   const CURRENT_USER_LOGIN = 'JuyoungKimmy-Kim';
   const TEAM = {
-    'JuyoungKimmy-Kim': { agent: 'Agent_Juyoung', owner: '김주영', role: 'ux' },
-    'msaltnet':         { agent: 'Agent_Msalt',   owner: '정성문', role: 'backend' },
-    'palendy':          { agent: 'Agent_Palendy', owner: 'palendy', role: 'knowledge' },
+    'JuyoungKimmy-Kim': { agent: 'Juyoung', owner: '김주영', role: 'ux' },
+    'msaltnet':         { agent: 'Msalt',   owner: '정성문', role: 'backend' },
+    'palendy':          { agent: 'Palendy', owner: 'palendy', role: 'knowledge' },
   };
   const infoOf = (login) =>
-    TEAM[login] || { agent: 'Agent_' + login.slice(0, 8), owner: login, role: 'code' };
+    TEAM[login] || { agent: login.slice(0, 8), owner: login, role: 'code' };
 
   const fmt = (iso) => {
     const d = new Date(iso);
@@ -72,7 +72,7 @@
     title: titleOf(p),
     status: p.state === 'MERGED' ? 'resolved' : 'open',
     timeline: [
-      { step: 'opened', label: '작업 시작', actor: infoOf(p.author.login).agent,
+      { step: 'open', label: '작업 시작', actor: infoOf(p.author.login).agent,
         ts: fmt(p.createdAt), note: summaryOf(p) || `리뷰 요청 (PR #${p.number})` },
       ...(p.state === 'MERGED'
         ? [{ step: 'resolved', label: '반영 완료', actor: infoOf(p.author.login).agent,
@@ -80,6 +80,36 @@
         : []),
     ],
   })));
+
+  // ── 머지된 PR → 지식 문서 (완료된 작업 기록 = org 공개 자산) ──
+  DB.knowledge.push(...merged.slice(0, 3).map((p) => ({
+    id: 'k-pr-' + p.number, spaceId: SPACE_ID,
+    title: titleOf(p), author: infoOf(p.author.login).agent,
+    visibility: 'org', ts: fmt(p.mergedAt || p.updatedAt).slice(0, 5),
+    summary: summaryOf(p) || `PR #${p.number}로 반영된 작업 기록`,
+    body: {
+      무엇: summaryOf(p) || short(p.title, 80),
+      원문: `PR #${p.number} — ${short(p.title, 60)}`,
+      상태: '리뷰를 거쳐 반영 완료',
+    },
+    citedBy: [],
+  })));
+
+  // ── PR 이벤트 → activity (하이라이트 관문·로비 게시판의 선정 풀) ──
+  // 재사용(reused)은 합성하지 않는다 — PR에는 "타팀 지식 인용" 개념이 없어 북극성 지표를
+  // 가짜로 채우게 된다. 머지 = knowledge_created(org-safe), 진행 = issue_opened(멤버 전용).
+  DB.activity.push(
+    ...merged.slice(0, 2).map((p) => ({
+      ts: fmt(p.mergedAt || p.updatedAt).slice(-5), at: p.mergedAt || p.updatedAt,
+      type: 'knowledge_created', spaceId: SPACE_ID, docId: 'k-pr-' + p.number,
+      summary: `SPACE-A 개발팀의 ${infoOf(p.author.login).agent}이 '${titleOf(p)}'를 반영 완료했습니다`,
+    })),
+    ...open.slice(0, 2).map((p) => ({
+      ts: fmt(p.updatedAt).slice(-5), at: p.updatedAt,
+      type: 'issue_opened', spaceId: SPACE_ID,
+      summary: `SPACE-A 개발팀의 ${infoOf(p.author.login).agent}이 '${titleOf(p)}' 작업을 시작했습니다`,
+    })),
+  );
 
   DB.managerEvents.push({
     spaceId: SPACE_ID, kind: 'optimize',

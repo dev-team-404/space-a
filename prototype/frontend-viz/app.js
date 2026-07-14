@@ -10,7 +10,8 @@ const state = {
 
 const ROLE_LABEL = { code: '코드', backend: '백엔드', knowledge: '지식', ux: 'UX', ops: '운영', manager: '매니저' };
 const STATUS_LABEL = { working: '작업 중', searching: '검색 중', writing: '기록 중', idle: '대기 중', offline: '오프라인' };
-const STEP_ICON = { opened: '!', knowledge_linked: '≡', resolved: '✓' };
+const STEP_ICON = { open: '!', knowledge_linked: '≡', resolved: '✓' }; // step 값은 C2 issueStatus enum
+const ACTIVITY_CHIP = { reused: ['chip-reuse', '재사용'], knowledge_created: ['chip-new', '신착'], issue_opened: ['chip-new', '이슈'], condensed: ['chip-new', '압축'], skill_proposed: ['chip-new', 'Skill'] };
 
 // ── 헬퍼 ──────────────────────────────────────────────────────────
 
@@ -35,6 +36,37 @@ function visitsOf(spaceId) {
   const base = DB.visits[spaceId] || { today: 0, total: 0 };
   const bump = state.sessionVisits[spaceId] || 0;
   return { today: base.today + bump, total: base.total + bump };
+}
+
+// ── 오늘의 하이라이트 관문 (04-data-mapping §activity) ─────────────
+// "오늘 가장 가치 있던 사건 1건" 선정 — 북극성(재사용된 시행착오) 기준 결정론 랭킹.
+// 선정은 구조 필드(type·doc_id)로 소비자가 하고, 문장은 서버 제공 summary를 그대로 쓴다.
+
+const HL_SCORE = { reused: 4, skill_proposed: 3, knowledge_created: 2, condensed: 1, issue_opened: 0 };
+
+// 로비·게스트에 노출 가능한 이벤트 — issue_opened는 summary에 이슈 제목(멤버 전용 서사)이
+// 담기므로 제외. 서버 트리밍이 정답이며 계약에 규칙 추가 필요 (04-data-mapping G7).
+const ORG_SAFE_EVENT_TYPES = ['reused', 'knowledge_created', 'skill_proposed', 'condensed'];
+
+function isCrossSpaceReuse(e) {
+  if (e.type !== 'reused' || !e.docId) return false;
+  const r = DB.reuseEvents.find((x) => x.knowledgeId === e.docId && x.consumerSpace === e.spaceId);
+  return !!(r && r.sourceSpace && r.sourceSpace !== r.consumerSpace);
+}
+
+function pickHighlight(events) {
+  const score = (e) => (HL_SCORE[e.type] ?? 0) + (isCrossSpaceReuse(e) ? 1 : 0);
+  return events.slice().sort((a, b) => score(b) - score(a) || new Date(b.at) - new Date(a.at))[0] || null;
+}
+
+// 스페이스 관련 이벤트 = 그 방에서 일어났거나, 그 방의 지식이 다른 방에서 재사용된 것
+function relatedToSpace(e, spaceId) {
+  if (e.spaceId === spaceId) return true;
+  if (e.type === 'reused' && e.docId) {
+    const r = DB.reuseEvents.find((x) => x.knowledgeId === e.docId);
+    return !!(r && r.sourceSpace === spaceId);
+  }
+  return false;
 }
 
 // ── 라우팅 ────────────────────────────────────────────────────────
@@ -131,15 +163,25 @@ function lobbyHTML() {
       </div>`;
   }).join('');
 
+  // 관문: 가장 가치 있던 1건(★)을 맨 위에, 그 외 최신 1건 — 04-data-mapping.md §activity
+  // 로비는 조직 공개 표면이므로 노출 풀 자체를 org-safe 이벤트로 제한
+  const lobbyEvents = DB.activity.filter((e) => ORG_SAFE_EVENT_TYPES.includes(e.type));
+  const hl = pickHighlight(lobbyEvents);
+  const rest = lobbyEvents.filter((e) => e !== hl)
+    .sort((a, b) => new Date(b.at) - new Date(a.at));
+  const boardItems = [
+    hl ? `<li class="board-hl"><span class="chip chip-hl">★ 오늘</span> ${hl.summary}</li>` : '',
+    ...rest.slice(0, 1).map((e) => {
+      const [chipCls, chipLabel] = ACTIVITY_CHIP[e.type] || ['chip-new', '소식'];
+      return `<li><span class="chip ${chipCls}">${chipLabel}</span> ${e.summary}</li>`;
+    }),
+  ].join('');
   const groundHtml = `
     <div class="floor-zone ground" style="top:${GROUND_ZONE.top}%;height:${GROUND_ZONE.height}%;">
       <div class="floor-tag">G · 로비 게시판</div>
       <div class="floor-card">
         <h4>오늘의 조직 하이라이트</h4>
-        <ul class="board-list">
-          <li><span class="chip chip-reuse">재사용</span> S/W 혁신팀의 <b>DS 인증서 지식</b> → 데이터 플랫폼팀이 5분 만에 해결</li>
-          <li><span class="chip chip-new">신착</span> 공개 지식 <b>파이프라인 캐시 설정 최적화</b> (데이터 플랫폼팀)</li>
-        </ul>
+        <ul class="board-list">${boardItems}</ul>
       </div>
     </div>`;
 
@@ -161,7 +203,10 @@ function lobbyHTML() {
       <header class="topbar">
         <div class="logo" onclick="goLobby()">SPACE <span class="logo-a">A</span></div>
         <div class="topbar-title">회사 로비 — 층을 골라 들어가세요</div>
-        <div class="topbar-right"><span class="user-chip">${DB.currentUser.name}</span></div>
+        <div class="topbar-right">
+          <button class="toggle-btn" onclick="openDashboard()">📊 대시보드</button>
+          <span class="user-chip">${DB.currentUser.name}</span>
+        </div>
       </header>
       <div class="lobby-body">
         <aside class="panel elevator-panel">
@@ -188,12 +233,12 @@ function lobbyHTML() {
             <div class="org-stat"><b>${totalReuse}</b><span>재사용</span></div>
           </div>
           <h3>공개 지식 신착</h3>
-          ${DB.knowledge.map((k) => `
+          ${DB.knowledge.filter((k) => k.visibility === 'org').map((k) => `
             <button class="k-item" onclick="openKnowledge('${k.id}')">
               <span class="k-title">${k.title}</span>
               <span class="k-meta">${spaceById(k.spaceId).name} · 인용 ${k.citedBy.length}</span>
             </button>`).join('')}
-          <p class="muted small">지식 문서는 조직 공개 자산이라 로비에서도 열람할 수 있어요.</p>
+          <p class="muted small">조직 공개(org) 지식만 로비에 올라와요. 스페이스 전용 문서는 제목까지 방 멤버 전용이에요.</p>
         </aside>
       </div>
     </div>`;
@@ -255,6 +300,7 @@ function spaceHTML(id) {
             <span class="hub-title">Agent Collaboration Hub</span>
             <span class="live-dot">● 분 단위 스냅숏</span>
           </div>
+          ${spaceHighlightHTML(space, guest)}
           ${issueFeedHTML(space, guest)}
           ${reuseFeedHTML(space, guest)}
           ${activityFeedHTML(agents, guest)}
@@ -269,18 +315,34 @@ function spaceHTML(id) {
     </div>`;
 }
 
+// 방 입장 첫 시선 — 이 방과 관련된 오늘의 하이라이트 1건. 게스트에겐 이슈성 이벤트 제외.
+function spaceHighlightHTML(space, guest) {
+  const events = DB.activity.filter((e) =>
+    relatedToSpace(e, space.id) && (!guest || ORG_SAFE_EVENT_TYPES.includes(e.type)));
+  const hl = pickHighlight(events);
+  if (!hl) return '';
+  return `
+    <div class="hl-card">
+      <span class="chip chip-hl">★ 오늘의 하이라이트</span>
+      <p>${hl.summary}</p>
+    </div>`;
+}
+
 function chalkboardHTML(space, guest) {
+  // 이슈 제목·타임라인은 내부 서사 — 게스트 응답에는 없다 (04-data-mapping §게스트)
+  if (guest) {
+    return `<div class="chalkboard"><div class="board-title">에이전트 게시판 (Agent Board)</div>
+      <p class="board-empty">게시 내용은 멤버에게만 보여요</p></div>`;
+  }
   const issue = issuesOf(space.id).find((i) => i.status === 'resolved') || issuesOf(space.id)[0];
   if (!issue) return '<div class="chalkboard"><div class="board-title">에이전트 게시판 (Agent Board)</div><p class="board-empty">아직 게시된 이슈가 없어요</p></div>';
   const cards = issue.timeline.map((t, i) => `
     ${i > 0 ? '<span class="board-arrow">→</span>' : ''}
     <div class="board-card">
       <div class="bc-label">${t.label}</div>
-      <div class="bc-actor">${guest ? '멤버 전용' : t.actor}</div>
+      <div class="bc-actor">${t.actor}</div>
     </div>`).join('');
-  const log = guest
-    ? `<div class="board-log locked">진행 로그는 멤버에게만 보여요</div>`
-    : issue.timeline.map((t) => `
+  const log = issue.timeline.map((t) => `
         <div class="board-log-line"><b>${t.actor}</b>: ${t.note} <span class="ts">${t.ts}</span></div>`).join('');
   return `
     <div class="chalkboard">
@@ -337,16 +399,13 @@ function shelfBadgeHTML(space) {
 // ── 사이드바 피드 (F4·F5 + F7 가시성) ────────────────────────────
 
 function issueFeedHTML(space, guest) {
+  // 게스트에게 이슈는 제목까지 비노출 — C2가 issues: []를 내려준다 (04-data-mapping §게스트)
+  if (guest) {
+    return feedSection('이슈 흐름', 'Issue Flow',
+      `<div class="feed-card locked-card"><div class="lock-note">이슈 흐름은 멤버 전용이에요</div></div>`, true);
+  }
   const issues = issuesOf(space.id);
   const items = issues.map((issue) => {
-    if (guest) {
-      return `
-        <div class="feed-card locked-card">
-          <div class="fc-title">${issue.title}</div>
-          <span class="chip chip-${issue.status}">${issue.status === 'resolved' ? '해결' : '진행 중'}</span>
-          <div class="lock-note">상세 타임라인은 멤버 전용</div>
-        </div>`;
-    }
     const steps = issue.timeline.map((t) => `
       <div class="tl-step">
         <span class="tl-icon i-${t.step}">${STEP_ICON[t.step]}</span>
@@ -359,7 +418,7 @@ function issueFeedHTML(space, guest) {
         <div class="timeline">${steps}</div>
       </div>`;
   }).join('');
-  return feedSection('이슈 흐름', 'Issue Flow', items, guest);
+  return feedSection('이슈 흐름', 'Issue Flow', items, false);
 }
 
 function reuseFeedHTML(space, guest) {
@@ -382,6 +441,7 @@ function reuseFeedHTML(space, guest) {
       <div class="feed-card reuse-card ${outbound ? 'outbound' : 'inbound'}">
         <div class="reuse-dir">${dirText}</div>
         <button class="k-link" onclick="openKnowledge('${k.id}')">📄 ${k.title}</button>
+        ${r.estSavedTokens ? `<div class="reuse-saved">약 ~${Math.round(r.estSavedTokens / 1000)}k 토큰 · ~${r.estSavedMinutes}분 절약</div>` : ''}
         <div class="chain">${chain}</div>
       </div>`;
   }).join('');
@@ -409,17 +469,72 @@ function feedSection(title, sub, items, frosted, note) {
     </section>`;
 }
 
+// ── 대시보드 (GET /stats → 팀 리더용 집계, 04-data-mapping §stats) ──
+
+function openDashboard() {
+  const s = DB.stats;
+  const spaceName = (id) => (spaceById(id) || { name: id }).name;
+  const maxFlow = Math.max(...s.bySpace.map((b) => Math.max(b.contributed, b.reused)));
+  const bars = s.bySpace.map((b) => `
+    <div class="dash-row">
+      <span class="dash-name">${spaceName(b.spaceId)}</span>
+      <div class="dash-bars">
+        <div class="dash-bar give" style="width:${(b.contributed / maxFlow) * 100}%">${b.contributed}</div>
+        <div class="dash-bar take" style="width:${(b.reused / maxFlow) * 100}%">${b.reused}</div>
+      </div>
+    </div>`).join('');
+  const rank = (items, label) => items.map((x, i) => `
+    <li><span class="rank-n">${i + 1}</span> ${x.title || x.name} <span class="ts">${label} ${x.reuseCount}</span></li>`).join('');
+  showModal(`
+    <div class="doc-head">
+      <span class="chip chip-org">집계 · ${s.period.from} ~ ${s.period.to}</span>
+      <h2>조직 대시보드</h2>
+      <p class="doc-meta">서버 결정론 집계 — 절약치는 추정(~)으로만 표기</p>
+    </div>
+    <div class="org-stats dash-totals">
+      <div class="org-stat"><b>${s.totals.issues}</b><span>이슈</span></div>
+      <div class="org-stat"><b>${s.totals.knowledge}</b><span>지식</span></div>
+      <div class="org-stat"><b>${s.totals.reuses}</b><span>재사용</span></div>
+      <div class="org-stat"><b>${s.totals.skills}</b><span>Skill</span></div>
+    </div>
+    <p class="dash-saved">기간 내 절약 추정 <b>약 ~${Math.round(s.tokensSavedEst / 1000)}k 토큰</b></p>
+    <div class="doc-section"><h4>스페이스별 기여 ↔ 소비</h4>
+      <p class="muted small">위 = 다른 팀이 가져간 지식(기여) · 아래 = 가져와 쓴 지식(소비)</p>
+      <div class="dash-chart">${bars}</div>
+    </div>
+    <div class="doc-section"><h4>Top 재사용 Skill</h4><ul class="rank-list">${rank(s.topReusedSkills, '재사용')}</ul></div>
+    <div class="doc-section"><h4>Top 지식</h4><ul class="rank-list">${rank(s.topKnowledge, '인용')}</ul></div>
+  `);
+}
+
 // ── 모달 (F6) ─────────────────────────────────────────────────────
+
+// visibility:'space' 문서는 로비 tier에선 아예 미노출, 방 게스트 tier에선 서버가 body 없이
+// title만 내려준다 (04 §게스트). 이 가드는 딥링크·인용 경유 접근에 대한 방어용.
+const knowledgeLocked = (k) => k.visibility === 'space' && roleFor(k.spaceId) !== 'member';
 
 function openKnowledge(id) {
   const k = knowledgeById(id);
   const space = spaceById(k.spaceId);
+  if (knowledgeLocked(k)) {
+    showModal(`
+      <div class="doc-head">
+        <span class="chip chip-space">스페이스 전용</span>
+        <h2>🔒 ${k.title}</h2>
+        <p class="doc-meta">${space.name} · 멤버만 원문을 열람할 수 있어요</p>
+      </div>
+      <p class="doc-summary muted">이 문서는 ${space.name} 내부용으로 공유됐어요.
+        요약과 원문은 스페이스 멤버에게만 보여요. 필요하면 ${space.name}에 공유(새니타이징 후 조직 공개)를 요청하세요.</p>
+      <div class="doc-section"><h4>재사용 이력</h4><p class="muted small">${k.citedBy.length}회 인용 — 상세는 멤버 전용</p></div>
+    `);
+    return;
+  }
   const cited = k.citedBy.length
     ? k.citedBy.map((c) => `<li><b>${spaceById(c.spaceId).name}</b> — “${c.issueTitle}” <span class="ts">${c.ts}</span></li>`).join('')
     : '<li class="muted">아직 인용 기록이 없어요</li>';
   showModal(`
     <div class="doc-head">
-      <span class="chip chip-org">조직 공개</span>
+      <span class="chip ${k.visibility === 'org' ? 'chip-org' : 'chip-space'}">${k.visibility === 'org' ? '조직 공개' : '스페이스 전용'}</span>
       <h2>${k.title}</h2>
       <p class="doc-meta">${k.author} · ${space.name} · ${k.ts}</p>
     </div>
