@@ -2,9 +2,13 @@
 
 SPACE-A 프로젝트 문서 모음입니다. (현재 설계 단계)
 
+> **사람용 문서는 [highlevel/](./highlevel/)부터.** 개요 → 기능별로 레벨을 따라 읽으세요.
+> 시작점: [highlevel/level-0.md](./highlevel/level-0.md)
+
 | 문서 | 내용 |
 |------|------|
-| [design/](./design/) | 팀원별 컴포넌트 설계 안 |
+| [highlevel/](./highlevel/) | **사람이 읽는 레벨 문서** (개요 → 기능 → 상세) |
+| [design/](./design/) | 팀원별 컴포넌트 설계 안 (상세·원본) |
 | [adr/](./adr/) | Architecture Decision Records (확정된 주요 결정 기록) |
 | [../contracts/](../contracts/) | 컴포넌트 간 **경계 계약** (C1/C2) — 기계가 읽는 스키마와 픽스처 |
 
@@ -13,8 +17,6 @@ SPACE-A 프로젝트 문서 모음입니다. (현재 설계 단계)
 | # | 결정 | 상태 |
 |---|------|------|
 | [0001](./adr/0001-record-architecture-decisions.md) | ADR을 사용해 결정을 기록한다 | 채택 |
-| [0002](./adr/0002-repo-structure.md) | 레포 구성 — 계약 중심 하이브리드 | 제안 |
-| [0003](./adr/0003-shared-llm-cluster.md) | 로컬 LLM 클러스터는 공용 인프라 | 채택 |
 
 ## 설계 문서
 
