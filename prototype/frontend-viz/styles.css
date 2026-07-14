@@ -167,6 +167,15 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .chip-new   { background: rgba(255,157,151,.15); color: var(--coral); }
 .chip-org   { background: rgba(126,232,200,.15); color: var(--mint); border: 1px solid rgba(126,232,200,.4); }
 .chip-space { background: rgba(184,167,247,.15); color: var(--lav); border: 1px solid rgba(184,167,247,.4); }
+.chip-hl    { background: rgba(246,234,210,.15); color: var(--cream); border: 1px solid rgba(246,234,210,.45); }
+
+/* 오늘의 하이라이트 관문 */
+.board-hl { background: rgba(246,234,210,.07); border-radius: 6px; padding: 4px 6px; }
+.hl-card {
+  background: var(--panel2); border: 1px solid rgba(246,234,210,.35); border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 12px;
+}
+.hl-card p { font-size: 12px; margin-top: 6px; line-height: 1.5; }
 .chip-resolved { background: rgba(126,232,200,.15); color: var(--mint); }
 .chip-knowledge_linked { background: rgba(110,198,255,.15); color: #6ec6ff; }
 .chip-open { background: rgba(255,157,151,.15); color: var(--coral); }

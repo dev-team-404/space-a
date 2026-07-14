@@ -38,6 +38,33 @@ function visitsOf(spaceId) {
   return { today: base.today + bump, total: base.total + bump };
 }
 
+// ── 오늘의 하이라이트 관문 (04-data-mapping §activity) ─────────────
+// "오늘 가장 가치 있던 사건 1건" 선정 — 북극성(재사용된 시행착오) 기준 결정론 랭킹.
+// 선정은 구조 필드(type·doc_id)로 소비자가 하고, 문장은 서버 제공 summary를 그대로 쓴다.
+
+const HL_SCORE = { reused: 4, skill_proposed: 3, knowledge_created: 2, condensed: 1, issue_opened: 0 };
+
+function isCrossSpaceReuse(e) {
+  if (e.type !== 'reused' || !e.docId) return false;
+  const r = DB.reuseEvents.find((x) => x.knowledgeId === e.docId && x.consumerSpace === e.spaceId);
+  return !!(r && r.sourceSpace && r.sourceSpace !== r.consumerSpace);
+}
+
+function pickHighlight(events) {
+  const score = (e) => (HL_SCORE[e.type] ?? 0) + (isCrossSpaceReuse(e) ? 1 : 0);
+  return events.slice().sort((a, b) => score(b) - score(a) || new Date(b.at) - new Date(a.at))[0] || null;
+}
+
+// 스페이스 관련 이벤트 = 그 방에서 일어났거나, 그 방의 지식이 다른 방에서 재사용된 것
+function relatedToSpace(e, spaceId) {
+  if (e.spaceId === spaceId) return true;
+  if (e.type === 'reused' && e.docId) {
+    const r = DB.reuseEvents.find((x) => x.knowledgeId === e.docId);
+    return !!(r && r.sourceSpace === spaceId);
+  }
+  return false;
+}
+
 // ── 라우팅 ────────────────────────────────────────────────────────
 
 function goLobby() {
@@ -132,11 +159,15 @@ function lobbyHTML() {
       </div>`;
   }).join('');
 
-  // GET /activity의 서버 제공 summary(서사)를 그대로 렌더 — 04-data-mapping.md §activity
-  const boardItems = DB.activity.slice(0, 2).map((e) => {
-    const [chipCls, chipLabel] = ACTIVITY_CHIP[e.type] || ['chip-new', '소식'];
-    return `<li><span class="chip ${chipCls}">${chipLabel}</span> ${e.summary}</li>`;
-  }).join('');
+  // 관문: 가장 가치 있던 1건(★)을 맨 위에, 그 외 최신 1건 — 04-data-mapping.md §activity
+  const hl = pickHighlight(DB.activity);
+  const boardItems = [
+    hl ? `<li class="board-hl"><span class="chip chip-hl">★ 오늘</span> ${hl.summary}</li>` : '',
+    ...DB.activity.filter((e) => e !== hl).slice(0, 1).map((e) => {
+      const [chipCls, chipLabel] = ACTIVITY_CHIP[e.type] || ['chip-new', '소식'];
+      return `<li><span class="chip ${chipCls}">${chipLabel}</span> ${e.summary}</li>`;
+    }),
+  ].join('');
   const groundHtml = `
     <div class="floor-zone ground" style="top:${GROUND_ZONE.top}%;height:${GROUND_ZONE.height}%;">
       <div class="floor-tag">G · 로비 게시판</div>
@@ -261,6 +292,7 @@ function spaceHTML(id) {
             <span class="hub-title">Agent Collaboration Hub</span>
             <span class="live-dot">● 분 단위 스냅숏</span>
           </div>
+          ${spaceHighlightHTML(space, guest)}
           ${issueFeedHTML(space, guest)}
           ${reuseFeedHTML(space, guest)}
           ${activityFeedHTML(agents, guest)}
@@ -272,6 +304,21 @@ function spaceHTML(id) {
         <span class="visits">TODAY <b>${visits.today}</b> · TOTAL <b>${visits.total}</b></span>
         <button class="ev-back" onclick="goLobby()">▼ 엘리베이터 (로비로)</button>
       </footer>
+    </div>`;
+}
+
+// 방 입장 첫 시선 — 이 방과 관련된 오늘의 하이라이트 1건. 게스트에겐 이슈성 이벤트 제외.
+const GUEST_SAFE_EVENT_TYPES = ['reused', 'knowledge_created', 'skill_proposed', 'condensed'];
+
+function spaceHighlightHTML(space, guest) {
+  const events = DB.activity.filter((e) =>
+    relatedToSpace(e, space.id) && (!guest || GUEST_SAFE_EVENT_TYPES.includes(e.type)));
+  const hl = pickHighlight(events);
+  if (!hl) return '';
+  return `
+    <div class="hl-card">
+      <span class="chip chip-hl">★ 오늘의 하이라이트</span>
+      <p>${hl.summary}</p>
     </div>`;
 }
 

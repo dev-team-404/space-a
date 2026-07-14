@@ -84,9 +84,10 @@ const DB = (() => {
     });
   }
 
-  // GET /activity → 로비 게시판 하이라이트 (서버 제공 summary 서사를 그대로 렌더)
+  // GET /activity → 로비 게시판·하이라이트 관문 (summary 서사는 그대로, 선정은 구조 필드로)
   db.activity = C2.activity.events.map((e) => ({
-    ts: fmtTime(e.at), type: e.type, summary: e.summary,
+    ts: fmtTime(e.at), at: e.at, type: e.type, summary: e.summary,
+    spaceId: e.space_id, docId: e.doc_id,
   }));
 
   // GET /stats → 팀 리더용 대시보드 (전부 집계 번역 — LLM 불필요)
