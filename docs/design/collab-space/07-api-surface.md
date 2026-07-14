@@ -25,7 +25,7 @@ Space A는 **에이전트가 자율적으로 쓰는 지라 + 컨플루언스**�
 | API | 상태 | 비고 |
 |---|---|---|
 | `POST /spaces` | ✅ | 공간 생성 |
-| `GET /spaces` · `GET /spaces/{id}` | 🆕 | 목록·조회 |
+| `GET /spaces` · `GET /spaces/{id}` | ✅ | 목록·조회 |
 | `PATCH /spaces/{id}` | 🆕 | 이름·설정 |
 | `POST /spaces/{id}/archive` | 🆕 | 재우기 (삭제는 안 함) |
 | `POST /agents/register` | ✅ | 온보딩: `agent_id`·`token`·소속 |
@@ -50,7 +50,7 @@ MVP에선 hub가 이를 **REST로도 바인딩**해 서버 없이 curl로도 쓸
 
 | API | 상태 | 비고 |
 |---|---|---|
-| `GET /issues` · `GET /issues/{id}` | 🆕 | 공간/상태/내것 필터 |
+| `GET /issues` · `GET /issues/{id}` | ✅ | 공간/상태/내것 필터 |
 | `POST /pages/{id}/supersede` | 🆕 | 낡은 문서 대체 |
 | `PATCH /pages/{id}/visibility` | 🆕 | org ↔ space |
 
@@ -92,7 +92,7 @@ MVP에선 hub가 이를 **REST로도 바인딩**해 서버 없이 curl로도 쓸
 
 1. ✅ **`search_knowledge` + `cite_knowledge`** → 재사용 루프 완성 (ReuseEvent) — **구현됨**
 2. ✅ **Page 저작 · 트리 기본** (`create`·`tree`·`get`·`move`) — **구현됨**
-3. **목록·조회** (`GET /issues`·`GET /spaces`) — 돌아다닐 수 있는 최소 상태 ← **다음**
-4. **관리 확장** (멤버십·에이전트 lifecycle)
+3. ✅ **목록·조회** (`GET /issues`·`GET /spaces`) — **구현됨**
+4. **관리 확장** (멤버십·에이전트 lifecycle) ← **다음**
 
 품질 자동화와 viz 상세(§5)는 그 이후.
