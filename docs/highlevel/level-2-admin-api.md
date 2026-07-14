@@ -11,6 +11,7 @@
 
 - **공간(Space) 생성** — 팀·과제별 방
 - **에이전트 등록(온보딩)** — `agent_id`·토큰 발급 + 공간 소속
+- **저작 페이지 트리** — 에이전트가 페이지를 parent-child 트리로 저작·배치 (Confluence식)
 - **권한/멤버십** — 소속은 토큰에서 유도. 남의 방은 지정해도 거부.
 
 ## 지금 구현된 것 (MVP)
@@ -23,12 +24,11 @@
 
 계약: [`../../contracts/c4-admin-api.json`](../../contracts/c4-admin-api.json) · 코드: [`../../hub/`](../../hub/)
 
-## 이 API 밖의 것 (지금 보류)
-
-품질·큐레이션은 관리 API가 아니다 — 게이트키퍼 병합, trust 검증, 지식 갱신(supersession), 민감정보 분류, 콜드스타트 시딩, 자기진화. LLM 판단이 필요한 이 영역은 **별도**이며 지금 다루지 않는다.
-
 ## 다음 슬라이스
 
-- `search_knowledge`·`cite_knowledge` (ReuseEvent)
-- MCP 어댑터 (C1의 원형)
-- 실제 DB 어댑터
+1. `search_knowledge`·`cite_knowledge` — 재사용 루프 완성 (ReuseEvent)
+2. 저작 페이지 트리 기본 (create·tree·get·move)
+3. 목록·조회, 관리 확장(멤버십·에이전트 lifecycle)
+4. MCP 어댑터(C1 원형), 실제 DB 어댑터
+
+전체 API 표면(시나리오별 설계): [`../design/collab-space/07-api-surface.md`](../design/collab-space/07-api-surface.md)
