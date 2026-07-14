@@ -1,0 +1,203 @@
+{
+  "catalog_version": "2026-07-14",
+  "verification": {
+    "method": "official pages fetched directly (no third-party summaries)",
+    "verified_at": "2026-07-14",
+    "notes": [
+      "Anthropic Academy catalog = 20 courses as of 2026-07-14 (third-party blogs said 13 — stale).",
+      "OpenAI Academy courses are workplace-general, NOT developer/coding specific.",
+      "Course durations not published on detail pages."
+    ]
+  },
+  "frameworks": {
+    "ai_fluency_4d": {
+      "source_url": "https://anthropic.skilljar.com/ai-fluency-framework-foundations",
+      "pillars": {
+        "delegation": "AI에 어떤 작업을 어떻게 맡길지 판단",
+        "description": "명확한 프롬프트와 지시 작성",
+        "discernment": "AI 산출물을 비판적으로 평가",
+        "diligence": "책임 있는 AI 사용"
+      }
+    }
+  },
+  "coding_ladder": [
+    {
+      "level": 0,
+      "name": "모델 리터러시",
+      "detect_signals": ["model mix 100% high-tier", "잔심부름 비율 (R7 재료)"],
+      "graduate_when": "모델 티어 혼용 시작",
+      "course_refs": ["claude-code-101#m1"],
+      "tip_material": ["에이전틱 루프 vs 챗봇 차이", "컨텍스트 창·도구·권한의 상호작용", "approval/auto-accept/Plan Mode"]
+    },
+    {
+      "level": 1,
+      "name": "컨텍스트 위생",
+      "detect_signals": ["미사용 MCP (R1)", "미사용 플러그인 (R2)", "CLAUDE.md 부재", "낮은 캐시 히트율"],
+      "graduate_when": "MCP 정리 실행 or CLAUDE.md 생성",
+      "course_refs": ["claude-code-101#m3", "claude-code-101#m4-claudemd"],
+      "tip_material": ["Explore→Plan→Code→Commit 워크플로", "컨텍스트 관리 커맨드", "CLAUDE.md 작성·유지"]
+    },
+    {
+      "level": 2,
+      "name": "반복 제거 → 스킬",
+      "detect_signals": ["설치 스킬 미활용 (R12)", "반복 워크플로 (R6 재료)"],
+      "graduate_when": "첫 스킬 생성 (인벤토리 diff)",
+      "course_refs": ["introduction-to-agent-skills"],
+      "tip_material": ["'Stop repeating yourself, teach Claude once'", "SKILL.md frontmatter·트리거 서술", "progressive disclosure로 컨텍스트 절약", "스킬 vs CLAUDE.md vs hooks vs subagents 구분"]
+    },
+    {
+      "level": 3,
+      "name": "워크플로 자동화",
+      "detect_signals": ["권한 마찰 (R11)", "자동화 버스트 (R10)", "hooks 부재"],
+      "graduate_when": "권한 사전 허용 설정 or 첫 hook",
+      "course_refs": ["claude-code-in-action#m3", "claude-code-in-action#m4"],
+      "tip_material": ["커스텀 커맨드", "hooks 정의·구현·함정", "GitHub 자동 코드리뷰", "Claude Code SDK"]
+    },
+    {
+      "level": 4,
+      "name": "오케스트레이션",
+      "detect_signals": ["is_sidechain 사용률", "동시 세션 패턴"],
+      "graduate_when": "서브에이전트 정기 활용",
+      "course_refs": ["introduction-to-subagents"],
+      "tip_material": ["컨텍스트 격리 메커니즘", "/agents로 커스텀 서브에이전트", "구조화 출력·에러 처리 설계", "언제 위임이 적절한가 vs 불필요한가"]
+    }
+  ],
+  "ax_track": {
+    "description": "비개발 직군 포함 전사 AX 상식 — 4D 프레임워크 기반",
+    "course_refs": ["ai-fluency-framework-foundations", "introduction-to-claude-cowork", "openai-ai-foundations", "openai-applied-ai-foundations", "openai-agents-and-workflows"]
+  },
+  "tag_gated": {
+    "description": "레벨 무관, finding 태그 매칭 시에만 노출",
+    "courses": [
+      { "ref": "introduction-to-model-context-protocol", "trigger_tags": ["mcp"] },
+      { "ref": "model-context-protocol-advanced-topics", "trigger_tags": ["mcp", "advanced"] }
+    ]
+  },
+  "courses": [
+    {
+      "id": "claude-code-101",
+      "provider": "anthropic",
+      "title": "Claude Code 101",
+      "url": "https://anthropic.skilljar.com/claude-code-101",
+      "audience": "AI 코딩 에이전트를 처음 접하는 개발자",
+      "prerequisites": ["에디터·CLI 기본", "Claude 계정 or API key"],
+      "modules": [
+        { "id": "m1", "title": "What is Claude Code?", "lessons": ["What is Claude Code?", "How Claude Code works", "Your first prompt"] },
+        { "id": "m2", "title": "Installing Claude Code", "lessons": ["Your first prompt"] },
+        { "id": "m3", "title": "Daily Workflows", "lessons": ["The explore → plan → code → commit workflow", "Context management", "Code review"] },
+        { "id": "m4", "title": "Customizing Claude Code", "lessons": ["The CLAUDE.md file", "Subagents", "Skills", "MCP", "Hooks"] }
+      ]
+    },
+    {
+      "id": "claude-code-in-action",
+      "provider": "anthropic",
+      "title": "Claude Code in Action",
+      "url": "https://anthropic.skilljar.com/claude-code-in-action",
+      "audience": "AI 지원을 워크플로에 통합하려는 개발자·팀",
+      "prerequisites": ["CLI·터미널", "Git 기본"],
+      "modules": [
+        { "id": "m1", "title": "What is Claude Code?", "lessons": ["Introduction", "What is a coding assistant?", "Claude Code in action"] },
+        { "id": "m2", "title": "Getting Hands On", "lessons": ["Claude Code setup", "Project setup", "Adding context", "Making changes"] },
+        { "id": "m3", "title": "Controlling Context", "lessons": ["Controlling context", "Custom commands", "MCP servers with Claude Code", "Github integration"] },
+        { "id": "m4", "title": "Hooks and the SDK", "lessons": ["Introducing hooks", "Defining hooks", "Implementing a hook", "Gotchas around hooks", "Useful hooks! (x2)", "The Claude Code SDK"] }
+      ]
+    },
+    {
+      "id": "introduction-to-agent-skills",
+      "provider": "anthropic",
+      "title": "Introduction to Agent Skills",
+      "url": "https://anthropic.skilljar.com/introduction-to-agent-skills",
+      "tagline": "Stop repeating yourself and start teaching Claude once",
+      "audience": "일관되고 컨텍스트 효율적인 워크플로를 원하는 팀",
+      "modules": [
+        { "id": "m1", "title": "What are skills?" },
+        { "id": "m2", "title": "Creating your first skill" },
+        { "id": "m3", "title": "Configuration and multi-file skills" },
+        { "id": "m4", "title": "Skills vs. other Claude Code features" },
+        { "id": "m5", "title": "Sharing skills" },
+        { "id": "m6", "title": "Troubleshooting skills" }
+      ]
+    },
+    {
+      "id": "introduction-to-subagents",
+      "provider": "anthropic",
+      "title": "Introduction to Subagents",
+      "url": "https://anthropic.skilljar.com/introduction-to-subagents",
+      "audience": "긴 세션의 컨텍스트 관리를 최적화하려는 Claude Code 사용자",
+      "modules": [
+        { "id": "m1", "title": "What are subagents?" },
+        { "id": "m2", "title": "Creating a subagent" },
+        { "id": "m3", "title": "Designing effective subagents" },
+        { "id": "m4", "title": "Using subagents effectively" }
+      ]
+    },
+    {
+      "id": "ai-fluency-framework-foundations",
+      "provider": "anthropic",
+      "title": "AI Fluency: Framework & Foundations",
+      "url": "https://anthropic.skilljar.com/ai-fluency-framework-foundations",
+      "audience": "전 직군 (신규~숙련)",
+      "framework": "4D (Delegation, Description, Discernment, Diligence)",
+      "modules": [
+        { "id": "m1", "title": "Introduction to AI Fluency" },
+        { "id": "m2", "title": "The AI Fluency Framework" },
+        { "id": "m3", "title": "Deep Dive: What is Generative AI?" },
+        { "id": "m4", "title": "Delegation" },
+        { "id": "m5", "title": "Description (prompting deep dive)" },
+        { "id": "m6", "title": "Discernment (Description-Discernment loop)" },
+        { "id": "m7", "title": "Diligence" }
+      ]
+    },
+    {
+      "id": "introduction-to-claude-cowork",
+      "provider": "anthropic",
+      "title": "Introduction to Claude Cowork",
+      "url": "https://anthropic.skilljar.com/introduction-to-claude-cowork",
+      "audience": "파일·프로젝트 협업을 일상 사용하려는 전문직 (비개발 포함)",
+      "modules": [
+        { "id": "m1", "title": "Meet Claude Cowork" },
+        { "id": "m2", "title": "Hand Claude Cowork Your First Task" },
+        { "id": "m3", "title": "Make Claude Cowork Yours (context, skills, plugins)" },
+        { "id": "m4", "title": "Use Claude Wherever You Work (Chrome, M365)" },
+        { "id": "m5", "title": "Sharing and Safety" }
+      ]
+    },
+    {
+      "id": "introduction-to-model-context-protocol",
+      "provider": "anthropic",
+      "title": "Introduction to Model Context Protocol",
+      "url": "https://anthropic.skilljar.com/introduction-to-model-context-protocol",
+      "audience": "MCP 서버를 만들려는 개발자",
+      "prerequisites": ["Python", "JSON·HTTP 기본"],
+      "modules": [
+        { "id": "m1", "title": "Introduction" },
+        { "id": "m2", "title": "Hands-on with MCP Servers" },
+        { "id": "m3", "title": "Connecting with MCP Clients" }
+      ]
+    },
+    {
+      "id": "openai-ai-foundations",
+      "provider": "openai",
+      "title": "AI Foundations",
+      "url": "https://academy.openai.com/public/courses/ai-foundations-juzjs",
+      "audience": "AI 입문자 (직장인 일반)",
+      "summary": "지시·컨텍스트·산출물 검토·책임 사용 기본기"
+    },
+    {
+      "id": "openai-applied-ai-foundations",
+      "provider": "openai",
+      "title": "Applied AI Foundations",
+      "url": "https://academy.openai.com/public/courses/applied-ai-foundations-hgk7r",
+      "audience": "AI 경험자",
+      "summary": "반복 작업을 단계 분해해 재사용 워크플로로 전환"
+    },
+    {
+      "id": "openai-agents-and-workflows",
+      "provider": "openai",
+      "title": "Agents and Workflows",
+      "url": "https://academy.openai.com/public/courses/agents-and-workflows-bieml",
+      "audience": "AI 도구 숙련자",
+      "summary": "에이전트 지휘 — 컨텍스트 제공·출력 정의·경계 설정·검토·재사용"
+    }
+  ]
+}
