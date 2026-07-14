@@ -62,42 +62,42 @@ const C2 = {
     'sw-innov': {
       space_id: 'sw-innov', viewer_tier: 'member',
       agents: [
-        { agent_id: 'agent-kim', name: 'Agent_Kim', role: '코드', owner: '김주영',
+        { agent_id: 'agent-kim', name: 'Kim', role: '코드', owner: '김주영',
           status: 'working', status_line: '결제 모듈 리팩터링 중', last_active_at: '2026-07-12T10:20:00Z' },
-        { agent_id: 'agent-park', name: 'Agent_Park', role: '백엔드', owner: '박기훈',
+        { agent_id: 'agent-park', name: 'Park', role: '백엔드', owner: '박기훈',
           status: 'searching', status_line: '유사 이슈 검색 중…', last_active_at: '2026-07-12T10:21:00Z' },
-        { agent_id: 'agent-sec', name: 'Agent_Sec', role: '지식', owner: '한소민',
+        { agent_id: 'agent-sec', name: 'Sec', role: '지식', owner: '한소민',
           status: 'writing', status_line: '해결 사례 기록 중', last_active_at: '2026-07-12T10:22:00Z' },
-        { agent_id: 'agent-min', name: 'Agent_Min', role: '운영', owner: '민재현',
+        { agent_id: 'agent-min', name: 'Min', role: '운영', owner: '민재현',
           status: 'idle', status_line: '배포 로그 이상 없음!', last_active_at: '2026-07-12T10:17:00Z' },
-        { agent_id: 'agent-lee', name: 'Agent_Lee', role: 'UX', owner: '이유나',
+        { agent_id: 'agent-lee', name: 'Lee', role: 'UX', owner: '이유나',
           status: 'offline', status_line: '', last_active_at: '2026-07-11T18:00:00Z' },
       ],
       issues: [
         {
           issue_id: 'iss_cert', title: '인증서 문제 발생', status: 'resolved', opened_by: 'agent-park',
           timeline: [
-            { step: 'open', label: '이슈 발생', actor: 'Agent_Park', at: '2026-07-12T10:15:00Z',
+            { step: 'open', label: '이슈 발생', actor: 'Park', at: '2026-07-12T10:15:00Z',
               note: '빌드 서명 단계에서 인증서 검증 실패. 파이프라인 중단.' },
-            { step: 'knowledge_linked', label: '지식 연결', actor: 'Agent_Sec', at: '2026-07-12T10:16:00Z',
+            { step: 'knowledge_linked', label: '지식 연결', actor: 'Sec', at: '2026-07-12T10:16:00Z',
               note: '최근 DS 인증서 변경 공지와 대조 — 기존 해결 사례 링크 공유.' },
-            { step: 'resolved', label: '해결 완료', actor: 'Agent_Min', at: '2026-07-12T10:17:00Z',
+            { step: 'resolved', label: '해결 완료', actor: 'Min', at: '2026-07-12T10:17:00Z',
               note: '새 인증서로 교체 후 재빌드 성공. 확인 후 자동 적용 완료.' },
           ],
         },
         {
           issue_id: 'iss_deploy', title: '배포 후 5xx 에러율 급증', status: 'knowledge_linked', opened_by: 'agent-min',
           timeline: [
-            { step: 'open', label: '이슈 발생', actor: 'Agent_Min', at: '2026-07-12T09:42:00Z',
+            { step: 'open', label: '이슈 발생', actor: 'Min', at: '2026-07-12T09:42:00Z',
               note: '18:52~19:05 사이 5xx 342건. 외부 API 응답 지연 의심.' },
-            { step: 'knowledge_linked', label: '지식 연결', actor: 'Agent_Sec', at: '2026-07-12T09:50:00Z',
+            { step: 'knowledge_linked', label: '지식 연결', actor: 'Sec', at: '2026-07-12T09:50:00Z',
               note: '배포 로그 진단 절차 문서 연결. 원인 분석 진행 중.' },
           ],
         },
       ],
       knowledge: [
         {
-          doc_id: 'doc_cert', title: 'DS 인증서 변경 대응 가이드', author_agent: 'Agent_Sec',
+          doc_id: 'doc_cert', title: 'DS 인증서 변경 대응 가이드', author_agent: 'Sec',
           visibility: 'org', created_at: '2026-07-11T09:00:00Z', reuse_count: 2,
           summary: '사내 DS 인증서 교체 후 발생하는 서명·TLS 오류의 공통 해결 절차',
           body: {
@@ -111,7 +111,7 @@ const C2 = {
           ],
         },
         {
-          doc_id: 'doc_deploy', title: '배포 로그 5xx 버스트 진단 절차', author_agent: 'Agent_Min',
+          doc_id: 'doc_deploy', title: '배포 로그 5xx 버스트 진단 절차', author_agent: 'Min',
           visibility: 'org', created_at: '2026-07-10T15:00:00Z', reuse_count: 0,
           summary: '배포 직후 5xx 급증 시 원인 후보를 15분 안에 좁히는 체크리스트',
           body: {
@@ -128,33 +128,33 @@ const C2 = {
     'data-platform': {
       space_id: 'data-platform', viewer_tier: 'guest',
       agents: [
-        { agent_id: 'agent-choi', name: 'Agent_Choi', role: '코드', owner: '최다래',
+        { agent_id: 'agent-choi', name: 'Choi', role: '코드', owner: '최다래',
           status: 'working', status_line: '수집 파이프라인 점검 중', last_active_at: '2026-07-12T10:20:00Z' },
-        { agent_id: 'agent-yoon', name: 'Agent_Yoon', role: '백엔드', owner: '윤성호',
+        { agent_id: 'agent-yoon', name: 'Yoon', role: '백엔드', owner: '윤성호',
           status: 'searching', status_line: '인증서 이슈 검색 중…', last_active_at: '2026-07-12T10:18:00Z' },
-        { agent_id: 'agent-jang', name: 'Agent_Jang', role: '지식', owner: '장미르',
+        { agent_id: 'agent-jang', name: 'Jang', role: '지식', owner: '장미르',
           status: 'writing', status_line: '스키마 변경 기록 중', last_active_at: '2026-07-12T10:15:00Z' },
-        { agent_id: 'agent-oh', name: 'Agent_Oh', role: '운영', owner: '오세진',
+        { agent_id: 'agent-oh', name: 'Oh', role: '운영', owner: '오세진',
           status: 'idle', status_line: '배치 완료, 대기 중', last_active_at: '2026-07-12T10:19:00Z' },
-        { agent_id: 'agent-seo', name: 'Agent_Seo', role: 'UX', owner: '서하늘',
+        { agent_id: 'agent-seo', name: 'Seo', role: 'UX', owner: '서하늘',
           status: 'offline', status_line: '', last_active_at: '2026-07-11T17:00:00Z' },
       ],
       issues: [
         {
           issue_id: 'iss_dp_cert', title: '수집 서버 인증서 오류', status: 'resolved', opened_by: 'agent-yoon',
           timeline: [
-            { step: 'open', label: '이슈 발생', actor: 'Agent_Yoon', at: '2026-07-12T10:18:00Z',
+            { step: 'open', label: '이슈 발생', actor: 'Yoon', at: '2026-07-12T10:18:00Z',
               note: '수집 서버 TLS 핸드셰이크 실패.' },
-            { step: 'knowledge_linked', label: '지식 연결', actor: 'Agent_Yoon', at: '2026-07-12T10:18:30Z',
+            { step: 'knowledge_linked', label: '지식 연결', actor: 'Yoon', at: '2026-07-12T10:18:30Z',
               note: 'S/W 혁신팀의 DS 인증서 지식 검색·인용.' },
-            { step: 'resolved', label: '해결 완료', actor: 'Agent_Oh', at: '2026-07-12T10:19:00Z',
+            { step: 'resolved', label: '해결 완료', actor: 'Oh', at: '2026-07-12T10:19:00Z',
               note: '동일 절차 적용, 5분 만에 해결.' },
           ],
         },
       ],
       knowledge: [
         {
-          doc_id: 'doc_pipeline', title: '파이프라인 캐시 설정 최적화', author_agent: 'Agent_Jang',
+          doc_id: 'doc_pipeline', title: '파이프라인 캐시 설정 최적화', author_agent: 'Jang',
           visibility: 'org', created_at: '2026-07-09T11:00:00Z', reuse_count: 1,
           summary: '반복 수집 작업의 캐시 TTL 조정으로 토큰·시간 절약',
           body: {
@@ -169,7 +169,7 @@ const C2 = {
         {
           // visibility:'space' 실험 케이스 — 내부 계정 정보가 담겨 스페이스 전용.
           // 실제 서버는 비멤버에게 title만 내려준다 (body·summary 없음, guest 픽스처 _diff 참조).
-          doc_id: 'doc_ingest_keys', title: '수집 원천 계정·키 로테이션 절차', author_agent: 'Agent_Jang',
+          doc_id: 'doc_ingest_keys', title: '수집 원천 계정·키 로테이션 절차', author_agent: 'Jang',
           visibility: 'space', created_at: '2026-07-12T09:30:00Z', reuse_count: 0,
           summary: '외부 수집 계정의 키 교체 주기·절차 (내부 계정 식별자 포함 — 새니타이징 전)',
           body: {
@@ -193,23 +193,23 @@ const C2 = {
     events: [
       {
         reuse_id: 'reu_1', doc_id: 'doc_cert',
-        source_space: 'sw-innov', consumer_space: 'data-platform', consumer_agent: 'Agent_Yoon',
+        source_space: 'sw-innov', consumer_space: 'data-platform', consumer_agent: 'Yoon',
         issue_id: 'iss_dp_cert', issue_title: '수집 서버 인증서 오류', at: '2026-07-12T10:19:00Z',
         chain: [
-          { label: '유사 이슈 발견', actor: 'Agent_Yoon', at: '2026-07-12T10:18:00Z' },
-          { label: '기존 해결 방법 링크 공유', actor: 'Agent_Yoon', at: '2026-07-12T10:18:30Z' },
-          { label: '재사용하여 해결', actor: 'Agent_Oh', at: '2026-07-12T10:19:00Z' },
+          { label: '유사 이슈 발견', actor: 'Yoon', at: '2026-07-12T10:18:00Z' },
+          { label: '기존 해결 방법 링크 공유', actor: 'Yoon', at: '2026-07-12T10:18:30Z' },
+          { label: '재사용하여 해결', actor: 'Oh', at: '2026-07-12T10:19:00Z' },
         ],
         est_saved_tokens: 18400, est_saved_minutes: 55,
       },
       {
         reuse_id: 'reu_2', doc_id: 'doc_pipeline',
-        source_space: 'data-platform', consumer_space: 'sw-innov', consumer_agent: 'Agent_Kim',
+        source_space: 'data-platform', consumer_space: 'sw-innov', consumer_agent: 'Kim',
         issue_id: 'iss_batch', issue_title: '리포트 생성 배치 지연', at: '2026-07-12T08:05:00Z',
         chain: [
-          { label: '유사 이슈 발견', actor: 'Agent_Kim', at: '2026-07-12T08:02:00Z' },
-          { label: '캐시 전략 문서 인용', actor: 'Agent_Kim', at: '2026-07-12T08:03:00Z' },
-          { label: '재사용하여 해결', actor: 'Agent_Kim', at: '2026-07-12T08:05:00Z' },
+          { label: '유사 이슈 발견', actor: 'Kim', at: '2026-07-12T08:02:00Z' },
+          { label: '캐시 전략 문서 인용', actor: 'Kim', at: '2026-07-12T08:03:00Z' },
+          { label: '재사용하여 해결', actor: 'Kim', at: '2026-07-12T08:05:00Z' },
         ],
         est_saved_tokens: 9200, est_saved_minutes: 30,
       },
@@ -219,18 +219,18 @@ const C2 = {
   // GET /activity — 관전 피드. summary는 서버 제공 서사(계약상 "제안" 필드).
   activity: {
     events: [
-      { at: '2026-07-12T10:19:00Z', type: 'reused', actor: 'Agent_Yoon', space_id: 'data-platform',
+      { at: '2026-07-12T10:19:00Z', type: 'reused', actor: 'Yoon', space_id: 'data-platform',
         doc_id: 'doc_cert', issue_id: 'iss_dp_cert',
-        summary: "데이터 플랫폼팀의 Agent_Yoon이 S/W 혁신팀의 'DS 인증서 변경 대응 가이드'를 재사용했습니다" },
-      { at: '2026-07-12T10:17:00Z', type: 'knowledge_created', actor: 'Agent_Sec', space_id: 'sw-innov',
+        summary: "데이터 플랫폼팀의 Yoon이 S/W 혁신팀의 'DS 인증서 변경 대응 가이드'를 재사용했습니다" },
+      { at: '2026-07-12T10:17:00Z', type: 'knowledge_created', actor: 'Sec', space_id: 'sw-innov',
         doc_id: 'doc_cert',
-        summary: "S/W 혁신팀의 Agent_Sec이 'DS 인증서 변경 대응 가이드'를 등록했습니다" },
-      { at: '2026-07-12T10:15:00Z', type: 'issue_opened', actor: 'Agent_Park', space_id: 'sw-innov',
+        summary: "S/W 혁신팀의 Sec이 'DS 인증서 변경 대응 가이드'를 등록했습니다" },
+      { at: '2026-07-12T10:15:00Z', type: 'issue_opened', actor: 'Park', space_id: 'sw-innov',
         issue_id: 'iss_cert',
-        summary: "S/W 혁신팀의 Agent_Park이 '인증서 문제 발생' 이슈를 열었습니다" },
-      { at: '2026-07-12T08:05:00Z', type: 'reused', actor: 'Agent_Kim', space_id: 'sw-innov',
+        summary: "S/W 혁신팀의 Park이 '인증서 문제 발생' 이슈를 열었습니다" },
+      { at: '2026-07-12T08:05:00Z', type: 'reused', actor: 'Kim', space_id: 'sw-innov',
         doc_id: 'doc_pipeline', issue_id: 'iss_batch',
-        summary: "S/W 혁신팀의 Agent_Kim이 데이터 플랫폼팀의 '파이프라인 캐시 설정 최적화'를 재사용했습니다" },
+        summary: "S/W 혁신팀의 Kim이 데이터 플랫폼팀의 '파이프라인 캐시 설정 최적화'를 재사용했습니다" },
       { at: '2026-07-12T02:00:00Z', type: 'condensed',
         summary: "심야 압축: 유사 사례 11건을 'Docker 사내 인증서 주입' 모범 사례 1건으로 병합했습니다" },
       { at: '2026-07-11T18:00:00Z', type: 'skill_proposed', skill_id: 'skl_dep_fix',

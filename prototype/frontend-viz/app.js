@@ -167,9 +167,11 @@ function lobbyHTML() {
   // 로비는 조직 공개 표면이므로 노출 풀 자체를 org-safe 이벤트로 제한
   const lobbyEvents = DB.activity.filter((e) => ORG_SAFE_EVENT_TYPES.includes(e.type));
   const hl = pickHighlight(lobbyEvents);
+  const rest = lobbyEvents.filter((e) => e !== hl)
+    .sort((a, b) => new Date(b.at) - new Date(a.at));
   const boardItems = [
     hl ? `<li class="board-hl"><span class="chip chip-hl">★ 오늘</span> ${hl.summary}</li>` : '',
-    ...lobbyEvents.filter((e) => e !== hl).slice(0, 1).map((e) => {
+    ...rest.slice(0, 1).map((e) => {
       const [chipCls, chipLabel] = ACTIVITY_CHIP[e.type] || ['chip-new', '소식'];
       return `<li><span class="chip ${chipCls}">${chipLabel}</span> ${e.summary}</li>`;
     }),
