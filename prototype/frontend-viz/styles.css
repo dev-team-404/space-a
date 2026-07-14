@@ -166,6 +166,7 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .chip-reuse { background: rgba(126,232,200,.15); color: var(--mint); }
 .chip-new   { background: rgba(255,157,151,.15); color: var(--coral); }
 .chip-org   { background: rgba(126,232,200,.15); color: var(--mint); border: 1px solid rgba(126,232,200,.4); }
+.chip-space { background: rgba(184,167,247,.15); color: var(--lav); border: 1px solid rgba(184,167,247,.4); }
 .chip-resolved { background: rgba(126,232,200,.15); color: var(--mint); }
 .chip-knowledge_linked { background: rgba(110,198,255,.15); color: #6ec6ff; }
 .chip-open { background: rgba(255,157,151,.15); color: var(--coral); }
@@ -185,6 +186,8 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   padding: 9px 11px; margin-bottom: 6px; transition: border-color .15s;
 }
 .k-item:hover { border-color: var(--mint); }
+.k-item.k-locked { opacity: .65; border-style: dashed; }
+.k-item.k-locked:hover { border-color: var(--lav); }
 .k-title { display: block; font-size: 12px; font-weight: 600; margin-bottom: 3px; }
 .k-meta { font-size: 10px; color: var(--muted); }
 

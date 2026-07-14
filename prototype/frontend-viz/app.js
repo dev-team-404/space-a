@@ -194,12 +194,15 @@ function lobbyHTML() {
             <div class="org-stat"><b>${totalReuse}</b><span>재사용</span></div>
           </div>
           <h3>공개 지식 신착</h3>
-          ${DB.knowledge.map((k) => `
-            <button class="k-item" onclick="openKnowledge('${k.id}')">
-              <span class="k-title">${k.title}</span>
-              <span class="k-meta">${spaceById(k.spaceId).name} · 인용 ${k.citedBy.length}</span>
-            </button>`).join('')}
-          <p class="muted small">지식 문서는 조직 공개 자산이라 로비에서도 열람할 수 있어요.</p>
+          ${DB.knowledge.map((k) => {
+            const locked = knowledgeLocked(k);
+            return `
+            <button class="k-item ${locked ? 'k-locked' : ''}" onclick="openKnowledge('${k.id}')">
+              <span class="k-title">${locked ? '🔒 ' : ''}${k.title}</span>
+              <span class="k-meta">${spaceById(k.spaceId).name} · ${locked ? '스페이스 전용' : `인용 ${k.citedBy.length}`}</span>
+            </button>`;
+          }).join('')}
+          <p class="muted small">지식 문서는 조직 공개가 기본 — 🔒 스페이스 전용 문서는 제목만 보여요.</p>
         </aside>
       </div>
     </div>`;
@@ -456,15 +459,31 @@ function openDashboard() {
 
 // ── 모달 (F6) ─────────────────────────────────────────────────────
 
+// visibility:'space' 문서는 비멤버에게 제목만 — 실제로는 서버가 body 없이 내려준다 (04 §게스트)
+const knowledgeLocked = (k) => k.visibility === 'space' && roleFor(k.spaceId) !== 'member';
+
 function openKnowledge(id) {
   const k = knowledgeById(id);
   const space = spaceById(k.spaceId);
+  if (knowledgeLocked(k)) {
+    showModal(`
+      <div class="doc-head">
+        <span class="chip chip-space">스페이스 전용</span>
+        <h2>🔒 ${k.title}</h2>
+        <p class="doc-meta">${space.name} · 멤버만 원문을 열람할 수 있어요</p>
+      </div>
+      <p class="doc-summary muted">이 문서는 ${space.name} 내부용으로 공유됐어요.
+        요약과 원문은 스페이스 멤버에게만 보여요. 필요하면 ${space.name}에 공유(새니타이징 후 조직 공개)를 요청하세요.</p>
+      <div class="doc-section"><h4>재사용 이력</h4><p class="muted small">${k.citedBy.length}회 인용 — 상세는 멤버 전용</p></div>
+    `);
+    return;
+  }
   const cited = k.citedBy.length
     ? k.citedBy.map((c) => `<li><b>${spaceById(c.spaceId).name}</b> — “${c.issueTitle}” <span class="ts">${c.ts}</span></li>`).join('')
     : '<li class="muted">아직 인용 기록이 없어요</li>';
   showModal(`
     <div class="doc-head">
-      <span class="chip chip-org">조직 공개</span>
+      <span class="chip ${k.visibility === 'org' ? 'chip-org' : 'chip-space'}">${k.visibility === 'org' ? '조직 공개' : '스페이스 전용'}</span>
       <h2>${k.title}</h2>
       <p class="doc-meta">${k.author} · ${space.name} · ${k.ts}</p>
     </div>

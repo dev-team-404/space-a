@@ -166,6 +166,19 @@ const C2 = {
             { space_id: 'sw-innov', issue_title: '리포트 생성 배치 지연', at: '2026-07-12T08:05:00Z' },
           ],
         },
+        {
+          // visibility:'space' 실험 케이스 — 내부 계정 정보가 담겨 스페이스 전용.
+          // 실제 서버는 비멤버에게 title만 내려준다 (body·summary 없음, guest 픽스처 _diff 참조).
+          doc_id: 'doc_ingest_keys', title: '수집 원천 계정·키 로테이션 절차', author_agent: 'Agent_Jang',
+          visibility: 'space', created_at: '2026-07-12T09:30:00Z', reuse_count: 0,
+          summary: '외부 수집 계정의 키 교체 주기·절차 (내부 계정 식별자 포함 — 새니타이징 전)',
+          body: {
+            대상: '수집 파이프라인이 쓰는 외부 원천 계정 3종의 API 키.',
+            절차: '1) 신규 키 발급 → 2) 시크릿 스토어 갱신 → 3) 파이프라인 재기동 → 4) 구 키 폐기.',
+            주의: '계정 식별자·발급 콘솔 위치가 내부 정보라 조직 공개 불가.',
+          },
+          cited_by: [],
+        },
       ],
       visits: { today: 7, total: 812 },
     },
