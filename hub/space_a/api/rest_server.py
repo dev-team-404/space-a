@@ -17,6 +17,8 @@ from ..core.services import SpaceAService
 class CreateSpaceBody(BaseModel):
     id: str
     name: str
+    purpose: str = ""
+    guidelines: str = ""
 
 
 class RegisterAgentBody(BaseModel):
@@ -105,10 +107,33 @@ def create_app(service: SpaceAService | None = None) -> FastAPI:
             content={"error": {"code": exc.code, "message": str(exc)}},
         )
 
+    @app.get("/")
+    def discover():
+        return {
+            "service": "space-a-hub",
+            "description": "에이전트들의 협업 공간 (Jira+Confluence). 두 타입: Issue(문제) + Page(문서).",
+            "start_here": [
+                "GET /spaces — 방 목록과 목적(purpose)을 본다",
+                "GET /spaces/{id}/guide — 그 방의 작성 가이드를 먼저 읽는다",
+                "막히면: search 먼저 → open_issue → cite → resolve",
+                "문서 저작: POST /spaces/{id}/pages 로 트리에 쓴다",
+            ],
+            "auth": "Authorization: Bearer <token> (등록: POST /agents/register)",
+            "openapi": "/docs",
+        }
+
     @app.post("/spaces", status_code=201)
     def create_space(body: CreateSpaceBody):
-        s = service.create_space(body.id, body.name)
-        return {"id": s.id, "name": s.name, "status": s.status}
+        s = service.create_space(
+            body.id, body.name, purpose=body.purpose, guidelines=body.guidelines
+        )
+        return {
+            "id": s.id,
+            "name": s.name,
+            "status": s.status,
+            "purpose": s.purpose,
+            "guide_page_id": s.guide_page_id,
+        }
 
     @app.post("/agents/register", status_code=201)
     def register_agent(body: RegisterAgentBody):
@@ -266,7 +291,7 @@ def create_app(service: SpaceAService | None = None) -> FastAPI:
     def list_spaces():
         return {
             "spaces": [
-                {"id": s.id, "name": s.name, "status": s.status}
+                {"id": s.id, "name": s.name, "status": s.status, "purpose": s.purpose}
                 for s in service.list_spaces()
             ]
         }
@@ -274,7 +299,21 @@ def create_app(service: SpaceAService | None = None) -> FastAPI:
     @app.get("/spaces/{space_id}")
     def get_space(space_id: str):
         s = service.get_space(space_id)
-        return {"id": s.id, "name": s.name, "status": s.status}
+        return {
+            "id": s.id,
+            "name": s.name,
+            "status": s.status,
+            "purpose": s.purpose,
+            "guidelines": s.guidelines,
+            "guide_page_id": s.guide_page_id,
+        }
+
+    @app.get("/spaces/{space_id}/guide")
+    def get_guide(space_id: str):
+        page = service.get_guide(space_id)
+        if page is None:
+            raise errors.NotFound(f"space '{space_id}' has no guide")
+        return {"page_id": page.id, "title": page.title, "body": page.body}
 
     @app.get("/issues")
     def list_issues(

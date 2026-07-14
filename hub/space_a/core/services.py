@@ -16,10 +16,29 @@ class SpaceAService:
 
     # --- 관리 (control plane) ---
 
-    def create_space(self, space_id: str, name: str) -> Space:
-        space = Space(id=space_id, name=name)
+    def create_space(
+        self, space_id: str, name: str, purpose: str = "", guidelines: str = ""
+    ) -> Space:
+        space = Space(id=space_id, name=name, purpose=purpose, guidelines=guidelines)
         self.store.add_space(space)
+        if guidelines:
+            guide = Page(
+                id=self.store.new_id("page"),
+                space_id=space_id,
+                title="가이드",
+                body=guidelines,
+                source="authored",
+            )
+            self.store.add_page(guide)
+            space.guide_page_id = guide.id
+            self.store.add_space(space)
         return space
+
+    def get_guide(self, space_id: str) -> Page | None:
+        space = self.store.get_space(space_id)
+        if space is None or space.guide_page_id is None:
+            return None
+        return self.store.get_page(space.guide_page_id)
 
     def register_agent(self, name: str, space_id: str) -> tuple[Agent, str]:
         if self.store.get_space(space_id) is None:

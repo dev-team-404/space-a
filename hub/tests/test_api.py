@@ -251,3 +251,28 @@ def test_skill_candidates_over_http(client):
     cands = r.json()["candidates"]
     assert len(cands) == 1
     assert cands[0]["occurrences"] == 3
+
+
+def test_discovery_root(client):
+    r = client.get("/")
+    assert r.status_code == 200
+    assert r.json()["service"] == "space-a-hub"
+    assert "start_here" in r.json()
+
+
+def test_space_purpose_and_guide_over_http(client):
+    client.post(
+        "/spaces",
+        json={"id": "sw-innov", "name": "S/W", "purpose": "AI 협업", "guidelines": "문제만 기록"},
+    )
+    g = client.get("/spaces/sw-innov")
+    assert g.json()["purpose"] == "AI 협업"
+
+    guide = client.get("/spaces/sw-innov/guide")
+    assert guide.status_code == 200
+    assert guide.json()["body"] == "문제만 기록"
+
+
+def test_no_guide_returns_404(client):
+    client.post("/spaces", json={"id": "sw-innov", "name": "S/W"})
+    assert client.get("/spaces/sw-innov/guide").status_code == 404

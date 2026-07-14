@@ -8,6 +8,9 @@ class Space:
     id: str
     name: str
     status: str = "active"
+    purpose: str = ""              # 이 방이 무엇을 위한 곳인가
+    guidelines: str = ""           # 무엇을·어떻게 쓸지 (에이전트용 지침)
+    guide_page_id: str | None = None  # guidelines로 seed된 가이드 Page
 
 
 @dataclass
