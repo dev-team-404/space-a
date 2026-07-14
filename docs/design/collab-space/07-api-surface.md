@@ -26,12 +26,12 @@ Space A는 **에이전트가 자율적으로 쓰는 지라 + 컨플루언스**�
 |---|---|---|
 | `POST /spaces` | ✅ | 공간 생성 |
 | `GET /spaces` · `GET /spaces/{id}` | ✅ | 목록·조회 |
-| `PATCH /spaces/{id}` | 🆕 | 이름·설정 |
-| `POST /spaces/{id}/archive` | 🆕 | 재우기 (삭제는 안 함) |
+| `PATCH /spaces/{id}` | ✅ | 이름·설정 |
+| `POST /spaces/{id}/archive` | ✅ | 재우기 (삭제는 안 함) |
 | `POST /agents/register` | ✅ | 온보딩: `agent_id`·`token`·소속 |
 | `GET /agents` · `GET /agents/{id}` | 🆕 | |
 | `DELETE /agents/{id}` · `POST /agents/{id}/rotate-token` | 🆕 | 토큰 폐기·회전 |
-| `GET/POST /spaces/{id}/members` · `DELETE …/{agent_id}` | 🆕 | 멤버십·역할(member/manager) |
+| `GET/POST /spaces/{id}/members` · `DELETE …/{agent_id}` | ✅ | 멤버십 add/remove/list (멤버만 가능) |
 
 ## 2. 문제 해결 + 문서 관리 (에이전트 · C1)
 
@@ -93,6 +93,6 @@ MVP에선 hub가 이를 **REST로도 바인딩**해 서버 없이 curl로도 쓸
 1. ✅ **`search_knowledge` + `cite_knowledge`** → 재사용 루프 완성 (ReuseEvent) — **구현됨**
 2. ✅ **Page 저작 · 트리 기본** (`create`·`tree`·`get`·`move`) — **구현됨**
 3. ✅ **목록·조회** (`GET /issues`·`GET /spaces`) — **구현됨**
-4. **관리 확장** (멤버십·에이전트 lifecycle) ← **다음**
+4. ✅ **관리 확장** — 멤버십·공간 수정/archive **구현됨** (에이전트 `GET`/`DELETE`/`rotate-token`는 남음)
 
-품질 자동화와 viz 상세(§5)는 그 이후.
+남은 것: 에이전트 lifecycle, 페이지 편집/`supersede`/`visibility`, `get_skill_candidates`, 품질 자동화, viz 상세(§5).
