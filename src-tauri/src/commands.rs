@@ -52,6 +52,15 @@ pub fn chatter_pool_inner(store: &SqliteStore, date: &str) -> anyhow::Result<Vec
     Ok(store.get_chatter_pool(date)?.map(|(lines, _fp)| lines).unwrap_or_default())
 }
 
+/// 큐레이션 콘텐츠(팁·뉴스) 노출 목록 — 쿨다운 적용은 store가 담당(now 주입).
+pub fn content_inner(
+    store: &SqliteStore,
+    include_hidden: bool,
+) -> anyhow::Result<Vec<agent_mentor::store::ContentRow>> {
+    let now = chrono::Utc::now().to_rfc3339();
+    Ok(store.list_content(&now, agent_mentor::content::CONTENT_COOLDOWN_DAYS, include_hidden)?)
+}
+
 #[derive(Debug, Serialize)]
 pub struct SessionCtx {
     pub project_id: String,
@@ -143,6 +152,10 @@ pub fn model_mix_inner(store: &SqliteStore, period: &str) -> anyhow::Result<Vec<
 
 pub(crate) fn valid_finding_status(s: &str) -> bool {
     matches!(s, "new" | "resolved" | "dismissed")
+}
+
+pub(crate) fn valid_content_status(s: &str) -> bool {
+    matches!(s, "new" | "shown" | "dismissed")
 }
 
 /// 오늘 occasions — 하루 1회 게이트 포함. 반환하는 순간 통지된 것으로 마킹한다
@@ -261,6 +274,27 @@ pub fn set_finding_status(state: State<AppState>, dedup_key: String, status: Str
 pub fn get_week_summary(state: State<AppState>) -> Result<Vec<DayStat>, String> {
     let guard = lock(&state)?;
     week_summary_inner(&*guard).map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+pub fn list_content(
+    state: State<AppState>,
+    include_hidden: Option<bool>,
+) -> Result<Vec<agent_mentor::store::ContentRow>, String> {
+    let guard = lock(&state)?;
+    content_inner(&*guard, include_hidden.unwrap_or(false)).map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+pub fn set_content_status(state: State<AppState>, id: String, status: String) -> Result<(), String> {
+    if !valid_content_status(&status) {
+        return Err(format!("허용되지 않은 상태: {status}"));
+    }
+    let now = chrono::Utc::now().to_rfc3339();
+    let guard = lock(&state)?;
+    guard.set_content_status(&id, &status, &now)
+        .map_err(|e| e.to_string())
+        .and_then(|found| if found { Ok(()) } else { Err(format!("콘텐츠 없음: {id}")) })
 }
 
 #[tauri::command(async)]
@@ -419,6 +453,14 @@ mod tests {
     fn open_chat_tab_validates_tab() {
         assert!(valid_tab("home") && valid_tab("diary") && valid_tab("coach") && valid_tab("chat"));
         assert!(!valid_tab("etc") && !valid_tab(""));
+    }
+
+    #[test]
+    fn content_status_validation_and_empty_list() {
+        assert!(valid_content_status("new") && valid_content_status("shown") && valid_content_status("dismissed"));
+        assert!(!valid_content_status("resolved") && !valid_content_status(""));
+        let store = SqliteStore::open_in_memory().unwrap();
+        assert!(content_inner(&store, false).unwrap().is_empty());
     }
 
     #[test]

@@ -150,6 +150,36 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     Ok(findings)
 }
 
+/// 콘텐츠 큐레이션 — 프로필 감지 → (내장 팁 + 피드) 스코어링·정렬 → persist → 노출 목록 반환.
+/// 결정론: `feed_items`는 호출부(가장자리)가 네트워크로 미리 가져와 넘긴다(테스트는 빈 벡터).
+/// (킥오프 `docs/brainstroming/2026-07-14-content-curation-kickoff.md` §How)
+pub fn run_curation(
+    store: &SqliteStore,
+    feed_items: Vec<crate::content::ContentItem>,
+    now_ts: &str,
+) -> Result<Vec<crate::store::ContentRow>> {
+    use crate::content::{rank, BuiltinTipsSource, ContentSource, CONTENT_COOLDOWN_DAYS};
+    let profile = crate::profile::detect_profile(store)?;
+    let mut items = BuiltinTipsSource.fetch()?;
+    items.extend(feed_items);
+    let ranked = rank(items, &profile);
+    store.replace_content_items(&ranked, now_ts)?;
+    store.list_content(now_ts, CONTENT_COOLDOWN_DAYS, false)
+}
+
+/// 피드 소스(T1 changelog 등)를 네트워크로 가져온다 — 부수효과는 가장자리. 실패는 하드
+/// 에러 아님(빈 벡터 후 계속 — 관대한 파싱 원칙). Tauri 파이프라인이 락 밖에서 호출.
+pub fn fetch_feed_items() -> Vec<crate::content::ContentItem> {
+    use crate::content::{ClaudeChangelogSource, ContentSource};
+    match ClaudeChangelogSource::default().fetch() {
+        Ok(items) => items,
+        Err(e) => {
+            eprintln!("[curation] 피드 fetch 실패(계속): {e}");
+            Vec::new()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -161,6 +191,52 @@ mod tests {
         let findings = run_rules(&store).unwrap();
         assert!(findings.is_empty());
         assert_eq!(store.count_findings().unwrap(), 0);
+    }
+
+    fn opus_turn(store: &SqliteStore, sid: &str, uuid: &str, model: &str) {
+        use crate::model::*;
+        store.upsert_events(&[NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "d--proj".into(),
+            session_id: sid.into(), uuid: Some(uuid.into()), parent_uuid: None,
+            is_sidechain: false, ts: Some("2026-07-14T10:00:00Z".into()),
+            source_file: "s.jsonl".into(), source_offset: 0,
+            kind: EventKind::AssistantTurn {
+                model: NormModel::from_raw_id(model),
+                usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
+            },
+        }]).unwrap();
+    }
+
+    #[test]
+    fn run_curation_persists_and_returns_frontier_first() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 전부 opus → 프론티어 = 모델 리터러시
+        opus_turn(&store, "s1", "u1", "claude-opus-4-8");
+        opus_turn(&store, "s1", "u2", "claude-opus-4-8");
+        let visible = run_curation(&store, vec![], "2026-07-14T10:00:00Z").unwrap();
+        assert!(!visible.is_empty());
+        assert_eq!(visible[0].dimension.as_deref(), Some("model_literacy"));
+        // persist 확인: 전체(숨김 포함) 목록엔 마스터 축 팁도 저장돼 있음
+        let all = store.list_content("2026-07-14T10:00:00Z", 14.0, true).unwrap();
+        assert!(all.len() > visible.len());
+    }
+
+    #[test]
+    fn dismissed_tip_cools_down_its_dimension() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        opus_turn(&store, "s1", "u1", "claude-opus-4-8");
+        opus_turn(&store, "s1", "u2", "claude-opus-4-8");
+        let visible = run_curation(&store, vec![], "2026-07-14T10:00:00Z").unwrap();
+        let top = visible[0].id.clone(); // model_literacy 팁
+        // 닫으면 같은 축 형제도 쿨다운 기간 동안 억제
+        store.set_content_status(&top, "dismissed", "2026-07-14T10:05:00Z").unwrap();
+        let after = store.list_content("2026-07-15T10:00:00Z", 14.0, false).unwrap();
+        assert!(after.iter().all(|r| r.dimension.as_deref() != Some("model_literacy")),
+            "닫은 축(model_literacy)은 쿨다운 동안 조용해야 함");
+        // 쿨다운 경과 후엔 다시 노출
+        let later = store.list_content("2026-08-01T10:00:00Z", 14.0, false).unwrap();
+        assert!(later.iter().any(|r| r.dimension.as_deref() == Some("model_literacy")));
     }
 
     #[test]
