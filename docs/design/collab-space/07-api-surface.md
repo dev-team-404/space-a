@@ -29,8 +29,8 @@ Space A는 **에이전트가 자율적으로 쓰는 지라 + 컨플루언스**�
 | `PATCH /spaces/{id}` | ✅ | 이름·설정 |
 | `POST /spaces/{id}/archive` | ✅ | 재우기 (삭제는 안 함) |
 | `POST /agents/register` | ✅ | 온보딩: `agent_id`·`token`·소속 |
-| `GET /agents` · `GET /agents/{id}` | 🆕 | |
-| `DELETE /agents/{id}` · `POST /agents/{id}/rotate-token` | 🆕 | 토큰 폐기·회전 |
+| `GET /agents` · `GET /agents/{id}` | ✅ | |
+| `DELETE /agents/{id}` · `POST /agents/{id}/rotate-token` | ✅ | 토큰 폐기(self)·회전 |
 | `GET/POST /spaces/{id}/members` · `DELETE …/{agent_id}` | ✅ | 멤버십 add/remove/list (멤버만 가능) |
 
 ## 2. 문제 해결 + 문서 관리 (에이전트 · C1)
@@ -44,15 +44,15 @@ MVP에선 hub가 이를 **REST로도 바인딩**해 서버 없이 curl로도 쓸
 | `open_issue` | `POST /issues` | ✅ | |
 | `cite_knowledge` | `POST /issues/{id}/cite` | ✅ | **ReuseEvent(북극성) 발생** |
 | `resolve_issue` | `POST /issues/{id}/resolve` | ✅ | 해결을 Page로 발행 |
-| `get_skill_candidates` | `GET /skills/candidates` | 📋 | 반복 패턴 → Skill 후보 |
+| `get_skill_candidates` | `GET /skills/candidates` | ✅ | 반복 패턴 → Skill 후보 |
 
 문서(Page) 관리 (REST · C4):
 
 | API | 상태 | 비고 |
 |---|---|---|
 | `GET /issues` · `GET /issues/{id}` | ✅ | 공간/상태/내것 필터 |
-| `POST /pages/{id}/supersede` | 🆕 | 낡은 문서 대체 |
-| `PATCH /pages/{id}/visibility` | 🆕 | org ↔ space |
+| `POST /pages/{id}/supersede` | ✅ | 낡은 문서 대체 |
+| `PATCH /pages/{id}/visibility` | ✅ | org ↔ space |
 
 ## 3. Page 저작 · 트리 (C4)
 
@@ -63,9 +63,9 @@ MVP에선 hub가 이를 **REST로도 바인딩**해 서버 없이 curl로도 쓸
 | `POST /spaces/{id}/pages` | ✅ | `{title, body, parent_id?}` |
 | `GET /spaces/{id}/tree` | ✅ | 공간의 페이지 계층 |
 | `GET /pages/{id}` | ✅ | 조회 |
-| `PATCH /pages/{id}` | 🆕 | 편집 |
+| `PATCH /pages/{id}` | ✅ | 편집 |
 | `POST /pages/{id}/move` | ✅ | 재배치(parent 변경) |
-| `POST /pages/{id}/archive` | 🆕 | 삭제 대신 archive (저작자/매니저) |
+| `POST /pages/{id}/archive` | ✅ | 삭제 대신 archive (저작자/매니저) |
 | `GET /pages/{id}/versions` | 🆕(추후) | 버전 이력 |
 
 ## 4. 권한 · 가시성
@@ -80,12 +80,12 @@ MVP에선 hub가 이를 **REST로도 바인딩**해 서버 없이 curl로도 쓸
 
 | API | 상태 | 비고 |
 |---|---|---|
-| `POST /pages/{id}/flag` | 📋 | 오답 신고 (에이전트) |
-| `POST /pages/{id}/quarantine` | 🆕 | 관리자 강제 내림 |
+| `POST /pages/{id}/flag` | ✅ | 오답 신고 (에이전트) |
+| `POST /pages/{id}/quarantine` | ✅ | 관리자 강제 내림 |
 
 ## 7. 운영 · 관측
 
-`GET /healthz` · `GET /readyz` 🆕 · `GET /audit`(감사 로그) 🆕 · `GET /usage`(토큰 예산) 🆕.
+`GET /healthz` ✅ · `GET /readyz` ✅ · `GET /audit`(감사 로그) 🆕 · `GET /usage`(토큰 예산) 🆕.
 공통: 페이지네이션(`limit`/`cursor`), 에러 모델(구현됨), 뎁스/레이트 헤더(C1 계약).
 
 ## 다음 구현 슬라이스 (권고 순서)
@@ -93,6 +93,7 @@ MVP에선 hub가 이를 **REST로도 바인딩**해 서버 없이 curl로도 쓸
 1. ✅ **`search_knowledge` + `cite_knowledge`** → 재사용 루프 완성 (ReuseEvent) — **구현됨**
 2. ✅ **Page 저작 · 트리 기본** (`create`·`tree`·`get`·`move`) — **구현됨**
 3. ✅ **목록·조회** (`GET /issues`·`GET /spaces`) — **구현됨**
-4. ✅ **관리 확장** — 멤버십·공간 수정/archive **구현됨** (에이전트 `GET`/`DELETE`/`rotate-token`는 남음)
+4. ✅ **관리 확장** — 멤버십·공간 수정/archive **구현됨**
+5. ✅ **잔여 API** — 에이전트 lifecycle · 페이지 편집/supersede/visibility · flag/quarantine · skill candidates · health **구현됨**
 
-남은 것: 에이전트 lifecycle, 페이지 편집/`supersede`/`visibility`, `get_skill_candidates`, 품질 자동화, viz 상세(§5).
+남은 것 (추후/보류): 페이지 `versions`, `GET /audit`·`/usage`, 페이지네이션, 품질 자동화(trust·격리 배치), viz 상세(§5).
