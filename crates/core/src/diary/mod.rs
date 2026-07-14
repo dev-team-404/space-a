@@ -46,6 +46,8 @@ pub struct WorkLog {
 }
 
 const WORK_LOG_CAP: usize = 8;
+const WORK_LOG_TITLE_CAP: usize = 12;   // work_log에 실을 커밋 제목 최대 개수
+const WORK_LOG_CHURN_CLAMP: u64 = 400;  // 커밋당 churn 상한 (lockfile·생성물 인플레이션 방어)
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BriefFinding {
@@ -465,6 +467,83 @@ fn git_commits_for(host: &str, cwd: &str, date: &str) -> Vec<String> {
         Some(out) => out.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
         None => Vec::new(),
     }
+}
+
+/// repo별 그룹(각 (제목, raw churn))을 받아 clamp된 churn으로 floor + 비례 배분하고,
+/// repo 내부는 clamp된 churn 내림차순으로 골라 평평한 제목 리스트(≤ TITLE_CAP)를 반환.
+/// label은 churn 동률 시 결정론적 tiebreak용(host+cwd 등 안정 문자열).
+#[allow(dead_code)] // Task 2에서 collect_work_log가 사용 → 제거
+fn balance_commits(mut groups: Vec<(String, Vec<(String, u64)>)>) -> Vec<String> {
+    let n = groups.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let eff = |c: u64| c.min(WORK_LOG_CHURN_CLAMP);
+    let counts: Vec<usize> = groups.iter().map(|(_, c)| c.len()).collect();
+    // repo 가중치 = clamp된 churn 합(0 방지 위해 최소 1) — 배분 비례의 기준.
+    let weight: Vec<u64> = groups
+        .iter()
+        .map(|(_, c)| c.iter().map(|(_, ch)| eff(*ch)).sum::<u64>().max(1))
+        .collect();
+
+    // repo 순서: churn 비중 큰 순 → 커밋수 desc → label asc (host-편향 없는 결정론).
+    let order = {
+        let mut idx: Vec<usize> = (0..n).collect();
+        idx.sort_by(|&a, &b| {
+            weight[b]
+                .cmp(&weight[a])
+                .then(counts[b].cmp(&counts[a]))
+                .then(groups[a].0.cmp(&groups[b].0))
+        });
+        idx
+    };
+    // repo 내부: clamp된 churn 내림차순(stable → 동률은 git 최신순 유지).
+    for (_, cs) in &mut groups {
+        cs.sort_by(|a, b| eff(b.1).cmp(&eff(a.1)));
+    }
+
+    // 슬롯 배분: floor 1개씩(cap 초과 시 order 앞쪽부터), 남은 슬롯은 D'Hondt(최고평균)로 churn 비례.
+    let cap = WORK_LOG_TITLE_CAP;
+    let mut quota = vec![0usize; n];
+    let mut remaining = cap;
+    for &i in &order {
+        if remaining == 0 {
+            break;
+        }
+        quota[i] = 1;
+        remaining -= 1;
+    }
+    while remaining > 0 {
+        let best = order
+            .iter()
+            .copied()
+            .filter(|&i| quota[i] < counts[i])
+            .max_by_key(|&i| weight[i] / (quota[i] as u64 + 1));
+        match best {
+            Some(i) => {
+                quota[i] += 1;
+                remaining -= 1;
+            }
+            None => break, // 커밋 총량 < cap
+        }
+    }
+
+    // 채택: order 순으로 repo별 quota만큼 churn 순, 전역 중복 제목은 skip(슬롯 소비 안 함).
+    let mut seen = std::collections::HashSet::new();
+    let mut selected = Vec::new();
+    for &i in &order {
+        let mut take = quota[i];
+        for (subj, _) in &groups[i].1 {
+            if take == 0 {
+                break;
+            }
+            if seen.insert(subj.clone()) {
+                selected.push(subj.clone());
+                take -= 1;
+            }
+        }
+    }
+    selected
 }
 
 /// 그날 실제 한 작업 — 전 host 활동 repo의 git 커밋 제목(우선) + 세션 갈래(브랜치·정제 첫 프롬프트, 폴백/보조).
@@ -1049,6 +1128,74 @@ mod tests {
         // git repo 아닌 경로 → 빈 벡터(패닉 없음)
         let nogit = tempfile::tempdir().unwrap();
         assert!(super::git_commits_for("Windows", nogit.path().to_str().unwrap(), "2026-07-08").is_empty());
+    }
+
+    #[test]
+    fn balance_commits_behaviors() {
+        use super::balance_commits;
+
+        // 빈 입력
+        assert!(balance_commits(vec![]).is_empty());
+
+        // floor 보장: churn 큰 A(12개) + churn 작은 B(1개), C=13 → B 실종 금지
+        let a: Vec<(String, u64)> = (0..12).map(|i| (format!("a{i}"), 500)).collect();
+        let b = vec![(String::from("bonly"), 5)];
+        let out = balance_commits(vec![("A".into(), a), ("B".into(), b)]);
+        assert!(out.contains(&"bonly".to_string()), "floor: B 커밋 실종 금지: {out:?}");
+        assert!(out.len() <= 12);
+
+        // churn 비례 (개수 역전): 둘 다 10개인데 A churn 800, B churn 20 → A 과반
+        let a: Vec<(String, u64)> = (0..10).map(|i| (format!("a{i}"), 800)).collect();
+        let b: Vec<(String, u64)> = (0..10).map(|i| (format!("b{i}"), 20)).collect();
+        let out = balance_commits(vec![("A".into(), a), ("B".into(), b)]);
+        let na = out.iter().filter(|s| s.starts_with('a')).count();
+        let nb = out.iter().filter(|s| s.starts_with('b')).count();
+        assert!(na >= 8, "churn 큰 A 과반: na={na} nb={nb}");
+        assert!(nb >= 1, "B floor 보장");
+        assert_eq!(out.len(), 12);
+
+        // churn 우선 채택: 단일 repo 13개(cap 초과) → churn 최저 탈락
+        let mut c: Vec<(String, u64)> = (0..12).map(|i| (format!("big{i}"), 100)).collect();
+        c.push(("tiny".into(), 1));
+        let out = balance_commits(vec![("A".into(), c)]);
+        assert_eq!(out.len(), 12);
+        assert!(!out.contains(&"tiny".to_string()), "churn 최저 탈락: {out:?}");
+
+        // churn desc 순서 (cap 이내)
+        let out = balance_commits(vec![(
+            "A".into(),
+            vec![("low".into(), 10), ("high".into(), 900), ("mid".into(), 100)],
+        )]);
+        assert_eq!(out, vec!["high".to_string(), "mid".to_string(), "low".to_string()]);
+
+        // clamp: A(5개, 1개 5000+4개 10) vs B(10개 각 200), C=15 → B가 A보다 많음
+        let mut a = vec![("lock".to_string(), 5000u64)];
+        a.extend((0..4).map(|i| (format!("a{i}"), 10)));
+        let b: Vec<(String, u64)> = (0..10).map(|i| (format!("b{i}"), 200)).collect();
+        let out = balance_commits(vec![("A".into(), a), ("B".into(), b)]);
+        let na = out.iter().filter(|s| *s == "lock" || s.starts_with('a')).count();
+        let nb = out.iter().filter(|s| s.starts_with('b')).count();
+        assert!(nb > na, "clamp: 저활동 A가 lockfile로 상위 불가 na={na} nb={nb}");
+
+        // cap 이하 전부 포함
+        let out = balance_commits(vec![
+            ("A".into(), vec![("a0".into(), 1), ("a1".into(), 1)]),
+            ("B".into(), vec![("b0".into(), 1)]),
+            ("C".into(), vec![("c0".into(), 1)]),
+        ]);
+        assert_eq!(out.len(), 4);
+
+        // 중복 제목 1회만
+        let out = balance_commits(vec![
+            ("A".into(), vec![("dup".into(), 100), ("a1".into(), 100)]),
+            ("B".into(), vec![("dup".into(), 100), ("b1".into(), 100)]),
+        ]);
+        assert_eq!(out.iter().filter(|s| *s == "dup").count(), 1, "중복 1회: {out:?}");
+
+        // repo 과다: churn 0 repo 20개 → cap개만
+        let groups: Vec<(String, Vec<(String, u64)>)> =
+            (0..20).map(|i| (format!("r{i:02}"), vec![(format!("c{i:02}"), 0)])).collect();
+        assert_eq!(balance_commits(groups).len(), 12);
     }
 
     #[test]
