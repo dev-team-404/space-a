@@ -23,6 +23,7 @@ class Issue:
     space_id: str
     title: str
     status: str = "open"
+    opened_by: str | None = None  # 이슈를 연 agent_id
 
 
 @dataclass

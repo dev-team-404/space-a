@@ -36,7 +36,12 @@ class SpaceAService:
         agent = self._authed_agent(token)
         if space_id not in agent.spaces:
             raise errors.Forbidden(f"not a member of space '{space_id}'")
-        issue = Issue(id=self.store.new_id("iss"), space_id=space_id, title=title)
+        issue = Issue(
+            id=self.store.new_id("iss"),
+            space_id=space_id,
+            title=title,
+            opened_by=agent.id,
+        )
         self.store.add_issue(issue)
         return issue
 
@@ -114,6 +119,45 @@ class SpaceAService:
         issue.status = "knowledge_linked"
         self.store.save_issue(issue)
         return event, issue
+
+    # --- 목록 · 조회 ---
+
+    def list_spaces(self) -> list[Space]:
+        return self.store.all_spaces()
+
+    def get_space(self, space_id: str) -> Space:
+        space = self.store.get_space(space_id)
+        if space is None:
+            raise errors.NotFound(f"space '{space_id}' not found")
+        return space
+
+    def list_issues(
+        self,
+        token: str,
+        space_id: str | None = None,
+        status: str | None = None,
+        mine: bool = False,
+    ) -> list[Issue]:
+        agent = self._authed_agent(token)
+        if space_id is not None and space_id not in agent.spaces:
+            raise errors.Forbidden(f"not a member of space '{space_id}'")
+        issues = [i for i in self.store.all_issues() if i.space_id in agent.spaces]
+        if space_id is not None:
+            issues = [i for i in issues if i.space_id == space_id]
+        if status is not None:
+            issues = [i for i in issues if i.status == status]
+        if mine:
+            issues = [i for i in issues if i.opened_by == agent.id]
+        return issues
+
+    def get_issue(self, token: str, issue_id: str) -> Issue:
+        agent = self._authed_agent(token)
+        issue = self.store.get_issue(issue_id)
+        if issue is None:
+            raise errors.NotFound(f"issue '{issue_id}' not found")
+        if issue.space_id not in agent.spaces:
+            raise errors.Forbidden("issue belongs to a space you are not a member of")
+        return issue
 
     # --- 페이지 저작 · 트리 ---
 

@@ -205,4 +205,52 @@ def create_app(service: SpaceAService | None = None) -> FastAPI:
 
         return {"tree": [node(r) for r in by_parent.get(None, [])]}
 
+    @app.get("/spaces")
+    def list_spaces():
+        return {
+            "spaces": [
+                {"id": s.id, "name": s.name, "status": s.status}
+                for s in service.list_spaces()
+            ]
+        }
+
+    @app.get("/spaces/{space_id}")
+    def get_space(space_id: str):
+        s = service.get_space(space_id)
+        return {"id": s.id, "name": s.name, "status": s.status}
+
+    @app.get("/issues")
+    def list_issues(
+        space_id: str | None = None,
+        status: str | None = None,
+        mine: bool = False,
+        authorization: str | None = Header(default=None),
+    ):
+        issues = service.list_issues(
+            _bearer(authorization), space_id=space_id, status=status, mine=mine
+        )
+        return {
+            "issues": [
+                {
+                    "issue_id": i.id,
+                    "space_id": i.space_id,
+                    "title": i.title,
+                    "status": i.status,
+                    "opened_by": i.opened_by,
+                }
+                for i in issues
+            ]
+        }
+
+    @app.get("/issues/{issue_id}")
+    def get_issue(issue_id: str, authorization: str | None = Header(default=None)):
+        i = service.get_issue(_bearer(authorization), issue_id)
+        return {
+            "issue_id": i.id,
+            "space_id": i.space_id,
+            "title": i.title,
+            "status": i.status,
+            "opened_by": i.opened_by,
+        }
+
     return app

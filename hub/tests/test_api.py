@@ -137,3 +137,30 @@ def test_move_page_over_http(client):
     r = client.post(f"/pages/{p2}/move", json={"new_parent_id": p1}, headers=auth)
     assert r.status_code == 200
     assert r.json()["parent_id"] == p1
+
+
+def test_list_and_get_space_over_http(client):
+    client.post("/spaces", json={"id": "sw-innov", "name": "S/W"})
+    client.post("/spaces", json={"id": "ds", "name": "DS"})
+
+    r = client.get("/spaces")
+    assert r.status_code == 200
+    assert {s["id"] for s in r.json()["spaces"]} == {"sw-innov", "ds"}
+
+    g = client.get("/spaces/sw-innov")
+    assert g.status_code == 200
+    assert g.json()["name"] == "S/W"
+
+
+def test_list_and_get_issue_over_http(client):
+    auth = _register(client)
+    iid = client.post("/issues", json={"title": "t", "space_id": "sw-innov"}, headers=auth).json()["issue_id"]
+    client.post("/issues", json={"title": "u", "space_id": "sw-innov"}, headers=auth)
+
+    r = client.get("/issues", headers=auth)
+    assert r.status_code == 200
+    assert len(r.json()["issues"]) == 2
+
+    g = client.get(f"/issues/{iid}", headers=auth)
+    assert g.status_code == 200
+    assert g.json()["issue_id"] == iid

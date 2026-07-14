@@ -31,6 +31,9 @@ class InMemoryStore(Store):
     def get_space(self, space_id: str) -> Space | None:
         return self._spaces.get(space_id)
 
+    def all_spaces(self) -> list[Space]:
+        return list(self._spaces.values())
+
     def add_agent(self, agent: Agent) -> None:
         self._agents[agent.id] = agent
 
@@ -49,6 +52,9 @@ class InMemoryStore(Store):
 
     def save_issue(self, issue: Issue) -> None:
         self._issues[issue.id] = issue
+
+    def all_issues(self) -> list[Issue]:
+        return list(self._issues.values())
 
     def add_page(self, page: Page) -> None:
         self._pages[page.id] = page
