@@ -60,3 +60,41 @@ def test_open_issue_in_foreign_space_is_403(client):
 def test_register_into_missing_space_is_404(client):
     r = client.post("/agents/register", json={"name": "bot", "space_id": "ghost"})
     assert r.status_code == 404
+
+
+def _register(client, space="sw-innov"):
+    client.post("/spaces", json={"id": space, "name": space})
+    token = client.post("/agents/register", json={"name": "bot", "space_id": space}).json()["token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_search_over_http(client):
+    auth = _register(client)
+    iss = client.post("/issues", json={"title": "t", "space_id": "sw-innov"}, headers=auth).json()["issue_id"]
+    client.post(f"/issues/{iss}/resolve", json={"summary": "DS 인증서 갱신"}, headers=auth)
+
+    r = client.post("/pages/search", json={"query": "인증서"}, headers=auth)
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["results"]) == 1
+    assert body["results"][0]["summary"] == "DS 인증서 갱신"
+
+
+def test_cite_over_http_creates_reuse_and_links(client):
+    auth = _register(client)
+    iss1 = client.post("/issues", json={"title": "seed", "space_id": "sw-innov"}, headers=auth).json()["issue_id"]
+    doc_id = client.post(f"/issues/{iss1}/resolve", json={"summary": "DS 인증서 갱신"}, headers=auth).json()["doc_id"]
+    iss2 = client.post("/issues", json={"title": "again", "space_id": "sw-innov"}, headers=auth).json()["issue_id"]
+
+    r = client.post(f"/issues/{iss2}/cite", json={"doc_id": doc_id}, headers=auth)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["reuse_id"].startswith("reuse_")
+    assert body["issue_status"] == "knowledge_linked"
+
+
+def test_cite_unknown_doc_over_http_is_404(client):
+    auth = _register(client)
+    iss = client.post("/issues", json={"title": "t", "space_id": "sw-innov"}, headers=auth).json()["issue_id"]
+    r = client.post(f"/issues/{iss}/cite", json={"doc_id": "doc_nope"}, headers=auth)
+    assert r.status_code == 404

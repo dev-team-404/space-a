@@ -36,6 +36,17 @@ class ResolveIssueBody(BaseModel):
     visibility: str = "org"
 
 
+class SearchBody(BaseModel):
+    query: str
+    space_id: str | None = None
+    limit: int = 3
+
+
+class CiteBody(BaseModel):
+    doc_id: str
+    note: str | None = None
+
+
 _STATUS = {
     errors.InvalidRequest: 400,
     errors.Unauthorized: 401,
@@ -95,5 +106,36 @@ def create_app(service: SpaceAService | None = None) -> FastAPI:
         if doc is not None:
             resp["doc_id"] = doc.id
         return resp
+
+    @app.post("/pages/search")
+    def search_pages(body: SearchBody, authorization: str | None = Header(default=None)):
+        res = service.search_knowledge(
+            _bearer(authorization), body.query, space_id=body.space_id, limit=body.limit
+        )
+        return {
+            "results": [
+                {
+                    "doc_id": d.id,
+                    "space_id": d.space_id,
+                    "summary": d.summary,
+                    "steps": d.steps,
+                    "visibility": d.visibility,
+                }
+                for d in res.docs
+            ],
+            "scanned": res.scanned,
+        }
+
+    @app.post("/issues/{issue_id}/cite")
+    def cite(issue_id: str, body: CiteBody, authorization: str | None = Header(default=None)):
+        event, issue = service.cite_knowledge(
+            _bearer(authorization), issue_id, body.doc_id, note=body.note
+        )
+        return {
+            "reuse_id": event.id,
+            "doc_id": event.doc_id,
+            "cross_team": event.cross_team,
+            "issue_status": issue.status,
+        }
 
     return app

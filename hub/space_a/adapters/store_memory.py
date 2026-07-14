@@ -4,7 +4,7 @@ MVP용. ports & adapters 구조라, 나중에 실제 DB 어댑터로 교체해�
 id는 접두어별 순번(agt_1, iss_1, ...)으로 발급해 테스트가 결정론적이다.
 """
 
-from ..core.models import Agent, Issue, KnowledgeDoc, Space
+from ..core.models import Agent, Issue, KnowledgeDoc, ReuseEvent, Space
 from ..core.ports import Store
 
 
@@ -15,6 +15,7 @@ class InMemoryStore(Store):
         self._tokens: dict[str, str] = {}
         self._issues: dict[str, Issue] = {}
         self._docs: dict[str, KnowledgeDoc] = {}
+        self._reuse: list[ReuseEvent] = []
         self._seq: dict[str, int] = {}
 
     def new_id(self, prefix: str) -> str:
@@ -51,3 +52,12 @@ class InMemoryStore(Store):
 
     def add_doc(self, doc: KnowledgeDoc) -> None:
         self._docs[doc.id] = doc
+
+    def get_doc(self, doc_id: str) -> KnowledgeDoc | None:
+        return self._docs.get(doc_id)
+
+    def all_docs(self) -> list[KnowledgeDoc]:
+        return list(self._docs.values())
+
+    def add_reuse_event(self, event: ReuseEvent) -> None:
+        self._reuse.append(event)

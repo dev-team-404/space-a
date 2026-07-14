@@ -5,7 +5,7 @@
 """
 
 from . import errors
-from .models import Agent, Issue, KnowledgeDoc, Space
+from .models import Agent, Issue, KnowledgeDoc, ReuseEvent, SearchResult, Space
 from .ports import Store
 
 
@@ -71,7 +71,51 @@ class SpaceAService:
             self.store.add_doc(doc)
         return issue, doc
 
+    # --- 검색 · 재사용 ---
+
+    def search_knowledge(
+        self, token: str, query: str, space_id: str | None = None, limit: int = 3
+    ) -> SearchResult:
+        agent = self._authed_agent(token)
+        scope = [d for d in self.store.all_docs() if self._visible(d, agent)]
+        if space_id is not None:
+            scope = [d for d in scope if d.space_id == space_id]
+        terms = [t for t in query.lower().split() if t]
+        hits = [d for d in scope if any(t in d.summary.lower() for t in terms)]
+        return SearchResult(docs=hits[:limit], scanned=len(scope))
+
+    def cite_knowledge(
+        self, token: str, issue_id: str, doc_id: str, note: str | None = None
+    ) -> tuple[ReuseEvent, Issue]:
+        agent = self._authed_agent(token)
+        issue = self.store.get_issue(issue_id)
+        if issue is None:
+            raise errors.NotFound(f"issue '{issue_id}' not found")
+        if issue.space_id not in agent.spaces:
+            raise errors.Forbidden("issue belongs to a space you are not a member of")
+        doc = self.store.get_doc(doc_id)
+        if doc is None:
+            raise errors.NotFound(f"doc '{doc_id}' not found")
+        if not self._visible(doc, agent):
+            raise errors.Forbidden("doc is not visible to you")
+
+        event = ReuseEvent(
+            id=self.store.new_id("reuse"),
+            issue_id=issue.id,
+            doc_id=doc.id,
+            agent_id=agent.id,
+            cross_team=doc.space_id != issue.space_id,
+        )
+        self.store.add_reuse_event(event)
+        issue.status = "knowledge_linked"
+        self.store.save_issue(issue)
+        return event, issue
+
     # --- 내부 ---
+
+    @staticmethod
+    def _visible(doc: KnowledgeDoc, agent: Agent) -> bool:
+        return doc.visibility == "org" or doc.space_id in agent.spaces
 
     def _authed_agent(self, token: str) -> Agent:
         agent = self.store.agent_for_token(token)
