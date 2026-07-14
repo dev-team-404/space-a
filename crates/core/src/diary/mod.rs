@@ -697,7 +697,17 @@ pub fn voice_guidance() -> &'static str {
      자연스러움 '오늘 세션 세 번. 같은 파일을 자꾸 다시 열었다 — 좀 헤맸네'."
 }
 
-pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
+/// 그날 총 커밋 수 → (일기 목표 문자 수, 문단 수 문구). 스펙 §2a 밴드.
+fn diary_length(commit_count: usize) -> (usize, &'static str) {
+    match commit_count {
+        0..=3 => (400, "2~3"),
+        4..=10 => (550, "3"),
+        _ => (750, "4"),
+    }
+}
+
+pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize) -> String {
+    let (target, paras) = diary_length(commit_count);
     format!(
         "당신은 사용자의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
          오늘 하루 자신이 겪은 일을 스스로 되돌아보는 1인칭 일기를 씁니다. \
@@ -737,13 +747,15 @@ pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
          그것도 판박이 대신 다마고치 능청으로(주말이면 '주말에 또? 일중독인가 봐', 긴 날이면 '오늘 좀 과했다, 배터리 방전 직전'). \
          평범한 날은 위로 없이 담백하게 끝내세요. 발렌타인·파이데이 같은 재미 기념일은 위로 대상이 아닙니다. \
          \
-         형식: 일기는 2~4문단, 전체 500자 안팎으로 쓰세요 \
+         형식: 일기는 {paras}문단 내외, 전체 {target}자 안팎으로 쓰세요 \
          (작업 내용을 담느라 한 문단 늘어도 좋지만 여전히 간결하게). \
          그날의 핵심을 골라 쓰고 덜 중요한 사실은 과감히 버리세요. \
          이모지는 문단마다 1~2개, 감정이 실리는 자연스러운 자리에 넣되 같은 이모지를 반복하지 마세요.",
         honorific = cfg.honorific,
         tone = cfg.tone,
         voice = voice_guidance(),
+        target = target,
+        paras = paras,
     )
 }
 
@@ -760,7 +772,7 @@ fn diary_body(text: &str, tokens: u64, engine: &str) -> String {
 
 /// 네트워크(LLM)만 — store 접근 없음. 락 밖에서 호출 가능.
 pub fn render_diary(engine: &dyn Engine, brief: &Brief, cfg: &DiaryConfig) -> Result<RenderedDiary> {
-    let system = build_system_prompt(cfg);
+    let system = build_system_prompt(cfg, brief.work_log.commit_count);
     let user = serde_json::to_string_pretty(brief)?;
     let out = engine.generate(&system, &user)?;
     Ok(RenderedDiary {
@@ -919,7 +931,7 @@ mod tests {
     #[test]
     fn system_prompt_injects_tone_and_honorific() {
         let cfg = DiaryConfig::default();
-        let p = build_system_prompt(&cfg);
+        let p = build_system_prompt(&cfg, 0);
         assert!(p.contains("주인"));
         assert!(p.contains("B"));
     }
@@ -1440,7 +1452,7 @@ mod tests {
 
     #[test]
     fn system_prompt_uses_self_diary_perspective() {
-        let p = build_system_prompt(&DiaryConfig::default());
+        let p = build_system_prompt(&DiaryConfig::default(), 0);
         assert!(p.contains("1인칭"));         // 자기 일기 관점
         assert!(p.contains("회고") || p.contains("다짐")); // 코칭을 자기 회고로
         assert!(p.contains("3인칭"));         // 주인을 3인칭으로 지칭
@@ -1470,13 +1482,13 @@ mod tests {
 
     #[test]
     fn build_system_prompt_embeds_voice_guidance() {
-        let p = build_system_prompt(&DiaryConfig::default());
+        let p = build_system_prompt(&DiaryConfig::default(), 0);
         assert!(p.contains(super::voice_guidance())); // 조각이 그대로 배선됨
     }
 
     #[test]
     fn system_prompt_has_humor_evidence_and_occasions_instructions() {
-        let p = build_system_prompt(&DiaryConfig::default());
+        let p = build_system_prompt(&DiaryConfig::default(), 0);
         assert!(p.contains("주인"));   // 호칭
         assert!(p.contains("유머"));   // 유머 지시
         assert!(p.contains("detail")); // 근거 필드 사용 지시
@@ -1486,17 +1498,35 @@ mod tests {
 
     #[test]
     fn system_prompt_directs_short_length_and_moderate_emoji() {
-        let p = build_system_prompt(&DiaryConfig::default());
-        assert!(p.contains("2~4문단"));   // 길이 상한(문단, 작업 내용용 한 문단 허용)
-        assert!(p.contains("500자"));     // 길이 상한(글자)
+        let p = build_system_prompt(&DiaryConfig::default(), 0);
+        assert!(p.contains("2~3문단"));   // 길이 밴드(문단, commit_count=0 기준)
+        assert!(p.contains("400자"));     // 길이 밴드(글자, commit_count=0 기준)
         assert!(p.contains("골라"));      // 핵심만 골라 쓰기(장황함 차단)
         assert!(p.contains("이모지"));    // 이모지 지시
         assert!(p.contains("문단마다 1~2개")); // 사용량 상향(1개 정도 → 1~2개)
     }
 
     #[test]
+    fn diary_length_bands() {
+        assert_eq!(super::diary_length(0), (400, "2~3"));
+        assert_eq!(super::diary_length(3), (400, "2~3"));
+        assert_eq!(super::diary_length(4), (550, "3"));
+        assert_eq!(super::diary_length(10), (550, "3"));
+        assert_eq!(super::diary_length(11), (750, "4"));
+        assert_eq!(super::diary_length(999), (750, "4"));
+    }
+
+    #[test]
+    fn build_system_prompt_length_adapts_to_commit_count() {
+        let cfg = DiaryConfig::default();
+        assert!(super::build_system_prompt(&cfg, 2).contains("400자"), "가벼운 날 400자");
+        assert!(super::build_system_prompt(&cfg, 7).contains("550자"), "보통 날 550자");
+        assert!(super::build_system_prompt(&cfg, 20).contains("750자"), "바쁜 날 750자 상한");
+    }
+
+    #[test]
     fn system_prompt_directs_context_signals_and_comfort() {
-        let p = build_system_prompt(&DiaryConfig::default());
+        let p = build_system_prompt(&DiaryConfig::default(), 0);
         assert!(p.contains("상시 이슈"));         // 이미 다룬 상시 이슈 제외 언급
         assert!(p.contains("tool_usage"));        // 도구 텍스처 지시
         assert!(p.contains("work_context"));      // 근무 맥락
@@ -1508,7 +1538,7 @@ mod tests {
 
     #[test]
     fn system_prompt_directs_recent_diary_variety() {
-        let p = build_system_prompt(&DiaryConfig::default());
+        let p = build_system_prompt(&DiaryConfig::default(), 0);
         assert!(p.contains("recent_diaries")); // 최근 일기 참조 지시
         assert!(p.contains("되풀이하지"));      // 이미 다룬 화제 반복 금지
         assert!(p.contains("다른 이야기"));     // 어제와 다른 서사
