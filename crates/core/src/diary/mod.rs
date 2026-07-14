@@ -41,11 +41,14 @@ const IDLE_GAP_SECS: f64 = 1800.0; // 30분 이상 공백은 휴식으로 보고
 /// 그날 실제로 한 작업 — "열심히 달렸다"가 아니라 무슨 작업이었는지 일기에 담을 재료.
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct WorkLog {
-    pub commits: Vec<String>, // 그날 활동 repo의 git 커밋 제목(정제·최대 WORK_LOG_CAP)
-    pub topics: Vec<String>,  // 폴백/보조: 브랜치명·정제된 첫 프롬프트(여러 갈래=멀티태스킹 신호)
+    pub commits: Vec<String>,   // churn 우선+repo 비례로 고른 커밋 제목(최대 TITLE_CAP)
+    pub commit_count: usize,    // 그날 총 커밋 수(cap 전) — 일기 목표 길이 산정용
+    pub topics: Vec<String>,    // 폴백/보조: 브랜치명·정제된 첫 프롬프트
 }
 
-const WORK_LOG_CAP: usize = 8;
+const WORK_LOG_TITLE_CAP: usize = 12;   // work_log에 실을 커밋 제목 최대 개수
+const WORK_LOG_TOPIC_CAP: usize = 8;    // topics 최대 개수 (기존 동작 유지)
+const WORK_LOG_CHURN_CLAMP: u64 = 400;  // 커밋당 churn 상한 (lockfile·생성물 인플레이션 방어)
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BriefFinding {
@@ -421,10 +424,27 @@ fn clean_prompt(s: &str) -> Option<String> {
     Some(cap_chars(t, 60))
 }
 
-/// 그날(로컬 날짜) 해당 repo(host,cwd)에서 그 repo 작성자가 남긴 커밋 제목들. best-effort — 실패는 빈 벡터.
+/// `git log --numstat --format=%x1e%s` 출력을 (제목, insertions+deletions) 목록으로 파싱.
+/// `\x1e`로 시작하는 줄은 새 커밋 제목, 그 외 줄은 직전 커밋의 numstat("<add>\t<del>\t<path>").
+fn parse_numstat_log(out: &str) -> Vec<(String, u64)> {
+    let mut commits: Vec<(String, u64)> = Vec::new();
+    for line in out.lines() {
+        if let Some(subj) = line.strip_prefix('\u{1e}') {
+            commits.push((subj.trim().to_string(), 0));
+        } else if let Some(last) = commits.last_mut() {
+            let mut it = line.split('\t');
+            if let (Some(a), Some(d)) = (it.next(), it.next()) {
+                last.1 += a.trim().parse::<u64>().unwrap_or(0) + d.trim().parse::<u64>().unwrap_or(0);
+            }
+        }
+    }
+    commits.into_iter().filter(|(s, _)| !s.is_empty()).collect()
+}
+
+/// 그날(로컬 날짜) 해당 repo(host,cwd)에서 그 repo 작성자가 남긴 커밋의 (제목, churn=insertions+deletions). best-effort — 실패는 빈 벡터.
 /// host가 `wsl:<distro>`면 `wsl -d <distro> -- git`으로 WSL 안에서 실행(리눅스 경로), 아니면 네이티브 git.
 /// WSL 미설치·distro 부재 등은 spawn 에러 → 빈 벡터 → 상위에서 topics로 폴백.
-fn git_commits_for(host: &str, cwd: &str, date: &str) -> Vec<String> {
+fn git_commits_for(host: &str, cwd: &str, date: &str) -> Vec<(String, u64)> {
     use std::process::Command;
     let Some(next) = NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .ok()
@@ -455,16 +475,105 @@ fn git_commits_for(host: &str, cwd: &str, date: &str) -> Vec<String> {
         .map(|s| s.trim().to_string())
         .unwrap_or_default();
     let mut args: Vec<String> = vec![
-        "-C".into(), cwd.into(), "log".into(), "--no-merges".into(), "--format=%s".into(),
+        "-C".into(), cwd.into(), "log".into(), "--no-merges".into(), "--numstat".into(),
+        "--format=%x1e%s".into(),
         format!("--since={date} 00:00:00"), format!("--until={next} 00:00:00"),
     ];
     if !email.is_empty() {
         args.push(format!("--author={email}"));
     }
     match run(&args) {
-        Some(out) => out.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
+        Some(out) => parse_numstat_log(&out),
         None => Vec::new(),
     }
+}
+
+/// repo별 그룹(각 (제목, raw churn))을 받아 clamp된 churn으로 floor + 비례 배분하고,
+/// repo 내부는 clamp된 churn 내림차순으로 골라 평평한 제목 리스트(≤ TITLE_CAP)를 반환.
+/// label은 churn 동률 시 결정론적 tiebreak용(host+cwd 등 안정 문자열).
+fn balance_commits(mut groups: Vec<(String, Vec<(String, u64)>)>) -> Vec<String> {
+    let n = groups.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    let eff = |c: u64| c.min(WORK_LOG_CHURN_CLAMP);
+    let counts: Vec<usize> = groups.iter().map(|(_, c)| c.len()).collect();
+    // repo 가중치 = clamp된 churn 합(0 방지 위해 최소 1) — 배분 비례의 기준.
+    let weight: Vec<u64> = groups
+        .iter()
+        .map(|(_, c)| c.iter().map(|(_, ch)| eff(*ch)).sum::<u64>().max(1))
+        .collect();
+
+    // repo 순서: churn 비중 큰 순 → 커밋수 desc → label asc (host-편향 없는 결정론).
+    let order = {
+        let mut idx: Vec<usize> = (0..n).collect();
+        idx.sort_by(|&a, &b| {
+            weight[b]
+                .cmp(&weight[a])
+                .then(counts[b].cmp(&counts[a]))
+                .then(groups[a].0.cmp(&groups[b].0))
+        });
+        idx
+    };
+    // repo 내부: clamp된 churn 내림차순(stable → 동률은 git 최신순 유지).
+    for (_, cs) in &mut groups {
+        cs.sort_by(|a, b| eff(b.1).cmp(&eff(a.1)));
+    }
+
+    // 슬롯 배분: floor 1개씩(cap 초과 시 order 앞쪽부터), 남은 슬롯은 D'Hondt(최고평균)로 churn 비례.
+    let cap = WORK_LOG_TITLE_CAP;
+    let mut quota = vec![0usize; n];
+    let mut remaining = cap;
+    for &i in &order {
+        if remaining == 0 {
+            break;
+        }
+        quota[i] = 1;
+        remaining -= 1;
+    }
+    while remaining > 0 {
+        // D'Hondt(최고평균): weight[i]/(quota[i]+1) 최대인 repo에 다음 슬롯.
+        // 정수 나눗셈은 저-churn 구간에서 몫을 0으로 뭉개 허위 동률을 만들므로 교차곱으로 비교하고,
+        // 진짜 동률은 order 앞쪽(가중치 큰 repo)을 유지한다(엄격히 클 때만 교체).
+        let mut best: Option<usize> = None;
+        for &i in &order {
+            if quota[i] >= counts[i] {
+                continue;
+            }
+            match best {
+                None => best = Some(i),
+                Some(b) => {
+                    if weight[i] * (quota[b] as u64 + 1) > weight[b] * (quota[i] as u64 + 1) {
+                        best = Some(i);
+                    }
+                }
+            }
+        }
+        match best {
+            Some(i) => {
+                quota[i] += 1;
+                remaining -= 1;
+            }
+            None => break, // 커밋 총량 < cap
+        }
+    }
+
+    // 채택: order 순으로 repo별 quota만큼 churn 순, 전역 중복 제목은 skip(슬롯 소비 안 함).
+    let mut seen = std::collections::HashSet::new();
+    let mut selected = Vec::new();
+    for &i in &order {
+        let mut take = quota[i];
+        for (subj, _) in &groups[i].1 {
+            if take == 0 {
+                break;
+            }
+            if seen.insert(subj.clone()) {
+                selected.push(subj.clone());
+                take -= 1;
+            }
+        }
+    }
+    selected
 }
 
 /// 그날 실제 한 작업 — 전 host 활동 repo의 git 커밋 제목(우선) + 세션 갈래(브랜치·정제 첫 프롬프트, 폴백/보조).
@@ -507,12 +616,13 @@ fn collect_work_log(store: &SqliteStore, date: &str) -> WorkLog {
         .collect();
     host_cwds.sort();
     host_cwds.dedup();
-    let mut commits: Vec<String> = host_cwds
+    let groups: Vec<(String, Vec<(String, u64)>)> = host_cwds
         .iter()
-        .flat_map(|(h, c)| git_commits_for(h, c, date))
+        .map(|(h, c)| (format!("{h}\u{0}{c}"), git_commits_for(h, c, date)))
+        .filter(|(_, v)| !v.is_empty())
         .collect();
-    commits.dedup();
-    commits.truncate(WORK_LOG_CAP);
+    let commit_count = groups.iter().map(|(_, v)| v.len()).sum();
+    let commits = balance_commits(groups);
 
     // 토픽: 브랜치(main/master/HEAD 제외) + 정제된 첫 프롬프트 — 여러 갈래면 멀티태스킹 신호
     let mut topics: Vec<String> = Vec::new();
@@ -528,9 +638,9 @@ fn collect_work_log(store: &SqliteStore, date: &str) -> WorkLog {
     }
     topics.sort();
     topics.dedup();
-    topics.truncate(WORK_LOG_CAP);
+    topics.truncate(WORK_LOG_TOPIC_CAP);
 
-    WorkLog { commits, topics }
+    WorkLog { commits, commit_count, topics }
 }
 
 #[derive(Debug, Clone)]
@@ -599,7 +709,17 @@ pub fn voice_guidance() -> &'static str {
      자연스러움 '오늘 세션 세 번. 같은 파일을 자꾸 다시 열었다 — 좀 헤맸네'."
 }
 
-pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
+/// 그날 총 커밋 수 → (일기 목표 문자 수, 문단 수 문구). 스펙 §2a 밴드.
+fn diary_length(commit_count: usize) -> (usize, &'static str) {
+    match commit_count {
+        0..=3 => (400, "2~3"),
+        4..=10 => (550, "3"),
+        _ => (750, "4"),
+    }
+}
+
+pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize) -> String {
+    let (target, paras) = diary_length(commit_count);
     format!(
         "당신은 사용자의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
          오늘 하루 자신이 겪은 일을 스스로 되돌아보는 1인칭 일기를 씁니다. \
@@ -639,13 +759,15 @@ pub fn build_system_prompt(cfg: &DiaryConfig) -> String {
          그것도 판박이 대신 다마고치 능청으로(주말이면 '주말에 또? 일중독인가 봐', 긴 날이면 '오늘 좀 과했다, 배터리 방전 직전'). \
          평범한 날은 위로 없이 담백하게 끝내세요. 발렌타인·파이데이 같은 재미 기념일은 위로 대상이 아닙니다. \
          \
-         형식: 일기는 2~4문단, 전체 500자 안팎으로 쓰세요 \
+         형식: 일기는 {paras}문단 내외, 전체 {target}자 안팎으로 쓰세요 \
          (작업 내용을 담느라 한 문단 늘어도 좋지만 여전히 간결하게). \
          그날의 핵심을 골라 쓰고 덜 중요한 사실은 과감히 버리세요. \
          이모지는 문단마다 1~2개, 감정이 실리는 자연스러운 자리에 넣되 같은 이모지를 반복하지 마세요.",
         honorific = cfg.honorific,
         tone = cfg.tone,
         voice = voice_guidance(),
+        target = target,
+        paras = paras,
     )
 }
 
@@ -662,7 +784,7 @@ fn diary_body(text: &str, tokens: u64, engine: &str) -> String {
 
 /// 네트워크(LLM)만 — store 접근 없음. 락 밖에서 호출 가능.
 pub fn render_diary(engine: &dyn Engine, brief: &Brief, cfg: &DiaryConfig) -> Result<RenderedDiary> {
-    let system = build_system_prompt(cfg);
+    let system = build_system_prompt(cfg, brief.work_log.commit_count);
     let user = serde_json::to_string_pretty(brief)?;
     let out = engine.generate(&system, &user)?;
     Ok(RenderedDiary {
@@ -821,7 +943,7 @@ mod tests {
     #[test]
     fn system_prompt_injects_tone_and_honorific() {
         let cfg = DiaryConfig::default();
-        let p = build_system_prompt(&cfg);
+        let p = build_system_prompt(&cfg, 0);
         assert!(p.contains("주인"));
         assert!(p.contains("B"));
     }
@@ -1028,6 +1150,20 @@ mod tests {
     }
 
     #[test]
+    fn parse_numstat_log_sums_churn_per_commit() {
+        let sample = "\u{1e}feat: a\n5\t2\tsrc/a.rs\n3\t0\tsrc/b.rs\n\n\u{1e}fix: b\n1\t1\tREADME.md\n";
+        let out = super::parse_numstat_log(sample);
+        assert_eq!(out, vec![("feat: a".to_string(), 10), ("fix: b".to_string(), 2)]);
+
+        // 바이너리("-\t-") 는 0, 커밋 제목만 있고 변경 없으면 0
+        let bin = "\u{1e}bin only\n-\t-\tlogo.png\n\u{1e}empty\n";
+        assert_eq!(
+            super::parse_numstat_log(bin),
+            vec![("bin only".to_string(), 0), ("empty".to_string(), 0)]
+        );
+    }
+
+    #[test]
     fn git_commits_for_reads_dated_authored_subjects() {
         use std::process::Command;
         let tmp = tempfile::tempdir().unwrap();
@@ -1041,14 +1177,98 @@ mod tests {
         Command::new("git").args(["init", "-q", dir]).output().unwrap();
         run(&["config", "user.email", "t@example.com"]);
         run(&["config", "user.name", "t"]);
-        run(&["commit", "--allow-empty", "-q", "-m", "feat: work_log 다이어리 반영"]);
+        // 3줄짜리 파일 추가 → churn = 3
+        std::fs::write(tmp.path().join("f.txt"), "l1\nl2\nl3\n").unwrap();
+        run(&["add", "."]);
+        run(&["commit", "-q", "-m", "feat: work_log 다이어리 반영"]);
 
         let subs = super::git_commits_for("Windows", dir, "2026-07-08");
-        assert!(subs.iter().any(|s| s.contains("work_log 다이어리 반영")), "그날 커밋 제목: {subs:?}");
+        assert!(
+            subs.iter().any(|(s, c)| s.contains("work_log 다이어리 반영") && *c == 3),
+            "제목+churn: {subs:?}"
+        );
         assert!(super::git_commits_for("Windows", dir, "2026-07-09").is_empty(), "다른 날짜엔 없음");
-        // git repo 아닌 경로 → 빈 벡터(패닉 없음)
         let nogit = tempfile::tempdir().unwrap();
         assert!(super::git_commits_for("Windows", nogit.path().to_str().unwrap(), "2026-07-08").is_empty());
+    }
+
+    #[test]
+    fn balance_commits_behaviors() {
+        use super::balance_commits;
+
+        // 빈 입력
+        assert!(balance_commits(vec![]).is_empty());
+
+        // floor 보장: churn 큰 A(12개) + churn 작은 B(1개), C=13 → B 실종 금지
+        let a: Vec<(String, u64)> = (0..12).map(|i| (format!("a{i}"), 500)).collect();
+        let b = vec![(String::from("bonly"), 5)];
+        let out = balance_commits(vec![("A".into(), a), ("B".into(), b)]);
+        assert!(out.contains(&"bonly".to_string()), "floor: B 커밋 실종 금지: {out:?}");
+        assert!(out.len() <= 12);
+
+        // churn 비례 (개수 역전): 둘 다 10개인데 A churn 800, B churn 20 → A 과반
+        let a: Vec<(String, u64)> = (0..10).map(|i| (format!("a{i}"), 800)).collect();
+        let b: Vec<(String, u64)> = (0..10).map(|i| (format!("b{i}"), 20)).collect();
+        let out = balance_commits(vec![("A".into(), a), ("B".into(), b)]);
+        let na = out.iter().filter(|s| s.starts_with('a')).count();
+        let nb = out.iter().filter(|s| s.starts_with('b')).count();
+        assert!(na >= 8, "churn 큰 A 과반: na={na} nb={nb}");
+        assert!(nb >= 1, "B floor 보장");
+        assert_eq!(out.len(), 12);
+
+        // churn 우선 채택: 단일 repo 13개(cap 초과) → churn 최저 탈락
+        let mut c: Vec<(String, u64)> = (0..12).map(|i| (format!("big{i}"), 100)).collect();
+        c.push(("tiny".into(), 1));
+        let out = balance_commits(vec![("A".into(), c)]);
+        assert_eq!(out.len(), 12);
+        assert!(!out.contains(&"tiny".to_string()), "churn 최저 탈락: {out:?}");
+
+        // churn desc 순서 (cap 이내)
+        let out = balance_commits(vec![(
+            "A".into(),
+            vec![("low".into(), 10), ("high".into(), 900), ("mid".into(), 100)],
+        )]);
+        assert_eq!(out, vec!["high".to_string(), "mid".to_string(), "low".to_string()]);
+
+        // clamp: A(5개, 1개 5000+4개 10) vs B(10개 각 200), C=15 → B가 A보다 많음
+        let mut a = vec![("lock".to_string(), 5000u64)];
+        a.extend((0..4).map(|i| (format!("a{i}"), 10)));
+        let b: Vec<(String, u64)> = (0..10).map(|i| (format!("b{i}"), 200)).collect();
+        let out = balance_commits(vec![("A".into(), a), ("B".into(), b)]);
+        let na = out.iter().filter(|s| *s == "lock" || s.starts_with('a')).count();
+        let nb = out.iter().filter(|s| s.starts_with('b')).count();
+        assert!(nb > na, "clamp: 저활동 A가 lockfile로 상위 불가 na={na} nb={nb}");
+
+        // cap 이하 전부 포함
+        let out = balance_commits(vec![
+            ("A".into(), vec![("a0".into(), 1), ("a1".into(), 1)]),
+            ("B".into(), vec![("b0".into(), 1)]),
+            ("C".into(), vec![("c0".into(), 1)]),
+        ]);
+        assert_eq!(out.len(), 4);
+
+        // 중복 제목 1회만
+        let out = balance_commits(vec![
+            ("A".into(), vec![("dup".into(), 100), ("a1".into(), 100)]),
+            ("B".into(), vec![("dup".into(), 100), ("b1".into(), 100)]),
+        ]);
+        assert_eq!(out.iter().filter(|s| *s == "dup").count(), 1, "중복 1회: {out:?}");
+
+        // repo 과다: churn 0 repo 20개 → cap개만
+        let groups: Vec<(String, Vec<(String, u64)>)> =
+            (0..20).map(|i| (format!("r{i:02}"), vec![(format!("c{i:02}"), 0)])).collect();
+        assert_eq!(balance_commits(groups).len(), 12);
+
+        // 저-churn D'Hondt: 정수 나눗셈이 몫을 0으로 뭉개는 구간(가중치 2 vs 1)에서도
+        // 가중치 큰 repo가 우세해야 함(교차곱 비교 + 상위 우선 tie-break). 각 10커밋(cap 초과).
+        let mut a = vec![("a0".to_string(), 2u64)];
+        a.extend((1..10).map(|i| (format!("a{i}"), 0)));
+        let mut b = vec![("b0".to_string(), 1u64)];
+        b.extend((1..10).map(|i| (format!("b{i}"), 0)));
+        let out = balance_commits(vec![("A".into(), a), ("B".into(), b)]);
+        let na = out.iter().filter(|s| s.starts_with('a')).count();
+        let nb = out.iter().filter(|s| s.starts_with('b')).count();
+        assert!(na > nb, "저-churn 동률 구간에서도 가중치 큰 A 우세: na={na} nb={nb}");
     }
 
     #[test]
@@ -1255,7 +1475,7 @@ mod tests {
 
     #[test]
     fn system_prompt_uses_self_diary_perspective() {
-        let p = build_system_prompt(&DiaryConfig::default());
+        let p = build_system_prompt(&DiaryConfig::default(), 0);
         assert!(p.contains("1인칭"));         // 자기 일기 관점
         assert!(p.contains("회고") || p.contains("다짐")); // 코칭을 자기 회고로
         assert!(p.contains("3인칭"));         // 주인을 3인칭으로 지칭
@@ -1285,13 +1505,13 @@ mod tests {
 
     #[test]
     fn build_system_prompt_embeds_voice_guidance() {
-        let p = build_system_prompt(&DiaryConfig::default());
+        let p = build_system_prompt(&DiaryConfig::default(), 0);
         assert!(p.contains(super::voice_guidance())); // 조각이 그대로 배선됨
     }
 
     #[test]
     fn system_prompt_has_humor_evidence_and_occasions_instructions() {
-        let p = build_system_prompt(&DiaryConfig::default());
+        let p = build_system_prompt(&DiaryConfig::default(), 0);
         assert!(p.contains("주인"));   // 호칭
         assert!(p.contains("유머"));   // 유머 지시
         assert!(p.contains("detail")); // 근거 필드 사용 지시
@@ -1301,17 +1521,35 @@ mod tests {
 
     #[test]
     fn system_prompt_directs_short_length_and_moderate_emoji() {
-        let p = build_system_prompt(&DiaryConfig::default());
-        assert!(p.contains("2~4문단"));   // 길이 상한(문단, 작업 내용용 한 문단 허용)
-        assert!(p.contains("500자"));     // 길이 상한(글자)
+        let p = build_system_prompt(&DiaryConfig::default(), 0);
+        assert!(p.contains("2~3문단"));   // 길이 밴드(문단, commit_count=0 기준)
+        assert!(p.contains("400자"));     // 길이 밴드(글자, commit_count=0 기준)
         assert!(p.contains("골라"));      // 핵심만 골라 쓰기(장황함 차단)
         assert!(p.contains("이모지"));    // 이모지 지시
         assert!(p.contains("문단마다 1~2개")); // 사용량 상향(1개 정도 → 1~2개)
     }
 
     #[test]
+    fn diary_length_bands() {
+        assert_eq!(super::diary_length(0), (400, "2~3"));
+        assert_eq!(super::diary_length(3), (400, "2~3"));
+        assert_eq!(super::diary_length(4), (550, "3"));
+        assert_eq!(super::diary_length(10), (550, "3"));
+        assert_eq!(super::diary_length(11), (750, "4"));
+        assert_eq!(super::diary_length(999), (750, "4"));
+    }
+
+    #[test]
+    fn build_system_prompt_length_adapts_to_commit_count() {
+        let cfg = DiaryConfig::default();
+        assert!(super::build_system_prompt(&cfg, 2).contains("400자"), "가벼운 날 400자");
+        assert!(super::build_system_prompt(&cfg, 7).contains("550자"), "보통 날 550자");
+        assert!(super::build_system_prompt(&cfg, 20).contains("750자"), "바쁜 날 750자 상한");
+    }
+
+    #[test]
     fn system_prompt_directs_context_signals_and_comfort() {
-        let p = build_system_prompt(&DiaryConfig::default());
+        let p = build_system_prompt(&DiaryConfig::default(), 0);
         assert!(p.contains("상시 이슈"));         // 이미 다룬 상시 이슈 제외 언급
         assert!(p.contains("tool_usage"));        // 도구 텍스처 지시
         assert!(p.contains("work_context"));      // 근무 맥락
@@ -1323,7 +1561,7 @@ mod tests {
 
     #[test]
     fn system_prompt_directs_recent_diary_variety() {
-        let p = build_system_prompt(&DiaryConfig::default());
+        let p = build_system_prompt(&DiaryConfig::default(), 0);
         assert!(p.contains("recent_diaries")); // 최근 일기 참조 지시
         assert!(p.contains("되풀이하지"));      // 이미 다룬 화제 반복 금지
         assert!(p.contains("다른 이야기"));     // 어제와 다른 서사
