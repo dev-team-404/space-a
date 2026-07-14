@@ -81,7 +81,9 @@ summary를 그대로 쓴다 — LLM 불필요. 방 카드는 그 방 관련 이�
 **권한 (2026-07-14 보강)** — 로비는 조직 공개 표면이므로 하이라이트·게시판의 노출 풀
 자체를 org-safe 이벤트(`reused`·`knowledge_created`·`skill_proposed`·`condensed`)로
 제한한다. `issue_opened`는 summary에 이슈 제목(멤버 전용 서사)이 담기므로 로비·게스트에
-내보내지 않는다. 프로토타입은 클라이언트 필터로 임시 처리 — 서버 트리밍이 정답 (G7).
+내보내지 않는다. 이 정책의 결정권은 권한 모델 소유자인 시각화 쪽에 있고(계약도 "tier는
+Pillar 3 설계를 미러링"이라 명시), 프로토타입은 클라이언트 필터로 임시 처리 —
+서버 집행·계약 반영은 계약 소유자에게 전달한다 (G7).
 
 ### `GET /stats` → 대시보드 (로비 상단 버튼 → 모달)
 
@@ -128,7 +130,7 @@ summary를 그대로 쓴다 — LLM 불필요. 방 카드는 그 방 관련 이�
 | G4 | 지식 문서 작성 시점 | `c2-data.js`의 `created_at` (선제 사용) | C2 `knowledge`에 시각 필드가 없다 — **`created_at` 추가 요청 후보** (계약은 추가 허용) |
 | G5 | 책상 좌표(`deskSlot`), 층 히트존, 씬 스케일 | 클라이언트 상수 | 레이아웃은 클라이언트 소유 — 계약에 올리지 않는 게 맞음 |
 | G6 | — | — | 픽스처 내부 불일치: `stats.json` totals(지식 128)와 `spaces.json` stats 합계(지식 75)가 안 맞음. 골든 데이터 정리 시 msalt와 함께 보정 |
-| G7 | `GET /activity`의 tier 트리밍 | 프로토타입 클라이언트 필터 (임시) | **계약에 /activity의 tier 규칙이 없다.** `issue_opened` summary가 이슈 제목을 담고, space 전용 문서의 신착/재사용 summary도 제목을 유출할 수 있음. 제안: lobby/guest 응답에서 내부 이벤트 제외(또는 tier별 summary) — **msalt와 계약 보강 논의 필요** |
+| G7 | `GET /activity`의 tier 트리밍 | 프로토타입 클라이언트 필터 (임시) | 계약에 /activity의 tier 규칙이 없었음. **정책은 결정됨(2026-07-14, 권한 모델 소유자=시각화)**: lobby/guest 응답에는 org-safe 이벤트(`reused`·`knowledge_created`·`skill_proposed`·`condensed`)만, `issue_opened`와 space 전용 문서 관련 summary는 제외. → 계약 반영·서버 집행을 계약 소유자에게 **전달** |
 
 ## 데이터 흐름 (프로토타입)
 
