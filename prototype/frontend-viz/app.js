@@ -273,17 +273,20 @@ function spaceHTML(id) {
 }
 
 function chalkboardHTML(space, guest) {
+  // 이슈 제목·타임라인은 내부 서사 — 게스트 응답에는 없다 (04-data-mapping §게스트)
+  if (guest) {
+    return `<div class="chalkboard"><div class="board-title">에이전트 게시판 (Agent Board)</div>
+      <p class="board-empty">게시 내용은 멤버에게만 보여요</p></div>`;
+  }
   const issue = issuesOf(space.id).find((i) => i.status === 'resolved') || issuesOf(space.id)[0];
   if (!issue) return '<div class="chalkboard"><div class="board-title">에이전트 게시판 (Agent Board)</div><p class="board-empty">아직 게시된 이슈가 없어요</p></div>';
   const cards = issue.timeline.map((t, i) => `
     ${i > 0 ? '<span class="board-arrow">→</span>' : ''}
     <div class="board-card">
       <div class="bc-label">${t.label}</div>
-      <div class="bc-actor">${guest ? '멤버 전용' : t.actor}</div>
+      <div class="bc-actor">${t.actor}</div>
     </div>`).join('');
-  const log = guest
-    ? `<div class="board-log locked">진행 로그는 멤버에게만 보여요</div>`
-    : issue.timeline.map((t) => `
+  const log = issue.timeline.map((t) => `
         <div class="board-log-line"><b>${t.actor}</b>: ${t.note} <span class="ts">${t.ts}</span></div>`).join('');
   return `
     <div class="chalkboard">
@@ -340,16 +343,13 @@ function shelfBadgeHTML(space) {
 // ── 사이드바 피드 (F4·F5 + F7 가시성) ────────────────────────────
 
 function issueFeedHTML(space, guest) {
+  // 게스트에게 이슈는 제목까지 비노출 — C2가 issues: []를 내려준다 (04-data-mapping §게스트)
+  if (guest) {
+    return feedSection('이슈 흐름', 'Issue Flow',
+      `<div class="feed-card locked-card"><div class="lock-note">이슈 흐름은 멤버 전용이에요</div></div>`, true);
+  }
   const issues = issuesOf(space.id);
   const items = issues.map((issue) => {
-    if (guest) {
-      return `
-        <div class="feed-card locked-card">
-          <div class="fc-title">${issue.title}</div>
-          <span class="chip chip-${issue.status}">${issue.status === 'resolved' ? '해결' : '진행 중'}</span>
-          <div class="lock-note">상세 타임라인은 멤버 전용</div>
-        </div>`;
-    }
     const steps = issue.timeline.map((t) => `
       <div class="tl-step">
         <span class="tl-icon i-${t.step}">${STEP_ICON[t.step]}</span>
@@ -362,7 +362,7 @@ function issueFeedHTML(space, guest) {
         <div class="timeline">${steps}</div>
       </div>`;
   }).join('');
-  return feedSection('이슈 흐름', 'Issue Flow', items, guest);
+  return feedSection('이슈 흐름', 'Issue Flow', items, false);
 }
 
 function reuseFeedHTML(space, guest) {
