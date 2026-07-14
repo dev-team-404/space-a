@@ -44,22 +44,37 @@ host 문자열은 `"Windows"`(대문자 W=87) vs `"wsl:<distro>"`(소문자 w=11
 "중간" 프로파일 — 현재 500자에서 양방향으로 적당히 벌어진다. LLM은 문자 수를 정밀히 세지 못하므로
 기존 "500자 안팎"과 동일한 **소프트 타깃**이다.
 
-### 2b. 커밋 제목 선정 = floor + 개수 비례 (repo 간)
+### 2b. 커밋 제목 선정 = floor + churn 비례 (repo 간)
 
 work_log에 실을 제목은 최대 `WORK_LOG_TITLE_CAP`(=12)개. `C ≤ 12`면 전부 포함(→ 버그는 바쁜 날에만
 관여). `C > 12`면:
 
 - **floor**: 각 repo에서 1개씩 먼저 확보(모든 repo 대표 = WSL repo 실종 방지). repo 수 > cap이면
-  커밋 많은 repo부터 cap개만 대표.
-- **비례**: 남은 슬롯을 repo 커밋 수에 비례해 배분(작업 많은 repo가 더 많은 제목).
+  churn 비중 큰 repo부터 cap개만 대표.
+- **churn 비례**: 남은 슬롯을 repo별 **clamp된 churn 합**에 비례해 배분(변경량 큰 repo가 더 많은
+  제목). 개수가 아니라 churn을 쓰는 이유: "큰 변경이 중요"라는 §2c 가치는 repo 경계에서도 동일하게
+  성립한다 — 자잘한 커밋 8개 repo보다 대규모 리팩터 2개 repo가 그날의 실질 작업이다.
 
 순수 라운드로빈(균등)은 기각 — repo 많은 날 floor가 슬롯을 다 먹어 바쁜 repo가 과소 대표. 순수
-비례(floor 없음)도 기각 — 커밋 적은 repo가 사라져 원래 버그 부분 재발.
+비례(floor 없음)도 기각 — 커밋 적은 repo가 사라져 원래 버그 부분 재발. 개수 비례도 기각 — 커밋
+잘게 쪼개는 repo에 과다 배분(§2c와 모순).
 
-### 2c. repo 내부 선정 = churn(변경 라인) 우선
+### 2c. churn 우선 + 커밋당 clamp
 
-repo 안에서 어떤 제목을 고를지는 **최신순이 아니라 변경량 큰 커밋 우선**. 사소한 변경(오타·포맷)보다
-큰 변경에 가중 — 그날의 실질 작업이 일기에 반영된다. churn = `insertions + deletions`.
+repo 내부에서 어떤 제목을 고를지, 그리고 §2b의 repo 간 비중 모두 **변경량(churn) 우선**.
+사소한 변경(오타·포맷)보다 큰 변경에 가중 — 그날의 실질 작업이 일기에 반영된다.
+
+churn = `insertions + deletions`. 단, **raw churn은 인플레이션에 취약** — 생성 파일·`Cargo.lock`·
+리포맷·대량 이동이 수천 라인을 만들어 repo 비중과 내부 1순위를 강탈할 수 있다(Rust 프로젝트라
+`Cargo.lock` 위험 실재). 경로 제외 목록은 brittle해 기각하고 **커밋당 상한(clamp)**으로 방어:
+
+```
+effective_churn = min(insertions + deletions, WORK_LOG_CHURN_CLAMP)   // = 400
+```
+
+대규모 실제 커밋(~200–600라인)과 5000라인 lockfile이 둘 다 400으로 눌려 비슷해진다 — churn을
+완전히 무시하진 않되(생성물도 작업이긴 하다) 지배하진 못하게. clamp된 값으로 정렬·합산한다.
+**길이(§2a)는 개수 유지** — 길이는 "말할 거리 수"라 개수가 정확하고 인플레이션에도 강하다.
 
 ### 2d. topics는 무변경
 
@@ -72,8 +87,9 @@ topics(브랜치·정제 프롬프트)는 host-편향 버그가 없다(단순 �
 
 ```rust
 // 삭제: const WORK_LOG_CAP: usize = 8;
-const WORK_LOG_TITLE_CAP: usize = 12; // work_log에 실을 커밋 제목 최대 개수
-const WORK_LOG_TOPIC_CAP: usize = 8;  // topics 최대 개수 (기존 동작 유지)
+const WORK_LOG_TITLE_CAP: usize = 12;   // work_log에 실을 커밋 제목 최대 개수
+const WORK_LOG_TOPIC_CAP: usize = 8;    // topics 최대 개수 (기존 동작 유지)
+const WORK_LOG_CHURN_CLAMP: u64 = 400;  // 커밋당 churn 상한 (lockfile·생성물 인플레이션 방어)
 ```
 
 ### 3b. `WorkLog`에 `commit_count` 추가
@@ -92,7 +108,8 @@ pub struct WorkLog {
 
 ### 3c. `git_commits_for` — churn 반환
 
-반환 타입을 `Vec<(String, u64)>`(제목, churn)로 확장. numstat로 커밋별 변경 라인 수집:
+반환 타입을 `Vec<(String, u64)>`(제목, **raw** churn)로 확장. clamp는 선택 정책이라 여기선 원시값을
+주고 `balance_commits`에서 clamp한다(테스트 용이). numstat로 커밋별 변경 라인 수집:
 
 ```rust
 // git log --no-merges --numstat --format=%x1e%s --since --until [--author]
@@ -107,46 +124,59 @@ pub struct WorkLog {
 git/WSL 없이 결정론적 단위 테스트가 가능하도록 선택을 순수 함수로 분리.
 
 ```rust
-/// repo별 그룹(각 (제목, churn))을 받아 floor + 개수 비례로 슬롯을 배분하고,
-/// repo 내부는 churn 내림차순으로 골라 평평한 제목 리스트(≤ TITLE_CAP)를 반환.
-/// label은 커밋 수 동률 시 결정론적 tiebreak용(host+cwd 등 안정 문자열).
+/// repo별 그룹(각 (제목, raw churn))을 받아 clamp된 churn으로 floor + 비례 배분하고,
+/// repo 내부는 clamp된 churn 내림차순으로 골라 평평한 제목 리스트(≤ TITLE_CAP)를 반환.
+/// label은 churn 동률 시 결정론적 tiebreak용(host+cwd 등 안정 문자열).
 fn balance_commits(mut groups: Vec<(String, Vec<(String, u64)>)>) -> Vec<String> {
     let n = groups.len();
     if n == 0 { return Vec::new(); }
 
-    // repo: 커밋 많은 순(busiest-first), 동률은 label 오름차순 — host-편향 없는 결정론.
-    groups.sort_by(|a, b| b.1.len().cmp(&a.1.len()).then(a.0.cmp(&b.0)));
-    // repo 내부: churn 내림차순(stable → 동률은 git 최신순 유지).
-    for (_, cs) in &mut groups {
-        cs.sort_by(|a, b| b.1.cmp(&a.1));
-    }
+    let eff = |c: u64| c.min(WORK_LOG_CHURN_CLAMP);
     let counts: Vec<usize> = groups.iter().map(|(_, c)| c.len()).collect();
+    // repo 가중치 = clamp된 churn 합(0 방지 위해 최소 1) — 배분 비례의 기준.
+    let weight: Vec<u64> =
+        groups.iter().map(|(_, c)| c.iter().map(|(_, ch)| eff(*ch)).sum::<u64>().max(1)).collect();
 
-    // 슬롯 배분: floor 1개씩(cap 초과 시 busiest부터), 남은 슬롯은 미배분 커밋 많은 repo에 greedy.
+    // repo: churn 비중 큰 순, 동률은 커밋수 desc → label asc (host-편향 없는 결정론).
+    let order = {
+        let mut idx: Vec<usize> = (0..n).collect();
+        idx.sort_by(|&a, &b| {
+            weight[b].cmp(&weight[a])
+                .then(counts[b].cmp(&counts[a]))
+                .then(groups[a].0.cmp(&groups[b].0))
+        });
+        idx
+    };
+    // repo 내부: clamp된 churn 내림차순(stable → 동률은 git 최신순 유지).
+    for (_, cs) in &mut groups {
+        cs.sort_by(|a, b| eff(b.1).cmp(&eff(a.1)));
+    }
+
+    // 슬롯 배분: floor 1개씩(cap 초과 시 order 앞쪽부터), 남은 슬롯은 D'Hondt(최고평균)로 churn 비례.
     let cap = WORK_LOG_TITLE_CAP;
     let mut quota = vec![0usize; n];
     let mut remaining = cap;
-    for q in quota.iter_mut() {
+    for &i in &order {
         if remaining == 0 { break; }
-        *q = 1; remaining -= 1;
+        quota[i] = 1; remaining -= 1;
     }
     while remaining > 0 {
-        // quota < counts 인 repo 중 (counts-quota) 최대, 동률은 앞선 인덱스(=busiest).
-        let best = (0..n)
+        // quota < counts 인 repo 중 weight/(quota+1) 최대, 동률은 order 앞쪽(=weight 큰 쪽).
+        let best = order.iter().copied()
             .filter(|&i| quota[i] < counts[i])
-            .max_by_key(|&i| (counts[i] - quota[i], usize::MAX - i));
+            .max_by_key(|&i| weight[i] / (quota[i] as u64 + 1));
         match best {
             Some(i) => { quota[i] += 1; remaining -= 1; }
             None => break, // 커밋 총량 < cap: 더 채울 것 없음
         }
     }
 
-    // 채택: repo별 quota만큼 churn 순으로, 전역 중복 제목은 skip(슬롯 소비 안 함).
+    // 채택: order 순으로 repo별 quota만큼 churn 순, 전역 중복 제목은 skip(슬롯 소비 안 함).
     let mut seen = std::collections::HashSet::new();
     let mut selected = Vec::new();
-    for (i, (_, commits)) in groups.iter().enumerate() {
+    for &i in &order {
         let mut take = quota[i];
-        for (subj, _) in commits {
+        for (subj, _) in &groups[i].1 {
             if take == 0 { break; }
             if seen.insert(subj.clone()) {
                 selected.push(subj.clone());
@@ -159,10 +189,11 @@ fn balance_commits(mut groups: Vec<(String, Vec<(String, u64)>)>) -> Vec<String>
 ```
 
 설계 노트:
-- **host-편향 소멸**: 선택이 host 정렬순이 아니라 커밋 수(+floor)에 의존 → WSL repo 통째 실종 구조 제거.
-- **비례**: floor 후 남은 슬롯이 미배분 커밋 많은 repo로 흘러가 "작업 많은 repo = 더 많은 제목" 달성.
-- **churn**: repo 내부 정렬이 churn desc라 큰 변경이 먼저 채택.
-- 잔여 슬롯 재분배 없음(단순성) — greedy가 busiest부터 채워 낭비 거의 없음.
+- **host-편향 소멸**: 선택이 host 정렬순이 아니라 churn 가중(+floor)에 의존 → WSL repo 통째 실종 구조 제거.
+- **churn 비례**: floor 후 D'Hondt(최고평균 `weight/(seats+1)`)로 남은 슬롯을 churn 비중에 비례 배분 —
+  변경량 큰 repo가 더 많은 제목. `max_by_key`의 정수 나눗셈은 근사지만 휴리스틱엔 충분, 동률은 order로 결정론.
+- **clamp**: `eff()`로 커밋당 churn을 400에 눌러 정렬·합산 → lockfile 한 방이 repo 비중·내부 1순위 강탈 불가.
+- 잔여 슬롯 재분배 없음(단순성) — D'Hondt가 큰 repo부터 채워 낭비 거의 없음.
 
 ### 3e. `collect_work_log` 배선
 
@@ -208,14 +239,19 @@ pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize) -> String {
 
 ### 4a. 신규 — `balance_commits` 단위 테스트 (git/WSL 불필요)
 
-- **floor 보장**: `[("A",[12개]),("B",[1개])]` → B의 1개가 결과에 포함(실종 금지).
-- **개수 비례**: `[("A",[20개]),("B",[2개]),("C",[1개])]` → A가 슬롯 과반, B·C 각 ≥1, 총 ≤ 12.
+  (모든 배분 테스트는 `C > 12`라야 슬롯 경쟁이 생김 — `C ≤ 12`면 전부 포함되어 배분이 무의미.)
+- **floor 보장**: churn 큰 repo A(커밋 12개) + churn 작은 repo B(커밋 1개), C=13 → B의 1개가 포함(실종 금지).
+- **churn 비례 (개수와 역전)**: repo A·B 둘 다 커밋 10개(C=20)지만 A는 각 churn 800, B는 각 churn 20.
+  개수로는 5:5인데 **A가 슬롯 과반(≥8)**, B는 floor로 ≥1(변경량 우선).
 - **churn 우선 채택**: 단일 repo에 13개 커밋(cap 초과) → churn 최저 커밋이 결과에서 탈락하고
   churn 높은 것들이 남는다(최신순 아님). cap 이내 케이스에선 순서가 churn desc임도 확인.
-- **cap 이하 전부 포함**: `C ≤ 12` → 모든 (중복 제외) 제목 포함.
+- **clamp**: repo A(커밋 5개 — 1개 churn 5000 + 4개 churn 10) vs repo B(커밋 10개, 각 churn 200), C=15.
+  raw churn이면 A 가중치(5040)>B(2000)라 A가 order 1순위지만, clamp로 A=440<B=2000 → **B가 order
+  1순위가 되고 A는 floor 수준(~2개)으로 억제**(lockfile 한 방이 저활동 repo를 상위로 못 끌어올림).
+- **cap 이하 전부 포함**: `C ≤ 12` → 모든 (중복 제외) 제목 포함(배분 없이 전량).
 - **중복 제거**: 두 repo에 동일 제목 → 결과에 1회만.
 - **빈 입력**: `[]` → `[]`.
-- **repo 과다**(n > cap): 커밋 1개짜리 repo 20개 → busiest(동률 label순) cap개만, 결과 ≤ 12.
+- **repo 과다**(n > cap): churn 0(빈 커밋) repo 20개 → weight 모두 1, order는 label순, cap개만 대표, 결과 ≤ 12.
 
 ### 4b. 신규 — 길이 밴드
 
@@ -240,5 +276,5 @@ pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize) -> String {
 
 ## 5. 비목표 (YAGNI)
 
-- 잔여 슬롯 재분배, 커밋 timestamp 교차-repo 정렬, repo 비례 단위를 churn으로 바꾸는 것(개수 유지),
-  idle 일기 길이 적응, 프론트/스키마 외 변경 — 미도입.
+- 잔여 슬롯 재분배, 커밋 timestamp 교차-repo 정렬, 경로 기반 churn 제외 목록(생성물 필터), 길이를
+  churn 기반으로 바꾸는 것(개수 유지), idle 일기 길이 적응, 프론트/스키마 외 변경 — 미도입.
