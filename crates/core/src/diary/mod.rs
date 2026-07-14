@@ -41,12 +41,13 @@ const IDLE_GAP_SECS: f64 = 1800.0; // 30분 이상 공백은 휴식으로 보고
 /// 그날 실제로 한 작업 — "열심히 달렸다"가 아니라 무슨 작업이었는지 일기에 담을 재료.
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct WorkLog {
-    pub commits: Vec<String>, // 그날 활동 repo의 git 커밋 제목(정제·최대 WORK_LOG_CAP)
-    pub topics: Vec<String>,  // 폴백/보조: 브랜치명·정제된 첫 프롬프트(여러 갈래=멀티태스킹 신호)
+    pub commits: Vec<String>,   // churn 우선+repo 비례로 고른 커밋 제목(최대 TITLE_CAP)
+    pub commit_count: usize,    // 그날 총 커밋 수(cap 전) — 일기 목표 길이 산정용
+    pub topics: Vec<String>,    // 폴백/보조: 브랜치명·정제된 첫 프롬프트
 }
 
-const WORK_LOG_CAP: usize = 8;
 const WORK_LOG_TITLE_CAP: usize = 12;   // work_log에 실을 커밋 제목 최대 개수
+const WORK_LOG_TOPIC_CAP: usize = 8;    // topics 최대 개수 (기존 동작 유지)
 const WORK_LOG_CHURN_CLAMP: u64 = 400;  // 커밋당 churn 상한 (lockfile·생성물 인플레이션 방어)
 
 #[derive(Debug, Clone, Serialize)]
@@ -423,10 +424,27 @@ fn clean_prompt(s: &str) -> Option<String> {
     Some(cap_chars(t, 60))
 }
 
+/// `git log --numstat --format=%x1e%s` 출력을 (제목, insertions+deletions) 목록으로 파싱.
+/// `\x1e`로 시작하는 줄은 새 커밋 제목, 그 외 줄은 직전 커밋의 numstat("<add>\t<del>\t<path>").
+fn parse_numstat_log(out: &str) -> Vec<(String, u64)> {
+    let mut commits: Vec<(String, u64)> = Vec::new();
+    for line in out.lines() {
+        if let Some(subj) = line.strip_prefix('\u{1e}') {
+            commits.push((subj.trim().to_string(), 0));
+        } else if let Some(last) = commits.last_mut() {
+            let mut it = line.split('\t');
+            if let (Some(a), Some(d)) = (it.next(), it.next()) {
+                last.1 += a.trim().parse::<u64>().unwrap_or(0) + d.trim().parse::<u64>().unwrap_or(0);
+            }
+        }
+    }
+    commits.into_iter().filter(|(s, _)| !s.is_empty()).collect()
+}
+
 /// 그날(로컬 날짜) 해당 repo(host,cwd)에서 그 repo 작성자가 남긴 커밋 제목들. best-effort — 실패는 빈 벡터.
 /// host가 `wsl:<distro>`면 `wsl -d <distro> -- git`으로 WSL 안에서 실행(리눅스 경로), 아니면 네이티브 git.
 /// WSL 미설치·distro 부재 등은 spawn 에러 → 빈 벡터 → 상위에서 topics로 폴백.
-fn git_commits_for(host: &str, cwd: &str, date: &str) -> Vec<String> {
+fn git_commits_for(host: &str, cwd: &str, date: &str) -> Vec<(String, u64)> {
     use std::process::Command;
     let Some(next) = NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .ok()
@@ -457,14 +475,15 @@ fn git_commits_for(host: &str, cwd: &str, date: &str) -> Vec<String> {
         .map(|s| s.trim().to_string())
         .unwrap_or_default();
     let mut args: Vec<String> = vec![
-        "-C".into(), cwd.into(), "log".into(), "--no-merges".into(), "--format=%s".into(),
+        "-C".into(), cwd.into(), "log".into(), "--no-merges".into(), "--numstat".into(),
+        "--format=%x1e%s".into(),
         format!("--since={date} 00:00:00"), format!("--until={next} 00:00:00"),
     ];
     if !email.is_empty() {
         args.push(format!("--author={email}"));
     }
     match run(&args) {
-        Some(out) => out.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect(),
+        Some(out) => parse_numstat_log(&out),
         None => Vec::new(),
     }
 }
@@ -472,7 +491,6 @@ fn git_commits_for(host: &str, cwd: &str, date: &str) -> Vec<String> {
 /// repo별 그룹(각 (제목, raw churn))을 받아 clamp된 churn으로 floor + 비례 배분하고,
 /// repo 내부는 clamp된 churn 내림차순으로 골라 평평한 제목 리스트(≤ TITLE_CAP)를 반환.
 /// label은 churn 동률 시 결정론적 tiebreak용(host+cwd 등 안정 문자열).
-#[allow(dead_code)] // Task 2에서 collect_work_log가 사용 → 제거
 fn balance_commits(mut groups: Vec<(String, Vec<(String, u64)>)>) -> Vec<String> {
     let n = groups.len();
     if n == 0 {
@@ -586,12 +604,13 @@ fn collect_work_log(store: &SqliteStore, date: &str) -> WorkLog {
         .collect();
     host_cwds.sort();
     host_cwds.dedup();
-    let mut commits: Vec<String> = host_cwds
+    let groups: Vec<(String, Vec<(String, u64)>)> = host_cwds
         .iter()
-        .flat_map(|(h, c)| git_commits_for(h, c, date))
+        .map(|(h, c)| (format!("{h}\u{0}{c}"), git_commits_for(h, c, date)))
+        .filter(|(_, v)| !v.is_empty())
         .collect();
-    commits.dedup();
-    commits.truncate(WORK_LOG_CAP);
+    let commit_count = groups.iter().map(|(_, v)| v.len()).sum();
+    let commits = balance_commits(groups);
 
     // 토픽: 브랜치(main/master/HEAD 제외) + 정제된 첫 프롬프트 — 여러 갈래면 멀티태스킹 신호
     let mut topics: Vec<String> = Vec::new();
@@ -607,9 +626,9 @@ fn collect_work_log(store: &SqliteStore, date: &str) -> WorkLog {
     }
     topics.sort();
     topics.dedup();
-    topics.truncate(WORK_LOG_CAP);
+    topics.truncate(WORK_LOG_TOPIC_CAP);
 
-    WorkLog { commits, topics }
+    WorkLog { commits, commit_count, topics }
 }
 
 #[derive(Debug, Clone)]
@@ -1107,6 +1126,20 @@ mod tests {
     }
 
     #[test]
+    fn parse_numstat_log_sums_churn_per_commit() {
+        let sample = "\u{1e}feat: a\n5\t2\tsrc/a.rs\n3\t0\tsrc/b.rs\n\n\u{1e}fix: b\n1\t1\tREADME.md\n";
+        let out = super::parse_numstat_log(sample);
+        assert_eq!(out, vec![("feat: a".to_string(), 10), ("fix: b".to_string(), 2)]);
+
+        // 바이너리("-\t-") 는 0, 커밋 제목만 있고 변경 없으면 0
+        let bin = "\u{1e}bin only\n-\t-\tlogo.png\n\u{1e}empty\n";
+        assert_eq!(
+            super::parse_numstat_log(bin),
+            vec![("bin only".to_string(), 0), ("empty".to_string(), 0)]
+        );
+    }
+
+    #[test]
     fn git_commits_for_reads_dated_authored_subjects() {
         use std::process::Command;
         let tmp = tempfile::tempdir().unwrap();
@@ -1120,12 +1153,17 @@ mod tests {
         Command::new("git").args(["init", "-q", dir]).output().unwrap();
         run(&["config", "user.email", "t@example.com"]);
         run(&["config", "user.name", "t"]);
-        run(&["commit", "--allow-empty", "-q", "-m", "feat: work_log 다이어리 반영"]);
+        // 3줄짜리 파일 추가 → churn = 3
+        std::fs::write(tmp.path().join("f.txt"), "l1\nl2\nl3\n").unwrap();
+        run(&["add", "."]);
+        run(&["commit", "-q", "-m", "feat: work_log 다이어리 반영"]);
 
         let subs = super::git_commits_for("Windows", dir, "2026-07-08");
-        assert!(subs.iter().any(|s| s.contains("work_log 다이어리 반영")), "그날 커밋 제목: {subs:?}");
+        assert!(
+            subs.iter().any(|(s, c)| s.contains("work_log 다이어리 반영") && *c == 3),
+            "제목+churn: {subs:?}"
+        );
         assert!(super::git_commits_for("Windows", dir, "2026-07-09").is_empty(), "다른 날짜엔 없음");
-        // git repo 아닌 경로 → 빈 벡터(패닉 없음)
         let nogit = tempfile::tempdir().unwrap();
         assert!(super::git_commits_for("Windows", nogit.path().to_str().unwrap(), "2026-07-08").is_empty());
     }
