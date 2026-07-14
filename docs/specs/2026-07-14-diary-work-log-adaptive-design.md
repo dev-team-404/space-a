@@ -161,10 +161,20 @@ fn balance_commits(mut groups: Vec<(String, Vec<(String, u64)>)>) -> Vec<String>
         quota[i] = 1; remaining -= 1;
     }
     while remaining > 0 {
-        // quota < counts 인 repo 중 weight/(quota+1) 최대, 동률은 order 앞쪽(=weight 큰 쪽).
-        let best = order.iter().copied()
-            .filter(|&i| quota[i] < counts[i])
-            .max_by_key(|&i| weight[i] / (quota[i] as u64 + 1));
+        // D'Hondt: weight[i]/(quota[i]+1) 최대인 repo. 정수 나눗셈은 저-churn 구간에서 몫을 0으로
+        // 뭉개 허위 동률을 만들므로 교차곱으로 비교하고, 진짜 동률은 order 앞쪽(weight 큰 repo) 유지.
+        let mut best: Option<usize> = None;
+        for &i in &order {
+            if quota[i] >= counts[i] { continue; }
+            match best {
+                None => best = Some(i),
+                Some(b) => {
+                    if weight[i] * (quota[b] as u64 + 1) > weight[b] * (quota[i] as u64 + 1) {
+                        best = Some(i);
+                    }
+                }
+            }
+        }
         match best {
             Some(i) => { quota[i] += 1; remaining -= 1; }
             None => break, // 커밋 총량 < cap: 더 채울 것 없음
@@ -191,7 +201,9 @@ fn balance_commits(mut groups: Vec<(String, Vec<(String, u64)>)>) -> Vec<String>
 설계 노트:
 - **host-편향 소멸**: 선택이 host 정렬순이 아니라 churn 가중(+floor)에 의존 → WSL repo 통째 실종 구조 제거.
 - **churn 비례**: floor 후 D'Hondt(최고평균 `weight/(seats+1)`)로 남은 슬롯을 churn 비중에 비례 배분 —
-  변경량 큰 repo가 더 많은 제목. `max_by_key`의 정수 나눗셈은 근사지만 휴리스틱엔 충분, 동률은 order로 결정론.
+  변경량 큰 repo가 더 많은 제목. **비교는 교차곱**(`w[i]·(q[b]+1) > w[b]·(q[i]+1)`)으로 — 정수 나눗셈은
+  저-churn(작은 weight) 구간에서 몫을 0으로 뭉개 허위 동률을 만들고, 그 동률이 order 뒤쪽(weight 작은 repo)으로
+  몰려 비례를 뒤집는다(Codex 리뷰 지적). 진짜 동률은 order 앞쪽(weight 큰 repo)을 유지(엄격히 클 때만 교체).
 - **clamp**: `eff()`로 커밋당 churn을 400에 눌러 정렬·합산 → lockfile 한 방이 repo 비중·내부 1순위 강탈 불가.
 - 잔여 슬롯 재분배 없음(단순성) — D'Hondt가 큰 repo부터 채워 낭비 거의 없음.
 
@@ -252,6 +264,8 @@ pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize) -> String {
 - **중복 제거**: 두 repo에 동일 제목 → 결과에 1회만.
 - **빈 입력**: `[]` → `[]`.
 - **repo 과다**(n > cap): churn 0(빈 커밋) repo 20개 → weight 모두 1, order는 label순, cap개만 대표, 결과 ≤ 12.
+- **저-churn D'Hondt**(교차곱 회귀): A weight 2 vs B weight 1, 각 10커밋(cap 초과) → 가중치 큰 A가 B보다
+  많은 슬롯. 정수 나눗셈이면 몫 0 동률이 B(order 뒤)로 몰려 A=2·B=10로 역전됨(교차곱 수정 전 실패).
 
 ### 4b. 신규 — 길이 밴드
 

@@ -532,11 +532,23 @@ fn balance_commits(mut groups: Vec<(String, Vec<(String, u64)>)>) -> Vec<String>
         remaining -= 1;
     }
     while remaining > 0 {
-        let best = order
-            .iter()
-            .copied()
-            .filter(|&i| quota[i] < counts[i])
-            .max_by_key(|&i| weight[i] / (quota[i] as u64 + 1));
+        // D'Hondt(최고평균): weight[i]/(quota[i]+1) 최대인 repo에 다음 슬롯.
+        // 정수 나눗셈은 저-churn 구간에서 몫을 0으로 뭉개 허위 동률을 만들므로 교차곱으로 비교하고,
+        // 진짜 동률은 order 앞쪽(가중치 큰 repo)을 유지한다(엄격히 클 때만 교체).
+        let mut best: Option<usize> = None;
+        for &i in &order {
+            if quota[i] >= counts[i] {
+                continue;
+            }
+            match best {
+                None => best = Some(i),
+                Some(b) => {
+                    if weight[i] * (quota[b] as u64 + 1) > weight[b] * (quota[i] as u64 + 1) {
+                        best = Some(i);
+                    }
+                }
+            }
+        }
         match best {
             Some(i) => {
                 quota[i] += 1;
@@ -1246,6 +1258,17 @@ mod tests {
         let groups: Vec<(String, Vec<(String, u64)>)> =
             (0..20).map(|i| (format!("r{i:02}"), vec![(format!("c{i:02}"), 0)])).collect();
         assert_eq!(balance_commits(groups).len(), 12);
+
+        // 저-churn D'Hondt: 정수 나눗셈이 몫을 0으로 뭉개는 구간(가중치 2 vs 1)에서도
+        // 가중치 큰 repo가 우세해야 함(교차곱 비교 + 상위 우선 tie-break). 각 10커밋(cap 초과).
+        let mut a = vec![("a0".to_string(), 2u64)];
+        a.extend((1..10).map(|i| (format!("a{i}"), 0)));
+        let mut b = vec![("b0".to_string(), 1u64)];
+        b.extend((1..10).map(|i| (format!("b{i}"), 0)));
+        let out = balance_commits(vec![("A".into(), a), ("B".into(), b)]);
+        let na = out.iter().filter(|s| s.starts_with('a')).count();
+        let nb = out.iter().filter(|s| s.starts_with('b')).count();
+        assert!(na > nb, "저-churn 동률 구간에서도 가중치 큰 A 우세: na={na} nb={nb}");
     }
 
     #[test]
