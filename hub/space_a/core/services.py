@@ -1,11 +1,12 @@
 """Space A 도메인 서비스.
 
-관리(create_space, register_agent)와 지식 생애주기(open_issue, resolve_issue).
+관리(create_space, register_agent), 이슈 생애주기(open_issue, resolve_issue),
+검색·재사용(search_knowledge, cite_knowledge).
 권한 규칙: 소속(spaces)은 토큰에서 유도하며, 요청 인자로 주장할 수 없다.
 """
 
 from . import errors
-from .models import Agent, Issue, KnowledgeDoc, ReuseEvent, SearchResult, Space
+from .models import Agent, Issue, Page, ReuseEvent, SearchResult, Space
 from .ports import Store
 
 
@@ -29,7 +30,7 @@ class SpaceAService:
         self.store.bind_token(token, agent.id)
         return agent, token
 
-    # --- 지식 생애주기 ---
+    # --- 이슈 생애주기 ---
 
     def open_issue(self, token: str, title: str, space_id: str) -> Issue:
         agent = self._authed_agent(token)
@@ -47,7 +48,7 @@ class SpaceAService:
         steps: list[str] | None = None,
         publish_knowledge: bool = True,
         visibility: str = "org",
-    ) -> tuple[Issue, KnowledgeDoc | None]:
+    ) -> tuple[Issue, Page | None]:
         agent = self._authed_agent(token)
         issue = self.store.get_issue(issue_id)
         if issue is None:
@@ -58,18 +59,19 @@ class SpaceAService:
         issue.status = "resolved"
         self.store.save_issue(issue)
 
-        doc: KnowledgeDoc | None = None
+        page: Page | None = None
         if publish_knowledge:
-            doc = KnowledgeDoc(
-                id=self.store.new_id("doc"),
-                issue_id=issue.id,
+            page = Page(
+                id=self.store.new_id("page"),
                 space_id=issue.space_id,
-                summary=summary,
-                steps=steps or [],
+                title=summary,
+                source="issue-derived",
                 visibility=visibility,
+                issue_id=issue.id,
+                steps=steps or [],
             )
-            self.store.add_doc(doc)
-        return issue, doc
+            self.store.add_page(page)
+        return issue, page
 
     # --- 검색 · 재사용 ---
 
@@ -77,15 +79,17 @@ class SpaceAService:
         self, token: str, query: str, space_id: str | None = None, limit: int = 3
     ) -> SearchResult:
         agent = self._authed_agent(token)
-        scope = [d for d in self.store.all_docs() if self._visible(d, agent)]
+        scope = [p for p in self.store.all_pages() if self._visible(p, agent)]
         if space_id is not None:
-            scope = [d for d in scope if d.space_id == space_id]
+            scope = [p for p in scope if p.space_id == space_id]
         terms = [t for t in query.lower().split() if t]
-        hits = [d for d in scope if any(t in d.summary.lower() for t in terms)]
-        return SearchResult(docs=hits[:limit], scanned=len(scope))
+        hits = [
+            p for p in scope if any(t in f"{p.title} {p.body}".lower() for t in terms)
+        ]
+        return SearchResult(pages=hits[:limit], scanned=len(scope))
 
     def cite_knowledge(
-        self, token: str, issue_id: str, doc_id: str, note: str | None = None
+        self, token: str, issue_id: str, page_id: str, note: str | None = None
     ) -> tuple[ReuseEvent, Issue]:
         agent = self._authed_agent(token)
         issue = self.store.get_issue(issue_id)
@@ -93,29 +97,99 @@ class SpaceAService:
             raise errors.NotFound(f"issue '{issue_id}' not found")
         if issue.space_id not in agent.spaces:
             raise errors.Forbidden("issue belongs to a space you are not a member of")
-        doc = self.store.get_doc(doc_id)
-        if doc is None:
-            raise errors.NotFound(f"doc '{doc_id}' not found")
-        if not self._visible(doc, agent):
-            raise errors.Forbidden("doc is not visible to you")
+        page = self.store.get_page(page_id)
+        if page is None:
+            raise errors.NotFound(f"page '{page_id}' not found")
+        if not self._visible(page, agent):
+            raise errors.Forbidden("page is not visible to you")
 
         event = ReuseEvent(
             id=self.store.new_id("reuse"),
             issue_id=issue.id,
-            doc_id=doc.id,
+            page_id=page.id,
             agent_id=agent.id,
-            cross_team=doc.space_id != issue.space_id,
+            cross_team=page.space_id != issue.space_id,
         )
         self.store.add_reuse_event(event)
         issue.status = "knowledge_linked"
         self.store.save_issue(issue)
         return event, issue
 
+    # --- 페이지 저작 · 트리 ---
+
+    def create_page(
+        self,
+        token: str,
+        space_id: str,
+        title: str,
+        body: str = "",
+        parent_id: str | None = None,
+        visibility: str = "org",
+    ) -> Page:
+        agent = self._authed_agent(token)
+        if space_id not in agent.spaces:
+            raise errors.Forbidden(f"not a member of space '{space_id}'")
+        if parent_id is not None:
+            parent = self.store.get_page(parent_id)
+            if parent is None:
+                raise errors.NotFound(f"parent page '{parent_id}' not found")
+            if parent.space_id != space_id:
+                raise errors.InvalidRequest("parent must be in the same space")
+        page = Page(
+            id=self.store.new_id("page"),
+            space_id=space_id,
+            title=title,
+            body=body,
+            source="authored",
+            parent_id=parent_id,
+            visibility=visibility,
+        )
+        self.store.add_page(page)
+        return page
+
+    def get_page(self, token: str, page_id: str) -> Page:
+        agent = self._authed_agent(token)
+        page = self.store.get_page(page_id)
+        if page is None:
+            raise errors.NotFound(f"page '{page_id}' not found")
+        if not self._visible(page, agent):
+            raise errors.Forbidden("page is not visible to you")
+        return page
+
+    def move_page(self, token: str, page_id: str, new_parent_id: str | None) -> Page:
+        agent = self._authed_agent(token)
+        page = self.store.get_page(page_id)
+        if page is None:
+            raise errors.NotFound(f"page '{page_id}' not found")
+        if page.space_id not in agent.spaces:
+            raise errors.Forbidden("page belongs to a space you are not a member of")
+        if new_parent_id is not None:
+            if new_parent_id == page_id:
+                raise errors.InvalidRequest("a page cannot be its own parent")
+            parent = self.store.get_page(new_parent_id)
+            if parent is None:
+                raise errors.NotFound(f"parent page '{new_parent_id}' not found")
+            if parent.space_id != page.space_id:
+                raise errors.InvalidRequest("parent must be in the same space")
+            # 사이클 방지: 새 부모가 이 페이지의 자손이면 안 된다
+            cur: Page | None = parent
+            while cur is not None:
+                if cur.id == page_id:
+                    raise errors.InvalidRequest("move would create a cycle")
+                cur = self.store.get_page(cur.parent_id) if cur.parent_id else None
+        page.parent_id = new_parent_id
+        self.store.save_page(page)
+        return page
+
+    def list_pages(self, token: str, space_id: str) -> list[Page]:
+        agent = self._authed_agent(token)
+        return [p for p in self.store.pages_in_space(space_id) if self._visible(p, agent)]
+
     # --- 내부 ---
 
     @staticmethod
-    def _visible(doc: KnowledgeDoc, agent: Agent) -> bool:
-        return doc.visibility == "org" or doc.space_id in agent.spaces
+    def _visible(page: Page, agent: Agent) -> bool:
+        return page.visibility == "org" or page.space_id in agent.spaces
 
     def _authed_agent(self, token: str) -> Agent:
         agent = self.store.agent_for_token(token)

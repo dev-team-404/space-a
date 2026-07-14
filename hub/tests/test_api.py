@@ -1,4 +1,4 @@
-"""REST API 통합 테스트: 관리 API + 지식 등록을 HTTP로."""
+"""REST API 통합 테스트: 관리 API + 지식 생애주기를 HTTP로."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,6 +9,14 @@ from space_a.api.rest_server import create_app
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(create_app())
+
+
+def _register(client, space="sw-innov"):
+    client.post("/spaces", json={"id": space, "name": space})
+    token = client.post(
+        "/agents/register", json={"name": "bot", "space_id": space}
+    ).json()["token"]
+    return {"Authorization": f"Bearer {token}"}
 
 
 def test_full_flow_register_open_resolve(client):
@@ -34,7 +42,7 @@ def test_full_flow_register_open_resolve(client):
     )
     assert r.status_code == 200
     assert r.json()["status"] == "resolved"
-    assert r.json()["doc_id"].startswith("doc_")
+    assert r.json()["page_id"].startswith("page_")
 
 
 def test_open_issue_without_token_is_401(client):
@@ -62,12 +70,6 @@ def test_register_into_missing_space_is_404(client):
     assert r.status_code == 404
 
 
-def _register(client, space="sw-innov"):
-    client.post("/spaces", json={"id": space, "name": space})
-    token = client.post("/agents/register", json={"name": "bot", "space_id": space}).json()["token"]
-    return {"Authorization": f"Bearer {token}"}
-
-
 def test_search_over_http(client):
     auth = _register(client)
     iss = client.post("/issues", json={"title": "t", "space_id": "sw-innov"}, headers=auth).json()["issue_id"]
@@ -77,24 +79,61 @@ def test_search_over_http(client):
     assert r.status_code == 200
     body = r.json()
     assert len(body["results"]) == 1
-    assert body["results"][0]["summary"] == "DS 인증서 갱신"
+    assert body["results"][0]["title"] == "DS 인증서 갱신"
 
 
 def test_cite_over_http_creates_reuse_and_links(client):
     auth = _register(client)
     iss1 = client.post("/issues", json={"title": "seed", "space_id": "sw-innov"}, headers=auth).json()["issue_id"]
-    doc_id = client.post(f"/issues/{iss1}/resolve", json={"summary": "DS 인증서 갱신"}, headers=auth).json()["doc_id"]
+    page_id = client.post(f"/issues/{iss1}/resolve", json={"summary": "DS 인증서 갱신"}, headers=auth).json()["page_id"]
     iss2 = client.post("/issues", json={"title": "again", "space_id": "sw-innov"}, headers=auth).json()["issue_id"]
 
-    r = client.post(f"/issues/{iss2}/cite", json={"doc_id": doc_id}, headers=auth)
+    r = client.post(f"/issues/{iss2}/cite", json={"page_id": page_id}, headers=auth)
     assert r.status_code == 200
     body = r.json()
     assert body["reuse_id"].startswith("reuse_")
     assert body["issue_status"] == "knowledge_linked"
 
 
-def test_cite_unknown_doc_over_http_is_404(client):
+def test_cite_unknown_page_over_http_is_404(client):
     auth = _register(client)
     iss = client.post("/issues", json={"title": "t", "space_id": "sw-innov"}, headers=auth).json()["issue_id"]
-    r = client.post(f"/issues/{iss}/cite", json={"doc_id": "doc_nope"}, headers=auth)
+    r = client.post(f"/issues/{iss}/cite", json={"page_id": "page_nope"}, headers=auth)
     assert r.status_code == 404
+
+
+def test_create_and_get_page_over_http(client):
+    auth = _register(client)
+    r = client.post("/spaces/sw-innov/pages", json={"title": "온보딩", "body": "가이드"}, headers=auth)
+    assert r.status_code == 201
+    pid = r.json()["page_id"]
+    assert pid.startswith("page_")
+    assert r.json()["source"] == "authored"
+
+    g = client.get(f"/pages/{pid}", headers=auth)
+    assert g.status_code == 200
+    assert g.json()["title"] == "온보딩"
+
+
+def test_page_tree_over_http(client):
+    auth = _register(client)
+    parent = client.post("/spaces/sw-innov/pages", json={"title": "가이드"}, headers=auth).json()["page_id"]
+    child = client.post(
+        "/spaces/sw-innov/pages", json={"title": "세부", "parent_id": parent}, headers=auth
+    ).json()["page_id"]
+
+    r = client.get("/spaces/sw-innov/tree", headers=auth)
+    assert r.status_code == 200
+    tree = r.json()["tree"]
+    assert len(tree) == 1
+    assert tree[0]["page_id"] == parent
+    assert tree[0]["children"][0]["page_id"] == child
+
+
+def test_move_page_over_http(client):
+    auth = _register(client)
+    p1 = client.post("/spaces/sw-innov/pages", json={"title": "P1"}, headers=auth).json()["page_id"]
+    p2 = client.post("/spaces/sw-innov/pages", json={"title": "P2"}, headers=auth).json()["page_id"]
+    r = client.post(f"/pages/{p2}/move", json={"new_parent_id": p1}, headers=auth)
+    assert r.status_code == 200
+    assert r.json()["parent_id"] == p1

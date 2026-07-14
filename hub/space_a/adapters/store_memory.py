@@ -1,10 +1,10 @@
 """인메모리 Store 어댑터.
 
 MVP용. ports & adapters 구조라, 나중에 실제 DB 어댑터로 교체해도 core는 안 바뀐다.
-id는 접두어별 순번(agt_1, iss_1, ...)으로 발급해 테스트가 결정론적이다.
+id는 접두어별 순번(agt_1, iss_1, page_1, ...)으로 발급해 테스트가 결정론적이다.
 """
 
-from ..core.models import Agent, Issue, KnowledgeDoc, ReuseEvent, Space
+from ..core.models import Agent, Issue, Page, ReuseEvent, Space
 from ..core.ports import Store
 
 
@@ -14,7 +14,7 @@ class InMemoryStore(Store):
         self._agents: dict[str, Agent] = {}
         self._tokens: dict[str, str] = {}
         self._issues: dict[str, Issue] = {}
-        self._docs: dict[str, KnowledgeDoc] = {}
+        self._pages: dict[str, Page] = {}
         self._reuse: list[ReuseEvent] = []
         self._seq: dict[str, int] = {}
 
@@ -50,14 +50,20 @@ class InMemoryStore(Store):
     def save_issue(self, issue: Issue) -> None:
         self._issues[issue.id] = issue
 
-    def add_doc(self, doc: KnowledgeDoc) -> None:
-        self._docs[doc.id] = doc
+    def add_page(self, page: Page) -> None:
+        self._pages[page.id] = page
 
-    def get_doc(self, doc_id: str) -> KnowledgeDoc | None:
-        return self._docs.get(doc_id)
+    def get_page(self, page_id: str) -> Page | None:
+        return self._pages.get(page_id)
 
-    def all_docs(self) -> list[KnowledgeDoc]:
-        return list(self._docs.values())
+    def save_page(self, page: Page) -> None:
+        self._pages[page.id] = page
+
+    def all_pages(self) -> list[Page]:
+        return list(self._pages.values())
+
+    def pages_in_space(self, space_id: str) -> list[Page]:
+        return [p for p in self._pages.values() if p.space_id == space_id]
 
     def add_reuse_event(self, event: ReuseEvent) -> None:
         self._reuse.append(event)

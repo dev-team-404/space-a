@@ -1,7 +1,7 @@
 """REST API 어댑터 (FastAPI).
 
 관리 API(C4): 공간 생성, 에이전트 등록.
-지식 생애주기(C1의 MVP REST 바인딩): 이슈 열기·해결.
+지식 생애주기(C1의 MVP REST 바인딩): 이슈 열기·해결·검색·인용.
 도메인 에러를 HTTP 상태로 매핑한다.
 """
 
@@ -43,8 +43,19 @@ class SearchBody(BaseModel):
 
 
 class CiteBody(BaseModel):
-    doc_id: str
+    page_id: str
     note: str | None = None
+
+
+class CreatePageBody(BaseModel):
+    title: str
+    body: str = ""
+    parent_id: str | None = None
+    visibility: str = "org"
+
+
+class MovePageBody(BaseModel):
+    new_parent_id: str | None = None
 
 
 _STATUS = {
@@ -94,7 +105,7 @@ def create_app(service: SpaceAService | None = None) -> FastAPI:
         body: ResolveIssueBody,
         authorization: str | None = Header(default=None),
     ):
-        issue, doc = service.resolve_issue(
+        issue, page = service.resolve_issue(
             _bearer(authorization),
             issue_id,
             body.summary,
@@ -103,8 +114,8 @@ def create_app(service: SpaceAService | None = None) -> FastAPI:
             visibility=body.visibility,
         )
         resp = {"issue_id": issue.id, "status": issue.status}
-        if doc is not None:
-            resp["doc_id"] = doc.id
+        if page is not None:
+            resp["page_id"] = page.id
         return resp
 
     @app.post("/pages/search")
@@ -115,13 +126,13 @@ def create_app(service: SpaceAService | None = None) -> FastAPI:
         return {
             "results": [
                 {
-                    "doc_id": d.id,
-                    "space_id": d.space_id,
-                    "summary": d.summary,
-                    "steps": d.steps,
-                    "visibility": d.visibility,
+                    "page_id": p.id,
+                    "space_id": p.space_id,
+                    "title": p.title,
+                    "source": p.source,
+                    "visibility": p.visibility,
                 }
-                for d in res.docs
+                for p in res.pages
             ],
             "scanned": res.scanned,
         }
@@ -129,13 +140,69 @@ def create_app(service: SpaceAService | None = None) -> FastAPI:
     @app.post("/issues/{issue_id}/cite")
     def cite(issue_id: str, body: CiteBody, authorization: str | None = Header(default=None)):
         event, issue = service.cite_knowledge(
-            _bearer(authorization), issue_id, body.doc_id, note=body.note
+            _bearer(authorization), issue_id, body.page_id, note=body.note
         )
         return {
             "reuse_id": event.id,
-            "doc_id": event.doc_id,
+            "page_id": event.page_id,
             "cross_team": event.cross_team,
             "issue_status": issue.status,
         }
+
+    @app.post("/spaces/{space_id}/pages", status_code=201)
+    def create_page(
+        space_id: str, body: CreatePageBody, authorization: str | None = Header(default=None)
+    ):
+        p = service.create_page(
+            _bearer(authorization),
+            space_id,
+            body.title,
+            body=body.body,
+            parent_id=body.parent_id,
+            visibility=body.visibility,
+        )
+        return {
+            "page_id": p.id,
+            "space_id": p.space_id,
+            "title": p.title,
+            "parent_id": p.parent_id,
+            "source": p.source,
+        }
+
+    @app.get("/pages/{page_id}")
+    def get_page(page_id: str, authorization: str | None = Header(default=None)):
+        p = service.get_page(_bearer(authorization), page_id)
+        return {
+            "page_id": p.id,
+            "space_id": p.space_id,
+            "title": p.title,
+            "body": p.body,
+            "parent_id": p.parent_id,
+            "source": p.source,
+            "visibility": p.visibility,
+        }
+
+    @app.post("/pages/{page_id}/move")
+    def move_page(
+        page_id: str, body: MovePageBody, authorization: str | None = Header(default=None)
+    ):
+        p = service.move_page(_bearer(authorization), page_id, body.new_parent_id)
+        return {"page_id": p.id, "parent_id": p.parent_id}
+
+    @app.get("/spaces/{space_id}/tree")
+    def space_tree(space_id: str, authorization: str | None = Header(default=None)):
+        pages = service.list_pages(_bearer(authorization), space_id)
+        by_parent: dict[str | None, list] = {}
+        for p in pages:
+            by_parent.setdefault(p.parent_id, []).append(p)
+
+        def node(p):
+            return {
+                "page_id": p.id,
+                "title": p.title,
+                "children": [node(c) for c in by_parent.get(p.id, [])],
+            }
+
+        return {"tree": [node(r) for r in by_parent.get(None, [])]}
 
     return app

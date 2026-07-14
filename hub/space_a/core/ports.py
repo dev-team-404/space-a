@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from .models import Agent, Issue, KnowledgeDoc, ReuseEvent, Space
+from .models import Agent, Issue, Page, ReuseEvent, Space
 
 
 class Store(ABC):
@@ -34,13 +34,17 @@ class Store(ABC):
     @abstractmethod
     def save_issue(self, issue: Issue) -> None: ...
 
-    # docs
+    # pages
     @abstractmethod
-    def add_doc(self, doc: KnowledgeDoc) -> None: ...
+    def add_page(self, page: Page) -> None: ...
     @abstractmethod
-    def get_doc(self, doc_id: str) -> KnowledgeDoc | None: ...
+    def get_page(self, page_id: str) -> Page | None: ...
     @abstractmethod
-    def all_docs(self) -> list[KnowledgeDoc]: ...
+    def save_page(self, page: Page) -> None: ...
+    @abstractmethod
+    def all_pages(self) -> list[Page]: ...
+    @abstractmethod
+    def pages_in_space(self, space_id: str) -> list[Page]: ...
 
     # reuse events
     @abstractmethod
