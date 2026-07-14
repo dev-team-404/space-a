@@ -441,7 +441,7 @@ fn parse_numstat_log(out: &str) -> Vec<(String, u64)> {
     commits.into_iter().filter(|(s, _)| !s.is_empty()).collect()
 }
 
-/// 그날(로컬 날짜) 해당 repo(host,cwd)에서 그 repo 작성자가 남긴 커밋 제목들. best-effort — 실패는 빈 벡터.
+/// 그날(로컬 날짜) 해당 repo(host,cwd)에서 그 repo 작성자가 남긴 커밋의 (제목, churn=insertions+deletions). best-effort — 실패는 빈 벡터.
 /// host가 `wsl:<distro>`면 `wsl -d <distro> -- git`으로 WSL 안에서 실행(리눅스 경로), 아니면 네이티브 git.
 /// WSL 미설치·distro 부재 등은 spawn 에러 → 빈 벡터 → 상위에서 topics로 폴백.
 fn git_commits_for(host: &str, cwd: &str, date: &str) -> Vec<(String, u64)> {
