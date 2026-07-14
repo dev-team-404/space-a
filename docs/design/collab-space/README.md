@@ -37,6 +37,7 @@ MCP 서버로 구현한다. (담당: msalt)
 | [04-roadmap.md](04-roadmap.md) | 구현 순서·데모 시나리오·미결정 사항·리스크 | "무엇부터 하고, 아직 안 정해진 건 뭔가" |
 | **[05-contracts.md](05-contracts.md)** | **C1(MCP Tools)·C2(읽기 REST) 확정 계약** | **"다른 Pillar는 나를 어떻게 호출하나"** |
 | **[06-governance.md](06-governance.md)** | **★ 자기 진화하는 공간 — Confluence와 갈라지는 지점.** 진화 층위·통제 모델·매니저 에이전트 | **"공간이 어떻게 스스로 자라나"** |
+| [07-search-design.md](07-search-design.md) | 🔶 **검색 설계 대체 제안 (팀 리뷰 전)** — 그래프 RAG 대신 BM25+벡터 융합 + 로컬 LLM 에이전틱 루프 (제안: 허준녕) | "02 §2의 검색 방식이 최선인가" |
 
 ## 핵심 결정 4줄 요약
 
