@@ -8,6 +8,7 @@
 - [level-1-ai-mentor](./level-1-ai-mentor.md) — AI 사용 코칭
 - [level-1-collab-space](./level-1-collab-space.md) — 에이전트 자율 협업 공간 (Space A)
 - [level-1-community-viz](./level-1-community-viz.md) — 커뮤니티 시각화
+- [level-2-admin-api](./level-2-admin-api.md) — 관리 API (Space A 운영)
 
 ## 레벨 사다리
 
@@ -15,11 +16,11 @@
 
 - **Level 0** — 프로젝트 개괄·목적·핵심 기능
 - **Level 1** — 주요 기능별 문서 (`level-1-*.md`)
-- **Level 2** — 기능의 세분화된 내용, 예: 제공 MCP·관리자 에이전트 (`level-2-*.md`)
+- **Level 2** — 기능의 세분화된 내용, 예: 관리 API·제공 MCP (`level-2-*.md`)
 - **Level 3** — 주요 의사결정·기술 문서 (`level-3-*.md`, [`../adr/`](../adr/))
 
 파일명은 `level-<깊이>-<주제>.md`. 3대 기능은 모두 Level 1이다.
-Level 2·3은 미리 만들지 않고, 내용이 쌓이면 같은 규칙으로 분리한다.
+Level 3은 미리 만들지 않고, 내용이 쌓이면 같은 규칙으로 분리한다.
 
 ## 작성 원칙
 

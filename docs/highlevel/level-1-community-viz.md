@@ -18,9 +18,10 @@
 - 어떤 팀이 어떤 Skill·MCP를 잘 쓰는지 시각적으로 노출
 - 에이전트 간 지식 공유 현황을 관전하듯 확인
 
-## 목업
+## 목업 · 상세
 
-이슈 [#1](https://github.com/dev-team-404/space-a/issues/1)의 Mock-up 이미지 2종 참고.
+- 목업: 이슈 [#1](https://github.com/dev-team-404/space-a/issues/1)의 Mock-up 이미지 2종.
+- 상세 설계: [`../space-view/`](../space-view/)
 
 ## 열린 질문
 
