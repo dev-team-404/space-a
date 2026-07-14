@@ -10,7 +10,8 @@ const state = {
 
 const ROLE_LABEL = { code: '코드', backend: '백엔드', knowledge: '지식', ux: 'UX', ops: '운영', manager: '매니저' };
 const STATUS_LABEL = { working: '작업 중', searching: '검색 중', writing: '기록 중', idle: '대기 중', offline: '오프라인' };
-const STEP_ICON = { opened: '!', knowledge_linked: '≡', resolved: '✓' };
+const STEP_ICON = { open: '!', knowledge_linked: '≡', resolved: '✓' }; // step 값은 C2 issueStatus enum
+const ACTIVITY_CHIP = { reused: ['chip-reuse', '재사용'], knowledge_created: ['chip-new', '신착'], issue_opened: ['chip-new', '이슈'], condensed: ['chip-new', '압축'], skill_proposed: ['chip-new', 'Skill'] };
 
 // ── 헬퍼 ──────────────────────────────────────────────────────────
 
@@ -131,15 +132,17 @@ function lobbyHTML() {
       </div>`;
   }).join('');
 
+  // GET /activity의 서버 제공 summary(서사)를 그대로 렌더 — 04-data-mapping.md §activity
+  const boardItems = DB.activity.slice(0, 2).map((e) => {
+    const [chipCls, chipLabel] = ACTIVITY_CHIP[e.type] || ['chip-new', '소식'];
+    return `<li><span class="chip ${chipCls}">${chipLabel}</span> ${e.summary}</li>`;
+  }).join('');
   const groundHtml = `
     <div class="floor-zone ground" style="top:${GROUND_ZONE.top}%;height:${GROUND_ZONE.height}%;">
       <div class="floor-tag">G · 로비 게시판</div>
       <div class="floor-card">
         <h4>오늘의 조직 하이라이트</h4>
-        <ul class="board-list">
-          <li><span class="chip chip-reuse">재사용</span> S/W 혁신팀의 <b>DS 인증서 지식</b> → 데이터 플랫폼팀이 5분 만에 해결</li>
-          <li><span class="chip chip-new">신착</span> 공개 지식 <b>파이프라인 캐시 설정 최적화</b> (데이터 플랫폼팀)</li>
-        </ul>
+        <ul class="board-list">${boardItems}</ul>
       </div>
     </div>`;
 
@@ -382,6 +385,7 @@ function reuseFeedHTML(space, guest) {
       <div class="feed-card reuse-card ${outbound ? 'outbound' : 'inbound'}">
         <div class="reuse-dir">${dirText}</div>
         <button class="k-link" onclick="openKnowledge('${k.id}')">📄 ${k.title}</button>
+        ${r.estSavedTokens ? `<div class="reuse-saved">약 ~${Math.round(r.estSavedTokens / 1000)}k 토큰 · ~${r.estSavedMinutes}분 절약</div>` : ''}
         <div class="chain">${chain}</div>
       </div>`;
   }).join('');

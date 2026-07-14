@@ -24,7 +24,9 @@ open prototype/frontend-viz/index.html
 
 | 파일 | 내용 |
 |---|---|
-| `mock-data.js` | 데이터 계약을 따르는 목 데이터 — 백엔드가 생기면 이 파일만 API로 교체 |
+| `c2-data.js` | **가짜 C2 서버 응답** — [`contracts/c2-rest-api.json`](../../contracts/c2-rest-api.json) wire 형식 그대로. 백엔드가 생기면 이 파일만 fetch로 교체 |
+| `c2-adapter.js` | C2 wire → 화면 뷰모델(`DB`) 번역. 스펙: [`docs/design/space-view/04-data-mapping.md`](../../docs/design/space-view/04-data-mapping.md) |
+| `client-data.js` | C2 계약 밖 데이터 — 인증 세션·매니저 코너(재설계 대기)·레이아웃 상수 (매핑 문서 §갭) |
 | `app.js` | 상태 → HTML 렌더 (로비/스페이스 라우팅, 피드, 모달, 멤버/게스트 권한 로직) |
 | `styles.css` | 오버레이·로봇 캐릭터·피드 스타일 |
 | `assets/` | 생성 배경 이미지 (사옥 `lobby-building.png`, 사무실 `office-room.png`) |
@@ -36,10 +38,12 @@ open prototype/frontend-viz/index.html
 창 크기에 맞춰 스케일된다(`fitIso`).
 
 - 책상(의자) 앵커: `app.js`의 `DESK_SLOTS`
-- 로비 층 히트존: `mock-data.js`의 `FLOOR_ZONES`
+- 로비 층 히트존: `client-data.js`의 `FLOOR_ZONES`
 - 배경 이미지를 교체하면 이 좌표들만 다시 재면 된다
 
-## 알려진 한계 (설계 문서와의 갭)
+## 알려진 한계 (설계·계약과의 갭)
 
 - 배경에 책상 5개 고정 → 멤버 6명 이상 대응 불가 (docs/design/space-view README Q6의 단계 전략 참고)
-- 절약치("약~") 표기, 오늘의 하이라이트 관문, 핸드오프 버튼 미반영 — 설계가 앞서 있음
+- 오늘의 하이라이트 관문, 핸드오프 버튼 미반영 — 설계가 앞서 있음
+- 게스트 유리벽이 아직 클라이언트 연출 — 계약상 트리밍은 서버 몫이며, 라이브 연동 시
+  시점 토글을 "tier가 다른 응답 재요청"으로 교체 (04-data-mapping.md §게스트)

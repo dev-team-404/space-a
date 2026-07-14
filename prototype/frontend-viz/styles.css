@@ -450,6 +450,8 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
   border-radius: 8px; padding: 6px 9px; margin-bottom: 7px; color: var(--mint);
 }
 .k-link:hover { background: rgba(126,232,200,.16); }
+/* 절약치는 추정 — C2 계약상 '~' 라벨 필수 */
+.reuse-saved { font-size: 10px; color: var(--mint); margin: -3px 0 7px 2px; }
 .chain { padding-left: 4px; }
 .chain-step { display: flex; flex-direction: column; margin: 2px 0; }
 .chain-step b { font-size: 11px; }

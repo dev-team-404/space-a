@@ -72,7 +72,7 @@
     title: titleOf(p),
     status: p.state === 'MERGED' ? 'resolved' : 'open',
     timeline: [
-      { step: 'opened', label: '작업 시작', actor: infoOf(p.author.login).agent,
+      { step: 'open', label: '작업 시작', actor: infoOf(p.author.login).agent,
         ts: fmt(p.createdAt), note: summaryOf(p) || `리뷰 요청 (PR #${p.number})` },
       ...(p.state === 'MERGED'
         ? [{ step: 'resolved', label: '반영 완료', actor: infoOf(p.author.login).agent,

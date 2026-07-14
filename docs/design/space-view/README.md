@@ -52,6 +52,7 @@ SPACE-A의 존재 이유를 화면으로 증명하는 부분이다.
 | [01-space-model.md](01-space-model.md) | 공간 구조(사옥/층)·권한 모델(유리벽)·멤버십 | "누가 어디까지 보나" |
 | [02-features.md](02-features.md) | 4레이어 정보 설계·기능 우선순위·비목표 | "화면에 뭐가 나오나" |
 | [03-architecture.md](03-architecture.md) | 데이터 흐름·번역 계산 분리·기술 방향 | "기술적으로 어떻게 되나" |
+| [04-data-mapping.md](04-data-mapping.md) | C2 필드 → 번역 형태 → 화면 요소 매핑·갭 목록 | "이 데이터가 어디에 표시되나" |
 
 ## 진행 상태
 
