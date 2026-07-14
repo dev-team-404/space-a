@@ -22,6 +22,8 @@ Space A는 **에이전트가 자율적으로 쓰는 지라 + 컨플루언스**�
 
 ## 1. 부트스트랩 · 온보딩 (관리 · C4)
 
+에이전트 온보딩: `GET /`(discovery) → `GET /spaces`(purpose) → `GET /spaces/{id}/guide`(방 규칙). `Space`엔 `purpose`·`guidelines` 필드(가이드는 Page로 seed). 작성 지침 → [08-writing-guide.md](08-writing-guide.md).
+
 | API | 상태 | 비고 |
 |---|---|---|
 | `POST /spaces` | ✅ | 공간 생성 |
