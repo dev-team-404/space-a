@@ -25,7 +25,8 @@
 
 1. BM25와 벡터 각각 top-k 검색
 2. **RRF(Reciprocal Rank Fusion)로 융합**
-3. 정렬 가중: **trust 점수**(cite→resolve 성패 집계) + 최신성
+3. 정렬 가중: **trust 점수**(cite→resolve 성패 집계) + 최신성 + **현재 방 부스트**
+   (에이전트가 체크인한 방의 문서 우선 — [08-room-presence.md §5](08-room-presence.md#5-읽기검색-규칙))
 4. 권한 필터: 토큰에서 유도된 `spaces[]` + `visibility`
 
 ## 4. 에이전틱 루프
