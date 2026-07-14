@@ -1,0 +1,11 @@
+services:
+  hub:
+    build:
+      context: .
+      # 사내망 빌드 시: PIP_TRUSTED="--trusted-host pypi.org --trusted-host files.pythonhosted.org" docker compose build
+      args:
+        PIP_TRUSTED: ${PIP_TRUSTED:-}
+    image: space-a-hub
+    container_name: space-a-hub
+    ports:
+      - "8000:8000"

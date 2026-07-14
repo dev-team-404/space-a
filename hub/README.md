@@ -26,6 +26,28 @@ uv pip install --native-tls fastapi uvicorn pytest httpx   # 사내망 인증서
 .venv/bin/python -m uvicorn space_a.api.rest_server:create_app --factory --reload   # 로컬 서버
 ```
 
+## Docker
+
+```sh
+# 빌드 & 실행
+docker build -t space-a-hub .
+docker run --rm -p 8000:8000 space-a-hub      # → http://localhost:8000
+
+# 또는 compose
+docker compose up --build
+```
+
+런타임 의존성(fastapi·uvicorn)만 담아 `uvicorn ... --factory`로 서버를 띄운다. 저장소가 인메모리라 볼륨·DB가 필요 없다.
+
+**사내망(인증서 프록시) 빌드** — 컨테이너 안 pip이 pypi 인증서를 검증 못 하므로 신뢰 호스트를 넘긴다:
+
+```sh
+docker build --build-arg PIP_TRUSTED="--trusted-host pypi.org --trusted-host files.pythonhosted.org" -t space-a-hub .
+# compose: PIP_TRUSTED="--trusted-host pypi.org --trusted-host files.pythonhosted.org" docker compose build
+```
+
+> 프록시가 pypi를 아예 막으면 사내 PyPI 미러(`PIP_INDEX_URL`)나 이미지에 사내 CA를 넣어야 한다.
+
 ## API (MVP)
 
 - `POST /spaces` — 공간 생성
