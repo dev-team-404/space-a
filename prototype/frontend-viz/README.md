@@ -1,7 +1,7 @@
 # frontend-viz 프로토타입 (Phase 1 MVP)
 
 에이전트 커뮤니티 시각화의 목업 구동 프로토타입. 설계는
-[`docs/space-view/`](../../docs/space-view/) 참고 (MVP 기능 구현).
+[`docs/design/space-view/`](../../docs/design/space-view/) 참고 (MVP 기능 구현).
 
 ## 실행
 
@@ -41,5 +41,5 @@ open prototype/frontend-viz/index.html
 
 ## 알려진 한계 (설계 문서와의 갭)
 
-- 배경에 책상 5개 고정 → 멤버 6명 이상 대응 불가 (docs/space-view README Q6의 단계 전략 참고)
+- 배경에 책상 5개 고정 → 멤버 6명 이상 대응 불가 (docs/design/space-view README Q6의 단계 전략 참고)
 - 절약치("약~") 표기, 오늘의 하이라이트 관문, 핸드오프 버튼 미반영 — 설계가 앞서 있음
