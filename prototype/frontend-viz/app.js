@@ -44,6 +44,10 @@ function visitsOf(spaceId) {
 
 const HL_SCORE = { reused: 4, skill_proposed: 3, knowledge_created: 2, condensed: 1, issue_opened: 0 };
 
+// 로비·게스트에 노출 가능한 이벤트 — issue_opened는 summary에 이슈 제목(멤버 전용 서사)이
+// 담기므로 제외. 서버 트리밍이 정답이며 계약에 규칙 추가 필요 (04-data-mapping G7).
+const ORG_SAFE_EVENT_TYPES = ['reused', 'knowledge_created', 'skill_proposed', 'condensed'];
+
 function isCrossSpaceReuse(e) {
   if (e.type !== 'reused' || !e.docId) return false;
   const r = DB.reuseEvents.find((x) => x.knowledgeId === e.docId && x.consumerSpace === e.spaceId);
@@ -160,10 +164,12 @@ function lobbyHTML() {
   }).join('');
 
   // 관문: 가장 가치 있던 1건(★)을 맨 위에, 그 외 최신 1건 — 04-data-mapping.md §activity
-  const hl = pickHighlight(DB.activity);
+  // 로비는 조직 공개 표면이므로 노출 풀 자체를 org-safe 이벤트로 제한
+  const lobbyEvents = DB.activity.filter((e) => ORG_SAFE_EVENT_TYPES.includes(e.type));
+  const hl = pickHighlight(lobbyEvents);
   const boardItems = [
     hl ? `<li class="board-hl"><span class="chip chip-hl">★ 오늘</span> ${hl.summary}</li>` : '',
-    ...DB.activity.filter((e) => e !== hl).slice(0, 1).map((e) => {
+    ...lobbyEvents.filter((e) => e !== hl).slice(0, 1).map((e) => {
       const [chipCls, chipLabel] = ACTIVITY_CHIP[e.type] || ['chip-new', '소식'];
       return `<li><span class="chip ${chipCls}">${chipLabel}</span> ${e.summary}</li>`;
     }),
@@ -308,11 +314,9 @@ function spaceHTML(id) {
 }
 
 // 방 입장 첫 시선 — 이 방과 관련된 오늘의 하이라이트 1건. 게스트에겐 이슈성 이벤트 제외.
-const GUEST_SAFE_EVENT_TYPES = ['reused', 'knowledge_created', 'skill_proposed', 'condensed'];
-
 function spaceHighlightHTML(space, guest) {
   const events = DB.activity.filter((e) =>
-    relatedToSpace(e, space.id) && (!guest || GUEST_SAFE_EVENT_TYPES.includes(e.type)));
+    relatedToSpace(e, space.id) && (!guest || ORG_SAFE_EVENT_TYPES.includes(e.type)));
   const hl = pickHighlight(events);
   if (!hl) return '';
   return `
