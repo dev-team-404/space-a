@@ -194,15 +194,12 @@ function lobbyHTML() {
             <div class="org-stat"><b>${totalReuse}</b><span>재사용</span></div>
           </div>
           <h3>공개 지식 신착</h3>
-          ${DB.knowledge.map((k) => {
-            const locked = knowledgeLocked(k);
-            return `
-            <button class="k-item ${locked ? 'k-locked' : ''}" onclick="openKnowledge('${k.id}')">
-              <span class="k-title">${locked ? '🔒 ' : ''}${k.title}</span>
-              <span class="k-meta">${spaceById(k.spaceId).name} · ${locked ? '스페이스 전용' : `인용 ${k.citedBy.length}`}</span>
-            </button>`;
-          }).join('')}
-          <p class="muted small">지식 문서는 조직 공개가 기본 — 🔒 스페이스 전용 문서는 제목만 보여요.</p>
+          ${DB.knowledge.filter((k) => k.visibility === 'org').map((k) => `
+            <button class="k-item" onclick="openKnowledge('${k.id}')">
+              <span class="k-title">${k.title}</span>
+              <span class="k-meta">${spaceById(k.spaceId).name} · 인용 ${k.citedBy.length}</span>
+            </button>`).join('')}
+          <p class="muted small">조직 공개(org) 지식만 로비에 올라와요. 스페이스 전용 문서는 제목까지 방 멤버 전용이에요.</p>
         </aside>
       </div>
     </div>`;
@@ -459,7 +456,8 @@ function openDashboard() {
 
 // ── 모달 (F6) ─────────────────────────────────────────────────────
 
-// visibility:'space' 문서는 비멤버에게 제목만 — 실제로는 서버가 body 없이 내려준다 (04 §게스트)
+// visibility:'space' 문서는 로비 tier에선 아예 미노출, 방 게스트 tier에선 서버가 body 없이
+// title만 내려준다 (04 §게스트). 이 가드는 딥링크·인용 경유 접근에 대한 방어용.
 const knowledgeLocked = (k) => k.visibility === 'space' && roleFor(k.spaceId) !== 'member';
 
 function openKnowledge(id) {
