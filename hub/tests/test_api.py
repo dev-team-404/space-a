@@ -164,3 +164,33 @@ def test_list_and_get_issue_over_http(client):
     g = client.get(f"/issues/{iid}", headers=auth)
     assert g.status_code == 200
     assert g.json()["issue_id"] == iid
+
+
+def test_update_and_archive_space_over_http(client):
+    client.post("/spaces", json={"id": "sw-innov", "name": "S/W"})
+
+    r = client.patch("/spaces/sw-innov", json={"name": "S/W 혁신팀"})
+    assert r.status_code == 200
+    assert r.json()["name"] == "S/W 혁신팀"
+
+    a = client.post("/spaces/sw-innov/archive")
+    assert a.status_code == 200
+    assert a.json()["status"] == "archived"
+
+
+def test_membership_over_http(client):
+    client.post("/spaces", json={"id": "sw-innov", "name": "S/W"})
+    client.post("/spaces", json={"id": "ds", "name": "DS"})
+    x_tok = client.post("/agents/register", json={"name": "x", "space_id": "sw-innov"}).json()["token"]
+    y = client.post("/agents/register", json={"name": "y", "space_id": "ds"}).json()
+    xh = {"Authorization": f"Bearer {x_tok}"}
+
+    r = client.post("/spaces/sw-innov/members", json={"agent_id": y["agent_id"]}, headers=xh)
+    assert r.status_code == 201
+    assert "sw-innov" in r.json()["spaces"]
+
+    m = client.get("/spaces/sw-innov/members", headers=xh)
+    assert len(m.json()["members"]) == 2
+
+    d = client.delete(f"/spaces/sw-innov/members/{y['agent_id']}", headers=xh)
+    assert d.status_code == 200

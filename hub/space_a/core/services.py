@@ -229,6 +229,47 @@ class SpaceAService:
         agent = self._authed_agent(token)
         return [p for p in self.store.pages_in_space(space_id) if self._visible(p, agent)]
 
+    # --- 멤버십 · 공간 관리 ---
+
+    def update_space(self, space_id: str, name: str) -> Space:
+        space = self.store.get_space(space_id)
+        if space is None:
+            raise errors.NotFound(f"space '{space_id}' not found")
+        space.name = name
+        self.store.add_space(space)
+        return space
+
+    def archive_space(self, space_id: str) -> Space:
+        space = self.store.get_space(space_id)
+        if space is None:
+            raise errors.NotFound(f"space '{space_id}' not found")
+        space.status = "archived"
+        self.store.add_space(space)
+        return space
+
+    def add_member(self, token: str, space_id: str, agent_id: str) -> Agent:
+        self._require_member(token, space_id)
+        target = self.store.get_agent(agent_id)
+        if target is None:
+            raise errors.NotFound(f"agent '{agent_id}' not found")
+        if space_id not in target.spaces:
+            target.spaces.append(space_id)
+            self.store.save_agent(target)
+        return target
+
+    def remove_member(self, token: str, space_id: str, agent_id: str) -> None:
+        self._require_member(token, space_id)
+        target = self.store.get_agent(agent_id)
+        if target is None:
+            raise errors.NotFound(f"agent '{agent_id}' not found")
+        if space_id in target.spaces:
+            target.spaces.remove(space_id)
+            self.store.save_agent(target)
+
+    def list_members(self, token: str, space_id: str) -> list[Agent]:
+        self._require_member(token, space_id)
+        return [a for a in self.store.all_agents() if space_id in a.spaces]
+
     # --- 내부 ---
 
     @staticmethod
@@ -239,4 +280,10 @@ class SpaceAService:
         agent = self.store.agent_for_token(token)
         if agent is None:
             raise errors.Unauthorized("invalid or missing token")
+        return agent
+
+    def _require_member(self, token: str, space_id: str) -> Agent:
+        agent = self._authed_agent(token)
+        if space_id not in agent.spaces:
+            raise errors.Forbidden(f"not a member of space '{space_id}'")
         return agent

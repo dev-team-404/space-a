@@ -44,6 +44,15 @@ class InMemoryStore(Store):
         agent_id = self._tokens.get(token)
         return self._agents.get(agent_id) if agent_id else None
 
+    def get_agent(self, agent_id: str) -> Agent | None:
+        return self._agents.get(agent_id)
+
+    def save_agent(self, agent: Agent) -> None:
+        self._agents[agent.id] = agent
+
+    def all_agents(self) -> list[Agent]:
+        return list(self._agents.values())
+
     def add_issue(self, issue: Issue) -> None:
         self._issues[issue.id] = issue
 

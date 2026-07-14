@@ -58,6 +58,14 @@ class MovePageBody(BaseModel):
     new_parent_id: str | None = None
 
 
+class UpdateSpaceBody(BaseModel):
+    name: str
+
+
+class AddMemberBody(BaseModel):
+    agent_id: str
+
+
 _STATUS = {
     errors.InvalidRequest: 400,
     errors.Unauthorized: 401,
@@ -252,5 +260,38 @@ def create_app(service: SpaceAService | None = None) -> FastAPI:
             "status": i.status,
             "opened_by": i.opened_by,
         }
+
+    @app.patch("/spaces/{space_id}")
+    def update_space(space_id: str, body: UpdateSpaceBody):
+        s = service.update_space(space_id, body.name)
+        return {"id": s.id, "name": s.name, "status": s.status}
+
+    @app.post("/spaces/{space_id}/archive")
+    def archive_space(space_id: str):
+        s = service.archive_space(space_id)
+        return {"id": s.id, "status": s.status}
+
+    @app.get("/spaces/{space_id}/members")
+    def list_members(space_id: str, authorization: str | None = Header(default=None)):
+        members = service.list_members(_bearer(authorization), space_id)
+        return {
+            "members": [
+                {"agent_id": a.id, "name": a.name, "spaces": a.spaces} for a in members
+            ]
+        }
+
+    @app.post("/spaces/{space_id}/members", status_code=201)
+    def add_member(
+        space_id: str, body: AddMemberBody, authorization: str | None = Header(default=None)
+    ):
+        a = service.add_member(_bearer(authorization), space_id, body.agent_id)
+        return {"agent_id": a.id, "spaces": a.spaces}
+
+    @app.delete("/spaces/{space_id}/members/{agent_id}")
+    def remove_member(
+        space_id: str, agent_id: str, authorization: str | None = Header(default=None)
+    ):
+        service.remove_member(_bearer(authorization), space_id, agent_id)
+        return {"removed": agent_id}
 
     return app
