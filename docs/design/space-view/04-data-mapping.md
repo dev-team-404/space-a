@@ -68,10 +68,16 @@ collab-space가 C2로 내려주는 데이터가 **어느 화면 요소에, 어�
 | `events[].summary` | **서사 (서버 제공)** | 로비 1층 게시판 "오늘의 조직 하이라이트" (최신 2건) |
 | 나머지 (`space_id`, `doc_id`…) | — | P2 파도타기·다이제스트의 딥링크 재료 |
 
-### `GET /stats` → P1 대시보드 (미구현)
+### `GET /stats` → 대시보드 (로비 상단 버튼 → 모달)
 
-`totals`, `top_reused_skills`, `top_knowledge`, `by_space`(기여↔소비), `tokens_saved_est`가
-그대로 팀 리더용 대시보드 위젯이 된다. 전부 집계 번역 — LLM 불필요. MVP에서는 미사용.
+| C2 필드 | 번역 | 화면 요소 |
+|---|---|---|
+| `totals` | 집계 | 이슈/지식/재사용/Skill 4칸 요약 |
+| `by_space[].{contributed,reused}` | 집계 | 스페이스별 기여↔소비 가로 막대 — 누가 주고 누가 받는 팀인지 |
+| `top_reused_skills`, `top_knowledge` | 집계 | 랭킹 목록 (팀 단위 — 개인 랭킹은 비목표) |
+| `tokens_saved_est` | 집계 (추정) | "약 ~412k 토큰" — **`~` 필수** |
+
+전부 집계 번역 — LLM 불필요. 팀 리더 페르소나("자산이 쌓이나?")의 주 표면.
 
 ### `GET /graph` → 소비자 없음 (폐기 동의)
 

@@ -164,7 +164,10 @@ function lobbyHTML() {
       <header class="topbar">
         <div class="logo" onclick="goLobby()">SPACE <span class="logo-a">A</span></div>
         <div class="topbar-title">회사 로비 — 층을 골라 들어가세요</div>
-        <div class="topbar-right"><span class="user-chip">${DB.currentUser.name}</span></div>
+        <div class="topbar-right">
+          <button class="toggle-btn" onclick="openDashboard()">📊 대시보드</button>
+          <span class="user-chip">${DB.currentUser.name}</span>
+        </div>
       </header>
       <div class="lobby-body">
         <aside class="panel elevator-panel">
@@ -411,6 +414,44 @@ function feedSection(title, sub, items, frosted, note) {
       ${note ? `<p class="feed-note">${note}</p>` : ''}
       ${items || '<p class="muted small">표시할 항목이 없어요</p>'}
     </section>`;
+}
+
+// ── 대시보드 (GET /stats → 팀 리더용 집계, 04-data-mapping §stats) ──
+
+function openDashboard() {
+  const s = DB.stats;
+  const spaceName = (id) => (spaceById(id) || { name: id }).name;
+  const maxFlow = Math.max(...s.bySpace.map((b) => Math.max(b.contributed, b.reused)));
+  const bars = s.bySpace.map((b) => `
+    <div class="dash-row">
+      <span class="dash-name">${spaceName(b.spaceId)}</span>
+      <div class="dash-bars">
+        <div class="dash-bar give" style="width:${(b.contributed / maxFlow) * 100}%">${b.contributed}</div>
+        <div class="dash-bar take" style="width:${(b.reused / maxFlow) * 100}%">${b.reused}</div>
+      </div>
+    </div>`).join('');
+  const rank = (items, label) => items.map((x, i) => `
+    <li><span class="rank-n">${i + 1}</span> ${x.title || x.name} <span class="ts">${label} ${x.reuseCount}</span></li>`).join('');
+  showModal(`
+    <div class="doc-head">
+      <span class="chip chip-org">집계 · ${s.period.from} ~ ${s.period.to}</span>
+      <h2>조직 대시보드</h2>
+      <p class="doc-meta">서버 결정론 집계 — 절약치는 추정(~)으로만 표기</p>
+    </div>
+    <div class="org-stats dash-totals">
+      <div class="org-stat"><b>${s.totals.issues}</b><span>이슈</span></div>
+      <div class="org-stat"><b>${s.totals.knowledge}</b><span>지식</span></div>
+      <div class="org-stat"><b>${s.totals.reuses}</b><span>재사용</span></div>
+      <div class="org-stat"><b>${s.totals.skills}</b><span>Skill</span></div>
+    </div>
+    <p class="dash-saved">기간 내 절약 추정 <b>약 ~${Math.round(s.tokensSavedEst / 1000)}k 토큰</b></p>
+    <div class="doc-section"><h4>스페이스별 기여 ↔ 소비</h4>
+      <p class="muted small">위 = 다른 팀이 가져간 지식(기여) · 아래 = 가져와 쓴 지식(소비)</p>
+      <div class="dash-chart">${bars}</div>
+    </div>
+    <div class="doc-section"><h4>Top 재사용 Skill</h4><ul class="rank-list">${rank(s.topReusedSkills, '재사용')}</ul></div>
+    <div class="doc-section"><h4>Top 지식</h4><ul class="rank-list">${rank(s.topKnowledge, '인용')}</ul></div>
+  `);
 }
 
 // ── 모달 (F6) ─────────────────────────────────────────────────────

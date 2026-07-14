@@ -452,6 +452,20 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .k-link:hover { background: rgba(126,232,200,.16); }
 /* 절약치는 추정 — C2 계약상 '~' 라벨 필수 */
 .reuse-saved { font-size: 10px; color: var(--mint); margin: -3px 0 7px 2px; }
+
+/* 대시보드 모달 (GET /stats) */
+.dash-totals { margin-bottom: 10px; }
+.dash-saved { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.dash-saved b { color: var(--mint); }
+.dash-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.dash-name { width: 110px; font-size: 11px; color: var(--text); text-align: right; flex-shrink: 0; }
+.dash-bars { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.dash-bar { font-size: 9px; color: #0b101f; font-weight: 700; padding: 1px 5px; border-radius: 3px; min-width: 16px; }
+.dash-bar.give { background: var(--mint); }
+.dash-bar.take { background: var(--lav); }
+.rank-list { list-style: none; padding: 0; }
+.rank-list li { font-size: 12px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+.rank-n { display: inline-block; width: 16px; color: var(--mint); font-weight: 700; }
 .chain { padding-left: 4px; }
 .chain-step { display: flex; flex-direction: column; margin: 2px 0; }
 .chain-step b { font-size: 11px; }

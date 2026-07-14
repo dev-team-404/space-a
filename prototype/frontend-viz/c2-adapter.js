@@ -89,5 +89,15 @@ const DB = (() => {
     ts: fmtTime(e.at), type: e.type, summary: e.summary,
   }));
 
+  // GET /stats → 팀 리더용 대시보드 (전부 집계 번역 — LLM 불필요)
+  db.stats = {
+    period: C2.stats.period,
+    totals: C2.stats.totals,
+    tokensSavedEst: C2.stats.tokens_saved_est, // 추정치 — 렌더 시 '~' 라벨 필수
+    topReusedSkills: C2.stats.top_reused_skills.map((s) => ({ name: s.name, reuseCount: s.reuse_count })),
+    topKnowledge: C2.stats.top_knowledge.map((k) => ({ id: k.doc_id, title: k.title, reuseCount: k.reuse_count })),
+    bySpace: C2.stats.by_space.map((b) => ({ spaceId: b.space_id, contributed: b.contributed, reused: b.reused })),
+  };
+
   return db;
 })();
