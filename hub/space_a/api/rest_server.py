@@ -66,6 +66,19 @@ class AddMemberBody(BaseModel):
     agent_id: str
 
 
+class EditPageBody(BaseModel):
+    title: str | None = None
+    body: str | None = None
+
+
+class VisibilityBody(BaseModel):
+    visibility: str
+
+
+class SupersedeBody(BaseModel):
+    by: str
+
+
 _STATUS = {
     errors.InvalidRequest: 400,
     errors.Unauthorized: 401,
@@ -197,6 +210,42 @@ def create_app(service: SpaceAService | None = None) -> FastAPI:
         p = service.move_page(_bearer(authorization), page_id, body.new_parent_id)
         return {"page_id": p.id, "parent_id": p.parent_id}
 
+    @app.patch("/pages/{page_id}")
+    def edit_page(
+        page_id: str, body: EditPageBody, authorization: str | None = Header(default=None)
+    ):
+        p = service.edit_page(_bearer(authorization), page_id, title=body.title, body=body.body)
+        return {"page_id": p.id, "title": p.title, "body": p.body}
+
+    @app.patch("/pages/{page_id}/visibility")
+    def set_visibility(
+        page_id: str, body: VisibilityBody, authorization: str | None = Header(default=None)
+    ):
+        p = service.set_visibility(_bearer(authorization), page_id, body.visibility)
+        return {"page_id": p.id, "visibility": p.visibility}
+
+    @app.post("/pages/{page_id}/archive")
+    def archive_page(page_id: str, authorization: str | None = Header(default=None)):
+        p = service.archive_page(_bearer(authorization), page_id)
+        return {"page_id": p.id, "status": p.status}
+
+    @app.post("/pages/{page_id}/supersede")
+    def supersede_page(
+        page_id: str, body: SupersedeBody, authorization: str | None = Header(default=None)
+    ):
+        p = service.supersede_page(_bearer(authorization), page_id, body.by)
+        return {"page_id": p.id, "status": p.status, "superseded_by": p.superseded_by}
+
+    @app.post("/pages/{page_id}/quarantine")
+    def quarantine_page(page_id: str, authorization: str | None = Header(default=None)):
+        p = service.quarantine_page(_bearer(authorization), page_id)
+        return {"page_id": p.id, "status": p.status}
+
+    @app.post("/pages/{page_id}/flag")
+    def flag_page(page_id: str, authorization: str | None = Header(default=None)):
+        p = service.flag_page(_bearer(authorization), page_id)
+        return {"page_id": p.id, "flags": p.flags}
+
     @app.get("/spaces/{space_id}/tree")
     def space_tree(space_id: str, authorization: str | None = Header(default=None)):
         pages = service.list_pages(_bearer(authorization), space_id)
@@ -293,5 +342,53 @@ def create_app(service: SpaceAService | None = None) -> FastAPI:
     ):
         service.remove_member(_bearer(authorization), space_id, agent_id)
         return {"removed": agent_id}
+
+    @app.get("/agents")
+    def list_agents(authorization: str | None = Header(default=None)):
+        agents = service.list_agents(_bearer(authorization))
+        return {
+            "agents": [
+                {"agent_id": a.id, "name": a.name, "spaces": a.spaces} for a in agents
+            ]
+        }
+
+    @app.get("/agents/{agent_id}")
+    def get_agent(agent_id: str, authorization: str | None = Header(default=None)):
+        a = service.get_agent(_bearer(authorization), agent_id)
+        return {"agent_id": a.id, "name": a.name, "spaces": a.spaces}
+
+    @app.delete("/agents/{agent_id}")
+    def revoke_agent(agent_id: str, authorization: str | None = Header(default=None)):
+        service.revoke_agent(_bearer(authorization), agent_id)
+        return {"revoked": agent_id}
+
+    @app.post("/agents/{agent_id}/rotate-token")
+    def rotate_token(agent_id: str, authorization: str | None = Header(default=None)):
+        new = service.rotate_token(_bearer(authorization), agent_id)
+        return {"agent_id": agent_id, "token": new}
+
+    @app.get("/skills/candidates")
+    def skill_candidates(
+        space_id: str | None = None,
+        min_occurrences: int = 3,
+        authorization: str | None = Header(default=None),
+    ):
+        cands = service.get_skill_candidates(
+            _bearer(authorization), space_id=space_id, min_occurrences=min_occurrences
+        )
+        return {
+            "candidates": [
+                {"pattern": c.pattern, "occurrences": c.occurrences, "page_ids": c.page_ids}
+                for c in cands
+            ]
+        }
+
+    @app.get("/healthz")
+    def healthz():
+        return {"status": "ok"}
+
+    @app.get("/readyz")
+    def readyz():
+        return {"status": "ready"}
 
     return app

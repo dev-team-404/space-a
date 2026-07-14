@@ -53,6 +53,9 @@ class InMemoryStore(Store):
     def all_agents(self) -> list[Agent]:
         return list(self._agents.values())
 
+    def revoke_tokens(self, agent_id: str) -> None:
+        self._tokens = {t: a for t, a in self._tokens.items() if a != agent_id}
+
     def add_issue(self, issue: Issue) -> None:
         self._issues[issue.id] = issue
 

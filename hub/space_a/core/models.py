@@ -44,6 +44,8 @@ class Page:
     visibility: str = "org"           # org | space
     issue_id: str | None = None       # issue-derived일 때 원본 이슈
     steps: list[str] = field(default_factory=list)  # 해결 단계 (issue-derived)
+    superseded_by: str | None = None  # 대체된 경우 새 문서 id
+    flags: int = 0                    # 오답 신고 누적
 
 
 @dataclass
@@ -61,3 +63,12 @@ class ReuseEvent:
 class SearchResult:
     pages: list[Page]
     scanned: int  # 권한 범위 안에서 훑은 문서 수 (토큰 절감 증명용 카운터)
+
+
+@dataclass
+class SkillCandidate:
+    """반복 기록된 해결 패턴. N회 이상이면 Skill로 승격 후보."""
+
+    pattern: str
+    occurrences: int
+    page_ids: list[str]

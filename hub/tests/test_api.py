@@ -194,3 +194,60 @@ def test_membership_over_http(client):
 
     d = client.delete(f"/spaces/sw-innov/members/{y['agent_id']}", headers=xh)
     assert d.status_code == 200
+
+
+def test_agent_lifecycle_over_http(client):
+    client.post("/spaces", json={"id": "sw-innov", "name": "S/W"})
+    reg = client.post("/agents/register", json={"name": "x", "space_id": "sw-innov"}).json()
+    tok, aid = reg["token"], reg["agent_id"]
+    h = {"Authorization": f"Bearer {tok}"}
+
+    assert client.get("/agents", headers=h).status_code == 200
+    assert client.get(f"/agents/{aid}", headers=h).json()["name"] == "x"
+
+    rot = client.post(f"/agents/{aid}/rotate-token", headers=h)
+    assert rot.status_code == 200
+    new = rot.json()["token"]
+    assert new != tok
+    assert client.get("/agents", headers=h).status_code == 401  # 옛 토큰 무효
+    assert client.get("/agents", headers={"Authorization": f"Bearer {new}"}).status_code == 200
+
+
+def test_health_endpoints(client):
+    assert client.get("/healthz").json()["status"] == "ok"
+    assert client.get("/readyz").json()["status"] == "ready"
+
+
+def test_page_edit_and_archive_over_http(client):
+    auth = _register(client)
+    pid = client.post("/spaces/sw-innov/pages", json={"title": "가이드"}, headers=auth).json()["page_id"]
+
+    e = client.patch(f"/pages/{pid}", json={"title": "새 제목"}, headers=auth)
+    assert e.status_code == 200
+    assert e.json()["title"] == "새 제목"
+
+    a = client.post(f"/pages/{pid}/archive", headers=auth)
+    assert a.json()["status"] == "archived"
+
+    s = client.post("/pages/search", json={"query": "제목"}, headers=auth)
+    assert all(r["page_id"] != pid for r in s.json()["results"])  # archived → 검색 제외
+
+
+def test_page_flag_over_http(client):
+    auth = _register(client)
+    pid = client.post("/spaces/sw-innov/pages", json={"title": "의심"}, headers=auth).json()["page_id"]
+    r = client.post(f"/pages/{pid}/flag", headers=auth)
+    assert r.status_code == 200
+    assert r.json()["flags"] == 1
+
+
+def test_skill_candidates_over_http(client):
+    auth = _register(client)
+    for _ in range(3):
+        iid = client.post("/issues", json={"title": "err", "space_id": "sw-innov"}, headers=auth).json()["issue_id"]
+        client.post(f"/issues/{iid}/resolve", json={"summary": "인증서 갱신"}, headers=auth)
+    r = client.get("/skills/candidates?min_occurrences=3", headers=auth)
+    assert r.status_code == 200
+    cands = r.json()["candidates"]
+    assert len(cands) == 1
+    assert cands[0]["occurrences"] == 3

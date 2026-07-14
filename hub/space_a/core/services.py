@@ -6,7 +6,7 @@
 """
 
 from . import errors
-from .models import Agent, Issue, Page, ReuseEvent, SearchResult, Space
+from .models import Agent, Issue, Page, ReuseEvent, SearchResult, SkillCandidate, Space
 from .ports import Store
 
 
@@ -84,7 +84,11 @@ class SpaceAService:
         self, token: str, query: str, space_id: str | None = None, limit: int = 3
     ) -> SearchResult:
         agent = self._authed_agent(token)
-        scope = [p for p in self.store.all_pages() if self._visible(p, agent)]
+        scope = [
+            p
+            for p in self.store.all_pages()
+            if p.status == "active" and self._visible(p, agent)
+        ]
         if space_id is not None:
             scope = [p for p in scope if p.space_id == space_id]
         terms = [t for t in query.lower().split() if t]
@@ -119,6 +123,28 @@ class SpaceAService:
         issue.status = "knowledge_linked"
         self.store.save_issue(issue)
         return event, issue
+
+    def get_skill_candidates(
+        self, token: str, space_id: str | None = None, min_occurrences: int = 3
+    ) -> list[SkillCandidate]:
+        agent = self._authed_agent(token)
+        if space_id is not None and space_id not in agent.spaces:
+            raise errors.Forbidden(f"not a member of space '{space_id}'")
+        pages = [
+            p
+            for p in self.store.all_pages()
+            if p.source == "issue-derived" and p.space_id in agent.spaces
+        ]
+        if space_id is not None:
+            pages = [p for p in pages if p.space_id == space_id]
+        groups: dict[str, list[str]] = {}
+        for p in pages:
+            groups.setdefault(p.title, []).append(p.id)
+        return [
+            SkillCandidate(pattern=title, occurrences=len(ids), page_ids=ids)
+            for title, ids in groups.items()
+            if len(ids) >= min_occurrences
+        ]
 
     # --- 목록 · 조회 ---
 
@@ -270,6 +296,86 @@ class SpaceAService:
         self._require_member(token, space_id)
         return [a for a in self.store.all_agents() if space_id in a.spaces]
 
+    # --- 페이지 lifecycle ---
+
+    def edit_page(
+        self, token: str, page_id: str, title: str | None = None, body: str | None = None
+    ) -> Page:
+        _, page = self._page_for_member(token, page_id)
+        if title is not None:
+            page.title = title
+        if body is not None:
+            page.body = body
+        self.store.save_page(page)
+        return page
+
+    def set_visibility(self, token: str, page_id: str, visibility: str) -> Page:
+        _, page = self._page_for_member(token, page_id)
+        page.visibility = visibility
+        self.store.save_page(page)
+        return page
+
+    def archive_page(self, token: str, page_id: str) -> Page:
+        _, page = self._page_for_member(token, page_id)
+        page.status = "archived"
+        self.store.save_page(page)
+        return page
+
+    def supersede_page(self, token: str, page_id: str, by_page_id: str) -> Page:
+        _, page = self._page_for_member(token, page_id)
+        if self.store.get_page(by_page_id) is None:
+            raise errors.NotFound(f"page '{by_page_id}' not found")
+        page.status = "superseded"
+        page.superseded_by = by_page_id
+        self.store.save_page(page)
+        return page
+
+    def quarantine_page(self, token: str, page_id: str) -> Page:
+        _, page = self._page_for_member(token, page_id)
+        page.status = "quarantined"
+        self.store.save_page(page)
+        return page
+
+    def flag_page(self, token: str, page_id: str) -> Page:
+        agent = self._authed_agent(token)
+        page = self.store.get_page(page_id)
+        if page is None:
+            raise errors.NotFound(f"page '{page_id}' not found")
+        if not self._visible(page, agent):
+            raise errors.Forbidden("page is not visible to you")
+        page.flags += 1
+        self.store.save_page(page)
+        return page
+
+    # --- 에이전트 lifecycle ---
+
+    def list_agents(self, token: str) -> list[Agent]:
+        agent = self._authed_agent(token)
+        mine = set(agent.spaces)
+        return [a for a in self.store.all_agents() if mine & set(a.spaces)]
+
+    def get_agent(self, token: str, agent_id: str) -> Agent:
+        self._authed_agent(token)
+        target = self.store.get_agent(agent_id)
+        if target is None:
+            raise errors.NotFound(f"agent '{agent_id}' not found")
+        return target
+
+    def revoke_agent(self, token: str, agent_id: str) -> None:
+        caller = self._authed_agent(token)
+        if agent_id != caller.id:
+            raise errors.Forbidden("you can only revoke your own agent")
+        self.store.revoke_tokens(agent_id)
+
+    def rotate_token(self, token: str, agent_id: str) -> str:
+        caller = self._authed_agent(token)
+        if agent_id != caller.id:
+            raise errors.Forbidden("you can only rotate your own token")
+        self.store.revoke_tokens(agent_id)
+        new_token = self.store.new_token()
+        self.store.bind_token(new_token, agent_id)
+        return new_token
+
     # --- 내부 ---
 
     @staticmethod
@@ -287,3 +393,12 @@ class SpaceAService:
         if space_id not in agent.spaces:
             raise errors.Forbidden(f"not a member of space '{space_id}'")
         return agent
+
+    def _page_for_member(self, token: str, page_id: str) -> tuple[Agent, Page]:
+        agent = self._authed_agent(token)
+        page = self.store.get_page(page_id)
+        if page is None:
+            raise errors.NotFound(f"page '{page_id}' not found")
+        if page.space_id not in agent.spaces:
+            raise errors.Forbidden("page belongs to a space you are not a member of")
+        return agent, page
