@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-SPACE-A는 현재 **설계 단계**입니다. 코드보다 문서가 먼저이며, 모든 결정은 `docs/`에 기록합니다.
+SPACE-A는 **문서 우선** 프로젝트입니다. 구조·아키텍처 결정은 코드보다 먼저 `docs/`에 기록합니다.
+(구현: `hub/` 백엔드, 멘토 앱(루트 Cargo workspace), `prototype/` 시각화)
 
 ## 문서 구조 (`docs/`)
 
@@ -39,7 +40,20 @@ docs(design): draft frontend visualization spec
 chore: set up gitignore and base structure
 ```
 
+## 멘토 앱 (Agent Mentor) 개발 제약
+
+루트 Cargo workspace(`crates/core`, `src-tauri`, `src/`)의 멘토 앱을 만질 때 적용:
+
+- 제품명: Agent Mentor. 식별자 `agent-mentor`. Claude 외 타 에이전트 확장을 염두에 둔 이름이므로,
+  에이전트별 로직은 하드코딩하지 말고 SourceAdapter / Engine 인터페이스 뒤로 추상화할 것.
+- 스택: Tauri v2 + Rust 백엔드. v1 API(SystemTray, tauri::updater, WindowBuilder 등) 금지.
+- 상주/업데이트/자동시작은 반드시 v2 공식 플러그인(tray-icon, updater, autostart)으로.
+- 플랫폼: Windows 전용. macOS/Linux 분기 불필요.
+- 프라이버시: 트랜스크립트는 기본 로컬 처리. 외부 전송은 Engine 선택(사내 on-prem 기본)으로만.
+- 무거운 데이터 처리(JSONL 파싱/집계/감시)는 Rust 백엔드에서.
+- 설계 스펙·구현 계획: [docs/design/overview-mentor/](./docs/design/overview-mentor/) 아래 `specs/`, `plans/`.
+
 ## 참고
 
 - 프로젝트 개요: [`README.md`](./README.md)
-- 스택(backend/frontend/agent)은 아직 미확정. 설계가 확정되면 이 문서에 빌드·실행 규칙을 추가한다.
+- 멘토 앱 빌드·실행: [`docs/design/overview-mentor/build-and-run.md`](./docs/design/overview-mentor/build-and-run.md)
