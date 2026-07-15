@@ -128,6 +128,13 @@ summary를 그대로 쓴다 — LLM 불필요. 방 카드는 그 방 관련 이�
 Pillar 3 설계를 미러링"이라 명시), 프로토타입은 클라이언트 필터로 임시 처리 —
 서버 집행·계약 반영은 계약 소유자에게 전달한다 (G7).
 
+**에이전트 이름 (Q8, 2026-07-15 결정)** — 로비·게스트 tier 서사(`summary`·`highlight`)에서
+에이전트 이름을 제거하고 **팀을 주어로** 쓴다: 현행 픽스처의 "데이터 플랫폼팀의 Agent_Yoon이
+…를 재사용했습니다" → "데이터 플랫폼팀이 …를 재사용했습니다". 멤버십이 에이전트 소유에서
+파생되므로("내 에이전트가 멤버면 나도 멤버") 조직 공개 표면의 에이전트 이름은 개인 활동
+노출과 등가다 — "집계 하한선은 스페이스" 원칙 위반. 멤버 tier 서사(말풍선·타임라인 actor)는
+현행 유지. lobby/guest용 tier별 summary가 필요해지므로 G7 전달 사항에 포함한다.
+
 ### `GET /stats` → 대시보드 (로비 상단 버튼 → 모달)
 
 | C2 필드 | 번역 | 화면 요소 |
@@ -173,7 +180,7 @@ Pillar 3 설계를 미러링"이라 명시), 프로토타입은 클라이언트 
 | G4 | 지식 문서 작성 시점 | `c2-data.js`의 `created_at` (선제 사용) | C2 `knowledge`에 시각 필드가 없다 — **`created_at` 추가 요청 후보** (계약은 추가 허용) |
 | G5 | 책상 좌표(`deskSlot`), 층 히트존, 씬 스케일 | 클라이언트 상수 | 레이아웃은 클라이언트 소유 — 계약에 올리지 않는 게 맞음 |
 | G6 | — | — | 픽스처 내부 불일치: `stats.json` totals(지식 128)와 `spaces.json` stats 합계(지식 75)가 안 맞음. 골든 데이터 정리 시 msalt와 함께 보정 |
-| G7 | `GET /activity`의 tier 트리밍 | 프로토타입 클라이언트 필터 (임시) | 계약에 /activity의 tier 규칙이 없었음. **정책은 결정됨(2026-07-14, 권한 모델 소유자=시각화)**: lobby/guest 응답에는 org-safe 이벤트(`reused`·`knowledge_created`·`skill_proposed`·`condensed`)만, `issue_opened`와 space 전용 문서 관련 summary는 제외. → 계약 반영·서버 집행을 계약 소유자에게 **전달** |
+| G7 | `GET /activity`의 tier 트리밍 | 프로토타입 클라이언트 필터 (임시) | 계약에 /activity의 tier 규칙이 없었음. **정책은 결정됨(2026-07-14, 권한 모델 소유자=시각화)**: lobby/guest 응답에는 org-safe 이벤트(`reused`·`knowledge_created`·`skill_proposed`·`condensed`)만, `issue_opened`와 space 전용 문서 관련 summary는 제외. **+ Q8(2026-07-15): lobby/guest summary는 에이전트 이름 없이 팀 주어로**. → 계약 반영·서버 집행을 계약 소유자에게 **전달** |
 | G8 | 씬 출석부(프레즌스) | 없음 — 프로토타입은 `agents[].status`로 근사 | 08-room-presence §7의 협의 항목. **`GET /spaces/{space_id}/presence` 신설 제안** (위 "프레즌스" 절, 2026-07-15) → 응답 형태·파생 효과를 계약 소유자와 허준녕에게 **전달** |
 
 ## 데이터 흐름 (프로토타입)
