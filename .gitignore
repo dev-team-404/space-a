@@ -79,3 +79,4 @@ target/
 /diary/
 src-tauri/gen/schemas/
 src-tauri/target/
+.vite/
