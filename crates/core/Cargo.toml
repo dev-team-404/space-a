@@ -16,7 +16,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 chrono = "0.4"
-ureq = { version = "2", features = ["json"] }
+# native-certs: OS 인증서 저장소 사용 — 사내망 TLS 프록시(자체 CA) 환경에서 필수.
+# 내장(webpki) 루트만 쓰면 프록시가 재서명한 인증서가 UnknownIssuer로 거부된다.
+ureq = { version = "2", features = ["json", "native-certs"] }
 anyhow = "1"
 sys-locale = "0.3"
 sha2 = "0.10"
