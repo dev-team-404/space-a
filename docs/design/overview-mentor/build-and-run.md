@@ -86,7 +86,7 @@ Evergreen Runtime을 설치하세요.
 
 ```powershell
 git clone <repo-url>
-cd agent-mentor
+cd space-a/client     # Tauri 클라이언트는 client/ 디렉터리
 
 npm install          # node_modules는 커밋되지 않으므로 먼저 필수
 npm run tauri dev    # Vite(포트 1420) 기동 → Rust 앱 빌드 → 앱 실행
@@ -130,7 +130,8 @@ $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + `
 rustup default stable-x86_64-pc-windows-msvc
 rustc --version ; cargo --version ; node --version ; npm --version
 
-# 5) 프로젝트 빌드 & 실행
+# 5) 프로젝트 빌드 & 실행 (Tauri 클라이언트는 client/ 디렉터리)
+cd client
 npm install
 Copy-Item .env.example .env   # (선택) LLM 엔진 쓸 때만
 npm run tauri dev
@@ -148,7 +149,8 @@ npm run tauri dev
 - 다이어리 → **mock**으로 생성
 - 채팅 탭 → 설정 안내 표시 (에러 아님)
 
-실제 LLM 코칭/일기를 쓰려면 루트에 `.env`를 만드세요:
+실제 LLM 코칭/일기를 쓰려면 **트레이 우클릭 → 설정**에서 엔드포인트를 입력하거나
+(앱 재시작 불필요), `client/`에 `.env`를 만드세요:
 
 ```powershell
 Copy-Item .env.example .env
@@ -170,6 +172,8 @@ AGENT_MENTOR_ENGINE_MODEL=gpt-4.1-mini
 ---
 
 ## 자주 쓰는 명령
+
+전부 `client/` 디렉터리에서 실행합니다.
 
 ```powershell
 npm run tauri dev    # 개발 모드 실행 (핫리로드)
