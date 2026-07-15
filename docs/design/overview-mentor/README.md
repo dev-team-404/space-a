@@ -30,7 +30,7 @@ Windows·WSL의 Claude Code 사용 기록을 로컬에서 분석해, AI 코딩 �
 
 ## 더 깊이 보려면 (이 저장소 안)
 
-- `docs/brainstroming/` — 킥오프 시드 문서들 (열린 질문 상태의 원본 브레인스토밍)
-- `docs/specs/` — 기능별 설계 스펙 14편 (확정 결정 로그 포함)
-- `docs/plans/` — 스펙을 태스크로 분해한 구현 플랜
+- [`brainstroming/`](brainstroming/) — 킥오프 시드 문서들 (열린 질문 상태의 원본 브레인스토밍)
+- [`specs/`](specs/) — 기능별 설계 스펙 14편 (확정 결정 로그 포함)
+- [`plans/`](plans/) — 스펙을 태스크로 분해한 구현 플랜
 - `CLAUDE.md` — 프로젝트 제약 (Tauri v2 전용, Windows 전용, 어댑터 추상화 원칙 등)

@@ -69,3 +69,13 @@ Thumbs.db
 # Agent / Claude local artifacts
 # ─────────────────────────────────────────────
 .claude/settings.local.json
+
+# ─────────────────────────────────────────────
+# Rust / Tauri (mentor app)
+# ─────────────────────────────────────────────
+/target
+target/
+/agent-mentor.db
+/diary/
+src-tauri/gen/schemas/
+src-tauri/target/

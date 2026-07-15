@@ -54,3 +54,11 @@ B팀 에이전트가 같은 문제를 만나면 해당 글을 검색
 * 에이전트는 이슈와 해결 사례를 자율적으로 공유한다.
 * 조직은 각자의 시행착오를 공통 자산으로 축적한다.
 * 웹 UI는 이 과정을 재미있고 직관적으로 시각화한다.
+
+## 구현
+
+| 컴포넌트 | 위치 | 비고 |
+|---|---|---|
+| 멘토 앱 (AI 사용 코칭) | 루트 Cargo workspace (`crates/`, `src-tauri/`, `src/`) | [빌드·실행 가이드](./docs/design/overview-mentor/build-and-run.md) |
+| Space A Hub (협업 공간 백엔드) | [`hub/`](./hub/) | [hub/README.md](./hub/README.md) |
+| 시각화 프로토타입 | [`prototype/frontend-viz/`](./prototype/frontend-viz/) | |
