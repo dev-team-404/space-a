@@ -130,6 +130,8 @@ class SpaceAService:
             raise errors.NotFound(f"page '{page_id}' not found")
         if not self._visible(page, agent):
             raise errors.Forbidden("page is not visible to you")
+        if page.status != "active":
+            raise errors.InvalidRequest(f"cannot cite a non-active page (status: {page.status})")
 
         event = ReuseEvent(
             id=self.store.new_id("reuse"),
@@ -152,7 +154,9 @@ class SpaceAService:
         pages = [
             p
             for p in self.store.all_pages()
-            if p.source == "issue-derived" and p.space_id in agent.spaces
+            if p.status == "active"
+            and p.source == "issue-derived"
+            and p.space_id in agent.spaces
         ]
         if space_id is not None:
             pages = [p for p in pages if p.space_id == space_id]
@@ -224,6 +228,8 @@ class SpaceAService:
                 raise errors.NotFound(f"parent page '{parent_id}' not found")
             if parent.space_id != space_id:
                 raise errors.InvalidRequest("parent must be in the same space")
+            if parent.status != "active":
+                raise errors.InvalidRequest("parent page is not active")
         page = Page(
             id=self.store.new_id("page"),
             space_id=space_id,
@@ -260,11 +266,16 @@ class SpaceAService:
                 raise errors.NotFound(f"parent page '{new_parent_id}' not found")
             if parent.space_id != page.space_id:
                 raise errors.InvalidRequest("parent must be in the same space")
-            # 사이클 방지: 새 부모가 이 페이지의 자손이면 안 된다
+            if parent.status != "active":
+                raise errors.InvalidRequest("parent page is not active")
+            # 사이클 방지: 새 부모가 이 페이지의 자손이면 안 된다.
+            # visited로 이미 손상된 데이터의 무한루프(DoS)도 함께 차단한다.
+            visited = {page_id}
             cur: Page | None = parent
             while cur is not None:
-                if cur.id == page_id:
+                if cur.id in visited:
                     raise errors.InvalidRequest("move would create a cycle")
+                visited.add(cur.id)
                 cur = self.store.get_page(cur.parent_id) if cur.parent_id else None
         page.parent_id = new_parent_id
         self.store.save_page(page)
@@ -272,7 +283,11 @@ class SpaceAService:
 
     def list_pages(self, token: str, space_id: str) -> list[Page]:
         agent = self._authed_agent(token)
-        return [p for p in self.store.pages_in_space(space_id) if self._visible(p, agent)]
+        return [
+            p
+            for p in self.store.pages_in_space(space_id)
+            if p.status == "active" and self._visible(p, agent)
+        ]
 
     # --- 멤버십 · 공간 관리 ---
 
@@ -342,8 +357,13 @@ class SpaceAService:
 
     def supersede_page(self, token: str, page_id: str, by_page_id: str) -> Page:
         _, page = self._page_for_member(token, page_id)
-        if self.store.get_page(by_page_id) is None:
+        if by_page_id == page_id:
+            raise errors.InvalidRequest("a page cannot supersede itself")
+        by_page = self.store.get_page(by_page_id)
+        if by_page is None:
             raise errors.NotFound(f"page '{by_page_id}' not found")
+        if by_page.space_id != page.space_id:
+            raise errors.InvalidRequest("superseding page must be in the same space")
         page.status = "superseded"
         page.superseded_by = by_page_id
         self.store.save_page(page)
