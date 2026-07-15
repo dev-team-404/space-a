@@ -1,7 +1,7 @@
 # Agent Mentor — 아키텍처
 
-> 코드베이스 실측(2026-07-10, main) 기준의 전체 구조. 설계 근거는 `docs/specs/2026-07-01-data-foundation-design.md`,
-> `docs/specs/2026-07-03-frontend-vision-design.md` 참고.
+> 코드베이스 실측(2026-07-10, main) 기준의 전체 구조. 설계 근거는 [`specs/2026-07-01-data-foundation-design.md`](specs/2026-07-01-data-foundation-design.md),
+> [`specs/2026-07-03-frontend-vision-design.md`](specs/2026-07-03-frontend-vision-design.md) 참고.
 
 ## 1. 저장소 레이아웃
 

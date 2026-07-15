@@ -3,7 +3,7 @@
 Windows·WSL의 Claude Code 사용 기록을 **로컬에서** 분석해, AI 코딩 에이전트를 토큰 낭비 없이
 쓰도록 코칭하는 Windows 상주형 데스크톱 앱 (Tauri v2 + Rust).
 
-> 제품·아키텍처 소개는 [`docs/overview/`](docs/overview/README.md)를 참고하세요.
+> 제품·아키텍처 소개는 [같은 폴더의 개요 문서](README.md)를 참고하세요.
 > 이 문서는 **처음 클론한 팀원이 빌드·실행**하기 위한 셋업 가이드입니다.
 
 ---
