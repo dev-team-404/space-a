@@ -22,6 +22,17 @@
         "visible": false
       },
       {
+        "label": "settings",
+        "url": "settings.html",
+        "title": "설정 — agent mentor",
+        "width": 520,
+        "height": 500,
+        "minWidth": 440,
+        "minHeight": 420,
+        "resizable": true,
+        "visible": false
+      },
+      {
         "label": "mascot",
         "url": "mascot.html",
         "title": "mentor",

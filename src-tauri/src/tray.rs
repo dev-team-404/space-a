@@ -54,10 +54,11 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .items(&[&chatter_normal, &chatter_low, &chatter_off])
         .build()?;
     let scan = MenuItem::with_id(app, "scan", "지금 스캔", true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, "settings", "설정", true, None::<&str>)?;
     let auto_on = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart = CheckMenuItem::with_id(app, "autostart", "시작 시 실행", true, auto_on, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &mascot, &realtime, &protect, &chatter_menu, &scan, &autostart, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &mascot, &realtime, &protect, &chatter_menu, &scan, &settings, &autostart, &quit])?;
 
     let autostart_item = autostart.clone();
     let mascot_item = mascot.clone();
@@ -142,6 +143,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             "scan" => {
                 let _ = app.state::<AppState>().scan_tx.send(PipelineMsg::RunNow);
             }
+            "settings" => show_settings(app),
             "autostart" => {
                 let al = app.autolaunch();
                 let cur = al.is_enabled().unwrap_or(false);
@@ -177,6 +179,14 @@ fn toggle_chat(app: &AppHandle) {
 
 fn show_chat(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("chat") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
+fn show_settings(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("settings") {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();

@@ -9,7 +9,6 @@ pub use agent_mentor::pipeline::{debounce_loop, diff_findings, missing_diary_dat
 mod runtime {
     use super::*;
     use crate::AppState;
-    use agent_mentor::diary::engine::OpenAiCompatEngine;
     use agent_mentor::diary::{
         assemble_brief, persist_diary, render_diary, render_idle_diary, DiaryConfig, IdleContext,
     };
@@ -128,7 +127,12 @@ mod runtime {
         app: &AppHandle,
         store_mutex: &std::sync::Mutex<SqliteStore>,
     ) {
-        let Some(engine) = OpenAiCompatEngine::from_env() else { return; };
+        // 설정 창(store) → .env 순서로 엔진 해석. 락은 해석 동안만 (네트워크 전 해제 규율)
+        let engine = match store_mutex.lock() {
+            Ok(store) => crate::resolve_engine(&store),
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        };
+        let Some(engine) = engine else { return; };
         let vault = match app.path().app_data_dir() {
             Ok(d) => d.join("diary"),
             Err(e) => { log::warn!("diary vault 경로 실패: {e}"); return; }
@@ -199,7 +203,11 @@ mod runtime {
         app: &AppHandle,
         store_mutex: &std::sync::Mutex<SqliteStore>,
     ) {
-        let Some(engine) = OpenAiCompatEngine::from_env() else { return; };
+        let engine = match store_mutex.lock() {
+            Ok(store) => crate::resolve_engine(&store),
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        };
+        let Some(engine) = engine else { return; };
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
 
         // ① 락: 오늘 컨텍스트 + 캐시된 fingerprint 읽기 → 즉시 해제
@@ -243,7 +251,11 @@ mod runtime {
     /// 네트워크(LLM)는 daily-line과 동일하게 store 락 밖에서 호출. 이벤트는 emit하지
     /// 않는다 — 프론트 잡담 타이머가 발화 시점에 get_chatter_pool로 pull한다.
     fn maybe_generate_chatter_pool(store_mutex: &std::sync::Mutex<SqliteStore>) {
-        let Some(engine) = OpenAiCompatEngine::from_env() else { return; };
+        let engine = match store_mutex.lock() {
+            Ok(store) => crate::resolve_engine(&store),
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        };
+        let Some(engine) = engine else { return; };
         let now = chrono::Local::now();
         let today = now.format("%Y-%m-%d").to_string();
 
