@@ -22,7 +22,7 @@ const DB = (() => {
   const db = {
     currentUser: CLIENT.currentUser,
     spaces: [], memberships: [], agents: [], issues: [], knowledge: [],
-    reuseEvents: [], activity: [], visits: {},
+    reuseEvents: [], activity: [], visits: {}, presence: {},
     managerEvents: CLIENT.managerEvents.slice(),
   };
 
@@ -68,6 +68,18 @@ const DB = (() => {
       });
     }
     db.visits[spaceId] = detail.visits;
+  }
+
+  // GET /spaces/{id}/presence (계약 신설 제안 G8) → 씬 출석부.
+  // 신원은 agent_id뿐 — 이름·역할은 방 상세 agents[]와 조인하고, 조인 안 되는
+  // 타팀 방문자는 home_space 라벨만 쓴다 (04-data-mapping §프레즌스의 tier 규칙).
+  for (const [spaceId, p] of Object.entries(C2.presence)) {
+    db.presence[spaceId] = {
+      asOf: p.as_of,
+      occupants: p.occupants.map((o) => ({
+        agentId: o.agent_id, kind: o.kind, homeSpaceId: o.home_space_id || null, since: o.since,
+      })),
+    };
   }
 
   // 매니저 캐릭터는 C2 밖 (G2) — 재설계 전까지 클라이언트 데이터로 씬을 채운다

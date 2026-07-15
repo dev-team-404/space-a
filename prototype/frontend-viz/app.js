@@ -253,6 +253,11 @@ const DESK_SLOTS = [
   { x: 452, y: 933 }, { x: 805, y: 952 },
 ];
 
+// 방문자(게스트 체크인)는 책상이 아니라 입구 쪽 통로에 세운다 (좌표는 클라이언트 소유, G5)
+const VISITOR_SLOTS = [
+  { x: 158, y: 870 }, { x: 205, y: 985 },
+];
+
 function spaceHTML(id) {
   const space = spaceById(id);
   const role = roleFor(id);
@@ -260,6 +265,11 @@ function spaceHTML(id) {
   const agents = agentsOf(id);
   const deskAgents = agents.filter((a) => a.deskSlot >= 0);
   const manager = agents.find((a) => a.role === 'manager');
+  // 씬의 출석부는 프레즌스(G8) — occupants에 없는 멤버는 빈 책상(외출), 게스트 체크인은 방문자.
+  // 프레즌스 미제공 방(라이브 스페이스 등)은 전원 재실로 간주해 기존 연출을 유지한다.
+  const presence = DB.presence[id];
+  const present = presence ? new Set(presence.occupants.map((o) => o.agentId)) : null;
+  const visitors = presence ? presence.occupants.filter((o) => o.kind === 'guest') : [];
   const visits = visitsOf(id);
   const memberOfThis = isMember(id);
 
@@ -289,7 +299,8 @@ function spaceHTML(id) {
               ${chalkboardHTML(space, guest)}
               <div class="poster-neon">MOVE FAST<br>WITH<br>AGENTS</div>
               ${shelfBadgeHTML(space)}
-              ${deskAgents.map((a) => deskHTML(a, guest)).join('')}
+              ${deskAgents.map((a) => deskHTML(a, guest, present !== null && !present.has(a.id) && a.status !== 'offline')).join('')}
+              ${visitors.map((v, i) => visitorHTML(v, i)).join('')}
               ${manager ? managerHTML(space, manager, guest) : ''}
             </div>
           </div></div>
@@ -353,9 +364,17 @@ function chalkboardHTML(space, guest) {
     </div>`;
 }
 
-// 배경 이미지 위 픽셀 좌표(x,y = 스프라이트 바닥 중앙)에 서 있는 스프라이트
-function deskHTML(agent, guest) {
+// 배경 이미지 위 픽셀 좌표(x,y = 스프라이트 바닥 중앙)에 서 있는 스프라이트.
+// away = 프레즌스상 다른 방 방문 중 — 캐릭터 없이 빈 책상(명판 + 외출 태그)만 남긴다.
+function deskHTML(agent, guest, away) {
   const slot = DESK_SLOTS[agent.deskSlot] || DESK_SLOTS[0];
+  if (away) {
+    return `
+    <div class="sprite away" style="left:${slot.x}px;top:${slot.y}px;z-index:${Math.round(slot.y)}">
+      <div class="away-tag">외출 중</div>
+      <div class="nameplate">${guest ? ROLE_LABEL[agent.role] + ' 에이전트' : agent.name}</div>
+    </div>`;
+  }
   const bubbleText = guest ? STATUS_LABEL[agent.status] : agent.statusLine;
   const showBubble = agent.status !== 'offline' && bubbleText;
   return `
@@ -365,6 +384,18 @@ function deskHTML(agent, guest) {
       <div class="nameplate" title="${guest ? '' : '담당: ' + agent.owner}">
         ${guest ? ROLE_LABEL[agent.role] + ' 에이전트' : agent.name}
       </div>
+    </div>`;
+}
+
+// 타팀 방문자(게스트 체크인) — 신원 필드는 agent_id뿐이고 이 방 agents[]와 조인이
+// 안 되므로 home_space 라벨만 쓴다 (04-data-mapping §프레즌스). 전 tier 동일 연출.
+function visitorHTML(v, i) {
+  const slot = VISITOR_SLOTS[i] || VISITOR_SLOTS[0];
+  const home = spaceById(v.homeSpaceId);
+  return `
+    <div class="sprite" style="left:${slot.x}px;top:${slot.y}px;z-index:${Math.round(slot.y)}">
+      <div class="robot-scale">${robotHTML({ role: 'visitor', status: 'idle' })}</div>
+      <div class="nameplate">${home ? home.name : v.homeSpaceId}에서 방문 중</div>
     </div>`;
 }
 

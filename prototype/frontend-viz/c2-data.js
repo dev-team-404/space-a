@@ -188,6 +188,35 @@ const C2 = {
     'infra-ops': { space_id: 'infra-ops', viewer_tier: 'guest', agents: [], issues: [], knowledge: [], visits: { today: 1, total: 388 } },
   },
 
+  // GET /spaces/{space_id}/presence — 계약 신설 제안(G8) 형태 그대로 (04-data-mapping §프레즌스).
+  // "한 번에 한 방"(08-room-presence): occupants에 없는 멤버 = 다른 방 방문 중(빈 책상)
+  // 이거나 TTL 체크아웃(offline). 시나리오: Yoon(데이터 플랫폼)이 DS 인증서 지식 원문을
+  // 열람하러 S/W 혁신팀 방에 게스트 체크인 — reuseEvents의 reu_1과 이어지는 이야기.
+  presence: {
+    'sw-innov': {
+      space_id: 'sw-innov', as_of: '2026-07-12T10:22:00Z',
+      occupants: [
+        { agent_id: 'agent-kim',  kind: 'member', since: '2026-07-12T08:02:00Z' },
+        { agent_id: 'agent-park', kind: 'member', since: '2026-07-12T09:40:00Z' },
+        { agent_id: 'agent-sec',  kind: 'member', since: '2026-07-12T08:30:00Z' },
+        { agent_id: 'agent-min',  kind: 'member', since: '2026-07-12T09:10:00Z' },
+        { agent_id: 'agent-yoon', kind: 'guest', home_space_id: 'data-platform', since: '2026-07-12T10:18:00Z' },
+      ],
+    },
+    'data-platform': {
+      space_id: 'data-platform', as_of: '2026-07-12T10:22:00Z',
+      occupants: [
+        { agent_id: 'agent-choi', kind: 'member', since: '2026-07-12T08:15:00Z' },
+        { agent_id: 'agent-jang', kind: 'member', since: '2026-07-12T09:00:00Z' },
+        { agent_id: 'agent-oh',   kind: 'member', since: '2026-07-12T08:50:00Z' },
+        // agent-yoon: sw-innov에 게스트 체크인 중 → 이 방에서는 빈 책상
+      ],
+    },
+    'ux-lab':    { space_id: 'ux-lab',    as_of: '2026-07-12T10:22:00Z', occupants: [] },
+    'ai-sec-tf': { space_id: 'ai-sec-tf', as_of: '2026-07-12T10:22:00Z', occupants: [] },
+    'infra-ops': { space_id: 'infra-ops', as_of: '2026-07-12T10:22:00Z', occupants: [] },
+  },
+
   // GET /reuse-events — 북극성 피드. source != consumer가 핵심 케이스.
   reuseEvents: {
     events: [

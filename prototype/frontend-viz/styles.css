@@ -309,6 +309,16 @@ button { font: inherit; color: inherit; background: none; border: none; cursor: 
 .role-ux        { --c: #c9a7f7; }
 .role-ops       { --c: #ff9d97; }
 .role-manager   { --c: #8ef0a2; }
+.role-visitor   { --c: #f0d264; }
+
+/* 프레즌스 (G8) — 외출 중 멤버의 빈 책상 */
+.sprite.away { opacity: .8; }
+.away-tag {
+  text-align: center; font-size: 9px; font-weight: 700; color: var(--muted);
+  background: rgba(8,12,24,.6); border: 1px dashed var(--line);
+  border-radius: 8px; padding: 1px 6px; width: fit-content;
+  margin: 0 auto 4px;
+}
 
 .robot .antenna {
   width: 3px; height: 9px; background: #cfd6ea; margin: 0 auto; position: relative;
