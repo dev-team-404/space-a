@@ -20,11 +20,29 @@ core는 인터페이스(ports)에만 의존하므로, DB/LLM 구현을 갈아끼
 ```sh
 cd hub
 uv venv .venv
-uv pip install --native-tls fastapi uvicorn pytest httpx   # 사내망 인증서 이슈로 --native-tls
+uv pip install --native-tls fastapi uvicorn pytest httpx mcp   # 사내망 인증서 이슈로 --native-tls
 
-.venv/bin/python -m pytest                                  # 테스트 12개
-.venv/bin/python -m uvicorn space_a.api.rest_server:create_app --factory --reload   # 로컬 서버
+.venv/bin/python -m pytest                                  # 테스트 83개 (mcp 포함)
+.venv/bin/python -m uvicorn space_a.api.rest_server:create_app --factory --reload   # REST 서버
 ```
+
+## MCP (에이전트 연결)
+
+에이전트는 Space A에 **MCP 서버**로 붙는다 (C1 계약). 도구: `search_knowledge`·`open_issue`·`cite_knowledge`·`resolve_issue`·`get_skill_candidates`·`get_guide`. **각 도구 설명이 곧 프로토콜 지침**이라 MCP 클라이언트가 에이전트 컨텍스트에 자동 주입한다.
+
+```sh
+# 흐름을 바로 눈으로 (in-process 데모 — MCP 도구를 순서대로 호출·출력)
+.venv/bin/python demo_mcp.py
+
+# stdio MCP 서버 (SPACE_A_TOKEN 없으면 데모 공간·샘플 지식 시드 + 토큰 stderr 출력)
+.venv/bin/python -m space_a.api.mcp_server
+
+# 실제 MCP 클라이언트로 확인 (MCP Inspector)
+npx @modelcontextprotocol/inspector .venv/bin/python -m space_a.api.mcp_server
+```
+
+**"언제·무엇을" 판단**은 운영자가 에이전트 AGENTS.md에 넣는다 → [지침 템플릿](../docs/design/collab-space/09-agents-md-template.md).
+MVP는 인메모리 dev 서버(데모 시드). 프로덕션은 영속 저장소 + SSO 토큰으로 교체.
 
 ## Docker
 
