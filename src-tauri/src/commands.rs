@@ -355,29 +355,99 @@ pub fn run_scan_now(state: State<AppState>) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn chat_status() -> ChatStatus {
-    match OpenAiCompatEngine::from_env() {
+#[tauri::command(async)]
+pub fn chat_status(state: State<AppState>) -> Result<ChatStatus, String> {
+    let guard = lock(&state)?;
+    Ok(match crate::resolve_engine(&guard) {
         Some(e) => ChatStatus { configured: true, model: Some(e.model) },
         None => ChatStatus { configured: false, model: None },
-    }
+    })
 }
 
 #[tauri::command(async)]
 pub fn chat_send(state: State<AppState>, messages: Vec<ChatMessage>) -> Result<String, String> {
     validate_chat_messages(&messages)?;
-    let Some(engine) = OpenAiCompatEngine::from_env() else {
+    // 락 범위: 엔진 해석 + 컨텍스트 수집만. 네트워크(LLM) 호출 전에 반드시 해제.
+    let (engine, ctx) = {
+        let guard = lock(&state)?;
+        let engine = crate::resolve_engine(&guard);
+        let ctx = chat_context_inner(&*guard).map_err(|e| e.to_string())?;
+        (engine, ctx)
+    };
+    let Some(engine) = engine else {
         // UI는 chat_status로 사전 안내 — 여기는 방어선 (스펙 §5: 미설정은 에러가 아닌 안내)
         return Err("엔진이 설정되지 않았어요".into());
-    };
-    // 락 범위: 컨텍스트 수집만. 네트워크(LLM) 호출 전에 반드시 해제.
-    let ctx = {
-        let guard = lock(&state)?;
-        chat_context_inner(&*guard).map_err(|e| e.to_string())?
     };
     let system = agent_mentor::chat::build_chat_system_prompt(&ctx);
     let recent = &messages[messages.len().saturating_sub(20)..]; // 이력 상한 20턴
     engine.chat(&system, recent).map(|o| o.text).map_err(|e| e.to_string())
+}
+
+/// 설정 창용 엔진 설정 스냅샷. source: "store"(설정 창에서 지정) | "env"(.env 폴백) | "none".
+#[derive(Debug, Clone, Serialize)]
+pub struct EngineSettings {
+    pub url: String,
+    pub key: String,
+    pub model: String,
+    pub source: String,
+}
+
+#[tauri::command(async)]
+pub fn engine_settings_get(state: State<AppState>) -> Result<EngineSettings, String> {
+    let guard = lock(&state)?;
+    let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
+    let stored_url = get("engine_url").trim().to_string();
+    if !stored_url.is_empty() {
+        return Ok(EngineSettings {
+            url: stored_url,
+            key: get("engine_key"),
+            model: get("engine_model"),
+            source: "store".into(),
+        });
+    }
+    Ok(match OpenAiCompatEngine::from_env() {
+        Some(e) => EngineSettings { url: e.base_url, key: e.api_key, model: e.model, source: "env".into() },
+        None => EngineSettings { url: String::new(), key: String::new(), model: String::new(), source: "none".into() },
+    })
+}
+
+#[tauri::command(async)]
+pub fn engine_settings_set(
+    state: State<AppState>,
+    url: String,
+    key: String,
+    model: String,
+) -> Result<(), String> {
+    let url = url.trim();
+    if !url.is_empty() && !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err("엔드포인트 URL은 http:// 또는 https:// 로 시작해야 해요".into());
+    }
+    let guard = lock(&state)?;
+    // url을 비우고 저장하면 store 값이 지워져 .env 폴백으로 돌아간다 (engine_settings_get 참고)
+    guard.set_setting("engine_url", url).map_err(|e| e.to_string())?;
+    guard.set_setting("engine_key", key.trim()).map_err(|e| e.to_string())?;
+    guard.set_setting("engine_model", model.trim()).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 저장 전 값으로도 시험할 수 있게 폼 값을 그대로 받는다. 성공 시 모델의 응답 일부를 돌려준다.
+#[tauri::command(async)]
+pub fn engine_test(url: String, key: String, model: String) -> Result<String, String> {
+    let url = url.trim().to_string();
+    if url.is_empty() {
+        return Err("엔드포인트 URL을 입력하세요".into());
+    }
+    let model = model.trim();
+    let engine = OpenAiCompatEngine {
+        base_url: url,
+        api_key: key.trim().to_string(),
+        model: if model.is_empty() { "gpt-4o-mini".to_string() } else { model.to_string() },
+    };
+    let out = engine
+        .generate("연결 테스트입니다. 'ok' 한 단어로만 답하세요.", "ping")
+        .map_err(|e| e.to_string())?;
+    let snippet: String = out.text.chars().take(40).collect();
+    Ok(format!("연결 성공 — 응답: {snippet}"))
 }
 
 #[cfg_attr(test, allow(dead_code))]

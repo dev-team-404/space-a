@@ -15,6 +15,7 @@ export default defineConfig({
       input: {
         chat: fileURLToPath(new URL('./src/chat.html', import.meta.url)),
         mascot: fileURLToPath(new URL('./src/mascot.html', import.meta.url)),
+        settings: fileURLToPath(new URL('./src/settings.html', import.meta.url)),
       },
     },
   },

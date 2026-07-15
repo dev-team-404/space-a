@@ -7,6 +7,7 @@ mod pipeline;
 #[cfg_attr(test, allow(dead_code, unused_imports))]
 mod tray;
 
+use agent_mentor::diary::engine::OpenAiCompatEngine;
 use agent_mentor::store::SqliteStore;
 use std::sync::Mutex;
 
@@ -15,10 +16,34 @@ pub struct AppState {
     pub scan_tx: std::sync::mpsc::Sender<pipeline::PipelineMsg>,
 }
 
+/// 엔진 해석 우선순위: 설정 UI(store) → .env — 설정 창에서 지정한 값이 있으면 그것을 쓰고,
+/// 없으면 기존 AGENT_MENTOR_ENGINE_* 환경변수로 폴백한다 (지빈의 .env 워크플로 보존).
+/// 호출자는 락을 짧게 잡고(네트워크 전 해제 규율) 이 함수에 &SqliteStore만 넘긴다.
+pub(crate) fn resolve_engine(store: &SqliteStore) -> Option<OpenAiCompatEngine> {
+    let url = store
+        .get_setting("engine_url")
+        .ok()
+        .flatten()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    if let Some(base_url) = url {
+        let api_key = store.get_setting("engine_key").ok().flatten().unwrap_or_default();
+        let model = store
+            .get_setting("engine_model")
+            .ok()
+            .flatten()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "gpt-4o-mini".to_string());
+        return Some(OpenAiCompatEngine { base_url, api_key, model });
+    }
+    OpenAiCompatEngine::from_env()
+}
+
 /// content_protected 설정을 두 창(chat·mascot)에 적용 — 화면 캡처/녹화에서 제외 (스펙 §7).
 pub(crate) fn apply_content_protection(app: &tauri::AppHandle, on: bool) {
     use tauri::Manager;
-    for label in ["chat", "mascot"] {
+    for label in ["chat", "mascot", "settings"] {
         if let Some(w) = app.get_webview_window(label) {
             if let Err(e) = w.set_content_protected(on) {
                 log::warn!("content_protected({label}) 적용 실패: {e}");
@@ -58,8 +83,9 @@ pub fn run() {
             ))
             .on_window_event(|window, event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    if window.label() == "chat" {
-                        let _ = window.hide(); // 상주: destroy 대신 hide (스펙 §3)
+                    // 상주: destroy 대신 hide (스펙 §3). settings도 동일 — destroy되면 트레이에서 재오픈 불가
+                    if matches!(window.label(), "chat" | "settings") {
+                        let _ = window.hide();
                         api.prevent_close();
                     }
                 }
@@ -157,6 +183,9 @@ pub fn run() {
                 commands::sessions_ctx,
                 commands::chat_status,
                 commands::chat_send,
+                commands::engine_settings_get,
+                commands::engine_settings_set,
+                commands::engine_test,
             ])
             .run(tauri::generate_context!())
             .expect("tauri 실행 실패");
