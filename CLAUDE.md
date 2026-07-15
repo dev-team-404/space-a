@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 SPACE-A는 **문서 우선** 프로젝트입니다. 구조·아키텍처 결정은 코드보다 먼저 `docs/`에 기록합니다.
-(구현: `hub/` 백엔드, 멘토 앱(루트 Cargo workspace), `prototype/` 시각화)
+(구현: `client/` Tauri 클라이언트, `hub/` 백엔드, `prototype/` 시각화)
 
 ## 문서 구조 (`docs/`)
 
@@ -40,9 +40,9 @@ docs(design): draft frontend visualization spec
 chore: set up gitignore and base structure
 ```
 
-## 멘토 앱 (Agent Mentor) 개발 제약
+## Tauri 클라이언트 (`client/`) 개발 제약
 
-루트 Cargo workspace(`crates/core`, `src-tauri`, `src/`)의 멘토 앱을 만질 때 적용:
+`client/`(Cargo workspace: `crates/core`, `src-tauri`, `src/`)를 만질 때 적용:
 
 - 제품명: Agent Mentor. 식별자 `agent-mentor`. Claude 외 타 에이전트 확장을 염두에 둔 이름이므로,
   에이전트별 로직은 하드코딩하지 말고 SourceAdapter / Engine 인터페이스 뒤로 추상화할 것.

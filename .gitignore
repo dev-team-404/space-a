@@ -71,12 +71,10 @@ Thumbs.db
 .claude/settings.local.json
 
 # ─────────────────────────────────────────────
-# Rust / Tauri (mentor app)
+# Rust / Tauri (client/)
 # ─────────────────────────────────────────────
-/target
 target/
-/agent-mentor.db
-/diary/
-src-tauri/gen/schemas/
-src-tauri/target/
+client/agent-mentor.db
+client/diary/
+client/src-tauri/gen/schemas/
 .vite/
