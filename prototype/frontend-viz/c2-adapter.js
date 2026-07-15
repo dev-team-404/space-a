@@ -23,7 +23,6 @@ const DB = (() => {
     currentUser: CLIENT.currentUser,
     spaces: [], memberships: [], agents: [], issues: [], knowledge: [],
     reuseEvents: [], activity: [], visits: {}, presence: {},
-    managerEvents: CLIENT.managerEvents.slice(),
   };
 
   // GET /spaces → 로비 (공간·집계 + 서버 제공 하이라이트 서사)
@@ -82,8 +81,12 @@ const DB = (() => {
     };
   }
 
-  // 매니저 캐릭터는 C2 밖 (G2) — 재설계 전까지 클라이언트 데이터로 씬을 채운다
-  db.agents.push(...CLIENT.managerAgents);
+  // 매니저 캐릭터는 연출 전용 (G2 재설계) — 말풍선은 C2 구조 필드의 결정론 문장
+  db.agents.push(...CLIENT.managerAgents.map((m) => {
+    const s = db.spaces.find((x) => x.id === m.spaceId);
+    const busy = s && (s.status !== '정상' || s.tokenUsed >= 80);
+    return { ...m, statusLine: busy ? '토큰 사용 많음 — 재배분 검토' : '운영 이상 없음' };
+  }));
 
   // GET /reuse-events → 재사용 체인 피드 (북극성). est_saved_*는 '~' 라벨 필수.
   for (const r of C2.reuseEvents.events) {

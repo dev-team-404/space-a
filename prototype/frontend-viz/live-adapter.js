@@ -111,11 +111,6 @@
     })),
   );
 
-  DB.managerEvents.push({
-    spaceId: SPACE_ID, kind: 'optimize',
-    summary: `GitHub PR 스냅숏 반영 (${typeof LIVE_FETCHED_AT !== 'undefined' ? LIVE_FETCHED_AT : '수동'})`,
-    ts: typeof LIVE_FETCHED_AT !== 'undefined' ? LIVE_FETCHED_AT.slice(-5) : '',
-  });
   DB.visits[SPACE_ID] = { today: open.length + 1, total: prs.length * 3 };
 
   // 내 에이전트가 이 방 멤버면 나도 멤버 (멤버십 파생 규칙 그대로)

@@ -29,7 +29,7 @@ open prototype/frontend-viz/index.html
 |---|---|
 | `c2-data.js` | **가짜 C2 서버 응답** — [`contracts/c2-rest-api.json`](../../contracts/c2-rest-api.json) wire 형식 그대로. 백엔드가 생기면 이 파일만 fetch로 교체 |
 | `c2-adapter.js` | C2 wire → 화면 뷰모델(`DB`) 번역. 스펙: [`docs/design/space-view/04-data-mapping.md`](../../docs/design/space-view/04-data-mapping.md) |
-| `client-data.js` | C2 계약 밖 데이터 — 인증 세션·매니저 코너(재설계 대기)·레이아웃 상수 (매핑 문서 §갭) |
+| `client-data.js` | C2 계약 밖 데이터 — 인증 세션·매니저 캐릭터(연출 전용)·레이아웃 상수 (매핑 문서 §갭) |
 | `app.js` | 상태 → HTML 렌더 (로비/스페이스 라우팅, 피드, 모달, 멤버/게스트 권한 로직) |
 | `styles.css` | 오버레이·로봇 캐릭터·피드 스타일 |
 | `assets/` | 생성 배경 이미지 (사옥 `lobby-building.png`, 사무실 `office-room.png`) |

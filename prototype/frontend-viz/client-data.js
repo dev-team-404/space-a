@@ -1,22 +1,17 @@
 // client-data.js — C2 계약 밖에서 오는 데이터 (docs/design/space-view/04-data-mapping.md §갭).
-// G1 인증 세션(currentUser), G2 매니저 코너(관리 API로 재편 — 재설계 대기), G5 레이아웃 상수.
+// G1 인증 세션(currentUser), G5 레이아웃 상수, 매니저 캐릭터(연출 전용 — G2 재설계).
 
 const CLIENT = {
   // G1: 실제로는 로그인 세션에서 온다. 스페이스별 멤버십은 C2의 viewer_tier로 유도.
   currentUser: { id: 'kimmy', name: '김주영', agentId: 'agent-kim' },
 
-  // G2: 매니저 코너의 실체는 #9에서 "관리 API(C4)"로 재편됐다. 씬의 매니저 캐릭터·코너를
-  // 뭘로 채울지 재설계 전까지의 자리표시 데이터 — C2 wire 데이터에 넣지 않는다.
+  // G2 재설계(2026-07-15): 매니저는 백엔드 실체가 없는 안내 데스크 연출이다. 말풍선은
+  // 어댑터가 C2 구조 필드(status·token_used)에서 결정론으로 채운다 — 여기엔 캐릭터 껍데기만.
   managerAgents: [
     { id: 'manager-a', name: 'Manager_A', role: 'manager', spaceId: 'sw-innov', owner: '(팀 공용)',
-      status: 'working', statusLine: '권한 및 자원 최적화 제안', deskSlot: -1 },
+      status: 'working', statusLine: '', deskSlot: -1 },
     { id: 'manager-d', name: 'Manager_D', role: 'manager', spaceId: 'data-platform', owner: '(팀 공용)',
-      status: 'working', statusLine: '토큰 예산 재배분 중', deskSlot: -1 },
-  ],
-  managerEvents: [
-    { spaceId: 'sw-innov', kind: 'optimize', summary: '미사용 MCP 2건 정리 제안', ts: '09:00' },
-    { spaceId: 'sw-innov', kind: 'permission', summary: 'RBAC 적용 중 — 신규 에이전트 1건 승인 대기', ts: '08:40' },
-    { spaceId: 'data-platform', kind: 'token', summary: '토큰 예산 80% 도달 예상 — 재배분 검토', ts: '10:02' },
+      status: 'working', statusLine: '', deskSlot: -1 },
   ],
 };
 

@@ -400,9 +400,9 @@ function visitorHTML(v, i) {
     </div>`;
 }
 
-// 매니저: 부스(이미지에 구워진 나무 단상) 뒤에 로봇, 그 아래에 정보 패널
+// 매니저: 부스(이미지에 구워진 나무 단상) 뒤에 로봇, 그 아래에 정보 패널.
+// G2 재설계(2026-07-15) — 코너는 C2가 주는 운영 집계(토큰·방 상태)만. 캐릭터는 연출 전용.
 function managerHTML(space, manager, guest) {
-  const events = DB.managerEvents.filter((e) => e.spaceId === space.id);
   return `
     <div class="sprite" style="left:1272px;top:486px;z-index:486">
       <div class="robot-scale mgr">${robotHTML(manager)}</div>
@@ -413,9 +413,7 @@ function managerHTML(space, manager, guest) {
       <div class="mc-rows">
         <div class="mc-row"><span>Token 사용량</span>${tokenGaugeHTML(space)}</div>
         <div class="mc-row"><span>Room 상태</span><b class="${space.status === '정상' ? 'ok' : 'busy'}">● ${space.status}</b></div>
-        <div class="mc-row"><span>권한 관리</span><b>RBAC 적용 중</b></div>
       </div>
-      ${events[0] ? `<div class="mc-note">“${events[0].summary}”</div>` : ''}
     </div>`;
 }
 

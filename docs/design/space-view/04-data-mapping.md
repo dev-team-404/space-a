@@ -175,7 +175,7 @@ Pillar 3 설계를 미러링"이라 명시), 프로토타입은 클라이언트 
 | # | 뷰모델 필드 | 현재 출처 | 판정 |
 |---|---|---|---|
 | G1 | `currentUser`, 멤버십 | `client-data.js` | 인증 세션의 몫 (C2 밖이 맞음). 스페이스 멤버십은 `viewer_tier`로 유도 |
-| G2 | 매니저 코너 이벤트(`managerEvents`), RBAC 상태 | `client-data.js` | C2에 없음. #9에서 "매니저 에이전트 → 관리 API(C4)"로 재편됨 — **코너를 뭘로 채울지 재설계 필요** (C4 이벤트 노출? 코너 축소?) |
+| G2 | 매니저 코너 이벤트(`managerEvents`), RBAC 상태 | ~~`client-data.js`~~ 폐기 | **재설계 완료 (2026-07-15)**: 코너는 C2가 이미 주는 운영 집계만 남긴다 — 토큰 게이지(`token_budget/used`) + Room 상태(`status`). RBAC 행·`managerEvents`는 폐기 — #9 이후 관리는 C4(결정론 CRUD 컨트롤 플레인)로 재편됐고, C4엔 "매니저 에이전트"라는 실체도 이벤트 피드도 없다. 매니저 캐릭터는 안내 데스크 은유의 연출 전용으로 유지하고, 말풍선은 구조 필드에서 유도한 결정론 문장(공간 번역). 향후 후보: C4 온보딩을 `/activity`의 `agent_registered`(org-safe, "신규 입사" 연출) 이벤트로 노출 — 필요해지면 계약 추가 요청 |
 | G3 | 로비 "공개 지식 신착" 목록 | 스페이스 상세를 합쳐서 유도 | org 전체 지식 목록 endpoint 없음 (`stats.top_knowledge`는 제목·카운트뿐). 스페이스가 늘면 N회 호출 — **C2에 `GET /knowledge?visibility=org` 추가 후보** |
 | G4 | 지식 문서 작성 시점 | `c2-data.js`의 `created_at` (선제 사용) | C2 `knowledge`에 시각 필드가 없다 — **`created_at` 추가 요청 후보** (계약은 추가 허용) |
 | G5 | 책상 좌표(`deskSlot`), 층 히트존, 씬 스케일 | 클라이언트 상수 | 레이아웃은 클라이언트 소유 — 계약에 올리지 않는 게 맞음 |
@@ -190,7 +190,7 @@ contracts/fixtures/*.json  ←(모양·시나리오 정합)→  c2-data.js   "�
                                                      │
                                               c2-adapter.js     wire → 뷰모델 번역 (이 문서가 스펙)
                                                      │
-client-data.js (C2 밖: 인증·레이아웃·G2) ──────────→ DB (뷰모델)
+client-data.js (C2 밖: 인증·레이아웃) ────────────→ DB (뷰모델)
                                                      │
 live-data.js + live-adapter.js (GitHub PR 라이브) ──┤
                                                      ▼
