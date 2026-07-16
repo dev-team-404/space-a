@@ -26,6 +26,8 @@
   // 최상위 팁(프론티어) 1건을 크게, 나머지는 접힌 목록으로
   const top = $derived(items[0] ?? null);
   const rest = $derived(items.slice(1, 4));
+  // Boris(커뮤니티) 팁은 원문이 영어라, 한글 코칭(🤖)이 있으면 원문 본문을 숨긴다.
+  const isBoris = $derived(top?.trigger_tags?.includes('boris') ?? false);
 
   // (2) LLM 코칭 — top 팁이 바뀌면 엔진에 맞춤 코칭을 요청(비동기). 엔진 미설정/실패면 조용히 생략.
   let coaching = $state<string | null>(null);
@@ -63,7 +65,9 @@
     {:else if coaching}
       <p class="coach">🤖 {coaching}</p>
     {/if}
-    <p class="body">{top.body}</p>
+    {#if top.body && !(isBoris && (coaching || coachLoading))}
+      <p class="body">{top.body}</p>
+    {/if}
     {#if top.source_url}
       <a class="more" href={top.source_url} onclick={(e) => { e.preventDefault(); openExternal(top.source_url!); }}>공식 가이드에서 더 배우기 →</a>
     {/if}

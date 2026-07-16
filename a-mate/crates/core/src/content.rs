@@ -258,6 +258,19 @@ impl Default for BorisTipsSource {
     }
 }
 
+/// 본문을 간결하게 — 파싱 아티팩트("View original post") 제거 + 공백 정리 + ~140자 축약.
+/// (엔진 꺼져 코칭이 없을 때의 폴백용. 코칭이 있으면 프론트가 본문을 숨긴다.)
+fn tidy_body(body: &str) -> String {
+    let cleaned = body.replace("View original post", " ");
+    let collapsed = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.chars().count() > 140 {
+        let short: String = collapsed.chars().take(140).collect();
+        format!("{}…", short.trim_end())
+    } else {
+        collapsed
+    }
+}
+
 /// 팁 텍스트 → (역량 축, 태그). 키워드로 프론티어/태그 매칭이 되게 한다(특이도 높은 것 우선).
 fn classify_boris(text: &str) -> (Option<Dimension>, Vec<String>) {
     use Dimension::*;
@@ -321,7 +334,7 @@ impl BorisTipsSource {
                     id: format!("boris-{:02x}{:02x}{:02x}", hx[0], hx[1], hx[2]),
                     kind: ItemKind::Tip,
                     title: t.trim().to_string(),
-                    body: format!("{} — Boris Cherny(Claude Code 창시자)", b.trim()),
+                    body: format!("{} — Boris Cherny(Claude Code 창시자)", tidy_body(&b)),
                     source_url: Some(self.url.clone()),
                     dimension,
                     trigger_tags,
@@ -597,5 +610,17 @@ mod tests {
     fn boris_is_lenient_on_empty_or_garbage() {
         assert!(BorisTipsSource::default().parse_html("").is_empty());
         assert!(BorisTipsSource::default().parse_html("<p>no steps here</p>").is_empty());
+    }
+
+    #[test]
+    fn boris_body_is_tidied_no_artifacts_and_short() {
+        let html = r#"
+          <div class="step-header"><div class="step-title">Long Tip</div></div>
+          <div class="step-body">This is a long body that repeats itself many times to exceed the limit so we can verify truncation works for the home card and stays concise enough. View original post</div>
+        "#;
+        let items = BorisTipsSource::default().parse_html(html);
+        assert_eq!(items.len(), 1);
+        assert!(!items[0].body.contains("View original post"), "아티팩트 제거: {}", items[0].body);
+        assert!(items[0].body.contains('…'), "긴 본문 축약: {}", items[0].body);
     }
 }
