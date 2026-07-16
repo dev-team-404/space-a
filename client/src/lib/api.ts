@@ -130,6 +130,50 @@ export const coachTip = (item: ContentItem) =>
 // 마스코트가 pull한 occasion을 chat 창 알림 로그용으로 재방송 (pull 단일화 — 플랜 Task 2 Step 5)
 export const emitOccasionToday = (labels: string[]) => emit('occasion:today', labels);
 
+// --- 방 방문 (docs/design/room-visit.md) ---
+
+export interface HubSettings {
+  url: string;
+  user: string;
+  connected: boolean;
+  room_id: string;
+}
+export interface RoomOccupant {
+  agent_id: string;
+  name: string;
+  cell: [number, number];
+  is_owner: boolean;
+}
+export interface RoomState {
+  room_id: string;
+  owner_name: string;
+  grid: { w: number; h: number };
+  design: { wallpaper: string; floor: string; objects: { kind: string; cell: [number, number] }[] };
+  occupants: RoomOccupant[];
+}
+export interface RoomMe {
+  agent_id: string;
+  name: string;
+  my_room_id: string;
+  room_id: string;
+  cell: [number, number];
+}
+export interface RoomListEntry {
+  room_id: string;
+  owner_name: string;
+  occupants: number;
+}
+
+export const hubSettingsGet = () => invoke<HubSettings>('hub_settings_get');
+export const hubConnect = (url: string, user: string) =>
+  invoke<HubSettings>('hub_connect', { url, user });
+export const roomView = () => invoke<{ me: RoomMe; room: RoomState }>('room_view');
+export const roomsList = () => invoke<{ rooms: RoomListEntry[] }>('rooms_list');
+export const roomGoto = (roomId: string) => invoke<RoomMe>('room_goto', { roomId });
+export const roomMoveCell = (x: number, y: number) => invoke<RoomMe>('room_move_cell', { x, y });
+export const robotSpecForSeed = (seed: string) => invoke<RobotSpec>('robot_spec_for_seed', { seed });
+export const openSettingsWindow = () => invoke<void>('open_settings_window');
+
 export interface ScanProgress {
   done: number;
   total: number;

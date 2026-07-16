@@ -11,6 +11,8 @@
   import NoticeLog from './home/NoticeLog.svelte';
   import TipCard from './home/TipCard.svelte';
   import MiniRoom from './MiniRoom.svelte';
+  import RoomView from './RoomView.svelte';
+  import { hubSettingsGet } from '../api';
 
   let { summary, onGotoCoach, onGotoNotice }: {
     summary: Summary | null;
@@ -26,6 +28,9 @@
   let notices = $state<Notice[]>([]);
   let tips = $state<ContentItem[]>([]);
   const topAdvice = $derived(findings.length > 0 ? findings[0].suggested_action : null);
+  // 방 서버 연결 시 격자 방(RoomView), 미연결 시 기존 장식 방(MiniRoom) — 원기능 보존
+  let hubConnected = $state(false);
+  hubSettingsGet().then((h) => (hubConnected = h.connected)).catch(() => {});
 
   async function load() {
     [days, findings, tips] = await Promise.all([
@@ -78,7 +83,11 @@
     <NoticeLog {notices} onGoto={onGotoNotice} />
   </div>
 
-  <MiniRoom advice={topAdvice} />
+  {#if hubConnected}
+    <RoomView />
+  {:else}
+    <MiniRoom advice={topAdvice} />
+  {/if}
 
   <footer class="status">
     {#if scanning}

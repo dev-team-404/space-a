@@ -49,6 +49,32 @@
     }
   }
 
+  // --- Space A 서버 (방 방문) ---
+  interface HubSettings { url: string; user: string; connected: boolean; room_id: string }
+  let hub = $state<HubSettings | null>(null);
+  let hubUrl = $state('');
+  let hubUser = $state('');
+  let hubStatus = $state<{ kind: 'idle' | 'ok' | 'err' | 'busy'; text: string }>({ kind: 'idle', text: '' });
+
+  async function loadHub() {
+    try {
+      hub = await invoke<HubSettings>('hub_settings_get');
+      hubUrl = hub.url;
+      hubUser = hub.user;
+    } catch { /* 미설정 */ }
+  }
+  loadHub();
+
+  async function connectHub() {
+    hubStatus = { kind: 'busy', text: '연결 중…' };
+    try {
+      hub = await invoke<HubSettings>('hub_connect', { url: hubUrl, user: hubUser });
+      hubStatus = { kind: 'ok', text: `연결 완료 — 개인 방이 만들어졌어요 (${hub.room_id})` };
+    } catch (e) {
+      hubStatus = { kind: 'err', text: `${e}` };
+    }
+  }
+
   const sourceLabel = $derived(
     source === 'store' ? '설정 창에서 지정한 값 사용 중'
     : source === 'env' ? '.env 파일 값 사용 중 (아래에 저장하면 이 값을 덮어씁니다)'
@@ -83,7 +109,32 @@
     <p class="status" data-kind={status.kind}>{status.text}</p>
   {/if}
 
-  <p class="hint footer">URL을 비우고 저장하면 .env(AGENT_MENTOR_ENGINE_*) 값으로 되돌아갑니다.</p>
+  <p class="hint">URL을 비우고 저장하면 .env(AGENT_MENTOR_ENGINE_*) 값으로 되돌아갑니다.</p>
+
+  <hr />
+
+  <h1>Space A 서버</h1>
+  <p class="hint">방 방문·에이전트 위치를 관장하는 hub 서버에 연결합니다.</p>
+  {#if hub}
+    <p class="source" data-kind={hub.connected ? 'store' : 'none'}>
+      {hub.connected ? `연결됨 — 내 방: ${hub.room_id}` : '미연결'}
+    </p>
+  {/if}
+
+  <label>
+    <span>서버 URL</span>
+    <input type="text" bind:value={hubUrl} placeholder="http://192.168.0.10:8000" spellcheck="false" />
+  </label>
+  <label>
+    <span>내 이름</span>
+    <input type="text" bind:value={hubUser} placeholder="예: 준녕" spellcheck="false" />
+  </label>
+  <div class="actions">
+    <button class="primary" onclick={connectHub} disabled={hubStatus.kind === 'busy'}>연결</button>
+  </div>
+  {#if hubStatus.text}
+    <p class="status" data-kind={hubStatus.kind}>{hubStatus.text}</p>
+  {/if}
 </main>
 
 <style>
@@ -110,8 +161,8 @@
     font-size: 12px;
     color: var(--ink-soft);
   }
-  .footer {
-    margin-top: auto;
+  hr {
+    width: 100%; border: none; border-top: 1px solid var(--pastel-lav); margin: 6px 0;
   }
   .source {
     margin: 0;

@@ -3,8 +3,9 @@
   import './lib/theme.css';
   import {
     emitOccasionToday, getChatterPool, getMascotSeed, getSettings, getSummary, getTodayOccasions,
-    listFindings, openChatTab, setSetting,
+    hubSettingsGet, listFindings, openChatTab, openSettingsWindow, roomGoto, roomsList, setSetting,
     onDiaryReady, onNewFindings, onScanDone, onSettingsChanged,
+    type RoomListEntry,
   } from './lib/api';
   import { drawRobot, type RobotSpec } from './lib/robot/render';
   import { frameAt, resolveState, type BubbleKind } from './lib/robot/anim';
@@ -131,9 +132,35 @@
     return () => { clearTimeout(t); p.then((u) => u()); };
   });
 
+  // 방 이동 팝오버 (docs/design/room-visit.md §3): 우클릭 = 메뉴, 클릭 = 홈피(기존)
+  let roomMenu = $state<RoomListEntry[] | null>(null); // null = 닫힘
+  let myRoomId = $state('');
+  let hubOn = $state(false);
+  async function toggleRoomMenu() {
+    if (roomMenu !== null) { roomMenu = null; await expand(false); return; }
+    const wasCollapsed = bubble === null;
+    try {
+      const [h, list] = await Promise.all([hubSettingsGet(), roomsList().catch(() => ({ rooms: [] }))]);
+      hubOn = h.connected;
+      myRoomId = h.room_id;
+      roomMenu = list.rooms;
+    } catch {
+      hubOn = false;
+      roomMenu = [];
+    }
+    bubble = null; // 말풍선과 동시 표시 안 함
+    if (wasCollapsed) await expand(true);
+  }
+  async function gotoRoom(roomId: string) {
+    try { await roomGoto(roomId); } catch { /* cell_taken 등 — 다음 시도 */ }
+    roomMenu = null;
+    await expand(false);
+  }
+
   // 클릭 vs 드래그 (스펙 §6): drag-region 대신 수동 판별 — 클릭이면 홈피 열기
   let downAt: { x: number; y: number } | null = null;
   function onPointerDown(e: PointerEvent) {
+    if (e.button === 2) return; // 우클릭은 contextmenu 핸들러가 처리
     downAt = { x: e.screenX, y: e.screenY };
   }
   function onPointerMove(e: PointerEvent) {
@@ -170,8 +197,26 @@
   loadSettings();
 </script>
 
-<div class="stage" class:expanded={bubble !== null}>
-  {#if bubble}
+<div class="stage" class:expanded={bubble !== null || roomMenu !== null}>
+  {#if roomMenu !== null}
+    <div class="menu">
+      <div class="menu-title">방 이동</div>
+      {#if !hubOn}
+        <button class="item" onclick={() => { openSettingsWindow(); roomMenu = null; expand(false); }}>
+          서버 미연결 — 설정 열기
+        </button>
+      {:else}
+        <button class="item" onclick={() => gotoRoom(myRoomId)}>🏠 내 방으로 돌아가기</button>
+        <div class="list">
+          {#each roomMenu.filter((r) => r.room_id !== myRoomId) as r (r.room_id)}
+            <button class="item" onclick={() => gotoRoom(r.room_id)}>
+              {r.owner_name}의 방 <span class="n">{r.occupants}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {:else if bubble}
     <div class="bubble">
       <button class="text" onclick={() => closeBubble(true)}>{bubble.text}</button>
       <button class="x" aria-label="닫기" onclick={() => closeBubble(false)}>×</button>
@@ -183,6 +228,7 @@
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}
     onpointerup={onPointerUp}
+    oncontextmenu={(e) => { e.preventDefault(); toggleRoomMenu(); }}
   >
     <canvas bind:this={canvas} width="128" height="128"></canvas>
   </div>
@@ -210,4 +256,20 @@
     font-size: 13px; line-height: 1; color: var(--ink-soft);
   }
   .bubble .x:hover { color: var(--ink); }
+  .menu {
+    display: flex; flex-direction: column; gap: 4px;
+    width: 200px; margin: 8px 12px 0 0; padding: 8px;
+    background: var(--frame-bg); color: var(--ink);
+    border-radius: var(--radius-m); box-shadow: var(--shadow-soft);
+    font: 12px 'Segoe UI', 'Malgun Gothic', sans-serif;
+  }
+  .menu-title { font-weight: 700; font-size: 11px; color: var(--ink-soft); padding: 0 4px; }
+  .menu .list { max-height: 96px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  .menu .item {
+    border: none; background: var(--pastel-lav); color: var(--ink);
+    border-radius: var(--radius-s); padding: 6px 8px; font: inherit;
+    cursor: pointer; text-align: left;
+  }
+  .menu .item:hover { background: var(--accent); color: #fff; }
+  .menu .n { float: right; color: inherit; opacity: 0.7; }
 </style>

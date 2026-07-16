@@ -93,7 +93,12 @@ pub fn run() {
                 }
             })
             .setup(|app| {
-                let dir = app.path().app_data_dir()?;
+                // 테스트용 오버라이드: 한 PC에서 두 인스턴스를 돌릴 때 데이터 디렉터리 분리
+                // (docs/design/room-visit.md §5) — 미설정이면 기존 경로 그대로.
+                let dir = match std::env::var("AGENT_MENTOR_DATA_DIR") {
+                    Ok(d) if !d.trim().is_empty() => std::path::PathBuf::from(d),
+                    _ => app.path().app_data_dir()?,
+                };
                 std::fs::create_dir_all(&dir)?;
                 let store = SqliteStore::open(&dir.join("agent-mentor.db"))?;
                 let (tx, rx) = std::sync::mpsc::channel();
@@ -191,6 +196,14 @@ pub fn run() {
                 commands::coach_tip,
                 commands::list_content,
                 commands::set_content_status,
+                commands::hub_settings_get,
+                commands::hub_connect,
+                commands::room_view,
+                commands::rooms_list,
+                commands::room_goto,
+                commands::room_move_cell,
+                commands::robot_spec_for_seed,
+                commands::open_settings_window,
             ])
             .run(tauri::generate_context!())
             .expect("tauri 실행 실패");
