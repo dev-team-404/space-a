@@ -81,6 +81,8 @@ pub fn run() {
                 tauri_plugin_autostart::MacosLauncher::LaunchAgent, // Windows에선 무시되는 인자
                 None,
             ))
+            .plugin(tauri_plugin_opener::init()) // 공식 가이드 링크를 시스템 브라우저로 열기
+
             .on_window_event(|window, event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     // 상주: destroy 대신 hide (스펙 §3). settings도 동일 — destroy되면 트레이에서 재오픈 불가
@@ -186,6 +188,9 @@ pub fn run() {
                 commands::engine_settings_get,
                 commands::engine_settings_set,
                 commands::engine_test,
+                commands::coach_tip,
+                commands::list_content,
+                commands::set_content_status,
             ])
             .run(tauri::generate_context!())
             .expect("tauri 실행 실패");

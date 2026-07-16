@@ -79,6 +79,21 @@ export interface ChatStatus {
   model: string | null;
 }
 
+/** 큐레이션 콘텐츠 — 역량 사다리 팁(dimension 있음) 또는 피드 뉴스(dimension null). */
+export interface ContentItem {
+  id: string;
+  kind: 'tip' | 'news';
+  dimension: string | null;
+  title: string;
+  body: string;
+  source_url: string | null;
+  trigger_tags: string[];
+  score: number;
+  status: 'new' | 'shown' | 'dismissed';
+  /** "당신 로그: …" — 사용자 실측 데이터로 접지한 근거 줄(없을 수 있음). */
+  personal?: string | null;
+}
+
 export const getSummary = () => invoke<Summary>('get_summary');
 export const listFindings = (includeHidden = false) =>
   invoke<CoachFinding[]>('list_findings', { includeHidden });
@@ -104,6 +119,13 @@ export const sessionsCtx = (ids: string[]) =>
   invoke<SessionCtxItem[]>('sessions_ctx', { ids });
 export const chatStatus = () => invoke<ChatStatus>('chat_status');
 export const chatSend = (messages: ChatMessage[]) => invoke<string>('chat_send', { messages });
+export const listContent = (includeHidden = false) =>
+  invoke<ContentItem[]>('list_content', { includeHidden });
+export const setContentStatus = (id: string, status: 'new' | 'shown' | 'dismissed') =>
+  invoke<void>('set_content_status', { id, status });
+/** (2) LLM 코칭 — 팁+개인 근거를 엔진에 넘겨 맞춤 한 줄 생성. 엔진 미설정이면 reject. */
+export const coachTip = (item: ContentItem) =>
+  invoke<string>('coach_tip', { title: item.title, body: item.body, personal: item.personal ?? null });
 
 // 마스코트가 pull한 occasion을 chat 창 알림 로그용으로 재방송 (pull 단일화 — 플랜 Task 2 Step 5)
 export const emitOccasionToday = (labels: string[]) => emit('occasion:today', labels);
@@ -136,3 +158,5 @@ export const onGotoTab = (cb: (p: GotoTabPayload) => void): Promise<UnlistenFn> 
   listen<GotoTabPayload>('chat:goto-tab', (e) => cb(e.payload));
 export const onSettingsChanged = (cb: () => void): Promise<UnlistenFn> =>
   listen('settings:changed', () => cb());
+export const onContentReady = (cb: (rows: ContentItem[]) => void): Promise<UnlistenFn> =>
+  listen<ContentItem[]>('content:ready', (e) => cb(e.payload));

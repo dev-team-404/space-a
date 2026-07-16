@@ -68,6 +68,13 @@ CREATE TABLE IF NOT EXISTS daily_line (
 CREATE TABLE IF NOT EXISTS chatter_pool (
   date TEXT PRIMARY KEY, lines TEXT NOT NULL, fingerprint TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS content_items (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL, dimension TEXT, title TEXT NOT NULL, body TEXT NOT NULL,
+  source_url TEXT, trigger_tags TEXT NOT NULL DEFAULT '[]',
+  score INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'new',
+  first_seen TEXT, last_seen TEXT
+);
 "#;
 
 pub struct SqliteStore {
@@ -585,6 +592,171 @@ impl SqliteStore {
         Ok(n)
     }
 
+    /// 큐레이션 콘텐츠를 현재 랭킹으로 upsert. findings 선례처럼 **사용자 status는 보존**
+    /// (dismissed는 재스캔에도 유지 — 나깅 방지). 점수·본문·last_seen만 갱신.
+    pub fn replace_content_items(
+        &self,
+        ranked: &[(crate::content::ContentItem, i64)],
+        now_ts: &str,
+    ) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        for (item, score) in ranked {
+            let tags = serde_json::to_string(&item.trigger_tags)?;
+            let dim = item.dimension.map(|d| d.key());
+            self.conn.execute(
+                "INSERT INTO content_items
+                    (id, kind, dimension, title, body, source_url, trigger_tags, score, status, first_seen, last_seen)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'new',?9,?9)
+                 ON CONFLICT(id) DO UPDATE SET
+                    score=?8, title=?4, body=?5, source_url=?6, trigger_tags=?7, last_seen=?9",
+                params![item.id, item.kind.as_str(), dim, item.title, item.body,
+                        item.source_url, tags, score, now_ts],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    fn content_row_from(r: &rusqlite::Row) -> rusqlite::Result<ContentRow> {
+        let tags_json: String = r.get(6)?;
+        Ok(ContentRow {
+            id: r.get(0)?, kind: r.get(1)?, dimension: r.get(2)?,
+            title: r.get(3)?, body: r.get(4)?, source_url: r.get(5)?,
+            trigger_tags: serde_json::from_str(&tags_json).unwrap_or_default(),
+            score: r.get(7)?, status: r.get(8)?,
+            personal: None, // list_content에서 enrich_personal로 채움
+        })
+    }
+
+    /// 노출용 콘텐츠 목록. include_hidden=false면 status='new' + score≥0만,
+    /// 그리고 **태그(축) 쿨다운**: 같은 dimension의 dismissed 형제가 cooldown_days 이내면 억제
+    /// (팁 한 번 닫으면 그 축이 잠시 조용해짐 — 킥오프 §How 나깅 방지). 점수 내림차순.
+    pub fn list_content(
+        &self,
+        now_ts: &str,
+        cooldown_days: f64,
+        include_hidden: bool,
+    ) -> Result<Vec<ContentRow>> {
+        if include_hidden {
+            let mut stmt = self.conn.prepare(
+                "SELECT id,kind,dimension,title,body,source_url,trigger_tags,score,status
+                 FROM content_items ORDER BY score DESC, id",
+            )?;
+            let rows = stmt.query_map([], Self::content_row_from)?;
+            let out = rows.collect::<std::result::Result<Vec<_>, _>>()?;
+            return Ok(self.enrich_personal(out));
+        }
+        let mut stmt = self.conn.prepare(
+            "SELECT id,kind,dimension,title,body,source_url,trigger_tags,score,status
+             FROM content_items c
+             WHERE status='new' AND score >= 0
+               AND NOT EXISTS (
+                 SELECT 1 FROM content_items d
+                 WHERE d.status='dismissed' AND d.dimension IS NOT NULL
+                   AND d.dimension IS c.dimension
+                   AND julianday(?1) - julianday(d.last_seen) < ?2
+               )
+             ORDER BY score DESC, id",
+        )?;
+        let rows = stmt.query_map(params![now_ts, cooldown_days], Self::content_row_from)?;
+        let out = rows.collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(self.enrich_personal(out))
+    }
+
+    /// 노출 목록에 "당신 로그: …" 근거 줄을 채운다(신호 없으면 None 유지).
+    fn enrich_personal(&self, mut rows: Vec<ContentRow>) -> Vec<ContentRow> {
+        for r in &mut rows {
+            r.personal = self.tip_personal_evidence(r);
+        }
+        rows
+    }
+
+    /// 팁을 사용자 실측 데이터로 접지한다 — findings/이벤트 수치로 "당신 로그: …" 한 줄 생성.
+    /// 신호가 없으면 None(그 팁은 일반론만 표시). 커리큘럼=지도, 내 로그=GPS.
+    fn tip_personal_evidence(&self, row: &ContentRow) -> Option<String> {
+        let has = |t: &str| row.trigger_tags.iter().any(|x| x == t);
+        let cnt = |sql: &str| -> u64 {
+            self.conn
+                .query_row(sql, [], |r| r.get::<_, i64>(0))
+                .map(|n| n.max(0) as u64)
+                .unwrap_or(0)
+        };
+        let active = || self.list_findings_current(false).unwrap_or_default();
+
+        if has("mcp") {
+            if let Some(f) = active().into_iter().find(|f| f.rule_id == "R1") {
+                let server = f.evidence.get("server").and_then(|v| v.as_str()).unwrap_or("일부");
+                let resident =
+                    f.evidence.get("resident_tokens_total").and_then(|v| v.as_u64()).unwrap_or(0);
+                return Some(format!(
+                    "당신 로그: 미사용 MCP `{server}`가 상주 ~{}K토큰을 잡고 있어요 · 정리하면 세션당 ~{}토큰↓",
+                    resident / 1000,
+                    f.est_tokens_saved
+                ));
+            }
+        }
+        if has("model") {
+            let opus = cnt(
+                "SELECT COUNT(*) FROM events WHERE kind='assistant_turn' AND model_family='opus'",
+            );
+            let cheaper = cnt(
+                "SELECT COUNT(*) FROM events WHERE kind='assistant_turn' AND model_family IN ('sonnet','haiku')",
+            );
+            if opus + cheaper > 0 {
+                let pct = cheaper * 100 / (opus + cheaper);
+                return Some(format!(
+                    "당신 로그: 상위 모델 {opus}턴 vs 하위 모델 {cheaper}턴 (하위 {pct}%)"
+                ));
+            }
+        }
+        if has("skill") {
+            let n = cnt(
+                "SELECT COUNT(*) FROM events WHERE kind='tool_call' AND tool_kind='skill'",
+            );
+            return Some(if n > 0 {
+                format!("당신 로그: 스킬을 {n}회 쓰고 있어요 — 반복 작업을 더 스킬로 옮겨보세요")
+            } else {
+                "당신 로그: 아직 스킬 호출 0회 — 반복되는 지시를 스킬로 만들어보세요".into()
+            });
+        }
+        if has("subagent") {
+            let n = cnt(
+                "SELECT COUNT(*) FROM events WHERE is_sidechain=1 OR (kind='tool_call' AND tool_kind='sub_agent')",
+            );
+            return Some(if n > 0 {
+                format!("당신 로그: 서브에이전트 {n}건 사용 중")
+            } else {
+                "당신 로그: 서브에이전트 사용 없음 — 긴 조사·구현을 위임하면 컨텍스트가 깨끗해져요".into()
+            });
+        }
+        if has("hooks") || has("permission") {
+            if let Some(f) = active().into_iter().find(|f| f.rule_id == "R11") {
+                let friction = f
+                    .evidence
+                    .get("friction_events")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.len())
+                    .unwrap_or(0);
+                if friction > 0 {
+                    return Some(format!(
+                        "당신 로그: 권한 승인 마찰 {friction}건 감지 — 사전 허용/자동화로 줄일 수 있어요"
+                    ));
+                }
+            }
+        }
+        None
+    }
+
+    /// status: 'new' | 'shown' | 'dismissed' (검증은 커맨드 층). dismiss 시 last_seen 갱신해
+    /// 쿨다운 기준 시각으로 삼는다. 반환 = 해당 행 존재 여부.
+    pub fn set_content_status(&self, id: &str, status: &str, now_ts: &str) -> Result<bool> {
+        let n = self.conn.execute(
+            "UPDATE content_items SET status=?2, last_seen=?3 WHERE id=?1",
+            params![id, status, now_ts],
+        )?;
+        Ok(n > 0)
+    }
+
     /// 특정 하루의 모델 분포 — model_mix_for_range의 단일일 특수형.
     pub fn model_mix_for_date(&self, date: &str) -> Result<Vec<(String, u64)>> {
         self.model_mix_for_range(Some(date), date)
@@ -769,6 +941,23 @@ pub struct DaySummary {
     pub tok_output: u64,
     pub tok_cache_read: u64,
     pub tok_cache_create: u64,
+}
+
+/// content_items 한 행 — 프론트 팁/뉴스 카드용.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ContentRow {
+    pub id: String,
+    pub kind: String,
+    pub dimension: Option<String>,
+    pub title: String,
+    pub body: String,
+    pub source_url: Option<String>,
+    pub trigger_tags: Vec<String>,
+    pub score: i64,
+    pub status: String,
+    /// "당신 로그: …" — 사용자 실측 데이터로 접지한 근거 줄. list_content read 시점 계산.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub personal: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
