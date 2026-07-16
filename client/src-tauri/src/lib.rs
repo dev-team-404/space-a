@@ -105,6 +105,25 @@ pub fn run() {
                 app.manage(AppState { store: Mutex::new(store), scan_tx: tx.clone() });
                 pipeline::start(app.handle().clone(), rx, tx);
                 tray::setup_tray(app.handle())?;
+                // 방 방문: 앱 시작 시 내 에이전트는 항상 자기 방에서 출발한다
+                // (서버는 마지막 위치를 기억하지만, 세션 시작의 기본값은 내 방 — 설계 §3)
+                {
+                    let state = app.state::<AppState>();
+                    let cfg = state.store.lock().ok().map(|s| {
+                        let get = |k: &str| s.get_setting(k).ok().flatten().unwrap_or_default();
+                        (get("hub_url"), get("hub_token"), get("hub_room_id"))
+                    });
+                    if let Some((url, token, room_id)) = cfg {
+                        if !url.trim().is_empty() && !token.is_empty() && !room_id.is_empty() {
+                            std::thread::spawn(move || {
+                                let client = agent_mentor::rooms_client::RoomsClient { base_url: url, token };
+                                if let Err(e) = client.enter(&room_id, None) {
+                                    log::warn!("시작 시 내 방 입장 실패(무시): {e}");
+                                }
+                            });
+                        }
+                    }
+                }
                 // mascot 창: 설정 보고 표시 + 위치 복원
                 {
                     let state = app.state::<AppState>();
