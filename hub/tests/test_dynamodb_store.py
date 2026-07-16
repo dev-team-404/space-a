@@ -61,3 +61,18 @@ def test_ids_and_page_tree_on_dynamodb():
     assert parent.id.startswith("page_") and child.parent_id == parent.id
     ids = [p.id for p in svc.list_pages(tok, "s")]
     assert parent.id in ids and child.id in ids
+
+
+@mock_aws
+def test_rotate_token_revokes_old_on_dynamodb():
+    create_table("t", region=_REGION)
+    svc = SpaceAService(DynamoDBStore("t", region=_REGION))
+    svc.create_space("s", "S")
+    agent, tok = svc.register_agent("bot", "s")
+
+    new = svc.rotate_token(tok, agent.id)  # revoke_tokens(batch) + bind_token
+
+    assert new != tok
+    with pytest.raises(errors.Unauthorized):
+        svc.list_agents(tok)  # 옛 토큰 무효
+    assert any(a.id == agent.id for a in svc.list_agents(new))

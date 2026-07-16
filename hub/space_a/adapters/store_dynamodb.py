@@ -10,9 +10,10 @@
 
 import os
 from dataclasses import asdict
+from decimal import Decimal
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 
 from ..core.models import Agent, Issue, Page, ReuseEvent, Space
 from ..core.ports import Store
@@ -92,9 +93,16 @@ class DynamoDBStore(Store):
 
     @staticmethod
     def _to(cls, item: dict):
-        d = {k: v for k, v in item.items() if k not in ("pk", "sk")}
-        if d.get("flags") is not None:
-            d["flags"] = int(d["flags"])  # Decimal → int
+        def _num(v):
+            if isinstance(v, list):
+                return [_num(x) for x in v]
+            if isinstance(v, dict):
+                return {k: _num(x) for k, x in v.items()}
+            if isinstance(v, Decimal):
+                return int(v) if v % 1 == 0 else float(v)  # DynamoDB Decimal → py 숫자
+            return v
+
+        d = {k: _num(v) for k, v in item.items() if k not in ("pk", "sk")}
         return cls(**d)
 
     # --- spaces ---
@@ -118,7 +126,10 @@ class DynamoDBStore(Store):
 
     def agent_for_token(self, token: str) -> Agent | None:
         r = self._t.get_item(Key={"pk": _TOKEN, "sk": token}).get("Item")
-        return self.get_agent(r["agent_id"]) if r else None
+        if not r:
+            return None
+        agent_id = r.get("agent_id")
+        return self.get_agent(agent_id) if agent_id else None
 
     def get_agent(self, agent_id: str) -> Agent | None:
         return self._get(_AGENT, agent_id, Agent)
@@ -130,9 +141,12 @@ class DynamoDBStore(Store):
         return self._all(_AGENT, Agent)
 
     def revoke_tokens(self, agent_id: str) -> None:
-        for it in self._all_items(_TOKEN):
-            if it.get("agent_id") == agent_id:
-                self._t.delete_item(Key={"pk": _TOKEN, "sk": it["sk"]})
+        tokens = [it for it in self._all_items(_TOKEN) if it.get("agent_id") == agent_id]
+        if not tokens:
+            return
+        with self._t.batch_writer() as batch:
+            for it in tokens:
+                batch.delete_item(Key={"pk": _TOKEN, "sk": it["sk"]})
 
     # --- issues ---
 
@@ -163,7 +177,20 @@ class DynamoDBStore(Store):
         return self._all(_PAGE, Page)
 
     def pages_in_space(self, space_id: str) -> list[Page]:
-        return [p for p in self.all_pages() if p.space_id == space_id]
+        # 서버측 FilterExpression으로 space의 페이지만 받는다 (전량 스캔 지양)
+        items: list[dict] = []
+        kwargs = {
+            "KeyConditionExpression": Key("pk").eq(_PAGE),
+            "FilterExpression": Attr("space_id").eq(space_id),
+        }
+        while True:
+            resp = self._t.query(**kwargs)
+            items += resp.get("Items", [])
+            lek = resp.get("LastEvaluatedKey")
+            if not lek:
+                break
+            kwargs["ExclusiveStartKey"] = lek
+        return [self._to(Page, it) for it in items]
 
     # --- reuse events ---
 
