@@ -25,6 +25,10 @@
       me = v.me;
       room = v.room;
       error = '';
+      // 방문 컨텍스트를 창 전체에 알림 — App이 탭/헤더를 방문 모드로 전환 (자기 방=false)
+      window.dispatchEvent(new CustomEvent('room:context', {
+        detail: { visiting: v.me.room_id !== v.me.my_room_id, owner: v.room.owner_name, myName: v.me.name },
+      }));
     } catch (e) {
       error = `${e}`;
     }
@@ -133,6 +137,8 @@
   .room {
     position: relative; border-radius: var(--radius-m); box-shadow: var(--shadow-soft);
     overflow: hidden; aspect-ratio: 30 / 16;
+    /* 방이 페이지를 잡아먹지 않게 상한 — 폭은 비율 따라 자동 축소 */
+    max-height: 300px; max-width: 563px; margin: 0 auto; width: 100%;
   }
   .floor { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; }
   .grid {

@@ -179,6 +179,10 @@ def create_app(service: SpaceAService | None = None, rooms: RoomService | None =
     def room_me(authorization: str | None = Header(default=None)):
         return rooms.me(_room_token(authorization))
 
+    @app.patch("/rooms/me")
+    def room_rename(body: RoomRegisterBody, authorization: str | None = Header(default=None)):
+        return rooms.rename(_room_token(authorization), body.name)
+
     @app.get("/rooms/{room_id}")
     def room_state(room_id: str):
         return rooms.room_state(room_id)

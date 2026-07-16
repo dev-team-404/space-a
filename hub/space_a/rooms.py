@@ -97,6 +97,17 @@ class RoomService:
             raise errors.Unauthorized("invalid or missing token")
         return self._agents[agent_id]
 
+    def rename(self, token: str | None, name: str) -> dict:
+        """유저 이름 변경 — 에이전트 이름과 자기 방의 주인 이름을 함께 바꾼다."""
+        name = name.strip()
+        if not name:
+            raise errors.InvalidRequest("이름이 비어 있음")
+        agent = self._authed(token)
+        with self._lock:
+            agent.name = name
+            self._rooms[agent.room_id].owner_name = name
+        return self.me(token)
+
     # --- 조회 ---
 
     def list_rooms(self) -> list[dict]:

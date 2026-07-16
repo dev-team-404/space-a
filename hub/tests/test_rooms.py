@@ -84,3 +84,13 @@ def test_auto_cell_assignment_no_overlap(rooms):
 def test_unknown_token_rejected(rooms):
     with pytest.raises(errors.Unauthorized):
         rooms.me("no-such-token")
+
+
+def test_rename_updates_agent_and_room(rooms):
+    _, token, room = rooms.register("옛이름")
+    me = rooms.rename(token, "새이름")
+    assert me["name"] == "새이름"
+    state = rooms.room_state(room.id)
+    assert state["owner_name"] == "새이름"
+    with pytest.raises(errors.InvalidRequest):
+        rooms.rename(token, "  ")

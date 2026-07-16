@@ -533,12 +533,29 @@ pub fn hub_settings_get(state: State<AppState>) -> Result<HubSettings, String> {
 }
 
 /// 서버에 유저 등록 + 개인 방 생성. 성공 시 토큰·방 id를 설정에 저장.
+/// 이미 같은 서버에 연결돼 있으면 재등록 대신 **이름 변경**으로 처리한다 — 방·위치 유지.
 #[tauri::command(async)]
 pub fn hub_connect(state: State<AppState>, url: String, user: String) -> Result<HubSettings, String> {
     let url = url.trim().to_string();
     let user = user.trim().to_string();
     if url.is_empty() || user.is_empty() {
         return Err("서버 URL과 이름을 입력하세요".into());
+    }
+    // 기존 연결 확인 (락은 읽기 동안만)
+    let existing = {
+        let guard = lock(&state)?;
+        let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
+        (get("hub_url"), get("hub_token"))
+    };
+    if existing.0 == url && !existing.1.is_empty() {
+        let client = RoomsClient { base_url: url.clone(), token: existing.1 };
+        if client.rename(&user).is_ok() {
+            let guard = lock(&state)?;
+            guard.set_setting("hub_user", &user).map_err(|e| e.to_string())?;
+            drop(guard);
+            return hub_settings_get(state);
+        }
+        // rename 실패(서버 재시작으로 토큰 무효 등) → 아래에서 새로 등록
     }
     // 네트워크는 락 밖
     let v = rooms_client::register(&url, &user).map_err(|e| e.to_string())?;

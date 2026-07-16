@@ -67,6 +67,12 @@
 </script>
 
 <section class="home">
+  {#if hubConnected}
+    <RoomView />
+  {:else}
+    <MiniRoom advice={topAdvice} />
+  {/if}
+
   <div class="strip">
     <span>세션 <b>{fmt(summary?.session_count)}</b></span>
     <span>입력 <b>{fmt(summary?.tok_input)}</b></span>
@@ -82,12 +88,6 @@
     <SaveTop3 {findings} onGoto={onGotoCoach} />
     <NoticeLog {notices} onGoto={onGotoNotice} />
   </div>
-
-  {#if hubConnected}
-    <RoomView />
-  {:else}
-    <MiniRoom advice={topAdvice} />
-  {/if}
 
   <footer class="status">
     {#if scanning}

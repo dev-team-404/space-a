@@ -23,6 +23,23 @@
   ];
 
   let tab = $state<Tab>('home');
+
+  // 방문 컨텍스트 (docs/design/room-visit.md §3) — 남의 방을 보는 동안에는
+  // 사적 탭(일기·코칭·채팅)을 숨긴다. 데이터는 원래 로컬 전용이라 유출은 없지만,
+  // 남의 방 화면에 내 사적 탭이 보이면 "남의 것"으로 오독된다.
+  let visiting = $state(false);
+  let roomOwner = $state('');
+  $effect(() => {
+    const onCtx = (e: Event) => {
+      const d = (e as CustomEvent).detail as { visiting: boolean; owner: string };
+      visiting = d.visiting;
+      roomOwner = d.owner;
+      if (d.visiting && tab !== 'home') tab = 'home';
+    };
+    window.addEventListener('room:context', onCtx);
+    return () => window.removeEventListener('room:context', onCtx);
+  });
+  const visibleTabs = $derived(visiting ? TABS.filter((t) => t.id === 'home') : TABS);
   let summary = $state<Summary | null>(null);
   let dailyLine = $state<string | null>(null);
   let activeCount = $state(0);
@@ -83,7 +100,7 @@
 <div class="wall">
   <div class="homepy">
     <header class="titlebar">
-      <h1>{summary?.user_name ?? '주인'}님의 <span class="mh">미니홈피</span></h1>
+      <h1>{visiting ? roomOwner : (summary?.user_name ?? '주인')}님의 <span class="mh">미니홈피</span></h1>
       <div class="counter">
         TODAY <b>{summary?.session_count ?? '–'}</b> · TOTAL <b>{summary?.total_sessions ?? '–'}</b>
       </div>
@@ -91,7 +108,7 @@
     <div class="body">
       <aside class="profile">
         <RobotPortrait />
-        {#if dailyLine}
+        {#if dailyLine && !visiting}
           <button class="diary" onclick={() => (tab = 'diary')} title="오늘의 일기 전체 보기">
             <span class="cap">📔 오늘의 일기</span>
             <span class="daily-line">{dailyLine}</span>
@@ -112,7 +129,7 @@
         {/if}
       </main>
       <nav class="tabs">
-        {#each TABS as t (t.id)}
+        {#each visibleTabs as t (t.id)}
           <button class:active={tab === t.id} onclick={() => (tab = t.id)}>
             <span class="label">{t.label}</span>
             {#if t.id === 'coach' && activeCount > 0}<span class="badge">{activeCount}</span>{/if}

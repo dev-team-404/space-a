@@ -65,6 +65,14 @@ impl RoomsClient {
         self.req("GET", "/rooms/me").call().map_err(err_of)?.into_json().map_err(Into::into)
     }
 
+    pub fn rename(&self, name: &str) -> Result<Value> {
+        self.req("PATCH", "/rooms/me")
+            .send_json(json!({ "name": name }))
+            .map_err(err_of)?
+            .into_json()
+            .map_err(Into::into)
+    }
+
     pub fn room_state(&self, room_id: &str) -> Result<Value> {
         self.req("GET", &format!("/rooms/{room_id}"))
             .call()

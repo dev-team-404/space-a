@@ -153,9 +153,24 @@
   }
   async function gotoRoom(roomId: string) {
     try { await roomGoto(roomId); } catch { /* cell_taken 등 — 다음 시도 */ }
+    await closeRoomMenu();
+  }
+  async function closeRoomMenu() {
+    if (roomMenu === null) return;
     roomMenu = null;
     await expand(false);
   }
+
+  // 메뉴가 열려 있는 동안: 인원수 실시간 갱신(2s) + 포커스 잃으면 자동 닫힘
+  $effect(() => {
+    if (roomMenu === null) return;
+    const t = setInterval(async () => {
+      try { roomMenu = (await roomsList()).rooms; } catch { /* 서버 순단 — 다음 틱 */ }
+    }, 2000);
+    const onBlur = () => closeRoomMenu();
+    window.addEventListener('blur', onBlur);
+    return () => { clearInterval(t); window.removeEventListener('blur', onBlur); };
+  });
 
   // 클릭 vs 드래그 (스펙 §6): drag-region 대신 수동 판별 — 클릭이면 홈피 열기
   let downAt: { x: number; y: number } | null = null;
@@ -202,7 +217,7 @@
     <div class="menu">
       <div class="menu-title">방 이동</div>
       {#if !hubOn}
-        <button class="item" onclick={() => { openSettingsWindow(); roomMenu = null; expand(false); }}>
+        <button class="item" onclick={() => { openSettingsWindow(); closeRoomMenu(); }}>
           서버 미연결 — 설정 열기
         </button>
       {:else}
