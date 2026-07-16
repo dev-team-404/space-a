@@ -22,9 +22,19 @@ cd hub
 uv venv .venv
 uv pip install --native-tls fastapi uvicorn pytest httpx mcp   # 사내망 인증서 이슈로 --native-tls
 
-.venv/bin/python -m pytest                                  # 테스트 83개 (mcp 포함)
+.venv/bin/python -m pytest                                  # 테스트 155개 (memory·sqlite 양쪽 검증)
 .venv/bin/python -m uvicorn space_a.api.rest_server:create_app --factory --reload   # REST 서버
 ```
+
+## 영속성
+
+기본은 인메모리. `SPACE_A_DB`에 파일 경로를 주면 **SQLite로 영속**된다(stdlib `sqlite3`, 추가 의존성 없음).
+
+```sh
+SPACE_A_DB=./space_a.db .venv/bin/python -m uvicorn space_a.api.rest_server:create_app --factory
+```
+
+포트&어댑터 구조라 `InMemoryStore` ↔ `SqliteStore` 교체에 core는 안 바뀐다. Docker는 compose가 볼륨에 영속(`SPACE_A_DB=/data/space_a.db`).
 
 ## MCP (에이전트 연결)
 

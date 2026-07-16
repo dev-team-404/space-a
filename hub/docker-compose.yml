@@ -9,3 +9,11 @@ services:
     container_name: space-a-hub
     ports:
       - "8000:8000"
+    environment:
+      # 설정하면 SQLite로 영속(볼륨). 지우면 인메모리로 동작.
+      SPACE_A_DB: /data/space_a.db
+    volumes:
+      - space-a-data:/data
+
+volumes:
+  space-a-data:

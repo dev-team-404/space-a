@@ -9,7 +9,7 @@ from fastapi import FastAPI, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from ..adapters.store_memory import InMemoryStore
+from ..adapters.factory import make_store
 from ..core import errors
 from ..core.services import SpaceAService
 
@@ -96,7 +96,7 @@ def _bearer(authorization: str | None) -> str:
 
 
 def create_app(service: SpaceAService | None = None) -> FastAPI:
-    service = service or SpaceAService(InMemoryStore())
+    service = service or SpaceAService(make_store())
     app = FastAPI(title="Space A Hub")
 
     @app.exception_handler(errors.SpaceAError)
