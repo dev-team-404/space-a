@@ -242,6 +242,111 @@ impl ContentSource for ClaudeChangelogSource {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Boris 팁(창시자) — howborisusesclaudecode.com. 공신력↑·사내망 200·HTML 파싱.
+// 실제 팁은 .step-title + .step-body 쌍(중첩 태그 → scraper). 관대: 실패해도 빈 벡터.
+pub struct BorisTipsSource {
+    pub url: String,
+    pub max_items: usize,
+}
+
+impl Default for BorisTipsSource {
+    fn default() -> Self {
+        BorisTipsSource {
+            url: "https://howborisusesclaudecode.com/".into(),
+            max_items: 8,
+        }
+    }
+}
+
+/// 팁 텍스트 → (역량 축, 태그). 키워드로 프론티어/태그 매칭이 되게 한다(특이도 높은 것 우선).
+fn classify_boris(text: &str) -> (Option<Dimension>, Vec<String>) {
+    use Dimension::*;
+    let t = text.to_lowercase();
+    let has = |k: &str| t.contains(k);
+    let mut dim: Option<Dimension> = None;
+    let mut tags = vec!["boris".to_string()];
+    if has("subagent") || has("worktree") || has("parallel") || has("orchestr") || has("background agent") {
+        dim = dim.or(Some(Orchestration));
+        tags.push("subagent".into());
+    }
+    if has("skill") {
+        dim = dim.or(Some(SkillReuse));
+        tags.push("skill".into());
+    }
+    if has("hook") || has("slash command") || has("permission") || has("auto-accept") || has("github") {
+        dim = dim.or(Some(Automation));
+        tags.push("hooks".into());
+    }
+    if has("claude.md") || has("claudemd") || has("compact") || has("context") || has("memory") {
+        dim = dim.or(Some(ContextHygiene));
+        tags.push("claudemd".into());
+    }
+    if has("plan mode") || has(" model") || has("opus") || has("thinking") {
+        dim = dim.or(Some(ModelLiteracy));
+        tags.push("model".into());
+    }
+    if has("mcp") {
+        tags.push("mcp".into());
+    }
+    (dim, tags)
+}
+
+impl BorisTipsSource {
+    /// HTML을 관대하게 파싱: `.step-title` + `.step-body` 쌍을 팁으로. 파싱 실패는 빈 벡터.
+    /// 문서 구조가 step-header→step-title→step-body 1:1 반복이라 순서 zip이 정확히 짝을 맞춘다.
+    pub fn parse_html(&self, html: &str) -> Vec<ContentItem> {
+        use sha2::{Digest, Sha256};
+        let doc = scraper::Html::parse_document(html);
+        let (t_sel, b_sel) = match (
+            scraper::Selector::parse(".step-title"),
+            scraper::Selector::parse(".step-body"),
+        ) {
+            (Ok(t), Ok(b)) => (t, b),
+            _ => return vec![],
+        };
+        let text_of = |sel: &scraper::Selector| -> Vec<String> {
+            doc.select(sel)
+                .map(|e| e.text().collect::<String>().split_whitespace().collect::<Vec<_>>().join(" "))
+                .collect()
+        };
+        text_of(&t_sel)
+            .into_iter()
+            .zip(text_of(&b_sel))
+            .filter(|(t, b)| !t.trim().is_empty() && !b.trim().is_empty())
+            .take(self.max_items)
+            .map(|(t, b)| {
+                let (dimension, trigger_tags) = classify_boris(&format!("{t} {b}"));
+                let hx = Sha256::digest(t.trim().as_bytes());
+                ContentItem {
+                    id: format!("boris-{:02x}{:02x}{:02x}", hx[0], hx[1], hx[2]),
+                    kind: ItemKind::Tip,
+                    title: t.trim().to_string(),
+                    body: format!("{} — Boris Cherny(Claude Code 창시자)", b.trim()),
+                    source_url: Some(self.url.clone()),
+                    dimension,
+                    trigger_tags,
+                    base_priority: 6,
+                }
+            })
+            .collect()
+    }
+}
+
+impl ContentSource for BorisTipsSource {
+    fn id(&self) -> &str {
+        "boris-tips"
+    }
+    fn fetch(&self) -> Result<Vec<ContentItem>> {
+        // 백그라운드 스캔을 막지 않도록 타임아웃 필수(리뷰 지적).
+        let body = ureq::get(&self.url)
+            .timeout(std::time::Duration::from_secs(15))
+            .call()?
+            .into_string()?;
+        Ok(self.parse_html(&body))
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // 스코어링 — 프론티어 부스트 + 마스터 억제 + 태그 게이트 (결정론).
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -453,5 +558,44 @@ mod tests {
         let src = ClaudeChangelogSource::default();
         assert!(src.parse_markdown("").is_empty());
         assert!(src.parse_markdown("no headers here\njust text").is_empty());
+    }
+
+    #[test]
+    fn boris_parses_step_tips_with_dimension_and_attribution() {
+        // 실제 사이트 구조: .step-header → .step-title → .step-body (1:1 반복)
+        let html = r#"
+          <div class="tab"><div class="tab-label">parallel</div>
+            <div class="step-header"><div class="step-number">1</div>
+              <div class="step-title">Run 5 Claudes in Parallel</div></div>
+            <div class="step-body">Boris runs 5 instances using 5 <b>git worktrees</b> of the same repo.</div>
+          </div>
+          <div class="tab"><div class="tab-label">context</div>
+            <div class="step-header"><div class="step-title">Update your CLAUDE.md</div></div>
+            <div class="step-body">After every correction, ask Claude to update CLAUDE.md so it won't repeat.</div>
+          </div>
+          <div class="tab">
+            <div class="step-title">   </div><div class="step-body">   </div>
+          </div>
+        "#;
+        let items = BorisTipsSource::default().parse_html(html);
+        assert_eq!(items.len(), 2, "빈 쌍은 걸러야 함 (got {})", items.len());
+        // 첫 팁: worktree/parallel → Orchestration + subagent 태그, 창시자 출처
+        assert_eq!(items[0].title, "Run 5 Claudes in Parallel");
+        assert!(items[0].body.contains("git worktrees"), "본문 텍스트: {}", items[0].body);
+        assert!(items[0].body.contains("Boris"), "출처 표기 필요: {}", items[0].body);
+        assert_eq!(items[0].dimension, Some(Dimension::Orchestration));
+        assert!(items[0].trigger_tags.iter().any(|t| t == "subagent"));
+        assert!(items[0].trigger_tags.iter().any(|t| t == "boris"));
+        assert_eq!(items[0].source_url.as_deref(), Some("https://howborisusesclaudecode.com/"));
+        // 둘째 팁: CLAUDE.md → ContextHygiene
+        assert_eq!(items[1].title, "Update your CLAUDE.md");
+        assert_eq!(items[1].dimension, Some(Dimension::ContextHygiene));
+        assert!(items[1].trigger_tags.iter().any(|t| t == "claudemd"));
+    }
+
+    #[test]
+    fn boris_is_lenient_on_empty_or_garbage() {
+        assert!(BorisTipsSource::default().parse_html("").is_empty());
+        assert!(BorisTipsSource::default().parse_html("<p>no steps here</p>").is_empty());
     }
 }

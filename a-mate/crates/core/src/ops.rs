@@ -199,14 +199,18 @@ pub fn run_curation(
 /// 피드 소스(T1 changelog 등)를 네트워크로 가져온다 — 부수효과는 가장자리. 실패는 하드
 /// 에러 아님(빈 벡터 후 계속 — 관대한 파싱 원칙). Tauri 파이프라인이 락 밖에서 호출.
 pub fn fetch_feed_items() -> Vec<crate::content::ContentItem> {
-    use crate::content::{ClaudeChangelogSource, ContentSource};
+    use crate::content::{BorisTipsSource, ClaudeChangelogSource, ContentSource};
+    // 여러 소스를 각각 관대하게 fetch — 하나가 실패해도 나머지는 계속.
+    let mut items = Vec::new();
     match ClaudeChangelogSource::default().fetch() {
-        Ok(items) => items,
-        Err(e) => {
-            eprintln!("[curation] 피드 fetch 실패(계속): {e}");
-            Vec::new()
-        }
+        Ok(mut v) => items.append(&mut v),
+        Err(e) => eprintln!("[curation] changelog 피드 fetch 실패(계속): {e}"),
     }
+    match BorisTipsSource::default().fetch() {
+        Ok(mut v) => items.append(&mut v),
+        Err(e) => eprintln!("[curation] boris 피드 fetch 실패(계속): {e}"),
+    }
+    items
 }
 
 #[cfg(test)]
