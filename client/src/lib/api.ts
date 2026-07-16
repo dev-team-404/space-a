@@ -148,6 +148,7 @@ export interface RoomOccupant {
 export interface RoomState {
   room_id: string;
   owner_name: string;
+  owner_mascot_seed: string; // 주인이 방을 비워도 프로필 로봇을 그릴 수 있게 서버가 항상 준다
   grid: { w: number; h: number };
   design: { wallpaper: string; floor: string; objects: { kind: string; cell: [number, number] }[] };
   occupants: RoomOccupant[];
@@ -174,6 +175,9 @@ export const roomGoto = (roomId: string) => invoke<RoomMe>('room_goto', { roomId
 export const roomMoveCell = (x: number, y: number) => invoke<RoomMe>('room_move_cell', { x, y });
 export const robotSpecForSeed = (seed: string) => invoke<RobotSpec>('robot_spec_for_seed', { seed });
 export const openSettingsWindow = () => invoke<void>('open_settings_window');
+// 마스코트 창 확장/복귀 — 위치+크기를 네이티브에서 한 번에 적용 (중간 프레임 깜빡임 방지)
+export const mascotSetExpanded = (expanded: boolean) =>
+  invoke<void>('mascot_set_expanded', { expanded });
 
 export interface ScanProgress {
   done: number;

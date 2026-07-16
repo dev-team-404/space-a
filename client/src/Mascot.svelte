@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { getCurrentWindow, PhysicalPosition, LogicalSize } from '@tauri-apps/api/window';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import './lib/theme.css';
   import {
     emitOccasionToday, getChatterPool, getMascotSeed, getSettings, getSummary, getTodayOccasions,
-    hubSettingsGet, listFindings, openChatTab, openSettingsWindow, roomGoto, roomsList, setSetting,
+    hubSettingsGet, listFindings, mascotSetExpanded, openChatTab, openSettingsWindow,
+    roomGoto, roomView, roomsList, setSetting,
     onDiaryReady, onNewFindings, onScanDone, onSettingsChanged,
     type RoomListEntry,
   } from './lib/api';
@@ -13,8 +14,6 @@
   import { isDrag } from './lib/robot/drag';
 
   const win = getCurrentWindow();
-  const BASE = { w: 160, h: 160 };
-  const EXPANDED = { w: 320, h: 230 };
 
   let canvas = $state<HTMLCanvasElement | null>(null);
   let spec = $state<RobotSpec | null>(null);
@@ -39,18 +38,9 @@
   }
 
   async function expand(on: boolean) {
-    // 캐릭터(창 우하단 고정)가 화면상 제자리를 지키도록 위치 보정 (델타는 물리 픽셀로 환산)
-    const scale = await win.scaleFactor();
-    const pos = await win.outerPosition();
-    const dw = Math.round((EXPANDED.w - BASE.w) * scale);
-    const dh = Math.round((EXPANDED.h - BASE.h) * scale);
-    if (on) {
-      await win.setPosition(new PhysicalPosition(pos.x - dw, pos.y - dh));
-      await win.setSize(new LogicalSize(EXPANDED.w, EXPANDED.h));
-    } else {
-      await win.setSize(new LogicalSize(BASE.w, BASE.h));
-      await win.setPosition(new PhysicalPosition(pos.x + dw, pos.y + dh));
-    }
+    // 창 크기는 상시 확장 크기로 고정(리사이즈 깜빡임 원천 차단) — 백엔드에 열림
+    // 상태만 알려, 접힘 시 로봇 밖 투명 여백의 클릭 통과 여부를 전환한다
+    await mascotSetExpanded(on).catch(() => {});
   }
 
   async function loadSettings() {
@@ -135,14 +125,21 @@
   // 방 이동 팝오버 (docs/design/room-visit.md §3): 우클릭 = 메뉴, 클릭 = 홈피(기존)
   let roomMenu = $state<RoomListEntry[] | null>(null); // null = 닫힘
   let myRoomId = $state('');
+  let curRoomId = $state(''); // 현재 있는 방 — 내 방이면 "돌아가기" 버튼을 숨긴다
   let hubOn = $state(false);
   async function toggleRoomMenu() {
     if (roomMenu !== null) { roomMenu = null; await expand(false); return; }
     const wasCollapsed = bubble === null;
     try {
-      const [h, list] = await Promise.all([hubSettingsGet(), roomsList().catch(() => ({ rooms: [] }))]);
+      const [h, list, view] = await Promise.all([
+        hubSettingsGet(),
+        roomsList().catch(() => ({ rooms: [] })),
+        roomView().catch(() => null),
+      ]);
       hubOn = h.connected;
       myRoomId = h.room_id;
+      // 위치 조회 실패 시 내 방으로 간주 — 돌아가기 버튼을 띄워봐야 이동도 실패한다
+      curRoomId = view?.me.room_id ?? h.room_id;
       roomMenu = list.rooms;
     } catch {
       hubOn = false;
@@ -176,6 +173,9 @@
   let downAt: { x: number; y: number } | null = null;
   function onPointerDown(e: PointerEvent) {
     if (e.button === 2) return; // 우클릭은 contextmenu 핸들러가 처리
+    // 캡처 없이는 빠른 드래그가 로봇 영역(128px)을 벗어난 뒤 move 이벤트가 끊겨
+    // startDragging이 영영 호출되지 않는다 — 캡처로 창 밖까지 move를 계속 받는다
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     downAt = { x: e.screenX, y: e.screenY };
   }
   function onPointerMove(e: PointerEvent) {
@@ -221,9 +221,12 @@
           서버 미연결 — 설정 열기
         </button>
       {:else}
-        <button class="item" onclick={() => gotoRoom(myRoomId)}>🏠 내 방으로 돌아가기</button>
+        {#if curRoomId !== myRoomId}
+          <button class="item" onclick={() => gotoRoom(myRoomId)}>🏠 내 방으로 돌아가기</button>
+        {/if}
         <div class="list">
-          {#each roomMenu.filter((r) => r.room_id !== myRoomId) as r (r.room_id)}
+          <!-- 지금 있는 방은 이동 대상이 아님 — 내 방은 위의 "돌아가기"가 담당 -->
+          {#each roomMenu.filter((r) => r.room_id !== myRoomId && r.room_id !== curRoomId) as r (r.room_id)}
             <button class="item" onclick={() => gotoRoom(r.room_id)}>
               {r.owner_name}의 방 <span class="n">{r.occupants}</span>
             </button>

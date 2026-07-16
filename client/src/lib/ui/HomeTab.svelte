@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     getWeekSummary, listFindings, listContent, onContentReady,
-    onScanDone, onScanProgress, runScanNow,
+    onScanDone, onScanProgress, onSettingsChanged, runScanNow,
     type CoachFinding, type ContentItem, type DayStat, type ScanProgress, type Summary,
   } from '../api';
   import { loadNotices, type Notice, type NoticeDest } from '../notices';
@@ -30,8 +30,10 @@
   let tips = $state<ContentItem[]>([]);
   const topAdvice = $derived(findings.length > 0 ? findings[0].suggested_action : null);
   // 방 서버 연결 시 격자 방(RoomView), 미연결 시 기존 장식 방(MiniRoom) — 원기능 보존
+  // 설정 창에서 연결하는 순간 바뀌도록 settings:changed와 창 포커스에 반응한다
   let hubConnected = $state(false);
-  hubSettingsGet().then((h) => (hubConnected = h.connected)).catch(() => {});
+  const checkHub = () => hubSettingsGet().then((h) => (hubConnected = h.connected)).catch(() => {});
+  checkHub();
 
   async function load() {
     [days, findings, tips] = await Promise.all([
@@ -48,8 +50,13 @@
       onScanProgress((p) => { scanning = true; progress = p; }),
       onScanDone(() => { scanning = false; progress = null; load(); }),
       onContentReady((rows) => { tips = rows; }),
+      onSettingsChanged(() => checkHub()),
     ];
-    return () => { subs.forEach((s) => s.then((u) => u())); };
+    window.addEventListener('focus', checkHub);
+    return () => {
+      subs.forEach((s) => s.then((u) => u()));
+      window.removeEventListener('focus', checkHub);
+    };
   });
 
   // 팁 하나 닫으면 목록에서 즉시 제거(백엔드는 다음 스캔에 쿨다운 반영)

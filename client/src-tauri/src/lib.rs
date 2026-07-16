@@ -14,7 +14,17 @@ use std::sync::Mutex;
 pub struct AppState {
     pub store: Mutex<SqliteStore>,
     pub scan_tx: std::sync::mpsc::Sender<pipeline::PipelineMsg>,
+    /// 마스코트 말풍선/메뉴 열림 여부 — 클릭 통과 폴러가 소비 (setup의 폴러 주석 참조)
+    pub mascot_expanded: std::sync::atomic::AtomicBool,
 }
+
+/// 마스코트 창 논리 크기(px). 창은 이 크기로 **상시 고정** — 확장/접힘을 리사이즈로
+/// 구현하면 창 원점 이동 + WebView 비동기 리페인트 때문에 로봇이 튀어 보이는
+/// 깜빡임이 생긴다. 접힘 상태의 여백은 클릭 통과로 처리한다.
+pub(crate) const MASCOT_W: f64 = 320.0;
+pub(crate) const MASCOT_H: f64 = 230.0;
+/// 로봇 상호작용 영역(우하단, 논리 px) — 이 밖의 투명 여백은 접힘 상태에서 클릭 통과
+pub(crate) const ROBOT_SIDE: f64 = 160.0;
 
 /// 엔진 해석 우선순위: 설정 UI(store) → .env — 설정 창에서 지정한 값이 있으면 그것을 쓰고,
 /// 없으면 기존 AGENT_MENTOR_ENGINE_* 환경변수로 폴백한다 (지빈의 .env 워크플로 보존).
@@ -102,7 +112,11 @@ pub fn run() {
                 std::fs::create_dir_all(&dir)?;
                 let store = SqliteStore::open(&dir.join("agent-mentor.db"))?;
                 let (tx, rx) = std::sync::mpsc::channel();
-                app.manage(AppState { store: Mutex::new(store), scan_tx: tx.clone() });
+                app.manage(AppState {
+                    store: Mutex::new(store),
+                    scan_tx: tx.clone(),
+                    mascot_expanded: std::sync::atomic::AtomicBool::new(false),
+                });
                 pipeline::start(app.handle().clone(), rx, tx);
                 tray::setup_tray(app.handle())?;
                 // 방 방문: 앱 시작 시 내 에이전트는 항상 자기 방에서 출발한다
@@ -148,8 +162,8 @@ pub fn run() {
                                         }).collect())
                                         .unwrap_or_default();
                                     let scale = w.scale_factor().unwrap_or(1.0);
-                                    let side = (160.0 * scale) as i32;
-                                    if geometry::sanitize_pos(x, y, side, side, &monitors) {
+                                    let (pw, ph) = ((MASCOT_W * scale) as i32, (MASCOT_H * scale) as i32);
+                                    if geometry::sanitize_pos(x, y, pw, ph, &monitors) {
                                         let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
                                         restored = true;
                                     }
@@ -160,9 +174,9 @@ pub fn run() {
                             if let Ok(Some(mon)) = w.primary_monitor() {
                                 let size = mon.size();
                                 let mpos = mon.position();
-                                // 창 160×160 + 여백 16px, 작업표시줄(대략 하단 48px) 위 (스펙 §1)
-                                let x = mpos.x + size.width as i32 - 160 - 16;
-                                let y = mpos.y + size.height as i32 - 160 - 64;
+                                // 로봇(창 우하단)이 화면 우하단 + 여백 16px, 작업표시줄 위에 오도록 (스펙 §1)
+                                let x = mpos.x + size.width as i32 - MASCOT_W as i32 - 16;
+                                let y = mpos.y + size.height as i32 - MASCOT_H as i32 - 64;
                                 let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
                             }
                         }
@@ -170,6 +184,42 @@ pub fn run() {
                             let _ = w.show();
                         }
                     }
+                }
+                // 마스코트 클릭 통과 폴러 — 창은 상시 확장 크기라 접힘 상태의 투명 여백이
+                // 뒤 앱의 클릭을 막는다. 전역 커서를 폴링해 로봇 영역(우하단 160×160) 밖이면
+                // ignore_cursor_events를 켠다. 말풍선/메뉴 열림(mascot_expanded) 중엔 항상 상호작용.
+                {
+                    let handle = app.handle().clone();
+                    std::thread::spawn(move || {
+                        let mut ignoring: Option<bool> = None;
+                        loop {
+                            std::thread::sleep(std::time::Duration::from_millis(80));
+                            let Some(w) = handle.get_webview_window("mascot") else { continue };
+                            if !w.is_visible().unwrap_or(false) {
+                                continue;
+                            }
+                            let expanded = handle
+                                .state::<AppState>()
+                                .mascot_expanded
+                                .load(std::sync::atomic::Ordering::Relaxed);
+                            let interactive = expanded
+                                || match (handle.cursor_position(), w.outer_position(), w.scale_factor()) {
+                                    (Ok(c), Ok(p), Ok(s)) => {
+                                        let side = ROBOT_SIDE * s;
+                                        let rx = p.x as f64 + MASCOT_W * s - side;
+                                        let ry = p.y as f64 + MASCOT_H * s - side;
+                                        c.x >= rx && c.x < rx + side && c.y >= ry && c.y < ry + side
+                                    }
+                                    _ => true, // 판단 불가 시 상호작용 가능 쪽으로 (클릭을 잃지 않게)
+                                };
+                            let want_ignore = !interactive;
+                            if ignoring != Some(want_ignore)
+                                && w.set_ignore_cursor_events(want_ignore).is_ok()
+                            {
+                                ignoring = Some(want_ignore);
+                            }
+                        }
+                    });
                 }
                 // content_protected 설정을 시작 시 실제 적용 (스펙 §7)
                 // 설정 읽기 실패(락 poison·일시 잠금)로 시작이 죽지 않도록 안전 폴백 — 기본 미보호 (에러 철학 §9)
@@ -222,6 +272,7 @@ pub fn run() {
                 commands::room_goto,
                 commands::room_move_cell,
                 commands::robot_spec_for_seed,
+                commands::mascot_set_expanded,
                 commands::open_settings_window,
             ])
             .run(tauri::generate_context!())

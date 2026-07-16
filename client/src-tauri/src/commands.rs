@@ -535,7 +535,13 @@ pub fn hub_settings_get(state: State<AppState>) -> Result<HubSettings, String> {
 /// 서버에 유저 등록 + 개인 방 생성. 성공 시 토큰·방 id를 설정에 저장.
 /// 이미 같은 서버에 연결돼 있으면 재등록 대신 **이름 변경**으로 처리한다 — 방·위치 유지.
 #[tauri::command(async)]
-pub fn hub_connect(state: State<AppState>, url: String, user: String) -> Result<HubSettings, String> {
+pub fn hub_connect(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    url: String,
+    user: String,
+) -> Result<HubSettings, String> {
+    use tauri::Emitter;
     let url = url.trim().to_string();
     let user = user.trim().to_string();
     if url.is_empty() || user.is_empty() {
@@ -553,6 +559,7 @@ pub fn hub_connect(state: State<AppState>, url: String, user: String) -> Result<
             let guard = lock(&state)?;
             guard.set_setting("hub_user", &user).map_err(|e| e.to_string())?;
             drop(guard);
+            let _ = app.emit("settings:changed", ());
             return hub_settings_get(state);
         }
         // rename 실패(서버 재시작으로 토큰 무효 등) → 아래에서 새로 등록
@@ -578,6 +585,7 @@ pub fn hub_connect(state: State<AppState>, url: String, user: String) -> Result<
             guard.set_setting(k, val).map_err(|e| e.to_string())?;
         }
     }
+    let _ = app.emit("settings:changed", ());
     hub_settings_get(state)
 }
 
@@ -629,6 +637,16 @@ pub fn room_move_cell(state: State<AppState>, x: i64, y: i64) -> Result<serde_js
 #[tauri::command]
 pub fn robot_spec_for_seed(seed: String) -> RobotSpec {
     robot_spec_for(&seed)
+}
+
+/// 마스코트 말풍선/메뉴 열림 상태 알림. 창은 상시 확장 크기로 고정이라(리사이즈
+/// 깜빡임 원천 차단) 크기 변경은 없고, 접힘 상태에서 로봇 밖 투명 여백의 클릭
+/// 통과 여부를 lib.rs의 폴러가 이 플래그로 결정한다.
+#[tauri::command]
+pub fn mascot_set_expanded(state: State<AppState>, expanded: bool) {
+    state
+        .mascot_expanded
+        .store(expanded, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// 설정 창 열기 (마스코트 메뉴에서 "서버 연결" 안내용).

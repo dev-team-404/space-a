@@ -29,6 +29,7 @@
   // 남의 방 화면에 내 사적 탭이 보이면 "남의 것"으로 오독된다.
   let visiting = $state(false);
   let roomOwner = $state('');
+  let ownerSeed = $state(''); // 방문 중인 방 주인의 마스코트 시드 (없으면 이름 폴백)
   // 창(App) 레벨에서 직접 폴링 — 어느 탭에 있든 방 이동을 감지해 방문 모드로 전환
   $effect(() => {
     const tick = async () => {
@@ -36,10 +37,12 @@
         const v = await roomView();
         visiting = v.me.room_id !== v.me.my_room_id;
         roomOwner = v.room.owner_name;
+        ownerSeed = v.room.owner_mascot_seed || v.room.owner_name;
         if (visiting && tab !== 'home') tab = 'home';
       } catch {
         visiting = false;
         roomOwner = '';
+        ownerSeed = '';
       }
     };
     tick();
@@ -111,13 +114,17 @@
     <header class="titlebar">
       <!-- 헤더 = 지금 보는 방의 주인. 자기 방이면 hub 등록 이름, hub 미연결이면 로컬 계정명 -->
       <h1>{roomOwner || (summary?.user_name ?? '주인')}님의 <span class="mh">미니홈피</span></h1>
-      <div class="counter">
-        TODAY <b>{summary?.session_count ?? '–'}</b> · TOTAL <b>{summary?.total_sessions ?? '–'}</b>
-      </div>
+      <!-- 카운터도 내 로컬 세션 수 — 방문 중엔 숨김 (주인 수치로 오독 방지) -->
+      {#if !visiting}
+        <div class="counter">
+          TODAY <b>{summary?.session_count ?? '–'}</b> · TOTAL <b>{summary?.total_sessions ?? '–'}</b>
+        </div>
+      {/if}
     </header>
     <div class="body">
       <aside class="profile">
-        <RobotPortrait />
+        <!-- 프로필 = 지금 보는 미니홈피의 주인. 방문 중이면 그 방 주인의 로봇 -->
+        <RobotPortrait seed={visiting ? ownerSeed : null} />
         {#if dailyLine && !visiting}
           <button class="diary" onclick={() => (tab = 'diary')} title="오늘의 일기 전체 보기">
             <span class="cap">📔 오늘의 일기</span>
@@ -125,7 +132,10 @@
             <span class="more">더 보기 →</span>
           </button>
         {/if}
-        <p class="mood">“{mood}”</p>
+        <!-- mood는 내 로컬 데이터 — 남의 미니홈피에서 보이면 주인 것으로 오독된다 -->
+        {#if !visiting}
+          <p class="mood">“{mood}”</p>
+        {/if}
       </aside>
       <main class="content">
         {#if tab === 'home'}

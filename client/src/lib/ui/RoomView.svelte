@@ -180,8 +180,10 @@
     image-rendering: pixelated;
     transform: translateY(8%);
   }
+  /* 로봇 캔버스는 셀 위로 크게 겹쳐 그려지므로 이름표는 발밑(셀 아래)에 — 캐릭터를 가리지 않게.
+     캔버스가 translateY(8%)로 셀 아래로 살짝 내려오므로 발끝과 붙지 않게 여유를 둔다 */
   .agent .name {
-    position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+    position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
     font-size: 10px; color: var(--ink); background: var(--frame-bg);
     border-radius: 999px; padding: 0 6px; white-space: nowrap;
     box-shadow: var(--shadow-soft);

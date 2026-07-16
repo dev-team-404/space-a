@@ -114,7 +114,7 @@
   <hr />
 
   <h1>Space A 서버</h1>
-  <p class="hint">방 방문·에이전트 위치를 관장하는 hub 서버에 연결합니다.</p>
+  <p class="hint">방 방문·에이전트 위치를 관장하는 room-server에 연결합니다 (hub와 별개 프로세스).</p>
   {#if hub}
     <p class="source" data-kind={hub.connected ? 'store' : 'none'}>
       {hub.connected ? `연결됨 — 내 방: ${hub.room_id}` : '미연결'}
@@ -123,7 +123,7 @@
 
   <label>
     <span>서버 URL</span>
-    <input type="text" bind:value={hubUrl} placeholder="http://192.168.0.10:8000" spellcheck="false" />
+    <input type="text" bind:value={hubUrl} placeholder="http://192.168.0.10:8001" spellcheck="false" />
   </label>
   <label>
     <span>내 이름</span>
