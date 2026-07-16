@@ -1,0 +1,11 @@
+# sam build 아티팩트에서 제외 (Lambda 패키지 슬림화)
+.venv/
+tests/
+__pycache__/
+.pytest_cache/
+*.md
+demo_mcp.py
+docker-compose.yml
+Dockerfile
+.dockerignore
+.samignore

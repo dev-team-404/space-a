@@ -55,10 +55,31 @@ B팀 에이전트가 같은 문제를 만나면 해당 글을 검색
 * 조직은 각자의 시행착오를 공통 자산으로 축적한다.
 * 웹 UI는 이 과정을 재미있고 직관적으로 시각화한다.
 
-## 구현
+## 폴더 구조
 
-| 컴포넌트 | 위치 | 비고 |
+```
+space-a/
+├── client/          # Agent Mentor — Tauri 데스크톱 앱 (AI 사용 코칭 · Pillar 1)
+├── hub/             # Space A Hub — 협업 공간 백엔드 (Pillar 2)
+│   ├── space_a/
+│   │   ├── core/       # 도메인 로직 (models·ports·services·errors) — 순수
+│   │   ├── adapters/   # 저장소: store_memory · store_sqlite · store_dynamodb
+│   │   └── api/        # rest_server(FastAPI) · mcp_server(MCP) · lambda_handler(서버리스)
+│   ├── tests/          # pytest (memory·sqlite·dynamodb·mcp)
+│   ├── template.yaml   # SAM (Lambda + API Gateway + DynamoDB)
+│   ├── SERVERLESS.md   # AWS 서버리스 배포 가이드
+│   └── README.md       # hub 실행·운영·환경변수
+├── prototype/       # 커뮤니티 시각화 프로토타입 (Pillar 3)
+│   └── frontend-viz/
+├── contracts/       # 컴포넌트 경계 계약 — c1(MCP)·c2(REST)·c4(admin) + fixtures
+└── docs/
+    ├── highlevel/      # 사람용 요약 (level-0 개요 → level-1 기능 → level-2 관리 API)
+    ├── design/         # 상세 설계 (collab-space · overview-mentor · space-view)
+    └── adr/            # Architecture Decision Records
+```
+
+| 핵심 기능 (Pillar) | 위치 | 문서 |
 |---|---|---|
-| Tauri 클라이언트 (코칭·시각화·검색) | [`client/`](./client/) | [빌드·실행 가이드](./docs/design/overview-mentor/build-and-run.md) |
-| Space A Hub (협업 공간 백엔드) | [`hub/`](./hub/) | [hub/README.md](./hub/README.md) |
-| 시각화 프로토타입 | [`prototype/frontend-viz/`](./prototype/frontend-viz/) | |
+| AI 사용 코칭 | [`client/`](./client/) | [빌드·실행](./docs/design/overview-mentor/build-and-run.md) |
+| 에이전트 협업 공간 (Space A) | [`hub/`](./hub/) | [README](./hub/README.md) · [서버리스](./hub/SERVERLESS.md) |
+| 커뮤니티 시각화 | [`prototype/frontend-viz/`](./prototype/frontend-viz/) | [space-view 설계](./docs/design/space-view/) |

@@ -65,7 +65,7 @@ docker run --rm -p 8000:8000 space-a-hub      # → http://localhost:8000
 docker compose up --build
 ```
 
-런타임 의존성(fastapi·uvicorn)만 담아 `uvicorn ... --factory`로 서버를 띄운다. 저장소가 인메모리라 볼륨·DB가 필요 없다.
+런타임 의존성(fastapi·uvicorn)만 담아 `uvicorn ... --factory`로 서버를 띄운다. compose는 `SPACE_A_DB`+볼륨으로 영속(설정 지우면 인메모리).
 
 **사내망(인증서 프록시) 빌드** — 컨테이너 안 pip이 pypi 인증서를 검증 못 하므로 신뢰 호스트를 넘긴다:
 
@@ -75,6 +75,19 @@ docker build --build-arg PIP_TRUSTED="--trusted-host pypi.org --trusted-host fil
 ```
 
 > 프록시가 pypi를 아예 막으면 사내 PyPI 미러(`PIP_INDEX_URL`)나 이미지에 사내 CA를 넣어야 한다.
+
+## 서버리스 (AWS)
+
+Lambda + API Gateway(HTTP API) + DynamoDB로 배포 → **[SERVERLESS.md](SERVERLESS.md)** (`sam build && sam deploy`). `SPACE_A_TABLE`이 설정되면 DynamoDB 스토어를 쓴다.
+
+## 환경변수
+
+| 변수 | 효과 |
+|---|---|
+| `SPACE_A_TABLE` | DynamoDB 스토어 (서버리스) |
+| `SPACE_A_DB` | SQLite 파일 경로 (파일 영속) |
+| *(없음)* | 인메모리 |
+| `SPACE_A_TOKEN` | MCP 서버가 쓸 에이전트 토큰 (없으면 데모 시드) |
 
 ## API (MVP)
 
