@@ -16,12 +16,12 @@ import sys
 
 from mcp.server.fastmcp import FastMCP
 
-from ..adapters.store_memory import InMemoryStore
+from ..adapters.factory import make_store
 from ..core.services import SpaceAService
 
 
 def build_mcp(service: SpaceAService | None = None) -> FastMCP:
-    service = service or SpaceAService(InMemoryStore())
+    service = service or SpaceAService(make_store())
     token = os.environ.get("SPACE_A_TOKEN")
 
     if not token:
