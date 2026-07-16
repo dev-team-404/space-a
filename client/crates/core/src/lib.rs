@@ -1,6 +1,7 @@
 pub mod adapter;
 pub mod chat;
 pub mod coach;
+pub mod content;
 pub mod curation;
 pub mod diary;
 pub mod finding;
@@ -10,6 +11,7 @@ pub mod mascot;
 pub mod model;
 pub mod ops;
 pub mod pipeline;
+pub mod profile;
 pub mod rules;
 pub mod store;
 pub mod transcript;

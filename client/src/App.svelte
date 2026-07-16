@@ -83,7 +83,7 @@
 <div class="wall">
   <div class="homepy">
     <header class="titlebar">
-      <h1>{summary?.user_name ?? '주인'}님의 미니홈피</h1>
+      <h1>{summary?.user_name ?? '주인'}님의 <span class="mh">미니홈피</span></h1>
       <div class="counter">
         TODAY <b>{summary?.session_count ?? '–'}</b> · TOTAL <b>{summary?.total_sessions ?? '–'}</b>
       </div>
@@ -91,7 +91,13 @@
     <div class="body">
       <aside class="profile">
         <RobotPortrait />
-        {#if dailyLine}<p class="daily-line">“{dailyLine}”</p>{/if}
+        {#if dailyLine}
+          <button class="diary" onclick={() => (tab = 'diary')} title="오늘의 일기 전체 보기">
+            <span class="cap">📔 오늘의 일기</span>
+            <span class="daily-line">{dailyLine}</span>
+            <span class="more">더 보기 →</span>
+          </button>
+        {/if}
         <p class="mood">“{mood}”</p>
       </aside>
       <main class="content">
@@ -122,13 +128,14 @@
   :global(body) {
     background: var(--bg-grad);
     color: var(--ink);
-    font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+    font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
     font-size: 14px;
   }
   .wall { height: 100vh; padding: 18px 34px 18px 18px; box-sizing: border-box; }
   .homepy {
     height: 100%; display: flex; flex-direction: column;
-    background: var(--frame-bg);
+    background: var(--frame-2);
+    border: 1px solid var(--line);
     border-radius: var(--radius-l);
     box-shadow: var(--shadow-soft);
   }
@@ -137,7 +144,8 @@
     padding: 12px 20px;
     border-bottom: 1px solid var(--pastel-lav);
   }
-  .titlebar h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  .titlebar h1 { margin: 0; font-size: 16px; font-weight: 700; }
+  .titlebar h1 .mh { color: var(--accent); }
   .counter { font-size: 12px; color: var(--ink-soft); }
   .counter b { color: var(--accent); }
   .body { flex: 1; display: flex; min-height: 0; position: relative; }
@@ -147,7 +155,20 @@
     display: flex; flex-direction: column; gap: 12px;
   }
   .mood { margin: 0; font-size: 12px; color: var(--ink-soft); text-align: center; }
-  .daily-line { margin: 0; font-size: 13px; color: var(--ink); text-align: center; line-height: 1.45; }
+  /* 일기 카드 — 긴 일기를 4줄로 접고(…) 클릭 시 다이어리 탭으로. 좁은 프로필 칸 가독성 */
+  .diary {
+    width: 100%; display: flex; flex-direction: column; gap: 5px; text-align: left;
+    background: var(--panel2); border: 1px solid var(--line); border-left: 2px solid var(--accent);
+    border-radius: var(--radius-s); padding: 8px 10px; cursor: pointer; font: inherit; color: inherit;
+  }
+  .diary:hover { border-color: var(--accent); }
+  .diary .cap { font-size: 10px; color: var(--ink-soft); letter-spacing: 0.3px; }
+  .daily-line {
+    margin: 0; font-size: 12px; color: var(--ink); line-height: 1.55;
+    overflow-wrap: break-word; word-break: break-word;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .diary .more { font-size: 10px; color: var(--accent); }
   /* margin-right: 스크롤바를 프레임 가장자리(우측 세로 탭이 걸치는 곳)에서 안쪽으로 밀어냄 */
   .content { flex: 1; min-width: 0; overflow-y: auto; display: flex; flex-direction: column; margin-right: 10px; }
   .tabs {
@@ -156,17 +177,17 @@
   }
   .tabs button {
     writing-mode: vertical-rl;
-    border: none; cursor: pointer; font: inherit; font-size: 12px;
-    padding: 12px 7px;
-    background: var(--pastel-lav); color: var(--ink);
+    border: 1px solid var(--line); border-left: none; cursor: pointer; font: inherit; font-size: 12px;
+    padding: 13px 7px;
+    background: var(--panel2); color: var(--ink-soft);
     border-radius: 0 var(--radius-s) var(--radius-s) 0;
     box-shadow: var(--shadow-soft);
-    display: flex; align-items: center; gap: 4px;
+    display: flex; align-items: center; gap: 5px;
   }
-  .tabs button.active { background: var(--frame-bg); font-weight: 600; color: var(--accent); }
+  .tabs button.active { background: var(--accent); font-weight: 700; color: #0b3327; border-color: transparent; }
   .badge {
     writing-mode: horizontal-tb;
-    background: var(--pastel-coral); color: var(--ink);
+    background: var(--pastel-coral); color: #3a1512; font-weight: 700;
     border-radius: 999px; font-size: 10px; padding: 1px 5px;
   }
 </style>

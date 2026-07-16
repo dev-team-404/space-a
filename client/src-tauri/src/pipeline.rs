@@ -104,6 +104,8 @@ mod runtime {
                 if let Err(e) = app.emit("scan:done", &now) {
                     log::error!("pipeline error: scan:done emit 실패: {e}");
                 }
+                // 콘텐츠 큐레이션 — 피드 fetch(락 밖) → run_curation(락) → content:ready
+                maybe_curate_content(app, &state.store);
                 // 다이어리 실패는 조용히 — 다음 사이클에서 재시도
                 maybe_generate_diaries(app, &state.store);
                 // 오늘의 한마디 — 엔진 없으면 no-op, 실패는 조용히(다음 스캔 재시도)
@@ -120,6 +122,30 @@ mod runtime {
                     log::error!("scan:done(에러 경로) emit 실패: {e}");
                 }
             }
+        }
+    }
+
+    /// 콘텐츠 큐레이션 — 스캔 편승. 피드 fetch(네트워크)는 diary·daily-line과 동일하게
+    /// **store 락 밖**에서, 그다음 run_curation(프로필 감지·랭킹·persist)만 락 안에서.
+    /// 노출 목록이 있으면 `content:ready`를 emit해 프론트가 즉시 반영(coach:finding 선례).
+    /// 네트워크 실패는 조용히(빈 피드로 진행 — 내장 팁만으로도 코칭 성립).
+    fn maybe_curate_content(app: &AppHandle, store_mutex: &std::sync::Mutex<SqliteStore>) {
+        // ① 락 밖: 피드 소스 네트워크 fetch (실패해도 빈 벡터)
+        let feed = agent_mentor::ops::fetch_feed_items();
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // ② 락: run_curation(감지→랭킹→persist) → 노출 목록 → 즉시 해제
+        let visible = match store_mutex.lock() {
+            Ok(store) => match agent_mentor::ops::run_curation(&store, feed, &now) {
+                Ok(rows) => rows,
+                Err(e) => { log::warn!("run_curation 실패: {e}"); return; }
+            },
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        }; // guard drops here
+
+        // ③ 노출할 게 있으면 프론트에 알림
+        if !visible.is_empty() {
+            let _ = app.emit("content:ready", &visible);
         }
     }
 

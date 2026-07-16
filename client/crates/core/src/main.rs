@@ -40,6 +40,39 @@ fn cmd_rules(store: &SqliteStore) -> Result<()> {
     Ok(())
 }
 
+/// AX 튜터 — 역량 프로필 감지 + 커리큘럼 팁/소식 큐레이션. (ingest 후 실행)
+fn cmd_curate(store: &SqliteStore) -> Result<()> {
+    let profile = agent_mentor::profile::detect_profile(store)?;
+    println!("== 역량 프로필 (총 이벤트 {}) ==", profile.total_events);
+    for d in &profile.dims {
+        println!("  {:16} {:11}  {}", d.dimension.key(), format!("{:?}", d.mastery), d.evidence);
+    }
+    println!("  → 프론티어(지금 배울 것): {:?}", profile.frontier().map(|d| d.key()));
+    println!("  → 관심 태그: {:?}", profile.active_tags);
+
+    // 피드: 파일 지정(AGENT_MENTOR_CHANGELOG_FILE)이면 그걸, 아니면 실제 네트워크 fetch(실패 시 빈).
+    let feed = match std::env::var("AGENT_MENTOR_CHANGELOG_FILE") {
+        Ok(path) => {
+            let md = std::fs::read_to_string(&path).unwrap_or_default();
+            let n = agent_mentor::content::ClaudeChangelogSource::default().parse_markdown(&md);
+            eprintln!("feed: changelog 파일에서 {}건", n.len());
+            n
+        }
+        Err(_) => {
+            let n = ops::fetch_feed_items();
+            eprintln!("feed: 네트워크에서 {}건", n.len());
+            n
+        }
+    };
+    let now = chrono::Utc::now().to_rfc3339();
+    let visible = ops::run_curation(store, feed, &now)?;
+    println!("\n== AX 튜터가 지금 보여줄 것 (노출 {}건, content_items에 persist) ==", visible.len());
+    for r in &visible {
+        println!("  [{:>4}] {:16} {}", r.score, r.dimension.as_deref().unwrap_or("news"), r.title);
+    }
+    Ok(())
+}
+
 fn cmd_diary(store: &SqliteStore, date: Option<String>) -> Result<()> {
     let date = date.unwrap_or_else(|| chrono::Local::now().format("%Y-%m-%d").to_string());
     let cfg = DiaryConfig::default();
@@ -74,16 +107,18 @@ fn main() -> Result<()> {
         "ingest" => cmd_ingest(&store)?,
         "inventory" => cmd_inventory(&mut store)?,
         "rules" => cmd_rules(&store)?,
+        "curate" => cmd_curate(&store)?,
         "diary" => cmd_diary(&store, args.get(2).cloned())?,
         "all" => {
             cmd_ingest(&store)?;
             cmd_inventory(&mut store)?;
             cmd_rules(&store)?;
+            cmd_curate(&store)?;
             cmd_diary(&store, None)?;
         }
         other => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: agent-mentor [ingest|inventory|rules|diary [date]|all]");
+            eprintln!("usage: agent-mentor [ingest|inventory|rules|curate|diary [date]|all]");
         }
     }
     Ok(())
