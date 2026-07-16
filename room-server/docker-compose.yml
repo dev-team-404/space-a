@@ -1,0 +1,20 @@
+services:
+  room-server:
+    build:
+      context: .
+      # 사내망 빌드 시: PIP_TRUSTED="--trusted-host pypi.org --trusted-host files.pythonhosted.org" docker compose build
+      args:
+        PIP_TRUSTED: ${PIP_TRUSTED:-}
+    image: space-a-room-server
+    container_name: space-a-room-server
+    ports:
+      # hub(8000)와 나란히 띄울 수 있게 호스트 포트는 8001
+      - "8001:8000"
+    environment:
+      # 설정하면 SQLite로 영속(볼륨) — 재시작해도 등록·방·위치 유지. 지우면 인메모리.
+      ROOM_SERVER_DB: /data/rooms.db
+    volumes:
+      - room-server-data:/data
+
+volumes:
+  room-server-data:

@@ -5,7 +5,8 @@
 - 위치의 단일 원천은 서버. 겹침 금지는 전역 락 안에서 "빈 셀일 때만 점유"로 원자 처리.
 - 방 디자인(벽지·바닥·가구)은 방문자에게 보여주는 공개 표면이므로 서버가 가진다.
   사적 내용(다이어리 등)은 클라이언트에만 있다 — 여기 없음이 설계다.
-- 기존 Space/Page 도메인과 별개 모듈. MVP는 인메모리(재시작 시 초기화).
+- hub(Space/Page 도메인)와 별개의 서버 프로세스. 상태는 인메모리가 원천이고,
+  `ROOM_SERVER_DB` 설정 시 SQLite로 write-through 영속화(store.py) — 재시작을 견딘다.
 """
 
 import secrets
@@ -13,16 +14,13 @@ import threading
 import uuid
 from dataclasses import dataclass, field
 
-from .core import errors
+from . import errors
+from .errors import CellTaken
 
 GRID_W = 30
 GRID_H = 16
 
 Cell = tuple[int, int]
-
-
-class CellTaken(errors.SpaceAError):
-    code = "cell_taken"
 
 
 @dataclass
@@ -63,13 +61,20 @@ def _validate_cell(cell: Cell) -> None:
 
 
 class RoomService:
-    """인메모리 방 서비스. 모든 변이는 self._lock 안 — 겹침 금지의 원자성 보장."""
+    """방 서비스. 모든 변이는 self._lock 안 — 겹침 금지의 원자성 보장.
 
-    def __init__(self) -> None:
+    상태는 인메모리가 원천이고, store(SqliteStore)를 주면 변이를 write-through로
+    영속화하고 시작 시 복원한다. store가 없으면 순수 인메모리(재시작 시 초기화).
+    """
+
+    def __init__(self, store=None) -> None:
         self._lock = threading.Lock()
+        self._store = store
         self._rooms: dict[str, Room] = {}
         self._agents: dict[str, RoomAgent] = {}
         self._tokens: dict[str, str] = {}  # token -> agent_id
+        if store is not None:
+            self._rooms, self._agents, self._tokens = store.load()
 
     # --- 신원 ---
 
@@ -90,6 +95,8 @@ class RoomService:
             self._agents[agent_id] = agent
             token = secrets.token_urlsafe(24)
             self._tokens[token] = agent_id
+            if self._store:
+                self._store.save_registration(agent, token, room)
             return agent, token, room
 
     def _authed(self, token: str | None) -> RoomAgent:
@@ -106,7 +113,11 @@ class RoomService:
         agent = self._authed(token)
         with self._lock:
             agent.name = name
-            self._rooms[agent.room_id].owner_name = name
+            room = self._rooms[agent.room_id]
+            room.owner_name = name
+            if self._store:
+                self._store.save_agent(agent)
+                self._store.save_owner_name(room)
         return self.me(token)
 
     # --- 조회 ---
@@ -127,9 +138,12 @@ class RoomService:
             room = self._rooms.get(room_id)
             if room is None:
                 raise errors.NotFound(f"room '{room_id}' not found")
+            owner = self._agents.get(room.owner_agent_id)
             return {
                 "room_id": room.id,
                 "owner_name": room.owner_name,
+                # 주인이 다른 방에 가 있어도 방문자가 주인의 로봇(미니홈피 프로필)을 그릴 수 있게
+                "owner_mascot_seed": owner.mascot_seed if owner else "",
                 "grid": {"w": GRID_W, "h": GRID_H},
                 "design": {
                     "wallpaper": room.design.wallpaper,
@@ -175,6 +189,8 @@ class RoomService:
             # 이전 방 자동 퇴장 = at_room/cell 원자 교체
             agent.at_room = room_id
             agent.cell = target
+            if self._store:
+                self._store.save_agent(agent)
         return self.me(token)
 
     def move(self, token: str | None, cell: Cell) -> dict:
@@ -184,6 +200,8 @@ class RoomService:
             if self._occupied_locked(agent.at_room, cell, except_agent=agent.agent_id):
                 raise CellTaken(f"셀 ({cell[0]},{cell[1]}) 이미 점유됨")
             agent.cell = cell
+            if self._store:
+                self._store.save_agent(agent)
         return self.me(token)
 
     # --- 방 디자인 (주인만) ---
@@ -210,6 +228,8 @@ class RoomService:
                 floor=str(design.get("floor", room.design.floor)),
                 objects=objects,
             )
+            if self._store:
+                self._store.save_design(room)
         return self.room_state(room_id)
 
     # --- 내부 (호출자가 락 보유) ---

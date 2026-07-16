@@ -12,7 +12,6 @@ from pydantic import BaseModel
 from ..adapters.factory import make_store
 from ..core import errors
 from ..core.services import SpaceAService
-from ..rooms import RoomService, CellTaken
 
 
 class CreateSpaceBody(BaseModel):
@@ -87,27 +86,7 @@ _STATUS = {
     errors.Unauthorized: 401,
     errors.Forbidden: 403,
     errors.NotFound: 404,
-    CellTaken: 409,
 }
-
-
-class RoomRegisterBody(BaseModel):
-    name: str
-    mascot_seed: str = ""
-
-
-class RoomEnterBody(BaseModel):
-    cell: list[int] | None = None  # [x, y] — 생략 시 서버가 빈 셀 배정
-
-
-class RoomMoveBody(BaseModel):
-    cell: list[int]
-
-
-class RoomDesignBody(BaseModel):
-    wallpaper: str | None = None
-    floor: str | None = None
-    objects: list[dict] = []
 
 
 def _bearer(authorization: str | None) -> str:
@@ -116,9 +95,8 @@ def _bearer(authorization: str | None) -> str:
     return authorization[len("Bearer ") :]
 
 
-def create_app(service: SpaceAService | None = None, rooms: RoomService | None = None) -> FastAPI:
+def create_app(service: SpaceAService | None = None) -> FastAPI:
     service = service or SpaceAService(make_store())
-    rooms = rooms or RoomService()
     app = FastAPI(title="Space A Hub")
 
     @app.exception_handler(errors.SpaceAError)
@@ -161,53 +139,6 @@ def create_app(service: SpaceAService | None = None, rooms: RoomService | None =
     def register_agent(body: RegisterAgentBody):
         agent, token = service.register_agent(body.name, body.space_id)
         return {"agent_id": agent.id, "spaces": agent.spaces, "token": token}
-
-    # --- 방 방문 (docs/design/room-visit.md) ---
-
-    def _room_token(authorization: str | None) -> str:
-        return _bearer(authorization)
-
-    @app.post("/rooms/register", status_code=201)
-    def room_register(body: RoomRegisterBody):
-        agent, token, room = rooms.register(body.name, body.mascot_seed)
-        return {"agent_id": agent.agent_id, "token": token, "room_id": room.id}
-
-    @app.get("/rooms")
-    def room_list():
-        return {"rooms": rooms.list_rooms()}
-
-    @app.get("/rooms/me")
-    def room_me(authorization: str | None = Header(default=None)):
-        return rooms.me(_room_token(authorization))
-
-    @app.patch("/rooms/me")
-    def room_rename(body: RoomRegisterBody, authorization: str | None = Header(default=None)):
-        return rooms.rename(_room_token(authorization), body.name)
-
-    @app.get("/rooms/{room_id}")
-    def room_state(room_id: str):
-        return rooms.room_state(room_id)
-
-    @app.post("/rooms/{room_id}/enter")
-    def room_enter(room_id: str, body: RoomEnterBody, authorization: str | None = Header(default=None)):
-        cell = (body.cell[0], body.cell[1]) if body.cell else None
-        return rooms.enter(_room_token(authorization), room_id, cell)
-
-    @app.post("/rooms/{room_id}/move")
-    def room_move(room_id: str, body: RoomMoveBody, authorization: str | None = Header(default=None)):
-        me = rooms.me(_room_token(authorization))
-        if me["room_id"] != room_id:
-            raise errors.InvalidRequest("그 방에 있지 않음 — 먼저 입장하세요")
-        return rooms.move(_room_token(authorization), (body.cell[0], body.cell[1]))
-
-    @app.put("/rooms/{room_id}/design")
-    def room_design(room_id: str, body: RoomDesignBody, authorization: str | None = Header(default=None)):
-        design: dict = {"objects": body.objects}
-        if body.wallpaper is not None:
-            design["wallpaper"] = body.wallpaper
-        if body.floor is not None:
-            design["floor"] = body.floor
-        return rooms.set_design(_room_token(authorization), room_id, design)
 
     @app.post("/issues", status_code=201)
     def open_issue(body: OpenIssueBody, authorization: str | None = Header(default=None)):

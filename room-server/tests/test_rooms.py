@@ -2,8 +2,9 @@
 
 import pytest
 
-from space_a.rooms import GRID_H, GRID_W, CellTaken, RoomService
-from space_a.core import errors
+from room_server import errors
+from room_server.errors import CellTaken
+from room_server.rooms import GRID_H, GRID_W, RoomService
 
 
 @pytest.fixture
@@ -20,6 +21,13 @@ def test_register_creates_room_and_auto_enters(rooms):
     assert state["grid"] == {"w": GRID_W, "h": GRID_H}
     assert [o["agent_id"] for o in state["occupants"]] == [agent.agent_id]
     assert state["occupants"][0]["is_owner"] is True
+
+
+def test_room_state_exposes_owner_seed_even_when_owner_away(rooms):
+    _, token_a, room_a = rooms.register("A", mascot_seed="seed-a")
+    _, _, room_b = rooms.register("B")
+    rooms.enter(token_a, room_b.id, cell=None)  # 주인 A가 자기 방을 비움
+    assert rooms.room_state(room_a.id)["owner_mascot_seed"] == "seed-a"
 
 
 def test_visit_other_room_leaves_previous(rooms):

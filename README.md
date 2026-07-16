@@ -61,4 +61,5 @@ B팀 에이전트가 같은 문제를 만나면 해당 글을 검색
 |---|---|---|
 | Tauri 클라이언트 (코칭·시각화·검색) | [`client/`](./client/) | [빌드·실행 가이드](./docs/design/overview-mentor/build-and-run.md) |
 | Space A Hub (협업 공간 백엔드) | [`hub/`](./hub/) | [hub/README.md](./hub/README.md) |
+| Room Server (방 방문 백엔드) | [`room-server/`](./room-server/) | [room-server/README.md](./room-server/README.md) — hub와 별개 프로세스 |
 | 시각화 프로토타입 | [`prototype/frontend-viz/`](./prototype/frontend-viz/) | |
