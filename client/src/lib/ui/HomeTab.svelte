@@ -14,8 +14,9 @@
   import RoomView from './RoomView.svelte';
   import { hubSettingsGet } from '../api';
 
-  let { summary, onGotoCoach, onGotoNotice }: {
+  let { summary, visiting = false, onGotoCoach, onGotoNotice }: {
     summary: Summary | null;
+    visiting?: boolean;
     onGotoCoach: (k: string) => void;
     onGotoNotice: (dest: NoticeDest) => void;
   } = $props();
@@ -73,6 +74,8 @@
     <MiniRoom advice={topAdvice} />
   {/if}
 
+  <!-- 아래는 전부 내 로컬 데이터 — 남의 방을 보는 동안엔 숨긴다 (남의 것으로 오독 방지) -->
+  {#if !visiting}
   <div class="strip">
     <span>세션 <b>{fmt(summary?.session_count)}</b></span>
     <span>입력 <b>{fmt(summary?.tok_input)}</b></span>
@@ -105,6 +108,7 @@
     {/if}
     <button onclick={scan} disabled={scanning}>{scanning ? '스캔 중…' : '지금 스캔'}</button>
   </footer>
+  {/if}
 </section>
 
 <style>

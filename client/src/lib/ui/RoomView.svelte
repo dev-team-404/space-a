@@ -10,25 +10,27 @@
   let error = $state('');
   let flash = $state(''); // cell_taken 등 일시 피드백
 
+  // 파스텔 미니룸 팔레트 — 기존 MiniRoom의 그라데이션 벽 문법을 계승
   const WALL: Record<string, string> = {
-    lavender: 'var(--pastel-lav)', mint: 'var(--pastel-mint)',
-    cream: 'var(--pastel-cream)', coral: 'var(--pastel-coral)',
+    lavender: 'linear-gradient(180deg, #cfc6ec 0%, #e9e3f8 100%)',
+    mint: 'linear-gradient(180deg, #bfe3d9 0%, #e3f4ee 100%)',
+    cream: 'linear-gradient(180deg, #fdf1cf 0%, #fdf8e8 100%)',
+    coral: 'linear-gradient(180deg, #f6cfc6 0%, #fbe8e3 100%)',
   };
   const FLOOR: Record<string, string> = {
-    cream: 'var(--pastel-cream)', mint: 'var(--pastel-mint)', lavender: 'var(--pastel-lav)',
+    cream: '#fdf1cf', mint: '#bfe3d9', lavender: '#cfc6ec', wood: '#ead9c0',
   };
-  const OBJECT_EMOJI: Record<string, string> = { plant: '🪴', rug: '🟢', lamp: '🛋️', window: '🪟' };
+  // 이모지 가구 (window·rug는 CSS로 그림)
+  const OBJECT_EMOJI: Record<string, string> = {
+    plant: '🪴', sofa: '🛋️', lamp: '🪔', shelf: '📚', tv: '📺', cat: '🐈',
+  };
 
   async function poll() {
     try {
       const v = await roomView();
       me = v.me;
       room = v.room;
-      error = '';
-      // 방문 컨텍스트를 창 전체에 알림 — App이 탭/헤더를 방문 모드로 전환 (자기 방=false)
-      window.dispatchEvent(new CustomEvent('room:context', {
-        detail: { visiting: v.me.room_id !== v.me.my_room_id, owner: v.room.owner_name, myName: v.me.name },
-      }));
+      error = ''; // 방문 모드 전환은 App이 자체 폴링으로 감지
     } catch (e) {
       error = `${e}`;
     }
@@ -68,7 +70,8 @@
     }
   }
 
-  // 에이전트 로봇 렌더 — 시드=이름이라 어느 클라이언트에서 봐도 같은 모습
+  // 에이전트 로봇 렌더 — 서버가 공유한 마스코트 시드 사용 (없으면 이름 폴백):
+  // 각자의 데스크톱 마스코트와 같은 로봇이 어느 클라이언트에서든 보인다
   const specCache = new Map<string, RobotSpec>();
   function robotCanvas(node: HTMLCanvasElement, name: string) {
     let raf = 0;
@@ -109,13 +112,19 @@
           {/each}
         {/each}
         {#each room.design.objects as o (o.kind + o.cell.join())}
-          <div class="obj" style:--cx={o.cell[0]} style:--cy={o.cell[1]}>
-            {OBJECT_EMOJI[o.kind] ?? '📦'}
-          </div>
+          {#if o.kind === 'window'}
+            <div class="obj-window" style:--cx={o.cell[0]} style:--cy={o.cell[1]}></div>
+          {:else if o.kind === 'rug'}
+            <div class="obj-rug" style:--cx={o.cell[0]} style:--cy={o.cell[1]}></div>
+          {:else}
+            <div class="obj" style:--cx={o.cell[0]} style:--cy={o.cell[1]}>
+              {OBJECT_EMOJI[o.kind] ?? '📦'}
+            </div>
+          {/if}
         {/each}
         {#each room.occupants as a (a.agent_id)}
           <div class="agent" class:mine={a.agent_id === me.agent_id} style:--cx={a.cell[0]} style:--cy={a.cell[1]}>
-            <canvas width="128" height="128" use:robotCanvas={a.name}></canvas>
+            <canvas width="128" height="128" use:robotCanvas={a.mascot_seed || a.name}></canvas>
             <span class="name">{a.name}{a.is_owner ? ' 🏠' : ''}</span>
           </div>
         {/each}
@@ -140,7 +149,10 @@
     /* 방이 페이지를 잡아먹지 않게 상한 — 폭은 비율 따라 자동 축소 */
     max-height: 300px; max-width: 563px; margin: 0 auto; width: 100%;
   }
-  .floor { position: absolute; left: 0; right: 0; bottom: 0; height: 30%; }
+  .floor {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 30%;
+    box-shadow: inset 0 4px 6px -4px rgba(74, 70, 104, 0.3);
+  }
   .grid {
     position: absolute; inset: 0;
     display: grid;
@@ -175,7 +187,29 @@
     box-shadow: var(--shadow-soft);
   }
   .agent.mine .name { background: var(--accent); color: #fff; }
-  .obj { font-size: 18px; }
+  .obj { font-size: 22px; filter: drop-shadow(0 2px 2px rgba(74, 70, 104, 0.25)); }
+  /* 창문 — MiniRoom 문법: 민트 유리 + 크림 창틀. 논리 점유 1셀, 렌더 4×3셀 */
+  .obj-window {
+    position: absolute; pointer-events: none;
+    left: calc(var(--cx) / var(--gw) * 100%);
+    top: calc(var(--cy) / var(--gh) * 100%);
+    width: calc(100% / var(--gw) * 4);
+    height: calc(100% / var(--gh) * 3);
+    background: var(--pastel-mint);
+    border-radius: var(--radius-s);
+    box-shadow: inset 0 0 0 4px #fffdfa, inset 0 0 0 5px rgba(74, 70, 104, 0.12);
+  }
+  /* 러그 — 타원, 렌더 6×2셀 (중심 셀 기준) */
+  .obj-rug {
+    position: absolute; pointer-events: none;
+    left: calc((var(--cx) - 2.5) / var(--gw) * 100%);
+    top: calc(var(--cy) / var(--gh) * 100%);
+    width: calc(100% / var(--gw) * 6);
+    height: calc(100% / var(--gh) * 2);
+    border-radius: 50%;
+    background: rgba(255, 253, 250, 0.55);
+    box-shadow: inset 0 0 0 3px rgba(74, 70, 104, 0.08);
+  }
   .empty {
     font-size: 12px; color: var(--ink-soft); background: var(--frame-bg);
     border-radius: var(--radius-m); box-shadow: var(--shadow-soft); padding: 14px;

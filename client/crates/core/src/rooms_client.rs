@@ -34,11 +34,12 @@ fn base(url: &str) -> String {
     url.trim_end_matches('/').to_string()
 }
 
-/// 등록은 토큰이 없는 상태에서 호출된다.
-pub fn register(base_url: &str, name: &str) -> Result<Value> {
+/// 등록은 토큰이 없는 상태에서 호출된다. mascot_seed = 이 클라이언트의 로봇 시드
+/// (어느 방에서든 내 데스크톱 마스코트와 같은 모습으로 보이게).
+pub fn register(base_url: &str, name: &str, mascot_seed: &str) -> Result<Value> {
     ureq::post(&format!("{}/rooms/register", base(base_url)))
         .timeout(std::time::Duration::from_secs(10))
-        .send_json(json!({ "name": name }))
+        .send_json(json!({ "name": name, "mascot_seed": mascot_seed }))
         .map_err(err_of)?
         .into_json()
         .map_err(Into::into)

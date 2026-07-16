@@ -7,7 +7,7 @@
   import RobotPortrait from './lib/ui/RobotPortrait.svelte';
   import {
     getSummary, getDailyLine, listFindings, onScanDone, onGotoTab,
-    onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, type Summary,
+    onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, roomView, type Summary,
   } from './lib/api';
   import {
     diaryNotice, findingNotice, loadNotices, occasionNotice, pushNotice, saveNotices,
@@ -29,15 +29,24 @@
   // 남의 방 화면에 내 사적 탭이 보이면 "남의 것"으로 오독된다.
   let visiting = $state(false);
   let roomOwner = $state('');
+  // 창(App) 레벨에서 직접 폴링 — 어느 탭에 있든 방 이동을 감지해 방문 모드로 전환
   $effect(() => {
-    const onCtx = (e: Event) => {
-      const d = (e as CustomEvent).detail as { visiting: boolean; owner: string };
-      visiting = d.visiting;
-      roomOwner = d.owner;
-      if (d.visiting && tab !== 'home') tab = 'home';
+    const tick = async () => {
+      try {
+        const v = await roomView();
+        visiting = v.me.room_id !== v.me.my_room_id;
+        roomOwner = v.room.owner_name;
+        if (visiting && tab !== 'home') tab = 'home';
+      } catch {
+        visiting = false;
+        roomOwner = '';
+      }
     };
-    window.addEventListener('room:context', onCtx);
-    return () => window.removeEventListener('room:context', onCtx);
+    tick();
+    const t = setInterval(tick, 2000);
+    const onVis = () => { if (!document.hidden) tick(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
   });
   const visibleTabs = $derived(visiting ? TABS.filter((t) => t.id === 'home') : TABS);
   let summary = $state<Summary | null>(null);
@@ -100,7 +109,8 @@
 <div class="wall">
   <div class="homepy">
     <header class="titlebar">
-      <h1>{visiting ? roomOwner : (summary?.user_name ?? '주인')}님의 <span class="mh">미니홈피</span></h1>
+      <!-- 헤더 = 지금 보는 방의 주인. 자기 방이면 hub 등록 이름, hub 미연결이면 로컬 계정명 -->
+      <h1>{roomOwner || (summary?.user_name ?? '주인')}님의 <span class="mh">미니홈피</span></h1>
       <div class="counter">
         TODAY <b>{summary?.session_count ?? '–'}</b> · TOTAL <b>{summary?.total_sessions ?? '–'}</b>
       </div>
@@ -119,7 +129,7 @@
       </aside>
       <main class="content">
         {#if tab === 'home'}
-          <HomeTab {summary} onGotoCoach={gotoCoach} onGotoNotice={gotoDest} />
+          <HomeTab {summary} {visiting} onGotoCoach={gotoCoach} onGotoNotice={gotoDest} />
         {:else if tab === 'coach'}
           <CoachTab focusKey={coachFocus} onChanged={refresh} />
         {:else if tab === 'diary'}

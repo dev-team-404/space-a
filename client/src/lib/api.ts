@@ -143,6 +143,7 @@ export interface RoomOccupant {
   name: string;
   cell: [number, number];
   is_owner: boolean;
+  mascot_seed: string;
 }
 export interface RoomState {
   room_id: string;

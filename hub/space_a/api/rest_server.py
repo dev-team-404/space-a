@@ -93,6 +93,7 @@ _STATUS = {
 
 class RoomRegisterBody(BaseModel):
     name: str
+    mascot_seed: str = ""
 
 
 class RoomEnterBody(BaseModel):
@@ -168,7 +169,7 @@ def create_app(service: SpaceAService | None = None, rooms: RoomService | None =
 
     @app.post("/rooms/register", status_code=201)
     def room_register(body: RoomRegisterBody):
-        agent, token, room = rooms.register(body.name)
+        agent, token, room = rooms.register(body.name, body.mascot_seed)
         return {"agent_id": agent.agent_id, "token": token, "room_id": room.id}
 
     @app.get("/rooms")

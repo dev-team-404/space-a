@@ -45,6 +45,7 @@ class RoomAgent:
     room_id: str  # 자기 방 (소유)
     at_room: str  # 현재 있는 방
     cell: Cell
+    mascot_seed: str = ""  # 클라이언트 마스코트 시드 — 어느 방에서든 같은 로봇으로 보이게
 
 
 @dataclass
@@ -72,7 +73,7 @@ class RoomService:
 
     # --- 신원 ---
 
-    def register(self, name: str) -> tuple[RoomAgent, str, Room]:
+    def register(self, name: str, mascot_seed: str = "") -> tuple[RoomAgent, str, Room]:
         """유저 등록 + 개인 방 생성. 에이전트는 자기 방에 자동 입장."""
         name = name.strip()
         if not name:
@@ -84,7 +85,7 @@ class RoomService:
             self._rooms[room_id] = room
             agent = RoomAgent(
                 agent_id=agent_id, name=name, room_id=room_id, at_room=room_id,
-                cell=self._free_cell_locked(room_id),
+                cell=self._free_cell_locked(room_id), mascot_seed=mascot_seed,
             )
             self._agents[agent_id] = agent
             token = secrets.token_urlsafe(24)
@@ -141,6 +142,7 @@ class RoomService:
                         "name": a.name,
                         "cell": list(a.cell),
                         "is_owner": a.agent_id == room.owner_agent_id,
+                        "mascot_seed": a.mascot_seed,
                     }
                     for a in self._agents.values()
                     if a.at_room == room.id

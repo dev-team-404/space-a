@@ -558,7 +558,8 @@ pub fn hub_connect(state: State<AppState>, url: String, user: String) -> Result<
         // rename 실패(서버 재시작으로 토큰 무효 등) → 아래에서 새로 등록
     }
     // 네트워크는 락 밖
-    let v = rooms_client::register(&url, &user).map_err(|e| e.to_string())?;
+    let seed = agent_mentor::mascot::stable_identity();
+    let v = rooms_client::register(&url, &user, &seed).map_err(|e| e.to_string())?;
     let token = v["token"].as_str().unwrap_or_default().to_string();
     let agent_id = v["agent_id"].as_str().unwrap_or_default().to_string();
     let room_id = v["room_id"].as_str().unwrap_or_default().to_string();
