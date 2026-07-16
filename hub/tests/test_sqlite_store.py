@@ -43,3 +43,32 @@ def test_ids_are_unique_and_prefixed():
     a2, _ = svc.register_agent("a2", "s")
     assert a1.id.startswith("agt_") and a2.id.startswith("agt_")
     assert a1.id != a2.id
+
+
+def test_concurrent_read_write_is_safe(tmp_path):
+    """공유 연결을 여러 스레드가 읽기·쓰기해도 오류 없고 데이터가 온전하다."""
+    import threading
+
+    svc = SpaceAService(SqliteStore(str(tmp_path / "c.db")))
+    svc.create_space("s", "S")
+    _, tok = svc.register_agent("bot", "s")
+    errors: list[Exception] = []
+
+    def worker(n: int) -> None:
+        try:
+            for i in range(20):
+                iss = svc.open_issue(tok, f"t{n}-{i}", "s")
+                svc.resolve_issue(tok, iss.id, f"sol{n}-{i}")
+                svc.search_knowledge(tok, "sol")  # 동시 읽기
+                svc.list_issues(tok)
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    threads = [threading.Thread(target=worker, args=(n,)) for n in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors
+    assert len(svc.list_issues(tok)) == 8 * 20  # 유실 없이 전부 기록

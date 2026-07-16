@@ -3,8 +3,9 @@
 stdlib `sqlite3`만 쓴다(추가 의존성 없음). 파일 경로를 주면 영속되고,
 `:memory:`면 프로세스 수명 동안만 유지된다. 포트&어댑터라 core는 그대로다.
 
+`check_same_thread=False`로 하나의 연결을 여러 스레드가 공유하므로(FastAPI 스레드풀),
+**읽기·쓰기 모두 `self._lock`으로 직렬화**한다 (`_execute`/`_write`).
 id는 접두어별 순번(agt_1, page_1, ...)으로 발급해 InMemoryStore와 동작이 같다.
-서비스는 항상 mutate 후 save를 호출하므로, 값 복사(row→객체) 방식이어도 문제없다.
 """
 
 import json
@@ -40,9 +41,14 @@ class SqliteStore(Store):
     def __init__(self, path: str = "space_a.db") -> None:
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
-        self._lock = threading.Lock()  # FastAPI 스레드풀 대비 쓰기 직렬화
-        self._conn.executescript(_SCHEMA)
-        self._conn.commit()
+        self._lock = threading.Lock()  # 공유 연결 → 모든 접근 직렬화
+        with self._lock:
+            self._conn.executescript(_SCHEMA)
+            self._conn.commit()
+
+    def _execute(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
+        with self._lock:
+            return self._conn.execute(sql, params).fetchall()
 
     def _write(self, sql: str, params: tuple) -> None:
         with self._lock:
@@ -77,11 +83,11 @@ class SqliteStore(Store):
         )
 
     def get_space(self, space_id: str) -> Space | None:
-        r = self._conn.execute("SELECT * FROM spaces WHERE id=?", (space_id,)).fetchone()
-        return self._space(r) if r else None
+        rows = self._execute("SELECT * FROM spaces WHERE id=?", (space_id,))
+        return self._space(rows[0]) if rows else None
 
     def all_spaces(self) -> list[Space]:
-        return [self._space(r) for r in self._conn.execute("SELECT * FROM spaces")]
+        return [self._space(r) for r in self._execute("SELECT * FROM spaces")]
 
     # --- agents / tokens ---
 
@@ -95,18 +101,18 @@ class SqliteStore(Store):
         self._write("INSERT OR REPLACE INTO tokens(token,agent_id) VALUES(?,?)", (token, agent_id))
 
     def agent_for_token(self, token: str) -> Agent | None:
-        r = self._conn.execute("SELECT agent_id FROM tokens WHERE token=?", (token,)).fetchone()
-        return self.get_agent(r["agent_id"]) if r else None
+        rows = self._execute("SELECT agent_id FROM tokens WHERE token=?", (token,))
+        return self.get_agent(rows[0]["agent_id"]) if rows else None
 
     def get_agent(self, agent_id: str) -> Agent | None:
-        r = self._conn.execute("SELECT * FROM agents WHERE id=?", (agent_id,)).fetchone()
-        return self._agent(r) if r else None
+        rows = self._execute("SELECT * FROM agents WHERE id=?", (agent_id,))
+        return self._agent(rows[0]) if rows else None
 
     def save_agent(self, agent: Agent) -> None:
         self.add_agent(agent)
 
     def all_agents(self) -> list[Agent]:
-        return [self._agent(r) for r in self._conn.execute("SELECT * FROM agents")]
+        return [self._agent(r) for r in self._execute("SELECT * FROM agents")]
 
     def revoke_tokens(self, agent_id: str) -> None:
         self._write("DELETE FROM tokens WHERE agent_id=?", (agent_id,))
@@ -120,14 +126,14 @@ class SqliteStore(Store):
         )
 
     def get_issue(self, issue_id: str) -> Issue | None:
-        r = self._conn.execute("SELECT * FROM issues WHERE id=?", (issue_id,)).fetchone()
-        return self._issue(r) if r else None
+        rows = self._execute("SELECT * FROM issues WHERE id=?", (issue_id,))
+        return self._issue(rows[0]) if rows else None
 
     def save_issue(self, issue: Issue) -> None:
         self.add_issue(issue)
 
     def all_issues(self) -> list[Issue]:
-        return [self._issue(r) for r in self._conn.execute("SELECT * FROM issues")]
+        return [self._issue(r) for r in self._execute("SELECT * FROM issues")]
 
     # --- pages ---
 
@@ -144,19 +150,19 @@ class SqliteStore(Store):
         )
 
     def get_page(self, page_id: str) -> Page | None:
-        r = self._conn.execute("SELECT * FROM pages WHERE id=?", (page_id,)).fetchone()
-        return self._page(r) if r else None
+        rows = self._execute("SELECT * FROM pages WHERE id=?", (page_id,))
+        return self._page(rows[0]) if rows else None
 
     def save_page(self, page: Page) -> None:
         self.add_page(page)
 
     def all_pages(self) -> list[Page]:
-        return [self._page(r) for r in self._conn.execute("SELECT * FROM pages")]
+        return [self._page(r) for r in self._execute("SELECT * FROM pages")]
 
     def pages_in_space(self, space_id: str) -> list[Page]:
         return [
             self._page(r)
-            for r in self._conn.execute("SELECT * FROM pages WHERE space_id=?", (space_id,))
+            for r in self._execute("SELECT * FROM pages WHERE space_id=?", (space_id,))
         ]
 
     # --- reuse events ---
