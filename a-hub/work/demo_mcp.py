@@ -1,34 +1,24 @@
-"""MCP 도구를 in-process로 구동해 흐름을 눈으로 보는 데모.
+"""In-process 데모 — 데모 공간을 시드하고 재사용 흐름을 서비스로 시연한다.
+(MCP 도구는 HTTP 신원을 요구하므로 여기선 service를 직접 호출한다.)"""
 
-실행:  cd a-hub/work && .venv/bin/python demo_mcp.py
-(SPACE_A_TOKEN 없으면 데모 공간·샘플 지식이 자동 시드된다)
-"""
-
-import asyncio
-import json
-
-from ahub.api.mcp_server import build_mcp
+from ahub.adapters.store_memory import InMemoryStore
+from ahub.api.seed import seed_demo
+from ahub.core.services import SpaceAService
 
 
-async def main() -> None:
-    mcp = build_mcp()  # 데모 공간/샘플 지식 시드 (토큰은 stderr에 출력)
+def main() -> None:
+    service = SpaceAService(InMemoryStore())
+    token = seed_demo(service)
+    print("[demo] seeded space=demo, token issued")
 
-    async def call(name, **args):
-        res = await mcp.call_tool(name, args)
-        out = json.loads(res[0].text)
-        print(f"\n▶ {name}({args})")
-        print("  →", json.dumps(out, ensure_ascii=False))
-        return out
+    res = service.search_knowledge(token, "인증서")
+    print(f"[demo] search '인증서' → {len(res.pages)} hit(s)")
 
-    print("\n=== 에이전트가 MCP로 Space A를 쓰는 흐름 ===")
-    await call("get_guide", space_id="demo")
-    found = await call("search_knowledge", query="인증서")
-    page_id = found["results"][0]["page_id"]
-    issue = await call("open_issue", title="우리도 인증서 오류", space_id="demo")
-    await call("cite_knowledge", issue_id=issue["issue_id"], page_id=page_id)  # ★ ReuseEvent
-    await call("resolve_issue", issue_id=issue["issue_id"], summary="가이드대로 인증서 갱신")
-    await call("get_skill_candidates", min_occurrences=1)
+    issue = service.open_issue(token, "같은 문제", "demo")
+    page_id = res.pages[0].id
+    event, issue = service.cite_knowledge(token, issue.id, page_id)
+    print(f"[demo] cite → reuse={event.id}, issue_status={issue.status}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
