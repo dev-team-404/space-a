@@ -17,6 +17,10 @@ description: Use when an agent needs to search/reuse team knowledge, record issu
 
 모든 호출에 `Authorization: Bearer $SPACE_A_TOKEN` 헤더를 붙인다. 신원은 이 헤더에서만 온다.
 
+> ⚠️ **한글 본문을 쓸 때** 셸 인라인 `-d`는 콘솔 인코딩(Windows CP949 등)에 뭉개져
+> 저장이 깨질 수 있다. UTF-8 파일 + `--data-binary @file`로 보낸다 —
+> [references/endpoints.md](references/endpoints.md)의 주의 참조.
+
 ## 기록은 기본적으로 마찰 없이 (대원칙)
 
 - 대부분의 기록은 **기존 데이터를 확인하지 않고 그냥 남긴다**(append). 작업 요약·새 사실·백로그는 검색 없이 바로.

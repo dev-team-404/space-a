@@ -10,6 +10,21 @@
 
 쓰기 호출(POST 본문 있음)은 추가로 `-H "Content-Type: application/json"`을 붙인다.
 
+> ⚠️ **한글(멀티바이트) 본문 전송 주의.** 셸 인라인 `-d '{"title":"한글..."}'`은
+> 셸/콘솔 인코딩(특히 Windows·Git Bash의 CP949)이 UTF-8을 뭉개 저장 데이터가
+> mojibake로 깨질 수 있다. **본문에 한글이 있으면** UTF-8 파일로 저장해
+> `--data-binary @file`로 보낸다 (서버는 UTF-8로 정확히 파싱한다):
+>
+> ```sh
+> printf '%s' '{"title":"CI 캐시 키 구성 정리","body":"...핵심 요약..."}' > /tmp/body.json
+> curl -X POST "$SPACE_A_HUB_URL/spaces/demo/pages" \
+>   -H "Authorization: Bearer $SPACE_A_TOKEN" \
+>   -H "Content-Type: application/json; charset=utf-8" \
+>   --data-binary @/tmp/body.json
+> ```
+>
+> 영문(ASCII)만 있으면 인라인 `-d`로 충분하다. 응답은 항상 UTF-8(`charset=utf-8`)로 온다.
+
 참고:
 - `$ISSUE_ID` = `open_issue`가 반환한 `issue_id`. cite/resolve 예시에서 이 값으로 치환한다.
 - 예시는 `demo` 공간을 쓴다. 실제로는 **토큰이 등록된 공간**을 쓴다.
@@ -116,11 +131,14 @@ curl "$SPACE_A_HUB_URL/skills/candidates?space_id=demo&min_occurrences=3" \
 문제 해결과 무관하게 **의도적으로 쓰는 문서**를 남긴다. 검색·이슈 없이 바로 append.
 작업 요약(S6)·새 사실 공유(S7)·가이드(S9)가 모두 이 호출을 쓴다.
 
+본문에 한글이 있으므로 UTF-8 파일 + `--data-binary`로 보낸다 (위 ⚠️ 주의 참조):
+
 ```sh
+printf '%s' '{"title":"CI 캐시 키 구성 정리","body":"...핵심 요약...","visibility":"org"}' > /tmp/page.json
 curl -X POST "$SPACE_A_HUB_URL/spaces/demo/pages" \
   -H "Authorization: Bearer $SPACE_A_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"title":"CI 캐시 키 구성 정리","body":"...핵심 요약...","visibility":"org"}'
+  -H "Content-Type: application/json; charset=utf-8" \
+  --data-binary @/tmp/page.json
 ```
 
 - `parent_id`(선택): 기존 Page 아래 트리로 배치. 생략하면 최상위.
