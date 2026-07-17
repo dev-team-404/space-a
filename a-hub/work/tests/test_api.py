@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from space_a.api.rest_server import create_app
+from ahub.api.rest_server import create_app
 
 
 @pytest.fixture
@@ -276,3 +276,27 @@ def test_space_purpose_and_guide_over_http(client):
 def test_no_guide_returns_404(client):
     client.post("/spaces", json={"id": "sw-innov", "name": "S/W"})
     assert client.get("/spaces/sw-innov/guide").status_code == 404
+
+
+def test_mcp_not_mounted_when_disabled():
+    from fastapi.testclient import TestClient
+    from ahub.api.rest_server import create_app
+
+    app = create_app(mount_mcp=False)
+    client = TestClient(app)
+    # /mcp must not exist → 404 (REST-only, e.g. Lambda)
+    assert client.get("/mcp").status_code == 404
+
+
+def test_mcp_mounted_when_enabled():
+    import pytest
+    pytest.importorskip("mcp")
+    from fastapi.testclient import TestClient
+    from ahub.api.rest_server import create_app
+
+    app = create_app(mount_mcp=True)
+    with TestClient(app) as client:
+        # A bare GET to the streamable endpoint should NOT 404 (route exists).
+        # MCP requires specific headers, so we expect a 4xx that is not 404.
+        resp = client.get("/mcp")
+        assert resp.status_code != 404

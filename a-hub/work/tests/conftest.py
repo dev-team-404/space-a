@@ -1,8 +1,8 @@
 import pytest
 
-from space_a.adapters.store_memory import InMemoryStore
-from space_a.adapters.store_sqlite import SqliteStore
-from space_a.core.services import SpaceAService
+from ahub.adapters.store_memory import InMemoryStore
+from ahub.adapters.store_sqlite import SqliteStore
+from ahub.core.services import SpaceAService
 
 
 @pytest.fixture(params=["memory", "sqlite"])

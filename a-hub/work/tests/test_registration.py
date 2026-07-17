@@ -2,7 +2,7 @@
 
 import pytest
 
-from space_a.core import errors
+from ahub.core import errors
 
 
 def test_register_agent_issues_id_token_and_joins_space(service):

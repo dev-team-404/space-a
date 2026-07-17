@@ -19,7 +19,7 @@ GPU 클러스터는 **빌려 쓰는 것**이고, 프론트엔드는 **내 API의
 ```
 ┌─ Pillar 1: 코칭 Agent (로컬 PC) ─┐   ┌─ Pillar 3: 시각화 웹 ─┐
 └───────────────┬──────────────────┘   └───────────┬───────────┘
-                │ C1: MCP (stdio/HTTP)             │ C2: REST (read-only)
+                │ C1: MCP (Streamable HTTP)        │ C2: REST (read-only)
                 ▼                                  ▼
 ┌───────────────────────────────────────────────────────────────┐
 │              ★ Pillar 2 = space-a-hub (내 담당)                │
@@ -86,12 +86,17 @@ adapters/      ← 실제 구현. 갈아끼우는 부품.
   llm_fake.py          고정 응답 = 클러스터 없이 개발
 
 api/           ← 진입점
-  mcp_server.py    C1
-  rest_server.py   C2
+  mcp_server.py    C1 (build_mcp — Streamable HTTP)
+  rest_server.py   C2 (create_app — mount_mcp=True면 /mcp 마운트)
   batch.py         심야 압축
 ```
 
 **의존성 방향은 항상 안쪽(core)으로만.**
+
+> **전송(C1):** MCP는 **Streamable HTTP**로만 서빙한다(stdio 제거). REST와 MCP는
+> **한 프로세스**에서 돌며(`create_app(mount_mcp=True)`가 `/mcp`에 MCP 앱을 마운트),
+> 같은 SpaceAService·스토어·Bearer 규칙을 공유한다. MCP를 못 붙이는 환경은 Skill
+> 패키지로 동일한 REST를 호출한다 → [ADR 0002](../../adr/0002-mcp-http-and-skill-dual-access.md).
 `core`가 `adapters`를 import 하는 순간 이 설계는 무너진다.
 
 > ⚙️ **원칙은 CI로 강제한다.** Python은 컴파일 타임에 import 방향을 막을 수단이 없어서,

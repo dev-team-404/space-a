@@ -2,7 +2,7 @@
 
 import pytest
 
-from space_a.core import errors
+from ahub.core import errors
 
 
 def _page_in(service, token, space_id, summary, visibility="org"):

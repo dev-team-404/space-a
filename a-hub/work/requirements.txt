@@ -1,3 +1,9 @@
-# Lambda 배포 패키지용 (sam build). boto3는 Lambda 런타임에 기본 포함.
+# 서버리스(개발용) Lambda 배포 전용 — `sam build`가 이 파일을 읽는다.
+# Lambda 런타임 의존성만 명시적으로 나열한다. (프로젝트 자체를 pip install 하지 않는다 —
+# SAM 컨테이너 빌드는 소스를 read-only로 마운트하므로 `.[serverless]`는 egg-info 빌드가 막혀 실패.)
+# Lambda는 create_app(mount_mcp=False)라 uvicorn/mcp는 불필요. 버전은 pyproject.toml의
+# [serverless] extra와 맞춘다.
+#   fastapi: ASGI 앱 / mangum: FastAPI(ASGI) → Lambda 어댑터 / boto3: DynamoDB 스토어
 fastapi>=0.115
 mangum>=0.17
+boto3>=1.34

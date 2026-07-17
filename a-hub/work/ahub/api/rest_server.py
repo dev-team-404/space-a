@@ -5,6 +5,8 @@
 도메인 에러를 HTTP 상태로 매핑한다.
 """
 
+import contextlib
+
 from fastapi import FastAPI, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -12,6 +14,7 @@ from pydantic import BaseModel
 from ..adapters.factory import make_store
 from ..core import errors
 from ..core.services import SpaceAService
+from ._auth import _bearer
 
 
 class CreateSpaceBody(BaseModel):
@@ -89,15 +92,27 @@ _STATUS = {
 }
 
 
-def _bearer(authorization: str | None) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise errors.Unauthorized("missing bearer token")
-    return authorization[len("Bearer ") :]
-
-
-def create_app(service: SpaceAService | None = None) -> FastAPI:
+def create_app(
+    service: SpaceAService | None = None, *, mount_mcp: bool = True
+) -> FastAPI:
     service = service or SpaceAService(make_store())
-    app = FastAPI(title="Space A Hub")
+
+    lifespan = None
+    mcp_app = None
+    if mount_mcp:
+        # 지연 import: Lambda(mount_mcp=False)는 mcp를 import하지 않는다.
+        from .mcp_server import build_mcp
+
+        mcp = build_mcp(service)
+        mcp_app = mcp.streamable_http_app()  # session_manager를 지연 생성
+
+        @contextlib.asynccontextmanager
+        async def lifespan(_app):
+            # Streamable HTTP 세션 매니저를 부모 앱 lifespan에서 기동한다.
+            async with mcp.session_manager.run():
+                yield
+
+    app = FastAPI(title="Space A Hub", lifespan=lifespan)
 
     @app.exception_handler(errors.SpaceAError)
     async def _handle(_: Request, exc: errors.SpaceAError):
@@ -429,5 +444,9 @@ def create_app(service: SpaceAService | None = None) -> FastAPI:
     @app.get("/readyz")
     def readyz():
         return {"status": "ready"}
+
+    if mcp_app is not None:
+        # pairs with streamable_http_path="/" in build_mcp — mount prefix supplies /mcp
+        app.mount("/mcp", mcp_app)
 
     return app

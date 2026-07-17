@@ -1,4 +1,9 @@
-# 서버리스 배포 (AWS Lambda + API Gateway + DynamoDB)
+# 서버리스 배포 (AWS Lambda + API Gateway + DynamoDB) — 개발용
+
+> ⚠️ **개발 단계 전용이다.** 프로덕션은 서버(컨테이너)로 운영한다 → [README.md](README.md) Docker 절.
+> 서버리스 의존성(`mangum`·`boto3`)은 `pyproject.toml`의 `[serverless]` extra로 분리돼 있어,
+> 서버 빌드(`pip install .` / Dockerfile)에는 들어오지 않는다. `sam build`는 `requirements.txt`
+> (→ `.[serverless]`)로 이 extra를 설치한다.
 
 FastAPI(ASGI) 앱을 **Mangum**으로 Lambda에 올리고, **DynamoDB**로 영속한다.
 포트&어댑터라 core는 그대로이고, `SPACE_A_TABLE` 환경변수로 DynamoDB 스토어가 선택된다.
@@ -9,8 +14,8 @@ FastAPI(ASGI) 앱을 **Mangum**으로 Lambda에 올리고, **DynamoDB**로 영�
 API Gateway(HTTP API)  →  Lambda(HubFunction, Mangum+FastAPI)  →  DynamoDB(HubTable)
 ```
 
-- `space_a/api/lambda_handler.py` — `handler = Mangum(create_app())`
-- `space_a/adapters/store_dynamodb.py` — 단일 테이블(pk=타입, sk=id), 원자적 id 카운터
+- `ahub/api/lambda_handler.py` — `handler = Mangum(create_app())`
+- `ahub/adapters/store_dynamodb.py` — 단일 테이블(pk=타입, sk=id), 원자적 id 카운터
 - `template.yaml` — SAM: Lambda + HTTP API + DynamoDB 테이블 + IAM
 
 ## 배포
@@ -54,5 +59,5 @@ sam delete
 
 ## 주의 (테스트용)
 
-- 이 배포는 **REST API**를 노출한다. **MCP(stdio)는 Lambda에 맞지 않으므로**, 에이전트의 MCP 연결은 상시 서버(예: 컨테이너)로 별도 운영한다.
+- 이 배포는 **REST API만** 노출한다(`create_app(mount_mcp=False)` — `/mcp` 미마운트). **MCP(Streamable HTTP)의 상주·스트리밍은 API Gateway+Lambda와 맞지 않으므로**, 에이전트의 MCP 연결은 상시 서버(예: 컨테이너)로 별도 운영한다.
 - 인증은 아직 **정적/데모 토큰**(실제 SSO 아님) → 공개 엔드포인트로 두지 말고 테스트 용도로만.

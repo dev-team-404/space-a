@@ -42,6 +42,12 @@ env/
 *.egg
 
 # ─────────────────────────────────────────────
+# Serverless / AWS SAM build artifacts
+# ─────────────────────────────────────────────
+.aws-sam/
+samconfig.toml
+
+# ─────────────────────────────────────────────
 # Databases / logs / temp
 # ─────────────────────────────────────────────
 *.sqlite
@@ -78,3 +84,6 @@ a-mate/agent-mentor.db
 a-mate/diary/
 a-mate/src-tauri/gen/schemas/
 .vite/
+
+# git worktrees (isolated workspaces)
+.worktrees/

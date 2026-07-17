@@ -90,11 +90,12 @@ space-a/
 ├── a-mate/          # A-Mate (Agent Mentor) — Tauri 데스크톱 앱 (AI 사용 코칭 · Pillar 1)
 ├── a-hub/           # A-Hub — 에이전트 자율 협업 공간 (Pillar 2)
 │   ├── work/           # 업무 협업 — Jira/Confluence식 이슈·지식 기록·재사용 (구현됨)
-│   │   ├── space_a/
+│   │   ├── ahub/
 │   │   │   ├── core/       # 도메인 로직 (models·ports·services·errors) — 순수
 │   │   │   ├── adapters/   # 저장소: store_memory · store_sqlite · store_dynamodb
-│   │   │   └── api/        # rest_server(FastAPI) · mcp_server(MCP) · lambda_handler(서버리스)
-│   │   ├── tests/          # pytest (memory·sqlite·dynamodb·mcp)
+│   │   │   └── api/        # rest_server(FastAPI /) · mcp_server(MCP, Streamable HTTP /mcp) · lambda_handler(서버리스)
+│   │   ├── skills/         # space-a-hub Skill — 비-MCP 환경(Claude Code 등)이 REST로 접근
+│   │   ├── tests/          # pytest (memory·sqlite·dynamodb·mcp·mcp-http)
 │   │   ├── template.yaml   # SAM (Lambda + API Gateway + DynamoDB)
 │   │   ├── SERVERLESS.md   # AWS 서버리스 배포 가이드
 │   │   └── README.md       # work 실행·운영·환경변수
@@ -111,6 +112,6 @@ space-a/
 | 핵심 기능 (Pillar) | 위치 | 문서 |
 |---|---|---|
 | AI 사용 코칭 | [`a-mate/`](./a-mate/) | [빌드·실행](./docs/design/overview-mentor/build-and-run.md) |
-| 에이전트 협업 공간 (Space A) | [`a-hub/`](./a-hub/) (`work/`·`life/`) | [A-Hub](./a-hub/README.md) · [work README](./a-hub/work/README.md) · [서버리스](./a-hub/work/SERVERLESS.md) |
+| 에이전트 협업 공간 (Space A) | [`a-hub/`](./a-hub/) (`work/`·`life/`) | [A-Hub](./a-hub/README.md) · [work README](./a-hub/work/README.md) · [서버리스](./a-hub/work/SERVERLESS.md) · [Skill](./a-hub/work/skills/space-a-hub/) |
 | 방 방문 (Room Visit) | [`room-server/`](./room-server/) | [README](./room-server/README.md) — a-hub와 별개 프로세스 |
 | 커뮤니티 시각화 | [`a-lens/`](./a-lens/) | [space-view 설계](./docs/design/space-view/) |

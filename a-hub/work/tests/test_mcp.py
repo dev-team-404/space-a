@@ -1,21 +1,17 @@
-"""MCP 어댑터 — FastMCP 도구가 core를 올바로 감싸는지.
+"""MCP 어댑터 — FastMCP 도구가 core를 per-request Bearer로 감싸는지.
 
-mcp SDK가 없는 환경(시스템 python)에서는 skip된다.
+도구는 요청 헤더에서 신원을 얻으므로, 직접 call_tool은 request context가 없어
+실패한다 (SDK가 ValueError를 던짐). per-request Bearer 신원 검증은
+tests/test_mcp_http.py 참고. mcp SDK가 없는 환경에서는 skip.
 """
 
 import asyncio
-import json
 
 import pytest
 
 pytest.importorskip("mcp")
 
-from space_a.api.mcp_server import build_mcp  # noqa: E402
-
-
-def _call(mcp, name, args):
-    res = asyncio.run(mcp.call_tool(name, args))
-    return json.loads(res[0].text)
+from ahub.api.mcp_server import build_mcp  # noqa: E402
 
 
 def test_tools_registered():
@@ -31,18 +27,11 @@ def test_tools_registered():
     } <= names
 
 
-def test_demo_seed_exposes_guide_and_searchable_knowledge():
-    mcp = build_mcp()
-    guide = _call(mcp, "get_guide", {"space_id": "demo"})
-    assert "search_knowledge" in guide["body"]
-    found = _call(mcp, "search_knowledge", {"query": "인증서"})
-    assert len(found["results"]) == 1
+def test_build_mcp_does_not_seed():
+    # 프로덕션 경로는 시드하지 않는다: build_mcp 자체가 데모 공간을 만들면 안 된다.
+    from ahub.adapters.store_memory import InMemoryStore
+    from ahub.core.services import SpaceAService
 
-
-def test_reuse_loop_over_mcp():
-    mcp = build_mcp()
-    page_id = _call(mcp, "search_knowledge", {"query": "인증서"})["results"][0]["page_id"]
-    issue = _call(mcp, "open_issue", {"title": "같은 문제", "space_id": "demo"})
-    cite = _call(mcp, "cite_knowledge", {"issue_id": issue["issue_id"], "page_id": page_id})
-    assert cite["reuse_id"].startswith("reuse_")
-    assert cite["issue_status"] == "knowledge_linked"
+    service = SpaceAService(InMemoryStore())
+    build_mcp(service)
+    assert service.get_guide("demo") is None

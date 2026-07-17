@@ -89,6 +89,10 @@ Pillar 3 설계의 요구사항을 그대로 받는다:
 | HTTP (원격, 기본) | `Authorization: Bearer <token>` |
 | stdio (로컬 개발) | env `SPACE_A_TOKEN` |
 
+> **구현 상태:** stdio 전송은 **더 이상 구현되지 않는다** — Streamable HTTP + per-request
+> Bearer가 유일한 전송이다. 계약(헤더 위치·클레임 구조)은 그대로이고, 구현이 계약의
+> "기본"(HTTP)을 따라잡았을 뿐이다. → [ADR 0002](../../adr/0002-mcp-http-and-skill-dual-access.md).
+
 토큰 → `{ user_id, agent_id, spaces[] }`. **`spaces[]`가 권한의 전부다.**
 
 > ⚠️ **미결정:** 사내 SSO(SAML/OIDC) 연동은 인프라 담당과 협의 필요.
