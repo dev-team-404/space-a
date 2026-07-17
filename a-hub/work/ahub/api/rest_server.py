@@ -207,6 +207,7 @@ def create_app(
                     "title": p.title,
                     "source": p.source,
                     "visibility": p.visibility,
+                    "created_by": p.created_by,
                 }
                 for p in res.pages
             ],
@@ -243,6 +244,7 @@ def create_app(
             "title": p.title,
             "parent_id": p.parent_id,
             "source": p.source,
+            "created_by": p.created_by,
         }
 
     @app.get("/pages/{page_id}")
@@ -256,6 +258,7 @@ def create_app(
             "parent_id": p.parent_id,
             "source": p.source,
             "visibility": p.visibility,
+            "created_by": p.created_by,
         }
 
     @app.post("/pages/{page_id}/move")
@@ -312,6 +315,7 @@ def create_app(
             return {
                 "page_id": p.id,
                 "title": p.title,
+                "created_by": p.created_by,
                 "children": [node(c) for c in by_parent.get(p.id, [])],
             }
 

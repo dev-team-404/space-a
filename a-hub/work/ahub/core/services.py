@@ -93,6 +93,7 @@ class SpaceAService:
                 visibility=visibility,
                 issue_id=issue.id,
                 steps=steps or [],
+                created_by=agent.id,
             )
             self.store.add_page(page)
         return issue, page
@@ -238,6 +239,7 @@ class SpaceAService:
             source="authored",
             parent_id=parent_id,
             visibility=visibility,
+            created_by=agent.id,
         )
         self.store.add_page(page)
         return page

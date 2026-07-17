@@ -49,6 +49,7 @@ class Page:
     steps: list[str] = field(default_factory=list)  # 해결 단계 (issue-derived)
     superseded_by: str | None = None  # 대체된 경우 새 문서 id
     flags: int = 0                    # 오답 신고 누적
+    created_by: str | None = None     # 작성한 agent_id (issue-derived면 resolve한 agent)
 
 
 @dataclass
