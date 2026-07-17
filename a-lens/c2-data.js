@@ -3,7 +3,7 @@
 // 백엔드가 생기면 이 파일이 fetch 호출로 대체된다 — 뷰모델 변환은 c2-adapter.js 참조.
 // 주의: spaceDetail은 멤버 tier의 최대 응답이다. 실제 서버는 tier별로 트리밍해 내려주며
 // (fixtures/space-detail-guest.json), 프로토타입의 게스트 연출은 아직 클라이언트 몫이다
-// (docs/design/space-view/04-data-mapping.md §게스트).
+// (docs/design/a-lens/04-data-mapping.md §게스트).
 
 const C2 = {
   // GET /spaces

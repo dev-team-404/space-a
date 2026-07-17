@@ -1,5 +1,5 @@
 // c2-adapter.js — C2 wire 응답(c2-data.js) → 화면 뷰모델(DB) 번역.
-// 필드 단위 매핑의 스펙은 docs/design/space-view/04-data-mapping.md.
+// 필드 단위 매핑의 스펙은 docs/design/a-lens/04-data-mapping.md.
 // 백엔드 연동 시 c2-data.js가 fetch로 바뀌어도 이 변환 계층은 그대로 남는다.
 
 const DB = (() => {
