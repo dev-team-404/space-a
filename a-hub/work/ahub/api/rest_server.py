@@ -36,6 +36,7 @@ class CreateSpaceBody(BaseModel):
 
 
 class RegisterAgentBody(BaseModel):
+    user_id: str
     name: str
     space_id: str
 
@@ -167,7 +168,7 @@ def create_app(
 
     @app.post("/agents/register", status_code=201)
     def register_agent(body: RegisterAgentBody):
-        agent, token = service.register_agent(body.name, body.space_id)
+        agent, token = service.register_agent(body.user_id, body.name, body.space_id)
         return {"agent_id": agent.id, "spaces": agent.spaces, "token": token}
 
     @app.post("/issues", status_code=201)

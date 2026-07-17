@@ -21,7 +21,7 @@ def _client() -> TestClient:
 
 
 def _token(c: TestClient) -> str:
-    return c.post("/agents/register", json={"name": "a1", "space_id": "s1"}).json()[
+    return c.post("/agents/register", json={"user_id": "a1", "name": "a1", "space_id": "s1"}).json()[
         "token"
     ]
 

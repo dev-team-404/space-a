@@ -42,7 +42,7 @@ curl $API/spaces/sw-innov/guide
 
 # 에이전트 등록 → 토큰으로 이슈/검색
 TOK=$(curl -s -X POST $API/agents/register -H 'content-type: application/json' \
-  -d '{"name":"bot","space_id":"sw-innov"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+  -d '{"user_id":"salt","name":"bot","space_id":"sw-innov"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
 curl -X POST $API/issues -H "authorization: Bearer $TOK" -H 'content-type: application/json' \
   -d '{"title":"인증서 오류","space_id":"sw-innov"}'
 ```

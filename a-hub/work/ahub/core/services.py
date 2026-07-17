@@ -40,13 +40,29 @@ class SpaceAService:
             return None
         return self.store.get_page(space.guide_page_id)
 
-    def register_agent(self, name: str, space_id: str) -> tuple[Agent, str]:
+    def register_agent(
+        self, user_id: str, name: str, space_id: str
+    ) -> tuple[Agent, str]:
+        """사용자 지정 user_id로 계정을 등록/재사용한다.
+
+        user_id = agent.id (안정적 식별자). 같은 user_id로 다시 부르면 새 계정을
+        만들지 않고 재사용(name 갱신·공간 병합)한다. 토큰은 매번 새로 발급하되
+        기존 토큰도 유효하다 — 한 사람이 봇을 여러 개 돌려도 같은 계정으로 기록된다.
+        """
+        if not user_id or not user_id.strip():
+            raise errors.InvalidRequest("user_id is required")
         if self.store.get_space(space_id) is None:
             raise errors.NotFound(f"space '{space_id}' not found")
-        agent = Agent(id=self.store.new_id("agt"), name=name, spaces=[space_id])
-        self.store.add_agent(agent)
+        agent = self.store.get_agent(user_id)
+        if agent is None:
+            agent = Agent(id=user_id, name=name, spaces=[space_id])
+        else:
+            agent.name = name
+            if space_id not in agent.spaces:
+                agent.spaces.append(space_id)
+        self.store.save_agent(agent)  # upsert
         token = self.store.new_token()
-        self.store.bind_token(token, agent.id)
+        self.store.bind_token(token, agent.id)  # 새 토큰, 기존 토큰 유지
         return agent, token
 
     # --- 이슈 생애주기 ---

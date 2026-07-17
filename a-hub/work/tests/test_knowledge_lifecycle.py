@@ -6,7 +6,7 @@ import pytest
 @pytest.fixture
 def registered(service):
     service.create_space("sw-innov", "S/W 혁신팀")
-    _, token = service.register_agent("build-bot", "sw-innov")
+    _, token = service.register_agent("build-bot", "build-bot", "sw-innov")
     return service, token
 
 

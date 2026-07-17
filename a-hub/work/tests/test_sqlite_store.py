@@ -7,7 +7,7 @@ from ahub.core.services import SpaceAService
 def test_full_flow_on_sqlite():
     svc = SpaceAService(SqliteStore(":memory:"))
     svc.create_space("sw-innov", "S/W")
-    _, tok = svc.register_agent("bot", "sw-innov")
+    _, tok = svc.register_agent("bot", "bot", "sw-innov")
     issue = svc.open_issue(tok, "DS 인증서 오류", "sw-innov")
     _, page = svc.resolve_issue(tok, issue.id, "인증서 갱신")
 
@@ -20,7 +20,7 @@ def test_persists_across_reconnect(tmp_path):
 
     s1 = SpaceAService(SqliteStore(db))
     s1.create_space("sw-innov", "S/W", purpose="p", guidelines="g")
-    _, tok = s1.register_agent("bot", "sw-innov")
+    _, tok = s1.register_agent("bot", "bot", "sw-innov")
     issue = s1.open_issue(tok, "문제", "sw-innov")
     _, page = s1.resolve_issue(tok, issue.id, "영속 해결책")
     child = s1.create_page(tok, "sw-innov", "자식")
@@ -39,9 +39,9 @@ def test_persists_across_reconnect(tmp_path):
 def test_ids_are_unique_and_prefixed():
     svc = SpaceAService(SqliteStore(":memory:"))
     svc.create_space("s", "S")
-    a1, _ = svc.register_agent("a1", "s")
-    a2, _ = svc.register_agent("a2", "s")
-    assert a1.id.startswith("agt_") and a2.id.startswith("agt_")
+    a1, _ = svc.register_agent("a1", "a1", "s")
+    a2, _ = svc.register_agent("a2", "a2", "s")
+    assert a1.id == "a1" and a2.id == "a2"
     assert a1.id != a2.id
 
 
@@ -51,7 +51,7 @@ def test_concurrent_read_write_is_safe(tmp_path):
 
     svc = SpaceAService(SqliteStore(str(tmp_path / "c.db")))
     svc.create_space("s", "S")
-    _, tok = svc.register_agent("bot", "s")
+    _, tok = svc.register_agent("bot", "bot", "s")
     errors: list[Exception] = []
 
     def worker(n: int) -> None:

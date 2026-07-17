@@ -9,9 +9,9 @@ from ahub.core import errors
 def ctx(service):
     service.create_space("sw-innov", "S/W")
     service.create_space("ds", "DS")
-    x, x_tok = service.register_agent("x", "sw-innov")
-    y, y_tok = service.register_agent("y", "sw-innov")
-    z, z_tok = service.register_agent("z", "ds")
+    x, x_tok = service.register_agent("x", "x", "sw-innov")
+    y, y_tok = service.register_agent("y", "y", "sw-innov")
+    z, z_tok = service.register_agent("z", "z", "ds")
     return service, (x, x_tok), (y, y_tok), (z, z_tok)
 
 

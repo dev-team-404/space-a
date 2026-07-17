@@ -8,7 +8,7 @@ from ahub.core import errors
 @pytest.fixture
 def ctx(service):
     service.create_space("sw-innov", "S/W")
-    _, token = service.register_agent("bot", "sw-innov")
+    _, token = service.register_agent("bot", "bot", "sw-innov")
     return service, token
 
 

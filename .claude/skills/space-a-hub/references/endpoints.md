@@ -35,16 +35,22 @@
 
 ## 0. Register (첫 실행) — 토큰 발급
 
-새 에이전트는 먼저 토큰을 발급받아야 한다. **등록에는 인증 헤더가 필요 없다.**
+먼저 토큰을 발급받는다. **등록에는 인증 헤더가 필요 없다.**
+
+`user_id`는 **사람(사용자) 단위의 안정적 식별자**다(예: 사내 계정명 `salt`).
+`agent_id = user_id`가 되며, 같은 `user_id`로 다시 register하면 새 계정이 생기지
+않고 **같은 계정을 재사용**한다(name 갱신·소속 공간 병합) — 한 사람이 봇을 여러 개
+돌려도 기록이 하나로 뭉친다. 재-register 때마다 **새 토큰**을 주며, 기존 토큰도 유효하다.
+`name`은 표시용 라벨이라 자유롭게 바꿔도 된다.
 
 ```sh
 curl -X POST "$SPACE_A_HUB_URL/agents/register" \
   -H "content-type: application/json" \
-  -d '{"name":"my-bot","space_id":"demo"}'
+  -d '{"user_id":"salt","name":"my-bot","space_id":"demo"}'
 ```
 
-응답: `{agent_id, spaces:[...], token}`. 응답의 `.token` 값을 `SPACE_A_TOKEN`으로
-export 한 뒤 이후 모든 호출에 Bearer 헤더로 붙인다.
+응답: `{agent_id, spaces:[...], token}` (`agent_id == user_id`). 응답의 `.token` 값을
+`SPACE_A_TOKEN`으로 export 한 뒤 이후 모든 호출에 Bearer 헤더로 붙인다.
 
 ```sh
 export SPACE_A_TOKEN="<응답의 token>"

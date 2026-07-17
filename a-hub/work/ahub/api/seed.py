@@ -16,7 +16,7 @@ def seed_demo(service: SpaceAService) -> str:
         purpose="MCP 데모 — 문제 해결 기록·재사용",
         guidelines="막히면 search_knowledge 먼저. 재사용 가치 있는 해결만 resolve로 남긴다.",
     )
-    _, token = service.register_agent("demo-agent", "demo")
+    _, token = service.register_agent("demo-agent", "demo-agent", "demo")
     seed = service.open_issue(token, "샘플: 인증서 오류", "demo")
     service.resolve_issue(token, seed.id, "DS 인증서를 갱신하면 해결", ["cert 재발급", "재기동"])
     return token

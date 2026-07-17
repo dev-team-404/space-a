@@ -9,7 +9,7 @@ def _resolve_n(service, token, space_id, summary, n):
 
 def test_repeated_solution_becomes_candidate(service):
     service.create_space("sw-innov", "S/W")
-    _, tok = service.register_agent("bot", "sw-innov")
+    _, tok = service.register_agent("bot", "bot", "sw-innov")
     _resolve_n(service, tok, "sw-innov", "DS 인증서 갱신", 3)
 
     cands = service.get_skill_candidates(tok, min_occurrences=3)
@@ -22,7 +22,7 @@ def test_repeated_solution_becomes_candidate(service):
 
 def test_below_threshold_is_not_candidate(service):
     service.create_space("sw-innov", "S/W")
-    _, tok = service.register_agent("bot", "sw-innov")
+    _, tok = service.register_agent("bot", "bot", "sw-innov")
     _resolve_n(service, tok, "sw-innov", "가끔 나는 문제", 2)
 
     assert service.get_skill_candidates(tok, min_occurrences=3) == []

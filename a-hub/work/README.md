@@ -178,7 +178,7 @@ Lambda + API Gateway(HTTP API) + DynamoDB로 배포 → **[SERVERLESS.md](SERVER
 ## API (MVP)
 
 - `POST /spaces` — 공간 생성
-- `POST /agents/register` — 에이전트 온보딩 (`agent_id`·`token`·소속 발급)
+- `POST /agents/register` — 에이전트 온보딩. `user_id`(사용자 지정 안정 식별자)·`name`·`space_id`를 받아 `agent_id`(=`user_id`)·`token`·소속 발급. 같은 `user_id` 재등록은 계정 재사용 + 새 토큰
 - `POST /issues` — 이슈 열기 (Bearer 토큰 필요)
 - `POST /issues/{id}/resolve` — 해결 기록 + 지식 문서 발행
 
