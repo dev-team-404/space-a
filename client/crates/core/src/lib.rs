@@ -12,6 +12,7 @@ pub mod model;
 pub mod ops;
 pub mod pipeline;
 pub mod profile;
+pub mod rooms_client;
 pub mod rules;
 pub mod store;
 pub mod transcript;

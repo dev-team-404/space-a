@@ -1,10 +1,12 @@
 <script lang="ts">
-  import { getCurrentWindow, PhysicalPosition, LogicalSize } from '@tauri-apps/api/window';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import './lib/theme.css';
   import {
     emitOccasionToday, getChatterPool, getMascotSeed, getSettings, getSummary, getTodayOccasions,
-    listFindings, openChatTab, setSetting,
+    hubSettingsGet, listFindings, mascotSetExpanded, openChatTab, openSettingsWindow,
+    roomGoto, roomView, roomsList, setSetting,
     onDiaryReady, onNewFindings, onScanDone, onSettingsChanged,
+    type RoomListEntry,
   } from './lib/api';
   import { drawRobot, type RobotSpec } from './lib/robot/render';
   import { frameAt, resolveState, type BubbleKind } from './lib/robot/anim';
@@ -12,8 +14,6 @@
   import { isDrag } from './lib/robot/drag';
 
   const win = getCurrentWindow();
-  const BASE = { w: 160, h: 160 };
-  const EXPANDED = { w: 320, h: 230 };
 
   let canvas = $state<HTMLCanvasElement | null>(null);
   let spec = $state<RobotSpec | null>(null);
@@ -38,18 +38,9 @@
   }
 
   async function expand(on: boolean) {
-    // 캐릭터(창 우하단 고정)가 화면상 제자리를 지키도록 위치 보정 (델타는 물리 픽셀로 환산)
-    const scale = await win.scaleFactor();
-    const pos = await win.outerPosition();
-    const dw = Math.round((EXPANDED.w - BASE.w) * scale);
-    const dh = Math.round((EXPANDED.h - BASE.h) * scale);
-    if (on) {
-      await win.setPosition(new PhysicalPosition(pos.x - dw, pos.y - dh));
-      await win.setSize(new LogicalSize(EXPANDED.w, EXPANDED.h));
-    } else {
-      await win.setSize(new LogicalSize(BASE.w, BASE.h));
-      await win.setPosition(new PhysicalPosition(pos.x + dw, pos.y + dh));
-    }
+    // 창 크기는 상시 확장 크기로 고정(리사이즈 깜빡임 원천 차단) — 백엔드에 열림
+    // 상태만 알려, 접힘 시 로봇 밖 투명 여백의 클릭 통과 여부를 전환한다
+    await mascotSetExpanded(on).catch(() => {});
   }
 
   async function loadSettings() {
@@ -131,9 +122,60 @@
     return () => { clearTimeout(t); p.then((u) => u()); };
   });
 
+  // 방 이동 팝오버 (docs/design/room-visit.md §3): 우클릭 = 메뉴, 클릭 = 홈피(기존)
+  let roomMenu = $state<RoomListEntry[] | null>(null); // null = 닫힘
+  let myRoomId = $state('');
+  let curRoomId = $state(''); // 현재 있는 방 — 내 방이면 "돌아가기" 버튼을 숨긴다
+  let hubOn = $state(false);
+  async function toggleRoomMenu() {
+    if (roomMenu !== null) { roomMenu = null; await expand(false); return; }
+    const wasCollapsed = bubble === null;
+    try {
+      const [h, list, view] = await Promise.all([
+        hubSettingsGet(),
+        roomsList().catch(() => ({ rooms: [] })),
+        roomView().catch(() => null),
+      ]);
+      hubOn = h.connected;
+      myRoomId = h.room_id;
+      // 위치 조회 실패 시 내 방으로 간주 — 돌아가기 버튼을 띄워봐야 이동도 실패한다
+      curRoomId = view?.me.room_id ?? h.room_id;
+      roomMenu = list.rooms;
+    } catch {
+      hubOn = false;
+      roomMenu = [];
+    }
+    bubble = null; // 말풍선과 동시 표시 안 함
+    if (wasCollapsed) await expand(true);
+  }
+  async function gotoRoom(roomId: string) {
+    try { await roomGoto(roomId); } catch { /* cell_taken 등 — 다음 시도 */ }
+    await closeRoomMenu();
+  }
+  async function closeRoomMenu() {
+    if (roomMenu === null) return;
+    roomMenu = null;
+    await expand(false);
+  }
+
+  // 메뉴가 열려 있는 동안: 인원수 실시간 갱신(2s) + 포커스 잃으면 자동 닫힘
+  $effect(() => {
+    if (roomMenu === null) return;
+    const t = setInterval(async () => {
+      try { roomMenu = (await roomsList()).rooms; } catch { /* 서버 순단 — 다음 틱 */ }
+    }, 2000);
+    const onBlur = () => closeRoomMenu();
+    window.addEventListener('blur', onBlur);
+    return () => { clearInterval(t); window.removeEventListener('blur', onBlur); };
+  });
+
   // 클릭 vs 드래그 (스펙 §6): drag-region 대신 수동 판별 — 클릭이면 홈피 열기
   let downAt: { x: number; y: number } | null = null;
   function onPointerDown(e: PointerEvent) {
+    if (e.button === 2) return; // 우클릭은 contextmenu 핸들러가 처리
+    // 캡처 없이는 빠른 드래그가 로봇 영역(128px)을 벗어난 뒤 move 이벤트가 끊겨
+    // startDragging이 영영 호출되지 않는다 — 캡처로 창 밖까지 move를 계속 받는다
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     downAt = { x: e.screenX, y: e.screenY };
   }
   function onPointerMove(e: PointerEvent) {
@@ -170,8 +212,29 @@
   loadSettings();
 </script>
 
-<div class="stage" class:expanded={bubble !== null}>
-  {#if bubble}
+<div class="stage" class:expanded={bubble !== null || roomMenu !== null}>
+  {#if roomMenu !== null}
+    <div class="menu">
+      <div class="menu-title">방 이동</div>
+      {#if !hubOn}
+        <button class="item" onclick={() => { openSettingsWindow(); closeRoomMenu(); }}>
+          서버 미연결 — 설정 열기
+        </button>
+      {:else}
+        {#if curRoomId !== myRoomId}
+          <button class="item" onclick={() => gotoRoom(myRoomId)}>🏠 내 방으로 돌아가기</button>
+        {/if}
+        <div class="list">
+          <!-- 지금 있는 방은 이동 대상이 아님 — 내 방은 위의 "돌아가기"가 담당 -->
+          {#each roomMenu.filter((r) => r.room_id !== myRoomId && r.room_id !== curRoomId) as r (r.room_id)}
+            <button class="item" onclick={() => gotoRoom(r.room_id)}>
+              {r.owner_name}의 방 <span class="n">{r.occupants}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {:else if bubble}
     <div class="bubble">
       <button class="text" onclick={() => closeBubble(true)}>{bubble.text}</button>
       <button class="x" aria-label="닫기" onclick={() => closeBubble(false)}>×</button>
@@ -183,6 +246,7 @@
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}
     onpointerup={onPointerUp}
+    oncontextmenu={(e) => { e.preventDefault(); toggleRoomMenu(); }}
   >
     <canvas bind:this={canvas} width="128" height="128"></canvas>
   </div>
@@ -210,4 +274,20 @@
     font-size: 13px; line-height: 1; color: var(--ink-soft);
   }
   .bubble .x:hover { color: var(--ink); }
+  .menu {
+    display: flex; flex-direction: column; gap: 4px;
+    width: 200px; margin: 8px 12px 0 0; padding: 8px;
+    background: var(--frame-bg); color: var(--ink);
+    border-radius: var(--radius-m); box-shadow: var(--shadow-soft);
+    font: 12px 'Segoe UI', 'Malgun Gothic', sans-serif;
+  }
+  .menu-title { font-weight: 700; font-size: 11px; color: var(--ink-soft); padding: 0 4px; }
+  .menu .list { max-height: 96px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  .menu .item {
+    border: none; background: var(--pastel-lav); color: var(--ink);
+    border-radius: var(--radius-s); padding: 6px 8px; font: inherit;
+    cursor: pointer; text-align: left;
+  }
+  .menu .item:hover { background: var(--accent); color: #fff; }
+  .menu .n { float: right; color: inherit; opacity: 0.7; }
 </style>

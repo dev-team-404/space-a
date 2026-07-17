@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     getWeekSummary, listFindings, listContent, onContentReady,
-    onScanDone, onScanProgress, runScanNow,
+    onScanDone, onScanProgress, onSettingsChanged, runScanNow,
     type CoachFinding, type ContentItem, type DayStat, type ScanProgress, type Summary,
   } from '../api';
   import { loadNotices, type Notice, type NoticeDest } from '../notices';
@@ -11,9 +11,12 @@
   import NoticeLog from './home/NoticeLog.svelte';
   import TipCard from './home/TipCard.svelte';
   import MiniRoom from './MiniRoom.svelte';
+  import RoomView from './RoomView.svelte';
+  import { hubSettingsGet } from '../api';
 
-  let { summary, onGotoCoach, onGotoNotice }: {
+  let { summary, visiting = false, onGotoCoach, onGotoNotice }: {
     summary: Summary | null;
+    visiting?: boolean;
     onGotoCoach: (k: string) => void;
     onGotoNotice: (dest: NoticeDest) => void;
   } = $props();
@@ -26,6 +29,11 @@
   let notices = $state<Notice[]>([]);
   let tips = $state<ContentItem[]>([]);
   const topAdvice = $derived(findings.length > 0 ? findings[0].suggested_action : null);
+  // 방 서버 연결 시 격자 방(RoomView), 미연결 시 기존 장식 방(MiniRoom) — 원기능 보존
+  // 설정 창에서 연결하는 순간 바뀌도록 settings:changed와 창 포커스에 반응한다
+  let hubConnected = $state(false);
+  const checkHub = () => hubSettingsGet().then((h) => (hubConnected = h.connected)).catch(() => {});
+  checkHub();
 
   async function load() {
     [days, findings, tips] = await Promise.all([
@@ -42,8 +50,13 @@
       onScanProgress((p) => { scanning = true; progress = p; }),
       onScanDone(() => { scanning = false; progress = null; load(); }),
       onContentReady((rows) => { tips = rows; }),
+      onSettingsChanged(() => checkHub()),
     ];
-    return () => { subs.forEach((s) => s.then((u) => u())); };
+    window.addEventListener('focus', checkHub);
+    return () => {
+      subs.forEach((s) => s.then((u) => u()));
+      window.removeEventListener('focus', checkHub);
+    };
   });
 
   // 팁 하나 닫으면 목록에서 즉시 제거(백엔드는 다음 스캔에 쿨다운 반영)
@@ -62,6 +75,14 @@
 </script>
 
 <section class="home">
+  {#if hubConnected}
+    <RoomView />
+  {:else}
+    <MiniRoom advice={topAdvice} />
+  {/if}
+
+  <!-- 아래는 전부 내 로컬 데이터 — 남의 방을 보는 동안엔 숨긴다 (남의 것으로 오독 방지) -->
+  {#if !visiting}
   <div class="strip">
     <span>세션 <b>{fmt(summary?.session_count)}</b></span>
     <span>입력 <b>{fmt(summary?.tok_input)}</b></span>
@@ -77,8 +98,6 @@
     <SaveTop3 {findings} onGoto={onGotoCoach} />
     <NoticeLog {notices} onGoto={onGotoNotice} />
   </div>
-
-  <MiniRoom advice={topAdvice} />
 
   <footer class="status">
     {#if scanning}
@@ -96,6 +115,7 @@
     {/if}
     <button onclick={scan} disabled={scanning}>{scanning ? '스캔 중…' : '지금 스캔'}</button>
   </footer>
+  {/if}
 </section>
 
 <style>

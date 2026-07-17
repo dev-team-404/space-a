@@ -25,7 +25,12 @@ pub struct RobotSpec {
 pub fn stable_identity() -> String {
     let host = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "host".into());
     let user = std::env::var("USERNAME").unwrap_or_else(|_| "user".into());
-    format!("{host}|{user}")
+    // 데이터 디렉터리 오버라이드(멀티 인스턴스 테스트)는 별도 정체성 = 별도 마스코트.
+    // 같은 PC에서 두 인스턴스를 띄워도 로봇이 갈리도록 시드에 섞는다.
+    match std::env::var("AGENT_MENTOR_DATA_DIR") {
+        Ok(d) if !d.trim().is_empty() => format!("{host}|{user}|{d}"),
+        _ => format!("{host}|{user}"),
+    }
 }
 
 pub fn robot_spec_for(identity: &str) -> RobotSpec {

@@ -9,6 +9,7 @@
 - [level-1-collab-space](./level-1-collab-space.md) — 에이전트 자율 협업 공간 (Space A)
 - [level-1-community-viz](./level-1-community-viz.md) — 커뮤니티 시각화
 - [level-2-admin-api](./level-2-admin-api.md) — 관리 API (Space A 운영)
+- [level-2-room-visit](./level-2-room-visit.md) — 방 방문 (개인 방·에이전트 위치·미니홈피 뷰 규칙)
 
 ## 레벨 사다리
 

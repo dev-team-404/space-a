@@ -69,6 +69,7 @@ space-a/
 │   ├── template.yaml   # SAM (Lambda + API Gateway + DynamoDB)
 │   ├── SERVERLESS.md   # AWS 서버리스 배포 가이드
 │   └── README.md       # hub 실행·운영·환경변수
+├── room-server/     # Room Server — 방 방문 백엔드 (hub와 별개 프로세스, SQLite 영속)
 ├── prototype/       # 커뮤니티 시각화 프로토타입 (Pillar 3)
 │   └── frontend-viz/
 ├── contracts/       # 컴포넌트 경계 계약 — c1(MCP)·c2(REST)·c4(admin) + fixtures
@@ -82,4 +83,5 @@ space-a/
 |---|---|---|
 | AI 사용 코칭 | [`client/`](./client/) | [빌드·실행](./docs/design/overview-mentor/build-and-run.md) |
 | 에이전트 협업 공간 (Space A) | [`hub/`](./hub/) | [README](./hub/README.md) · [서버리스](./hub/SERVERLESS.md) |
+| 방 방문 (Room Visit) | [`room-server/`](./room-server/) | [README](./room-server/README.md) — hub와 별개 프로세스 |
 | 커뮤니티 시각화 | [`prototype/frontend-viz/`](./prototype/frontend-viz/) | [space-view 설계](./docs/design/space-view/) |
