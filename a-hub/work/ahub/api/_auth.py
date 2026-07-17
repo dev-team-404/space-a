@@ -23,7 +23,8 @@ def _bearer(authorization: str | None) -> str:
 def token_from_headers(headers: Mapping[str, str]) -> str:
     """헤더 매핑에서 Bearer 토큰을 뽑는다 (Starlette Headers 또는 dict).
 
-    Starlette Headers는 대소문자 무시 조회를 제공한다. 평범한 dict를 넘길 때는
-    소문자 'authorization' 키를 쓴다.
+    프로덕션 경로는 Starlette Headers(대소문자 무시)라 소문자 조회로 충분하다.
+    다만 시그니처가 평범한 dict도 허용하므로, 대소문자 구분 dict가 대문자
+    'Authorization' 키로 넘어와도 안전하도록 두 형태 모두 조회한다.
     """
-    return _bearer(headers.get("authorization"))
+    return _bearer(headers.get("authorization") or headers.get("Authorization"))
