@@ -13,6 +13,7 @@ members)를 읽어 C2 비슷한 모양으로 맞춘다 — pipeline은 원천을
 원천은 스냅숏 단위로 하나만 쓴다: 실데이터와 픽스처를 섞으면 화면이 거짓말을 한다.
 """
 
+import copy
 import json
 import logging
 import os
@@ -51,11 +52,15 @@ def _fixture(name: str) -> dict:
     return json.loads((_FIXTURES / name).read_text(encoding="utf-8"))
 
 
-def _hub_get(path: str) -> dict:
-    headers = {"Authorization": f"Bearer {WORK_TOKEN}"} if WORK_TOKEN else {}
-    r = httpx.get(f"{WORK_URL}{path}", headers=headers, timeout=8)
+def _hub_get(client: httpx.Client, path: str) -> dict:
+    """커넥션 풀 공유 — 스냅숏 한 번에 3+N번 호출하므로 핸드셰이크를 재사용한다."""
+    r = client.get(path)
     r.raise_for_status()
     return r.json()
+
+
+# 개별 호출에서 "빈 값으로 강등" 처리할 예외 — HTTP 오류 + 비정상 JSON
+_DEGRADE = (httpx.HTTPError, ValueError)
 
 
 def _id_seq(entity_id: str) -> int:
@@ -68,74 +73,82 @@ def _id_seq(entity_id: str) -> int:
 
 
 def _hub_snapshot() -> dict:
-    spaces_raw = _hub_get("/spaces")["spaces"]
+    headers = {"Authorization": f"Bearer {WORK_TOKEN}"} if WORK_TOKEN else {}
     floors: list[dict] = []
     details: dict[str, dict] = {}
     all_pages: list[dict] = []
     totals = {"issues": 0, "knowledge": 0, "skills": 0, "reuses": 0}
 
-    for i, s in enumerate(spaces_raw):
-        sid = s["id"]
-        # 비멤버 공간·권한 부족은 빈 목록으로 강등 (전체 스냅숏은 살린다)
-        try:
-            pages = _hub_get(f"/spaces/{sid}/tree")["tree"]
-        except httpx.HTTPError:
-            pages = []
-        try:
-            issues = _hub_get(f"/issues?space_id={sid}")["issues"]
-        except httpx.HTTPError:
-            issues = []
-        try:
-            members = _hub_get(f"/spaces/{sid}/members")["members"]
-        except httpx.HTTPError:
-            members = []
+    with httpx.Client(base_url=WORK_URL, headers=headers, timeout=8) as client:
+        spaces_raw = _hub_get(client, "/spaces").get("spaces", [])
 
-        resolved = sum(1 for it in issues if it.get("status") == "resolved")
-        knowledge = len(pages)
-        totals["issues"] += len(issues)
-        totals["knowledge"] += knowledge
-
-        # 활동 열기(0~3): 실측 근거가 생기기 전까지는 축적량 기반 근사
-        volume = knowledge + len(issues)
-        activity = 0 if volume == 0 else 1 if volume < 3 else 2 if volume < 8 else 3
-
-        floors.append(
-            {
-                "space_id": sid,
-                "name": s.get("name", sid),
-                "floor": i + 1,
-                "activity": activity,
-                # reuse: 허브에 ReuseEvent 조회 endpoint가 아직 없다 (#40 후속 요청 후보)
-                "stats": {"knowledge": knowledge, "resolved": resolved, "reuse": 0},
-                "highlight": None,  # 서버 서사 부재 — 아래 활동 피드에서 결정론 선정
-            }
-        )
-        # 지식 본문: 원문 모달(L4 역추적)용. 페이지 수가 적고 30s 캐시라 개별 조회 감당 가능
-        knowledge_docs = []
-        for p in pages:
-            doc = {"doc_id": p["page_id"], "title": p.get("title", "")}
+        for i, s in enumerate(spaces_raw):
+            sid = s.get("id")
+            if not sid:
+                continue
+            # 비멤버 공간·권한 부족·깨진 응답은 빈 목록으로 강등 (전체 스냅숏은 살린다)
             try:
-                page = _hub_get(f"/pages/{p['page_id']}")
-                doc["body"] = page.get("body", "")
-                doc["visibility"] = page.get("visibility", "org")
-                doc["summary"] = (page.get("body") or "")[:120]
-            except httpx.HTTPError:
-                doc["body"] = ""
-                doc["visibility"] = "space"  # 못 읽었으면 잠금으로 취급
-                doc["summary"] = ""
-            knowledge_docs.append(doc)
+                pages = _hub_get(client, f"/spaces/{sid}/tree").get("tree", [])
+            except _DEGRADE as e:
+                log.warning("tree 수집 실패 (%s): %s", sid, e)
+                pages = []
+            try:
+                issues = _hub_get(client, f"/issues?space_id={sid}").get("issues", [])
+            except _DEGRADE as e:
+                log.warning("issues 수집 실패 (%s): %s", sid, e)
+                issues = []
+            try:
+                members = _hub_get(client, f"/spaces/{sid}/members").get("members", [])
+            except _DEGRADE as e:
+                log.warning("members 수집 실패 (%s): %s", sid, e)
+                members = []
 
-        details[sid] = {
-            "space_id": sid,
-            "agents": [
-                {"agent_id": m["agent_id"], "name": m.get("name", m["agent_id"]), "status": "idle"}
-                for m in members
-            ],
-            "issues": issues,
-            "knowledge": knowledge_docs,
-        }
-        for p in pages:
-            all_pages.append({**p, "space_id": sid, "space_name": s.get("name", sid)})
+            resolved = sum(1 for it in issues if it.get("status") == "resolved")
+            knowledge = len(pages)
+            totals["issues"] += len(issues)
+            totals["knowledge"] += knowledge
+
+            # 활동 열기(0~3): 실측 근거가 생기기 전까지는 축적량 기반 근사
+            volume = knowledge + len(issues)
+            activity = 0 if volume == 0 else 1 if volume < 3 else 2 if volume < 8 else 3
+
+            floors.append(
+                {
+                    "space_id": sid,
+                    "name": s.get("name", sid),
+                    "floor": i + 1,
+                    "activity": activity,
+                    # reuse: 허브에 ReuseEvent 조회 endpoint가 아직 없다 (#40 후속 요청 후보)
+                    "stats": {"knowledge": knowledge, "resolved": resolved, "reuse": 0},
+                    "highlight": None,  # 서버 서사 부재 — 아래 활동 피드에서 결정론 선정
+                }
+            )
+            # 지식 본문: 원문 모달(L4 역추적)용. 페이지 수가 적고 30s 캐시라 개별 조회 감당 가능
+            knowledge_docs = []
+            for p in pages:
+                doc = {"doc_id": p["page_id"], "title": p.get("title", "")}
+                try:
+                    page = _hub_get(client, f"/pages/{p['page_id']}")
+                    doc["body"] = page.get("body", "")
+                    doc["visibility"] = page.get("visibility", "org")
+                    doc["summary"] = (page.get("body") or "")[:120]
+                except _DEGRADE:
+                    doc["body"] = ""
+                    doc["visibility"] = "space"  # 못 읽었으면 잠금으로 취급
+                    doc["summary"] = ""
+                knowledge_docs.append(doc)
+
+            details[sid] = {
+                "space_id": sid,
+                "agents": [
+                    {"agent_id": m["agent_id"], "name": m.get("name", m["agent_id"]), "status": "idle"}
+                    for m in members
+                ],
+                "issues": issues,
+                "knowledge": knowledge_docs,
+            }
+            for p in pages:
+                all_pages.append({**p, "space_id": sid, "space_name": s.get("name", sid)})
 
     # 활동 피드 합성: knowledge_created만 (타임스탬프·재사용 피드는 #40·후속 대기).
     # 서사 문장은 구조 필드로 소비자가 조합 — 계약 consumerAutonomy가 허용하는 방식.
@@ -201,13 +214,20 @@ def snapshot() -> dict:
             if SOURCE == "hub":
                 raise
             log.warning("허브 수집 실패, 픽스처로 폴백: %s", e)
+            # 폴백 결과를 'hub' 키에도 캐시 — 허브가 죽어 있는 동안 매 요청이
+            # 타임아웃(최대 8s)을 기다리는 것을 TTL 동안 방지
+            val = _memo("fixtures", _fixture_snapshot)
+            _cache["hub"] = (time.monotonic(), val)
+            return val
     return _memo("fixtures", _fixture_snapshot)
 
 
 def space_detail(space_id: str, tier: str = "member") -> dict:
     snap = snapshot()
     if snap["source"] == "hub":
-        detail = dict(snap["details"].get(space_id) or {"space_id": space_id, "agents": [], "issues": [], "knowledge": []})
+        # deepcopy — 얕은 복사면 프레즌스 조인(pipeline)이 캐시된 스냅숏을 오염시킨다
+        raw = snap["details"].get(space_id)
+        detail = copy.deepcopy(raw) if raw else {"space_id": space_id, "agents": [], "issues": [], "knowledge": []}
         if tier == "guest":
             detail["issues"] = []  # 이슈는 멤버 전용 (C2 계약 — 게스트 비노출 결정)
         detail["viewer_tier"] = tier
