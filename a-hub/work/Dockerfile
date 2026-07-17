@@ -7,7 +7,8 @@ WORKDIR /app
 #   docker build --build-arg PIP_TRUSTED="--trusted-host pypi.org --trusted-host files.pythonhosted.org" -t space-a-hub .
 ARG PIP_TRUSTED=""
 
-# 런타임 의존성만 설치 (dev 도구 pytest/httpx 제외). pyproject의 dependencies와 맞춘다.
+# 서버(프로덕션) 런타임 의존성만. pyproject의 [project].dependencies와 일치시킨다.
+# 서버리스 전용(mangum/boto3, [serverless] extra)은 여기 들어오지 않는다 — 서버/서버리스 분리.
 RUN pip install --no-cache-dir ${PIP_TRUSTED} "fastapi>=0.115" "uvicorn>=0.30"
 
 # 애플리케이션 코드 (ports & adapters 전부)

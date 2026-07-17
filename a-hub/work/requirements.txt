@@ -1,3 +1,4 @@
-# Lambda 배포 패키지용 (sam build). boto3는 Lambda 런타임에 기본 포함.
-fastapi>=0.115
-mangum>=0.17
+# 서버리스(개발용) Lambda 배포 패키지 전용 — `sam build`가 이 파일을 읽는다.
+# 의존성 단일 출처는 pyproject.toml. 여기선 서버리스 extra까지 포함해 설치한다.
+# (boto3는 Lambda 런타임에 기본 포함되지만, 버전 고정을 위해 extra에 함께 둔다.)
+.[serverless]

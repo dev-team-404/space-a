@@ -47,11 +47,16 @@ core는 인터페이스(ports)에만 의존하므로, DB/LLM 구현을 갈아끼
 ```sh
 cd a-hub/work
 uv venv .venv
-uv pip install --native-tls fastapi uvicorn pytest httpx mcp   # 사내망 인증서 이슈로 --native-tls
+uv pip install --native-tls -e ".[dev]" mcp   # 서버 런타임 + dev(pytest/httpx). 사내망 인증서 이슈로 --native-tls
 
 .venv/bin/python -m pytest                                  # 테스트 163개 (memory·sqlite 양쪽 검증)
 .venv/bin/python -m uvicorn ahub.api.rest_server:create_app --factory --reload   # REST 서버
 ```
+
+> **서버 vs 서버리스** — 이 프로젝트는 **서버(컨테이너)가 프로덕션**이고, **서버리스(Lambda)는 개발용 배포**다.
+> 의존성이 분리돼 있어 서버 설치엔 서버리스 패키지(`mangum`·`boto3`)가 들어오지 않는다:
+> - 서버:     `pip install .`              (fastapi·uvicorn)
+> - 서버리스: `pip install ".[serverless]"` (+ mangum·boto3) — → [SERVERLESS.md](SERVERLESS.md)
 
 ## 영속성
 
@@ -103,7 +108,10 @@ docker build --build-arg PIP_TRUSTED="--trusted-host pypi.org --trusted-host fil
 
 > 프록시가 pypi를 아예 막으면 사내 PyPI 미러(`PIP_INDEX_URL`)나 이미지에 사내 CA를 넣어야 한다.
 
-## 서버리스 (AWS)
+## 서버리스 (AWS) — 개발용
+
+> **개발 단계 전용 배포다.** 프로덕션은 서버(컨테이너, 위 [Docker](#docker) 참조)로 운영한다.
+> 서버리스 의존성(`mangum`·`boto3`)은 `[serverless]` extra로 분리돼 있어 서버 빌드엔 포함되지 않는다.
 
 Lambda + API Gateway(HTTP API) + DynamoDB로 배포 → **[SERVERLESS.md](SERVERLESS.md)** (`sam build && sam deploy`). `SPACE_A_TABLE`이 설정되면 DynamoDB 스토어를 쓴다.
 

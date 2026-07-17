@@ -1,4 +1,9 @@
-# 서버리스 배포 (AWS Lambda + API Gateway + DynamoDB)
+# 서버리스 배포 (AWS Lambda + API Gateway + DynamoDB) — 개발용
+
+> ⚠️ **개발 단계 전용이다.** 프로덕션은 서버(컨테이너)로 운영한다 → [README.md](README.md) Docker 절.
+> 서버리스 의존성(`mangum`·`boto3`)은 `pyproject.toml`의 `[serverless]` extra로 분리돼 있어,
+> 서버 빌드(`pip install .` / Dockerfile)에는 들어오지 않는다. `sam build`는 `requirements.txt`
+> (→ `.[serverless]`)로 이 extra를 설치한다.
 
 FastAPI(ASGI) 앱을 **Mangum**으로 Lambda에 올리고, **DynamoDB**로 영속한다.
 포트&어댑터라 core는 그대로이고, `SPACE_A_TABLE` 환경변수로 DynamoDB 스토어가 선택된다.
