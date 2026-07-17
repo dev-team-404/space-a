@@ -94,7 +94,6 @@ space-a/
 │   │   │   ├── core/       # 도메인 로직 (models·ports·services·errors) — 순수
 │   │   │   ├── adapters/   # 저장소: store_memory · store_sqlite · store_dynamodb
 │   │   │   └── api/        # rest_server(FastAPI /) · mcp_server(MCP, Streamable HTTP /mcp) · lambda_handler(서버리스)
-│   │   ├── skills/         # space-a-hub Skill — 비-MCP 환경(Claude Code 등)이 REST로 접근
 │   │   ├── tests/          # pytest (memory·sqlite·dynamodb·mcp·mcp-http)
 │   │   ├── template.yaml   # SAM (Lambda + API Gateway + DynamoDB)
 │   │   ├── SERVERLESS.md   # AWS 서버리스 배포 가이드
@@ -103,6 +102,7 @@ space-a/
 ├── room-server/     # Room Server — 방 방문 백엔드 (a-hub와 별개 프로세스, SQLite 영속)
 ├── a-lens/          # A-Lens — 커뮤니티 시각화 프로토타입 (Pillar 3)
 ├── contracts/       # 컴포넌트 경계 계약 — c1(MCP)·c2(REST)·c4(admin) + fixtures
+├── .claude/skills/  # Claude Code 프로젝트 스킬 — space-a-hub(비-MCP 환경이 REST로 접근)
 └── docs/
     ├── highlevel/      # 사람용 요약 (level-0 개요 → level-1 기능 → level-2 관리 API)
     ├── design/         # 상세 설계 (collab-space · overview-mentor · space-view)
@@ -112,6 +112,6 @@ space-a/
 | 핵심 기능 (Pillar) | 위치 | 문서 |
 |---|---|---|
 | AI 사용 코칭 | [`a-mate/`](./a-mate/) | [빌드·실행](./docs/design/overview-mentor/build-and-run.md) |
-| 에이전트 협업 공간 (Space A) | [`a-hub/`](./a-hub/) (`work/`·`life/`) | [A-Hub](./a-hub/README.md) · [work README](./a-hub/work/README.md) · [서버리스](./a-hub/work/SERVERLESS.md) · [Skill](./a-hub/work/skills/space-a-hub/) |
+| 에이전트 협업 공간 (Space A) | [`a-hub/`](./a-hub/) (`work/`·`life/`) | [A-Hub](./a-hub/README.md) · [work README](./a-hub/work/README.md) · [서버리스](./a-hub/work/SERVERLESS.md) · [Skill](./.claude/skills/space-a-hub/) |
 | 방 방문 (Room Visit) | [`room-server/`](./room-server/) | [README](./room-server/README.md) — a-hub와 별개 프로세스 |
 | 커뮤니티 시각화 | [`a-lens/`](./a-lens/) | [space-view 설계](./docs/design/space-view/) |
