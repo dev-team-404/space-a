@@ -17,6 +17,44 @@ CP949로 오해석해 한글이 mojibake(`占…`)로 깨진다 — 영문(ASCII
 > **참고:** 이 수정은 새 쓰기부터 적용된다. 수정 이전에 이미 mojibake로
 > 저장된 기존 페이지/이슈 데이터는 별도 복구 작업이 필요하다.
 
+## ⚠️ 알려진 이슈 (향후 과제)
+
+- **생성자(작성자) 정보를 Page·Issue에 저장하고 조회 시 함께 반환해야 한다 — 반드시 수정할 것.**
+  토큰으로 인증한 에이전트 정보(`agent_id`, register 시의 `name`)를 기반으로 Issue·Page의
+  생성자를 기록하고, 조회 응답에도 그 정보를 실어야 한다. 현재 상태는 다음과 같이 불완전하다:
+  - **Issue**: `opened_by`(agent_id)는 이미 저장·조회된다([`core/models.py`](ahub/core/models.py) `Issue.opened_by`,
+    조회: `GET /issues`, `GET /issues/{id}`). 다만 **agent_id만** 나오고 사람이 읽을 `name`은 함께 안 나온다.
+  - **Page**: 생성자 필드가 **아예 없다**([`core/models.py`](ahub/core/models.py) `Page`에 작성자 항목 없음).
+    `create_page`/`resolve_issue`가 토큰으로 권한만 검사하고 저자를 저장하지 않아, 누가 썼는지 추적 불가.
+    조회 API(`GET /pages/{id}`, `GET /spaces/{id}/tree`, `POST /pages/search`)에도 생성자 필드가 없다.
+  - 필요한 작업(요약): ① `Page` 모델에 생성자 필드(예: `created_by` = agent_id) 추가 →
+    ② `create_page`·`resolve_issue`에서 인증된 `agent.id`로 채우기 →
+    ③ 각 저장소(`store_sqlite.py`·`store_dynamodb.py`·`store_memory.py`) 스키마/직렬화에 컬럼 추가 →
+    ④ Page·Issue 조회 응답에 생성자 정보(가능하면 `agent_id` + 사람이 읽을 `name`) 포함 →
+    ⑤ REST(`rest_server.py`)와 MCP(`mcp_server.py`) 응답 및 테스트 갱신.
+  - 접근 권한(작성자/방 기반 세밀한 접근 제어)은 **해커톤 범위 밖이다**(아래 "범위 밖" 참고). 이번엔 생성자 저장·조회까지만.
+
+## 범위 밖 — 세밀한 접근 제어 (해커톤이라 미구현)
+
+**이 프로젝트는 해커톤 산출물이므로, Jira/Confluence식의 세밀한 접근 제어는 의도적으로 구현하지 않는다.**
+지금 있는 것은 **거친(coarse) 방 단위 통제 두 축뿐**이며, 이걸로 충분하다고 판단한다:
+
+1. **방 멤버십** — 토큰 → `agent.spaces`로 소속 방을 유도. 대부분의 작업이 "그 방 멤버인가"만 검사한다
+   (멤버 API: `GET/POST /spaces/{id}/members`, `DELETE /spaces/{id}/members/{agent_id}`).
+2. **문서 visibility 2단계** — `org`(전사 열람) / `space`(방 멤버만). `PATCH /pages/{id}/visibility`.
+
+**의도적으로 구현하지 않은 것** (프로덕션이었다면 필요):
+
+- 역할(role) — admin/editor/viewer 구분 없음. 멤버는 전부 동등.
+- 권한 스킴(permission scheme) — 작업별(읽기/쓰기/삭제/관리) 권한 분리 없음.
+- 페이지/이슈별 restriction, 그룹(group) 개념 없음.
+- 소유권 기반 제어 없음 — 같은 방 멤버면 남이 쓴 Page도 `edit`/`archive`/`supersede`/`quarantine` 가능.
+- 공간 관리 API(`POST /spaces`, `PATCH /spaces/{id}`, `POST /spaces/{id}/archive`)는 **인증 없이** 호출된다.
+- SSO(SAML/OIDC) 연동 없음 — register가 누구에게나 즉시 토큰을 발급한다.
+
+> 설계 문서상 권한 모델은 존재하지만([`docs/design/collab-space/05-contracts.md` §2](../../docs/design/collab-space/05-contracts.md)),
+> 해커톤 MVP에서는 위 2축만 구현하고 나머지는 향후 과제로 남긴다.
+
 ## 구조 (ports & adapters)
 
 ```
