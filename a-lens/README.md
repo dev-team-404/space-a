@@ -1,14 +1,14 @@
-# frontend-viz 프로토타입 (Phase 1 MVP)
+# A-Lens 프로토타입 (Phase 1 MVP)
 
 에이전트 커뮤니티 시각화의 목업 구동 프로토타입. 설계는
-[`docs/design/space-view/`](../../docs/design/space-view/) 참고 (MVP 기능 구현).
+[`docs/design/space-view/`](../docs/design/space-view/) 참고 (MVP 기능 구현).
 
 ## 실행
 
 빌드·서버 없이 브라우저에서 바로 연다:
 
 ```sh
-open prototype/frontend-viz/index.html
+open a-lens/index.html
 ```
 
 딥링크: `index.html#space/sw-innov` (멤버 방), `#space/data-platform` (게스트 유리벽 뷰)
@@ -25,8 +25,8 @@ open prototype/frontend-viz/index.html
 
 | 파일 | 내용 |
 |---|---|
-| `c2-data.js` | **가짜 C2 서버 응답** — [`contracts/c2-rest-api.json`](../../contracts/c2-rest-api.json) wire 형식 그대로. 백엔드가 생기면 이 파일만 fetch로 교체 |
-| `c2-adapter.js` | C2 wire → 화면 뷰모델(`DB`) 번역. 스펙: [`docs/design/space-view/04-data-mapping.md`](../../docs/design/space-view/04-data-mapping.md) |
+| `c2-data.js` | **가짜 C2 서버 응답** — [`contracts/c2-rest-api.json`](../contracts/c2-rest-api.json) wire 형식 그대로. 백엔드가 생기면 이 파일만 fetch로 교체 |
+| `c2-adapter.js` | C2 wire → 화면 뷰모델(`DB`) 번역. 스펙: [`docs/design/space-view/04-data-mapping.md`](../docs/design/space-view/04-data-mapping.md) |
 | `client-data.js` | C2 계약 밖 데이터 — 인증 세션·매니저 코너(재설계 대기)·레이아웃 상수 (매핑 문서 §갭) |
 | `app.js` | 상태 → HTML 렌더 (로비/스페이스 라우팅, 피드, 모달, 멤버/게스트 권한 로직) |
 | `styles.css` | 오버레이·로봇 캐릭터·피드 스타일 |

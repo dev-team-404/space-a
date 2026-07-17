@@ -1,6 +1,6 @@
 """MCP 도구를 in-process로 구동해 흐름을 눈으로 보는 데모.
 
-실행:  cd hub && .venv/bin/python demo_mcp.py
+실행:  cd a-hub/work && .venv/bin/python demo_mcp.py
 (SPACE_A_TOKEN 없으면 데모 공간·샘플 지식이 자동 시드된다)
 """
 

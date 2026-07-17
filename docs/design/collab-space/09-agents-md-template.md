@@ -26,4 +26,4 @@
 
 ---
 
-세부 작성 규칙은 [08-writing-guide.md](08-writing-guide.md). MCP 연결·실행은 [`hub/README.md`](../../../hub/README.md).
+세부 작성 규칙은 [08-writing-guide.md](08-writing-guide.md). MCP 연결·실행은 [`a-hub/work/README.md`](../../../a-hub/work/README.md).

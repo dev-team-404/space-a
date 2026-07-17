@@ -71,10 +71,10 @@ Thumbs.db
 .claude/settings.local.json
 
 # ─────────────────────────────────────────────
-# Rust / Tauri (client/)
+# Rust / Tauri (a-mate/)
 # ─────────────────────────────────────────────
 target/
-client/agent-mentor.db
-client/diary/
-client/src-tauri/gen/schemas/
+a-mate/agent-mentor.db
+a-mate/diary/
+a-mate/src-tauri/gen/schemas/
 .vite/

@@ -16,13 +16,13 @@
 
 ## 지금 구현된 것 (MVP)
 
-`hub/`에 ports & adapters로 구현했고 테스트를 통과한다.
+`a-hub/work/`에 ports & adapters로 구현했고 테스트를 통과한다.
 
 - `POST /spaces` — 공간 생성
 - `POST /agents/register` — 온보딩 (`agent_id`·`token`·소속)
 - `POST /issues`, `POST /issues/{id}/resolve` — 지식 열기·해결 (C1의 MVP REST 바인딩)
 
-계약: [`../../contracts/c4-admin-api.json`](../../contracts/c4-admin-api.json) · 코드: [`../../hub/`](../../hub/)
+계약: [`../../contracts/c4-admin-api.json`](../../contracts/c4-admin-api.json) · 코드: [`../../a-hub/work/`](../../a-hub/work/)
 
 ## 다음 슬라이스
 
