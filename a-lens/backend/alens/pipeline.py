@@ -19,12 +19,21 @@ _HIGHLIGHT_RANK = {
 _ORG_SAFE = {"reused", "knowledge_created", "skill_proposed", "condensed"}
 
 
-def _pick_highlight(events: list[dict]) -> dict | None:
+def _pick_highlight(events: list[dict], cross_team_docs: set[str] | None = None) -> dict | None:
+    """org-safe 이벤트 중 1건 선정. 랭킹: 크로스팀 reused > reused > ... , 동점은 최신순."""
     pool = [e for e in events if e.get("type") in _ORG_SAFE]
     if not pool:
         return None
-    pool.sort(key=lambda e: (_HIGHLIGHT_RANK.get(e["type"], 9), e.get("at", "")), reverse=False)
-    # 크로스팀 재사용 가점: reused 중 cross-team이 있으면 최우선
+    cross = cross_team_docs or set()
+
+    def rank(e: dict) -> int:
+        r = _HIGHLIGHT_RANK.get(e["type"], 9)
+        if e["type"] == "reused" and e.get("doc_id") in cross:
+            r -= 1  # 크로스팀 재사용 가점 (04-data-mapping: "크로스팀이면 +1")
+        return r
+
+    pool.sort(key=lambda e: e.get("at", ""), reverse=True)  # 동점은 최신순 (stable sort)
+    pool.sort(key=rank)
     return pool[0]
 
 
@@ -33,6 +42,13 @@ def lobby_view() -> dict:
     spaces = collector.fetch_spaces()["spaces"]
     stats = collector.fetch_stats()
     activity = collector.fetch_activity()["events"]
+    # 크로스팀 재사용 문서 집합 — 하이라이트 가점 판별용 (source ≠ consumer)
+    reuse = collector.fetch_reuse_events().get("events", [])
+    cross_team_docs = {
+        e["doc_id"]
+        for e in reuse
+        if e.get("doc_id") and e.get("source_space") and e.get("source_space") != e.get("consumer_space")
+    }
 
     return {
         "floors": [
@@ -48,7 +64,7 @@ def lobby_view() -> dict:
         ],
         "totals": stats.get("totals", {}),
         "tokens_saved_est": stats.get("tokens_saved_est"),  # 표시 시 '~' 필수
-        "highlight": _pick_highlight(activity),
+        "highlight": _pick_highlight(activity, cross_team_docs),
     }
 
 

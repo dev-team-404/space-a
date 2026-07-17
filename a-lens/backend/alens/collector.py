@@ -54,7 +54,7 @@ def fetch_presence(room_id: str) -> dict | None:
     if not LIFE_URL:
         return None
     try:
-        r = httpx.get(f"{LIFE_URL}/rooms/{room_id}", timeout=5)
+        r = httpx.get(f"{LIFE_URL.rstrip('/')}/rooms/{room_id}", timeout=5)
         r.raise_for_status()
         return r.json()
     except httpx.HTTPError:
