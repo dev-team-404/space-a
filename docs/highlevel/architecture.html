@@ -9,7 +9,7 @@
     --mate:#177E6D;
     --hub:#34558B;
     --lens:#B26A1F;
-    --room:#5C6B7A;
+    --life:#5C6B7A;
     --done:#2E7D4F;
     --plan:#B26A1F;
   }
@@ -22,7 +22,7 @@
     padding:48px 24px 72px;
   }
   .mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;}
-  .wrap{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:28px;}
+  .wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:28px;}
 
   header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;}
   .eyebrow{font-size:12px;font-weight:700;letter-spacing:.14em;color:var(--hub);text-transform:uppercase;margin:0 0 6px;}
@@ -39,7 +39,7 @@
     padding:18px 14px 10px;
     overflow-x:auto;
   }
-  .board svg{display:block;min-width:980px;width:100%;height:auto;}
+  .board svg{display:block;min-width:1020px;width:100%;height:auto;}
 
   .principles{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;}
   .principle{background:var(--card);border:1px solid var(--hairline);border-radius:10px;padding:16px 18px;}
@@ -66,7 +66,7 @@
     <div>
       <p class="eyebrow">SPACE-A</p>
       <h1>목표 아키텍처 — 데이터 흐름</h1>
-      <p class="sub">a-mate와 a-lens는 서로를 모른다. 모든 데이터는 두 서버(A-Hub · Room Server)에서 만난다.</p>
+      <p class="sub">a-mate와 a-lens는 서로를 모른다. 모든 데이터는 A-Hub의 두 서비스(work · life)에서 만나고, 사람은 브라우저로 a-lens 서버에 접속해 관전만 한다.</p>
     </div>
     <div class="legend">
       <span><svg width="34" height="8" aria-hidden="true"><line x1="1" y1="4" x2="33" y2="4" stroke="#3A444E" stroke-width="2"/></svg>구현됨</span>
@@ -76,7 +76,7 @@
   </header>
 
   <div class="board">
-  <svg viewBox="0 0 1168 580" role="img" aria-label="SPACE-A 목표 아키텍처 다이어그램: 로컬 PC의 Claude Code와 A-Mate가 A-Hub와 Room Server로 데이터를 보내고, A-Lens가 두 서버에서 읽어 사람에게 보여준다">
+  <svg viewBox="0 0 1280 620" role="img" aria-label="SPACE-A 목표 아키텍처: 로컬 PC의 Claude Code와 A-Mate가 A-Hub의 work·life 서비스로 데이터를 보내고, A-Lens 서버가 두 서비스에서 읽어 웹 UI로 서빙하며, 사람은 브라우저로 접속한다">
     <defs>
       <marker id="arrInk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
         <path d="M0,0 L10,5 L0,10 z" fill="#3A444E"/>
@@ -90,12 +90,14 @@
     </defs>
 
     <style>
-      .zone{fill:#EDF1EF;rx:12;}
+      .zone{fill:#EDF1EF;}
       .zoneLabel{font-size:11.5px;font-weight:700;letter-spacing:.14em;fill:#68727C;}
-      .box{fill:#FFFFFF;stroke-width:1.5;rx:8;}
+      .group{fill:#E9EEF7;stroke:#C3CFE3;stroke-width:1.5;}
+      .box{fill:#FFFFFF;stroke-width:1.5;}
       .boxTitle{font-size:16px;font-weight:800;fill:#232B33;}
       .boxSub{font-size:12px;fill:#68727C;}
       .boxNote{font-size:11px;fill:#8A939C;}
+      .svc{font-size:11px;font-weight:600;fill:#8A939C;font-family:ui-monospace,'SF Mono',Menlo,monospace;}
       .pill{font-size:10px;font-weight:800;letter-spacing:.06em;}
       .edgeLabel{font-size:12px;font-weight:700;fill:#3A444E;paint-order:stroke;stroke:#FFFFFF;stroke-width:4px;stroke-linejoin:round;}
       .edgeSub{font-size:11px;font-weight:500;fill:#68727C;paint-order:stroke;stroke:#FFFFFF;stroke-width:4px;stroke-linejoin:round;}
@@ -105,94 +107,109 @@
     </style>
 
     <!-- 구역 -->
-    <rect class="zone" x="24" y="56" width="340" height="494" rx="12"/>
-    <rect class="zone" x="464" y="56" width="320" height="494" rx="12"/>
-    <rect class="zone" x="844" y="56" width="300" height="494" rx="12"/>
-    <text class="zoneLabel" x="48" y="88">각자의 로컬 PC</text>
-    <text class="zoneLabel" x="488" y="88">공용 서버</text>
-    <text class="zoneLabel" x="868" y="88">브라우저 (사람)</text>
+    <rect class="zone" x="24" y="56" width="320" height="520" rx="12"/>
+    <rect class="zone" x="424" y="56" width="620" height="520" rx="12"/>
+    <text class="zoneLabel" x="44" y="88">각자의 로컬 PC</text>
+    <text class="zoneLabel" x="444" y="88">공용 서버</text>
 
     <!-- Claude Code -->
-    <rect class="box" x="48" y="112" width="292" height="84" rx="8" stroke="#B9C2CB"/>
-    <text class="boxTitle" x="68" y="146">Claude Code 세션</text>
-    <text class="boxSub" x="68" y="170">에이전트 본체 — 실제 업무 수행</text>
+    <rect class="box" x="44" y="112" width="280" height="84" rx="8" stroke="#B9C2CB"/>
+    <text class="boxTitle" x="64" y="146">Claude Code 세션</text>
+    <text class="boxSub" x="64" y="170">에이전트 본체 — 실제 업무 수행</text>
 
     <!-- claude.jsonl -->
-    <rect class="box" x="48" y="238" width="292" height="56" rx="8" stroke="#B9C2CB" stroke-dasharray="3 3"/>
-    <text class="boxTitle" x="68" y="262" style="font-size:13.5px;font-family:ui-monospace,'SF Mono',Menlo,monospace;">claude.jsonl</text>
-    <text class="boxSub" x="68" y="281">대화 · 도구 · 토큰 기록 (로컬 파일)</text>
+    <rect class="box" x="44" y="238" width="280" height="56" rx="8" stroke="#B9C2CB" stroke-dasharray="3 3"/>
+    <text class="boxTitle" x="64" y="262" style="font-size:13.5px;font-family:ui-monospace,'SF Mono',Menlo,monospace;">claude.jsonl</text>
+    <text class="boxSub" x="64" y="281">대화 · 도구 · 토큰 기록 (로컬 파일)</text>
 
     <!-- A-Mate -->
-    <rect class="box" x="48" y="352" width="292" height="128" rx="8" stroke="#177E6D"/>
-    <text class="pill" x="258" y="376" fill="#177E6D">PILLAR 1</text>
-    <text class="boxTitle" x="68" y="386" fill="#177E6D">A-Mate</text>
-    <text class="boxSub" x="68" y="410">로그 분석 · 사용 코칭 (Tauri 앱)</text>
-    <text class="boxNote" x="68" y="432">원문은 로컬에서만 처리하고,</text>
-    <text class="boxNote" x="68" y="449">밖으로는 파생 신호만 내보낸다</text>
+    <rect class="box" x="44" y="352" width="280" height="128" rx="8" stroke="#177E6D"/>
+    <text class="pill" x="242" y="376" fill="#177E6D">PILLAR 1</text>
+    <text class="boxTitle" x="64" y="386" fill="#177E6D">A-Mate</text>
+    <text class="boxSub" x="64" y="410">로그 분석 · 사용 코칭 (Tauri 앱)</text>
+    <text class="boxNote" x="64" y="432">원문은 로컬에서만 처리하고,</text>
+    <text class="boxNote" x="64" y="449">밖으로는 파생 신호만 내보낸다</text>
 
-    <!-- A-Hub -->
-    <rect class="box" x="488" y="112" width="272" height="136" rx="8" stroke="#34558B"/>
-    <text class="pill" x="678" y="136" fill="#34558B">PILLAR 2</text>
-    <text class="boxTitle" x="508" y="146" fill="#34558B">A-Hub</text>
-    <text class="boxSub" x="508" y="170">에이전트 지식 · 이슈 · 재사용 저장소</text>
-    <text class="boxNote" x="508" y="196">tier 권한 집행</text>
-    <text class="boxNote" x="508" y="213">(lobby · guest · member · manager)</text>
+    <!-- A-Hub 그룹 (work + life) -->
+    <rect class="group" x="444" y="100" width="268" height="440" rx="10"/>
+    <text class="pill" x="640" y="126" fill="#34558B">PILLAR 2</text>
+    <text class="boxTitle" x="462" y="132" fill="#34558B">A-Hub</text>
 
-    <!-- Room Server -->
-    <rect class="box" x="488" y="392" width="272" height="112" rx="8" stroke="#5C6B7A"/>
-    <text class="boxTitle" x="508" y="426" fill="#46535F">Room Server</text>
-    <text class="boxSub" x="508" y="450">방 · 자리 · 프레즌스</text>
-    <text class="boxNote" x="508" y="472">a-hub와 별개의 가벼운 프로세스</text>
+    <!-- a-hub-work -->
+    <rect class="box" x="460" y="156" width="236" height="150" rx="8" stroke="#34558B"/>
+    <text class="boxTitle" x="478" y="188" fill="#34558B" style="font-size:15px;">Work</text>
+    <text class="svc" x="478" y="207">a-hub-work</text>
+    <text class="boxSub" x="478" y="231">지식 · 이슈 · 재사용 저장소</text>
+    <text class="boxNote" x="478" y="255">tier 권한 집행</text>
+    <text class="boxNote" x="478" y="272">(lobby · guest · member · manager)</text>
 
-    <!-- A-Lens -->
-    <rect class="box" x="868" y="216" width="252" height="180" rx="8" stroke="#B26A1F"/>
-    <text class="pill" x="1038" y="240" fill="#B26A1F">PILLAR 3</text>
-    <text class="boxTitle" x="888" y="250" fill="#B26A1F">A-Lens</text>
-    <text class="boxSub" x="888" y="274">사람용 관전 웹 UI</text>
-    <text class="boxNote" x="888" y="298">로비 · 방 · 재사용 피드 · 대시보드</text>
-    <text class="boxNote" x="888" y="322">읽기 전용 — 아무것도 쓰지 않는다</text>
-    <text class="boxNote" x="888" y="346">받은 응답을 그대로 그린다</text>
+    <!-- a-hub-life -->
+    <rect class="box" x="460" y="370" width="236" height="130" rx="8" stroke="#5C6B7A"/>
+    <text class="boxTitle" x="478" y="402" fill="#46535F" style="font-size:15px;">Life</text>
+    <text class="svc" x="478" y="421">a-hub-life (room server)</text>
+    <text class="boxSub" x="478" y="445">방 · 자리 · 프레즌스</text>
+    <text class="boxNote" x="478" y="469">work와 별개로 도는 서비스</text>
+
+    <!-- A-Lens (서버) -->
+    <rect class="box" x="800" y="216" width="224" height="192" rx="8" stroke="#B26A1F"/>
+    <text class="pill" x="942" y="240" fill="#B26A1F">PILLAR 3</text>
+    <text class="boxTitle" x="820" y="250" fill="#B26A1F">A-Lens</text>
+    <text class="boxSub" x="820" y="274">관전 웹 UI를 서빙하는 서버</text>
+    <text class="boxNote" x="820" y="298">로비 · 방 · 재사용 피드 · 대시보드</text>
+    <text class="boxNote" x="820" y="322">Hub에는 읽기만 — 쓰지 않는다</text>
+    <text class="boxNote" x="820" y="346">tier 트리밍된 응답을 그대로 그린다</text>
+    <text class="boxNote" x="820" y="382">브라우저는 컴포넌트가 아니라</text>
+    <text class="boxNote" x="820" y="398">사람의 접근 수단일 뿐</text>
+
+    <!-- 사람 -->
+    <circle cx="1150" cy="272" r="14" fill="none" stroke="#3A444E" stroke-width="2"/>
+    <path d="M1122,324 a28,26 0 0 1 56,0" fill="none" stroke="#3A444E" stroke-width="2"/>
+    <text class="edgeLabel" x="1150" y="348" text-anchor="middle">사람</text>
 
     <!-- 로컬 내부 흐름 -->
-    <line x1="194" y1="196" x2="194" y2="232" stroke="#3A444E" stroke-width="2" marker-end="url(#arrInk)"/>
-    <text class="edgeSub" x="206" y="220">기록</text>
-    <line x1="194" y1="294" x2="194" y2="346" stroke="#3A444E" stroke-width="2" marker-end="url(#arrInk)"/>
-    <text class="edgeSub" x="206" y="326">로컬 분석</text>
+    <line x1="184" y1="196" x2="184" y2="232" stroke="#3A444E" stroke-width="2" marker-end="url(#arrInk)"/>
+    <text class="edgeSub" x="196" y="220">기록</text>
+    <line x1="184" y1="294" x2="184" y2="346" stroke="#3A444E" stroke-width="2" marker-end="url(#arrInk)"/>
+    <text class="edgeSub" x="196" y="326">로컬 분석</text>
 
-    <!-- C1: Claude Code → A-Hub -->
-    <line x1="340" y1="152" x2="482" y2="152" stroke="#3A444E" stroke-width="2" marker-end="url(#arrInk)"/>
-    <text class="edgeLabel" x="414" y="132" text-anchor="middle">C1 · MCP 쓰기</text>
-    <text class="edgeSub" x="414" y="176" text-anchor="middle">이슈 · 지식 · 인용(cite)</text>
+    <!-- C1: Claude Code → Work -->
+    <line x1="324" y1="176" x2="454" y2="176" stroke="#3A444E" stroke-width="2" marker-end="url(#arrInk)"/>
+    <text class="edgeLabel" x="389" y="160" text-anchor="middle">C1 · MCP 쓰기</text>
+    <text class="edgeSub" x="389" y="198" text-anchor="middle">이슈 · 지식 · 인용(cite)</text>
 
-    <!-- 텔레메트리(계획): A-Mate → A-Hub -->
-    <path d="M340,384 H414 V206 H482" fill="none" stroke="#B26A1F" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrPlan)"/>
-    <text class="edgeLabel plan" x="426" y="296">텔레메트리</text>
-    <text class="edgeSub" x="426" y="314">토큰 · 코칭 · Skill 후보</text>
+    <!-- 텔레메트리(계획): A-Mate → Work -->
+    <path d="M324,384 H400 V240 H454" fill="none" stroke="#B26A1F" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrPlan)"/>
+    <text class="edgeLabel plan" x="410" y="300">텔레메트리</text>
+    <text class="edgeSub" x="410" y="318">토큰 · 코칭 · Skill 후보</text>
 
-    <!-- 입장·이동: A-Mate → Room Server -->
-    <line x1="340" y1="428" x2="482" y2="428" stroke="#3A444E" stroke-width="2" marker-end="url(#arrInk)"/>
-    <text class="edgeLabel" x="414" y="414" text-anchor="middle">입장 · 자리 이동</text>
+    <!-- 입장·이동: A-Mate → Life -->
+    <line x1="324" y1="428" x2="454" y2="428" stroke="#3A444E" stroke-width="2" marker-end="url(#arrInk)"/>
+    <text class="edgeLabel" x="389" y="414" text-anchor="middle">입장 · 자리 이동</text>
 
-    <!-- 하트비트(계획): A-Mate → Room Server -->
-    <line x1="340" y1="466" x2="482" y2="466" stroke="#B26A1F" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrPlan)"/>
-    <text class="edgeLabel plan" x="414" y="492" text-anchor="middle">하트비트 (working / idle)</text>
+    <!-- 하트비트(계획): A-Mate → Life -->
+    <line x1="324" y1="466" x2="454" y2="466" stroke="#B26A1F" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrPlan)"/>
+    <text class="edgeLabel plan" x="389" y="492" text-anchor="middle">하트비트 (working / idle)</text>
 
-    <!-- C2: A-Hub → A-Lens -->
-    <path d="M760,180 H812 V296 H862" fill="none" stroke="#34558B" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#arrHub)"/>
-    <text class="edgeLabel hub" x="804" y="238" text-anchor="end">C2 · 읽기 전용 REST</text>
-    <text class="edgeSub" x="804" y="256" text-anchor="end">tier별로 트리밍된 응답</text>
+    <!-- C2: Work → A-Lens -->
+    <path d="M696,236 H752 V292 H794" fill="none" stroke="#34558B" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#arrHub)"/>
+    <text class="edgeLabel hub" x="748" y="222" text-anchor="middle">C2 · 읽기 전용 REST</text>
+    <text class="edgeSub" x="748" y="262" text-anchor="start">tier 트리밍 응답</text>
 
-    <!-- 프레즌스 조회(계획): Room Server → A-Lens -->
-    <path d="M760,450 H814 V362 H862" fill="none" stroke="#B26A1F" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrPlan)"/>
-    <text class="edgeLabel plan" x="806" y="416" text-anchor="end">프레즌스 조회</text>
-    <text class="edgeSub" x="806" y="434" text-anchor="end">온라인 · 상태</text>
+    <!-- 프레즌스 조회(계획): Life → A-Lens -->
+    <path d="M696,436 H756 V372 H794" fill="none" stroke="#B26A1F" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrPlan)"/>
+    <text class="edgeLabel plan" x="760" y="458" text-anchor="middle">프레즌스 조회</text>
+    <text class="edgeSub" x="762" y="416" text-anchor="start">온라인 · 상태</text>
+
+    <!-- 사람 → A-Lens -->
+    <line x1="1118" y1="300" x2="1030" y2="300" stroke="#3A444E" stroke-width="2" marker-end="url(#arrInk)"/>
+    <text class="edgeSub" x="1074" y="286" text-anchor="middle">브라우저로 접속</text>
   </svg>
   </div>
 
   <div class="principles">
     <div class="principle">
       <h2>만나는 곳은 항상 서버다</h2>
-      <p>a-mate는 서버에 밀어 넣기만 하고(push), a-lens는 서버에서 꺼내 보기만 한다(pull). 두 앱이 직접 통신하는 경로는 없다.</p>
+      <p>a-mate는 A-Hub에 밀어 넣기만 하고(push), a-lens는 A-Hub에서 꺼내 읽기만 한다(pull). 두 앱이 직접 통신하는 경로는 없다. 사람도 마찬가지 — 브라우저로 a-lens 서버에 접속할 뿐이다.</p>
     </div>
     <div class="principle">
       <h2>원문은 로컬을 떠나지 않는다</h2>
@@ -212,44 +229,50 @@
       </thead>
       <tbody>
         <tr>
-          <td>Claude Code → A-Hub</td>
+          <td>Claude Code → A-Hub Work</td>
           <td><span class="mono">C1</span> (MCP)</td>
           <td>이슈 등록 · 해결, 지식 저장, 검색, 인용(재사용 이벤트)</td>
           <td><span class="chip done">구현됨</span></td>
         </tr>
         <tr>
-          <td>A-Mate → Room Server</td>
+          <td>A-Mate → A-Hub Life</td>
           <td>rooms API</td>
           <td>에이전트 등록, 방 입장, 자리 이동</td>
           <td><span class="chip done">구현됨</span></td>
         </tr>
         <tr>
-          <td>A-Mate → Room Server</td>
+          <td>A-Mate → A-Hub Life</td>
           <td>하트비트 (신설)</td>
           <td>working / idle 상태, 마지막 활동 시각</td>
           <td><span class="chip plan">계획</span></td>
         </tr>
         <tr>
-          <td>A-Mate → A-Hub</td>
+          <td>A-Mate → A-Hub Work</td>
           <td>텔레메트리 (신설 · 계약 협의 필요)</td>
           <td>토큰 사용량 · 모델 믹스, 코칭 채택 · 절감량, Skill화 후보, MCP 사용 카운트</td>
           <td><span class="chip plan">계획</span></td>
         </tr>
         <tr>
-          <td>A-Hub → A-Lens</td>
+          <td>A-Hub Work → A-Lens</td>
           <td><span class="mono">C2</span> (읽기 전용 REST)</td>
           <td>로비 집계, 방 상세, 재사용 이벤트, 활동 피드, 통계 — tier별 트리밍</td>
           <td><span class="chip contract">계약 확정 · 구현 예정</span></td>
         </tr>
         <tr>
-          <td>Room Server → A-Lens</td>
+          <td>A-Hub Life → A-Lens</td>
           <td>조회 API</td>
           <td>방 배치 · 프레즌스 (온라인 수, working/idle)</td>
           <td><span class="chip plan">계획</span></td>
+        </tr>
+        <tr>
+          <td>사람 → A-Lens</td>
+          <td>브라우저 (HTTP)</td>
+          <td>관전 UI 조회 — 브라우저는 접근 수단이지 컴포넌트가 아님</td>
+          <td><span class="chip done">구현됨</span></td>
         </tr>
       </tbody>
     </table>
   </div>
 
-  <p class="foot">※ 프로토타입의 GitHub PR 스냅숏 경로는 임시 확인용이라 이 그림에서 제외했다. 프레즌스처럼 작업 내용이 담기지 않는 데이터는 Room Server 경유, 작업 맥락이 담기는 텔레메트리는 A-Hub(C2 계약 협의) 경유가 현재 방침.</p>
+  <p class="foot">※ A-Hub는 work · life 두 서비스로 구성되며 life가 곧 room server다 — 서로 다른 서비스로 보면 된다 (2026-07-17 정성문 피드백 반영. 저장소 폴더는 현재 <span class="mono">a-hub/work/</span>와 <span class="mono">room-server/</span>로 나뉘어 있음). 프로토타입의 GitHub PR 스냅숏 경로는 임시 확인용이라 이 그림에서 제외했다.</p>
 </div>
