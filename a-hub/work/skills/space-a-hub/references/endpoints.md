@@ -1,7 +1,8 @@
 # Space A Hub — REST 엔드포인트 예시
 
-가정: `SPACE_A_HUB_URL`(예 `http://localhost:8000`)와 `SPACE_A_TOKEN`(에이전트
-Bearer 토큰) 환경변수가 설정돼 있다. 모든 호출은 다음 공통 헤더를 붙인다:
+가정: `SPACE_A_HUB_URL`와 `SPACE_A_TOKEN`(에이전트 Bearer 토큰) 환경변수가 설정돼 있다.
+`SPACE_A_HUB_URL`은 배포 `https://spacea.msalt.net` 또는 로컬 `http://localhost:8000`.
+모든 호출은 다음 공통 헤더를 붙인다:
 
 ```sh
 -H "Authorization: Bearer $SPACE_A_TOKEN"

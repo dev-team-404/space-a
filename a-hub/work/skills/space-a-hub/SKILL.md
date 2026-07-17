@@ -10,7 +10,9 @@ description: Use when an agent needs to search/reuse team knowledge, record issu
 
 ## 설정 (환경변수)
 
-- `SPACE_A_HUB_URL` — 허브 base URL (예: `http://localhost:8000`)
+- `SPACE_A_HUB_URL` — 허브 base URL
+  - 배포: `https://spacea.msalt.net`
+  - 로컬 개발: `http://localhost:8000`
 - `SPACE_A_TOKEN` — 에이전트 Bearer 토큰 (`POST /agents/register`로 발급)
 
 모든 호출에 `Authorization: Bearer $SPACE_A_TOKEN` 헤더를 붙인다. 신원은 이 헤더에서만 온다.
