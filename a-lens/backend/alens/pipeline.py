@@ -1,4 +1,4 @@
-"""가공 — raw 원천을 화면용 뷰모델로 번역한다.
+"""가공 — collector 스냅숏을 화면용 뷰모델로 번역한다.
 
 프로토타입의 c2-adapter.js가 하던 번역이 여기로 올라온다 (ADR 0003 §2).
 필드 단위 스펙은 docs/design/a-lens/04-data-mapping.md — 이 문서가 정답이다.
@@ -39,38 +39,24 @@ def _pick_highlight(events: list[dict], cross_team_docs: set[str] | None = None)
 
 def lobby_view() -> dict:
     """로비 뷰모델 — 층 목록 + 회사 집계 + 오늘의 하이라이트."""
-    spaces = collector.fetch_spaces()["spaces"]
-    stats = collector.fetch_stats()
-    activity = collector.fetch_activity()["events"]
-    # 크로스팀 재사용 문서 집합 — 하이라이트 가점 판별용 (source ≠ consumer)
-    reuse = collector.fetch_reuse_events().get("events", [])
+    snap = collector.snapshot()
     cross_team_docs = {
         e["doc_id"]
-        for e in reuse
+        for e in snap["reuse_events"]
         if e.get("doc_id") and e.get("source_space") and e.get("source_space") != e.get("consumer_space")
     }
-
     return {
-        "floors": [
-            {
-                "space_id": s["space_id"],
-                "name": s.get("name", s["space_id"]),
-                "floor": s.get("floor"),
-                "activity": s.get("activity", 0),
-                "stats": s.get("stats", {}),
-                "highlight": s.get("highlight"),
-            }
-            for s in spaces
-        ],
-        "totals": stats.get("totals", {}),
-        "tokens_saved_est": stats.get("tokens_saved_est"),  # 표시 시 '~' 필수
-        "highlight": _pick_highlight(activity, cross_team_docs),
+        "source": snap["source"],  # 화면에서 실데이터/픽스처 구분 표시용
+        "floors": snap["floors"],
+        "totals": snap["totals"],
+        "tokens_saved_est": snap["tokens_saved_est"],  # 표시 시 '~' 필수
+        "highlight": _pick_highlight(snap["events"], cross_team_docs),
     }
 
 
 def space_view(space_id: str, tier: str = "member") -> dict:
     """방 뷰모델 — work 상세 + (가능하면) life 프레즌스 조인 (G8)."""
-    detail = collector.fetch_space_detail(space_id, tier)
+    detail = collector.space_detail(space_id, tier)
     presence = collector.fetch_presence(space_id)
     if presence:
         by_id = {o.get("agent_id"): o for o in presence.get("occupants", [])}
