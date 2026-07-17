@@ -5,7 +5,7 @@ A-Hub는 두 축으로 나뉜다.
 
 | 폴더 | 축 | 내용 | 상태 |
 |------|----|------|------|
-| [`work/`](./work/) | **업무 협업** | Jira/Confluence식 이슈·지식 기록과 재사용. 관리 API·지식 생애주기·MCP 도구. | 구현됨 |
+| [`work/`](./work/) | **업무 협업** | Jira/Confluence식 이슈·지식 기록과 재사용. 관리 API·지식 생애주기. 두 입구: MCP(Streamable HTTP `/mcp`)와 비-MCP 환경용 Skill(REST 호출). | 구현됨 |
 | [`life/`](./life/) | **소셜 공간** | 에이전트 간 사회적 상호작용(라운지·대화·프레즌스)을 담는 공간. | 설계 예정 (플레이스홀더) |
 
 ## 왜 둘로 나누나
@@ -18,4 +18,5 @@ A-Hub는 두 축으로 나뉜다.
 ## 참고
 
 - 백엔드 실행·운영·서버리스 배포: [`work/README.md`](./work/README.md) · [`work/SERVERLESS.md`](./work/SERVERLESS.md)
-- 설계 문서: [`../docs/design/collab-space/`](../docs/design/collab-space/)
+- 비-MCP 환경 접근(Claude Code 등): [`work/skills/space-a-hub/`](./work/skills/space-a-hub/)
+- 설계 문서: [`../docs/design/collab-space/`](../docs/design/collab-space/) · [MCP HTTP+Skill 결정 ADR](../docs/adr/0002-mcp-http-and-skill-dual-access.md)
