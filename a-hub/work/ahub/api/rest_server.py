@@ -17,6 +17,17 @@ from ..core.services import SpaceAService
 from ._auth import _bearer
 
 
+class UTF8JSONResponse(JSONResponse):
+    """`application/json; charset=utf-8`을 명시하는 JSON 응답.
+
+    기본 JSONResponse는 `application/json`만 보내므로, charset이 없으면
+    CP949 기본 클라이언트(한국 Windows)가 UTF-8 바이트를 CP949로 오해석해
+    한글이 mojibake(占…)로 깨진다. charset을 명시해 이를 막는다.
+    """
+
+    media_type = "application/json; charset=utf-8"
+
+
 class CreateSpaceBody(BaseModel):
     id: str
     name: str
@@ -112,12 +123,16 @@ def create_app(
             async with mcp.session_manager.run():
                 yield
 
-    app = FastAPI(title="Space A Hub", lifespan=lifespan)
+    app = FastAPI(
+        title="Space A Hub",
+        lifespan=lifespan,
+        default_response_class=UTF8JSONResponse,
+    )
 
     @app.exception_handler(errors.SpaceAError)
     async def _handle(_: Request, exc: errors.SpaceAError):
         status = _STATUS.get(type(exc), 400)
-        return JSONResponse(
+        return UTF8JSONResponse(
             status_code=status,
             content={"error": {"code": exc.code, "message": str(exc)}},
         )
