@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: space-a-hub serverless — Lambda + API Gateway(HTTP API) + DynamoDB
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 15
+    MemorySize: 256
+
+Resources:
+  HubTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+
+  HubFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: space_a.api.lambda_handler.handler
+      Environment:
+        Variables:
+          SPACE_A_TABLE: !Ref HubTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref HubTable
+      Events:
+        Root:
+          Type: HttpApi
+          Properties:
+            Path: /
+            Method: ANY
+        Proxy:
+          Type: HttpApi
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+
+Outputs:
+  ApiUrl:
+    Description: HTTP API base URL
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  TableName:
+    Description: DynamoDB table
+    Value: !Ref HubTable

@@ -1,0 +1,3 @@
+# Lambda 배포 패키지용 (sam build). boto3는 Lambda 런타임에 기본 포함.
+fastapi>=0.115
+mangum>=0.17
