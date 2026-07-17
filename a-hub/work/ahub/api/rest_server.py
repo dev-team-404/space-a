@@ -446,9 +446,6 @@ def create_app(
         return {"status": "ready"}
 
     if mcp_app is not None:
-        # mcp 앱의 기본 streamable 경로는 '/mcp'이므로 루트에 마운트하면
-        # 최종 엔드포인트가 최상위 '/mcp'가 된다. REST 라우트가 먼저 등록되어
-        # 우선하고, 나머지 경로만 mcp 앱으로 넘어간다.
-        app.mount("/", mcp_app)
+        app.mount("/mcp", mcp_app)
 
     return app

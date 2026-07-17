@@ -25,7 +25,7 @@ def _token(ctx: Context) -> str:
 
 def build_mcp(service: SpaceAService | None = None) -> FastMCP:
     service = service or SpaceAService(make_store())
-    mcp = FastMCP("space-a-hub")
+    mcp = FastMCP("space-a-hub", streamable_http_path="/")
 
     @mcp.tool()
     def get_guide(space_id: str, ctx: Context) -> dict:
