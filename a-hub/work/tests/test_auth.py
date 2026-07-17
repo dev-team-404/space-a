@@ -19,7 +19,7 @@ def test_non_bearer_raises_unauthorized():
 
 
 def test_header_lookup_is_case_insensitive():
-    # Starlette Headers are case-insensitive; a plain dict is not, so the
-    # function must normalize. We pass the canonical lowercase key here and
-    # rely on callers passing Starlette Headers in production.
-    assert token_from_headers({"authorization": "Bearer x"}) == "x"
+    from starlette.datastructures import Headers
+
+    headers = Headers({"Authorization": "Bearer xyz"})  # mixed-case key
+    assert token_from_headers(headers) == "xyz"
