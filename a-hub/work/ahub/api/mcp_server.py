@@ -16,7 +16,7 @@ from ._auth import token_from_headers
 
 
 def _token(ctx: Context) -> str:
-    """이번 요청의 Bearer 토큰. HTTP 요청 컨텍스트가 없으면 Unauthorized."""
+    """이번 요청의 Bearer 토큰. 요청에 HTTP request가 없으면 Unauthorized."""
     req = ctx.request_context.request  # Streamable HTTP → Starlette Request
     if req is None:
         raise errors.Unauthorized("no request context")

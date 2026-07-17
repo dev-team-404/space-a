@@ -1,8 +1,8 @@
 """MCP 어댑터 — FastMCP 도구가 core를 per-request Bearer로 감싸는지.
 
 도구는 요청 헤더에서 신원을 얻으므로, 직접 call_tool은 request context가 없어
-Unauthorized가 난다. HTTP 경유 신원 검증은 tests/test_mcp_http.py 참고.
-mcp SDK가 없는 환경에서는 skip.
+실패한다 (SDK가 ValueError를 던짐). per-request Bearer 신원 검증은
+tests/test_mcp_http.py 참고. mcp SDK가 없는 환경에서는 skip.
 """
 
 import asyncio
