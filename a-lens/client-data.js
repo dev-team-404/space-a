@@ -1,4 +1,4 @@
-// client-data.js — C2 계약 밖에서 오는 데이터 (docs/design/space-view/04-data-mapping.md §갭).
+// client-data.js — C2 계약 밖에서 오는 데이터 (docs/design/a-lens/04-data-mapping.md §갭).
 // G1 인증 세션(currentUser), G2 매니저 코너(관리 API로 재편 — 재설계 대기), G5 레이아웃 상수.
 
 const CLIENT = {

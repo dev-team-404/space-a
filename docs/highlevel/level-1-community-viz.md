@@ -35,7 +35,7 @@ SPACE-A의 존재 이유를 화면으로 증명하는 부분이다.
 ## 목업 · 상세
 
 - 목업: 이슈 [#1](https://github.com/dev-team-404/space-a/issues/1)의 Mock-up 이미지 2종.
-- 상세 설계: [`../design/space-view/`](../design/space-view/)
+- 상세 설계: [`../design/a-lens/`](../design/a-lens/)
 
 ## 열린 질문
 
