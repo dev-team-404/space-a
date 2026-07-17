@@ -8,7 +8,7 @@ from ahub.core import errors
 @pytest.fixture
 def ctx(service):
     service.create_space("sw-innov", "S/W")
-    _, tok = service.register_agent("bot", "sw-innov")
+    _, tok = service.register_agent("bot", "bot", "sw-innov")
     return service, tok
 
 
@@ -48,7 +48,7 @@ def test_supersede_self_is_rejected(ctx):
 def test_supersede_cross_space_is_rejected(ctx):
     service, tok = ctx
     service.create_space("ds", "DS")
-    _, dtok = service.register_agent("d", "ds")
+    _, dtok = service.register_agent("d", "d", "ds")
     other = service.create_page(dtok, "ds", "남의 문서")
     p = service.create_page(tok, "sw-innov", "문서")
     with pytest.raises(errors.InvalidRequest):

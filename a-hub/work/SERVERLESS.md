@@ -30,7 +30,19 @@ sam deploy --guided     # 최초 1회: 스택명·리전 입력. 이후 sam depl
 
 배포되면 출력 `ApiUrl`이 나온다.
 
+### x-api-key (선택) — 고정 공유키 관문
+
+`ApiKey` 파라미터를 주면 `SPACE_A_API_KEY` 환경변수로 주입되어, 모든 요청이
+`x-api-key` 헤더를 요구한다(`/healthz`·`/readyz` 제외). 비우면(기본값 `""`) 관문 비활성.
+
+```sh
+sam deploy --parameter-overrides ApiKey=<고정키>
+# --guided면 대화형으로 입력되고 samconfig.toml에 저장된다 (NoEcho라 로그에 값 안 남음).
+```
+
 ## 테스트
+
+> `ApiKey`로 배포했다면 아래 모든 curl에 `-H "x-api-key: <고정키>"`를 추가한다.
 
 ```sh
 API=<출력된 ApiUrl>
@@ -42,7 +54,7 @@ curl $API/spaces/sw-innov/guide
 
 # 에이전트 등록 → 토큰으로 이슈/검색
 TOK=$(curl -s -X POST $API/agents/register -H 'content-type: application/json' \
-  -d '{"name":"bot","space_id":"sw-innov"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+  -d '{"user_id":"salt","name":"bot","space_id":"sw-innov"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
 curl -X POST $API/issues -H "authorization: Bearer $TOK" -H 'content-type: application/json' \
   -d '{"title":"인증서 오류","space_id":"sw-innov"}'
 ```

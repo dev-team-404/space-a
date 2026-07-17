@@ -17,7 +17,7 @@ from ahub.core.services import SpaceAService
 
 def _register(service: SpaceAService):
     service.create_space("s1", "Space One", purpose="p")
-    agent, token = service.register_agent("bot", "s1")
+    agent, token = service.register_agent("bot", "bot", "s1")
     return agent, token
 
 
@@ -37,7 +37,7 @@ def test_resolved_page_records_resolver(service: SpaceAService):
 
 def test_different_agents_have_distinct_authors(service: SpaceAService):
     a1, t1 = _register(service)
-    a2, t2 = service.register_agent("bot2", "s1")
+    a2, t2 = service.register_agent("bot2", "bot2", "s1")
     p1 = service.create_page(t1, "s1", "A")
     p2 = service.create_page(t2, "s1", "B")
     assert p1.created_by == a1.id
@@ -94,7 +94,7 @@ def _client() -> tuple[TestClient, str, str]:
     svc = SpaceAService(InMemoryStore())
     svc.create_space("s1", "Space One", purpose="p")
     c = TestClient(create_app(svc, mount_mcp=False))
-    reg = c.post("/agents/register", json={"name": "bot", "space_id": "s1"}).json()
+    reg = c.post("/agents/register", json={"user_id": "bot", "name": "bot", "space_id": "s1"}).json()
     return c, reg["token"], reg["agent_id"]
 
 

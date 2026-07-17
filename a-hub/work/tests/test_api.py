@@ -14,7 +14,7 @@ def client() -> TestClient:
 def _register(client, space="sw-innov"):
     client.post("/spaces", json={"id": space, "name": space})
     token = client.post(
-        "/agents/register", json={"name": "bot", "space_id": space}
+        "/agents/register", json={"user_id": "bot", "name": "bot", "space_id": space}
     ).json()["token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -23,10 +23,10 @@ def test_full_flow_register_open_resolve(client):
     r = client.post("/spaces", json={"id": "sw-innov", "name": "S/W 혁신팀"})
     assert r.status_code == 201
 
-    r = client.post("/agents/register", json={"name": "build-bot", "space_id": "sw-innov"})
+    r = client.post("/agents/register", json={"user_id": "build-bot", "name": "build-bot", "space_id": "sw-innov"})
     assert r.status_code == 201
     body = r.json()
-    assert body["agent_id"].startswith("agt_")
+    assert body["agent_id"] == "build-bot"
     assert body["spaces"] == ["sw-innov"]
     token = body["token"]
 
@@ -55,7 +55,7 @@ def test_open_issue_in_foreign_space_is_403(client):
     client.post("/spaces", json={"id": "sw-innov", "name": "S/W"})
     client.post("/spaces", json={"id": "ds-platform", "name": "DS"})
     token = client.post(
-        "/agents/register", json={"name": "bot", "space_id": "sw-innov"}
+        "/agents/register", json={"user_id": "bot", "name": "bot", "space_id": "sw-innov"}
     ).json()["token"]
     r = client.post(
         "/issues",
@@ -66,7 +66,7 @@ def test_open_issue_in_foreign_space_is_403(client):
 
 
 def test_register_into_missing_space_is_404(client):
-    r = client.post("/agents/register", json={"name": "bot", "space_id": "ghost"})
+    r = client.post("/agents/register", json={"user_id": "bot", "name": "bot", "space_id": "ghost"})
     assert r.status_code == 404
 
 
@@ -181,8 +181,8 @@ def test_update_and_archive_space_over_http(client):
 def test_membership_over_http(client):
     client.post("/spaces", json={"id": "sw-innov", "name": "S/W"})
     client.post("/spaces", json={"id": "ds", "name": "DS"})
-    x_tok = client.post("/agents/register", json={"name": "x", "space_id": "sw-innov"}).json()["token"]
-    y = client.post("/agents/register", json={"name": "y", "space_id": "ds"}).json()
+    x_tok = client.post("/agents/register", json={"user_id": "x", "name": "x", "space_id": "sw-innov"}).json()["token"]
+    y = client.post("/agents/register", json={"user_id": "y", "name": "y", "space_id": "ds"}).json()
     xh = {"Authorization": f"Bearer {x_tok}"}
 
     r = client.post("/spaces/sw-innov/members", json={"agent_id": y["agent_id"]}, headers=xh)
@@ -198,7 +198,7 @@ def test_membership_over_http(client):
 
 def test_agent_lifecycle_over_http(client):
     client.post("/spaces", json={"id": "sw-innov", "name": "S/W"})
-    reg = client.post("/agents/register", json={"name": "x", "space_id": "sw-innov"}).json()
+    reg = client.post("/agents/register", json={"user_id": "x", "name": "x", "space_id": "sw-innov"}).json()
     tok, aid = reg["token"], reg["agent_id"]
     h = {"Authorization": f"Bearer {tok}"}
 

@@ -58,7 +58,7 @@ async def _call_search(url, token):
 def test_mcp_search_includes_created_by():
     service = SpaceAService(InMemoryStore())
     service.create_space("demo", "데모", guidelines="g")
-    agent, token = service.register_agent("a", "demo")
+    agent, token = service.register_agent("a", "a", "demo")
     issue = service.open_issue(token, "인증서 오류", "demo")
     _, page = service.resolve_issue(token, issue.id, "인증서 갱신", ["재발급"])
 

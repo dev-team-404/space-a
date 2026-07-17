@@ -8,7 +8,7 @@ from ahub.core import errors
 @pytest.fixture
 def ctx(service):
     service.create_space("sw-innov", "S/W")
-    _, tok = service.register_agent("bot", "sw-innov")
+    _, tok = service.register_agent("bot", "bot", "sw-innov")
     p = service.create_page(tok, "sw-innov", "가이드", body="원본")
     return service, tok, p
 
@@ -60,6 +60,6 @@ def test_flag_increments(ctx):
 def test_edit_foreign_space_is_forbidden(ctx):
     service, tok, p = ctx
     service.create_space("ds", "DS")
-    _, other = service.register_agent("o", "ds")
+    _, other = service.register_agent("o", "o", "ds")
     with pytest.raises(errors.Forbidden):
         service.edit_page(other, p.id, title="침입")

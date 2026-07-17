@@ -25,7 +25,7 @@ def test_full_flow_and_persistence_on_dynamodb():
     create_table("space-a", region=_REGION)
     svc = SpaceAService(DynamoDBStore("space-a", region=_REGION))
     svc.create_space("sw", "S/W", guidelines="규칙")
-    _, tok = svc.register_agent("bot", "sw")
+    _, tok = svc.register_agent("bot", "bot", "sw")
     iss = svc.open_issue(tok, "DS 인증서 오류", "sw")
     _, page = svc.resolve_issue(tok, iss.id, "인증서 갱신", ["재발급"])
 
@@ -45,7 +45,7 @@ def test_permission_scoping_on_dynamodb():
     svc = SpaceAService(DynamoDBStore("t", region=_REGION))
     svc.create_space("a", "A")
     svc.create_space("b", "B")
-    _, ta = svc.register_agent("x", "a")
+    _, ta = svc.register_agent("x", "x", "a")
     with pytest.raises(errors.Forbidden):
         svc.open_issue(ta, "침입", "b")
 
@@ -55,7 +55,7 @@ def test_ids_and_page_tree_on_dynamodb():
     create_table("t", region=_REGION)
     svc = SpaceAService(DynamoDBStore("t", region=_REGION))
     svc.create_space("s", "S")
-    _, tok = svc.register_agent("bot", "s")
+    _, tok = svc.register_agent("bot", "bot", "s")
     parent = svc.create_page(tok, "s", "부모")
     child = svc.create_page(tok, "s", "자식", parent_id=parent.id)
     assert parent.id.startswith("page_") and child.parent_id == parent.id
@@ -68,7 +68,7 @@ def test_rotate_token_revokes_old_on_dynamodb():
     create_table("t", region=_REGION)
     svc = SpaceAService(DynamoDBStore("t", region=_REGION))
     svc.create_space("s", "S")
-    agent, tok = svc.register_agent("bot", "s")
+    agent, tok = svc.register_agent("bot", "bot", "s")
 
     new = svc.rotate_token(tok, agent.id)  # revoke_tokens(batch) + bind_token
 

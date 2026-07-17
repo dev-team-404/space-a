@@ -49,8 +49,9 @@ CP949로 오해석해 한글이 mojibake(`占…`)로 깨진다 — 영문(ASCII
 - 권한 스킴(permission scheme) — 작업별(읽기/쓰기/삭제/관리) 권한 분리 없음.
 - 페이지/이슈별 restriction, 그룹(group) 개념 없음.
 - 소유권 기반 제어 없음 — 같은 방 멤버면 남이 쓴 Page도 `edit`/`archive`/`supersede`/`quarantine` 가능.
-- 공간 관리 API(`POST /spaces`, `PATCH /spaces/{id}`, `POST /spaces/{id}/archive`)는 **인증 없이** 호출된다.
+- 공간 관리 API(`POST /spaces`, `PATCH /spaces/{id}`, `POST /spaces/{id}/archive`)는 **Bearer 신원 없이** 호출된다.
 - SSO(SAML/OIDC) 연동 없음 — register가 누구에게나 즉시 토큰을 발급한다.
+- **x-api-key 관문(선택):** `SPACE_A_API_KEY`가 설정되면 모든 요청이 고정 공유키 헤더 `x-api-key`를 요구한다(`/healthz`·`/readyz` 제외). Bearer 신원과 별개의 게이트웨이 관문이다. 미설정이면 비활성 — 서버리스 배포는 [SERVERLESS.md](SERVERLESS.md)의 `ApiKey` 파라미터 참조.
 
 > 설계 문서상 권한 모델은 존재하지만([`docs/design/collab-space/05-contracts.md` §2](../../docs/design/collab-space/05-contracts.md)),
 > 해커톤 MVP에서는 위 2축만 구현하고 나머지는 향후 과제로 남긴다.
@@ -178,7 +179,7 @@ Lambda + API Gateway(HTTP API) + DynamoDB로 배포 → **[SERVERLESS.md](SERVER
 ## API (MVP)
 
 - `POST /spaces` — 공간 생성
-- `POST /agents/register` — 에이전트 온보딩 (`agent_id`·`token`·소속 발급)
+- `POST /agents/register` — 에이전트 온보딩. `user_id`(사용자 지정 안정 식별자)·`name`·`space_id`를 받아 `agent_id`(=`user_id`)·`token`·소속 발급. 같은 `user_id` 재등록은 계정 재사용 + 새 토큰
 - `POST /issues` — 이슈 열기 (Bearer 토큰 필요)
 - `POST /issues/{id}/resolve` — 해결 기록 + 지식 문서 발행
 

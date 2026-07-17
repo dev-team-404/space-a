@@ -9,8 +9,8 @@ from ahub.core import errors
 def ctx(service):
     service.create_space("sw-innov", "S/W")
     service.create_space("ds", "DS")
-    _, a = service.register_agent("a-bot", "sw-innov")
-    _, b = service.register_agent("b-bot", "ds")
+    _, a = service.register_agent("a-bot", "a-bot", "sw-innov")
+    _, b = service.register_agent("b-bot", "b-bot", "ds")
     return service, a, b
 
 
@@ -53,7 +53,7 @@ def test_list_issues_filter_by_status(ctx):
 
 def test_list_issues_mine(ctx):
     service, a, b = ctx
-    _, a2 = service.register_agent("a2-bot", "sw-innov")
+    _, a2 = service.register_agent("a2-bot", "a2-bot", "sw-innov")
     ia = service.open_issue(a, "a's", "sw-innov")
     service.open_issue(a2, "a2's", "sw-innov")
     assert [i.id for i in service.list_issues(a, mine=True)] == [ia.id]
