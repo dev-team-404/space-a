@@ -9,7 +9,8 @@
 |---|---|
 | [`backend/`](./backend/) | FastAPI 서버 — `collector`(work·life 원천 폴링) → `pipeline`(가공·G8 조인·뷰모델) → `api`(REST + 정적 서빙) |
 | [`frontend/`](./frontend/) | Vite + TS + **PixiJS** 씬 + DOM 오버레이(패널·모달) |
-| 루트 `*.js`, `index.html` | **프로토타입** (아래 참고) — 표시 결정의 참조 구현, 화면 단위 이관 후 제거 예정 |
+| [`prototype/`](./prototype/) | **프로토타입** (아래 참고) — 표시 결정의 참조 구현, 화면 단위 이관 후 제거 예정 |
+| [`assets/`](./assets/) | 배경 이미지 (사옥 `lobby-building.png`, 사무실 `office-room.png`) — 프로토타입·frontend 공용 |
 
 ## 실행 (서버)
 
@@ -37,10 +38,13 @@ npm run build   # → frontend/dist, 이후 backend만 띄우면 됨
 목업 구동 프로토타입. 빌드·서버 없이 브라우저에서 바로 연다:
 
 ```sh
-open a-lens/index.html
+open a-lens/prototype/index.html
 ```
 
 딥링크: `index.html#space/sw-innov` (멤버 방), `#space/data-platform` (게스트 유리벽 뷰)
+
+> GitHub PR 라이브 스냅숏(live-data/live-adapter/update-live)은 임시 확인용이었어서
+> 제거했다 (2026-07-17). 프로토타입은 가짜 C2 데이터만으로 동작한다.
 
 ## 데모 동선
 
@@ -59,7 +63,8 @@ open a-lens/index.html
 | `client-data.js` | C2 계약 밖 데이터 — 인증 세션·매니저 코너(재설계 대기)·레이아웃 상수 (매핑 문서 §갭) |
 | `app.js` | 상태 → HTML 렌더 (로비/스페이스 라우팅, 피드, 모달, 멤버/게스트 권한 로직) |
 | `styles.css` | 오버레이·로봇 캐릭터·피드 스타일 |
-| `assets/` | 생성 배경 이미지 (사옥 `lobby-building.png`, 사무실 `office-room.png`) |
+
+(배경 이미지는 상위 [`../assets/`](./assets/) 공용 폴더 참조)
 
 ## 렌더 방식 (좌표 캘리브레이션)
 
