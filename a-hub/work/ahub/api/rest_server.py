@@ -5,6 +5,8 @@
 도메인 에러를 HTTP 상태로 매핑한다.
 """
 
+import contextlib
+
 from fastapi import FastAPI, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -90,9 +92,27 @@ _STATUS = {
 }
 
 
-def create_app(service: SpaceAService | None = None) -> FastAPI:
+def create_app(
+    service: SpaceAService | None = None, *, mount_mcp: bool = True
+) -> FastAPI:
     service = service or SpaceAService(make_store())
-    app = FastAPI(title="Space A Hub")
+
+    lifespan = None
+    mcp_app = None
+    if mount_mcp:
+        # 지연 import: Lambda(mount_mcp=False)는 mcp를 import하지 않는다.
+        from ..api.mcp_server import build_mcp
+
+        mcp = build_mcp(service)
+        mcp_app = mcp.streamable_http_app()  # session_manager를 지연 생성
+
+        @contextlib.asynccontextmanager
+        async def lifespan(_app):
+            # Streamable HTTP 세션 매니저를 부모 앱 lifespan에서 기동한다.
+            async with mcp.session_manager.run():
+                yield
+
+    app = FastAPI(title="Space A Hub", lifespan=lifespan)
 
     @app.exception_handler(errors.SpaceAError)
     async def _handle(_: Request, exc: errors.SpaceAError):
@@ -424,5 +444,11 @@ def create_app(service: SpaceAService | None = None) -> FastAPI:
     @app.get("/readyz")
     def readyz():
         return {"status": "ready"}
+
+    if mcp_app is not None:
+        # mcp 앱의 기본 streamable 경로는 '/mcp'이므로 루트에 마운트하면
+        # 최종 엔드포인트가 최상위 '/mcp'가 된다. REST 라우트가 먼저 등록되어
+        # 우선하고, 나머지 경로만 mcp 앱으로 넘어간다.
+        app.mount("/", mcp_app)
 
     return app
