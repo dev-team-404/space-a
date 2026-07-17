@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from ..adapters.factory import make_store
 from ..core import errors
 from ..core.services import SpaceAService
+from ._auth import _bearer
 
 
 class CreateSpaceBody(BaseModel):
@@ -87,12 +88,6 @@ _STATUS = {
     errors.Forbidden: 403,
     errors.NotFound: 404,
 }
-
-
-def _bearer(authorization: str | None) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise errors.Unauthorized("missing bearer token")
-    return authorization[len("Bearer ") :]
 
 
 def create_app(service: SpaceAService | None = None) -> FastAPI:
