@@ -1,7 +1,7 @@
 """영속 저장소 어댑터 (SqliteStore) — 재접속 후에도 데이터가 남는다."""
 
-from space_a.adapters.store_sqlite import SqliteStore
-from space_a.core.services import SpaceAService
+from ahub.adapters.store_sqlite import SqliteStore
+from ahub.core.services import SpaceAService
 
 
 def test_full_flow_on_sqlite():
@@ -16,7 +16,7 @@ def test_full_flow_on_sqlite():
 
 
 def test_persists_across_reconnect(tmp_path):
-    db = str(tmp_path / "space_a.db")
+    db = str(tmp_path / "ahub.db")
 
     s1 = SpaceAService(SqliteStore(db))
     s1.create_space("sw-innov", "S/W", purpose="p", guidelines="g")

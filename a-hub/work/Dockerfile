@@ -11,9 +11,9 @@ ARG PIP_TRUSTED=""
 RUN pip install --no-cache-dir ${PIP_TRUSTED} "fastapi>=0.115" "uvicorn>=0.30"
 
 # 애플리케이션 코드 (ports & adapters 전부)
-COPY space_a ./space_a
+COPY ahub ./ahub
 
 EXPOSE 8000
 
 # create_app 은 FastAPI 인스턴스를 반환하는 팩토리
-CMD ["uvicorn", "space_a.api.rest_server:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "ahub.api.rest_server:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

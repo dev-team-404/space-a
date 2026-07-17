@@ -7,9 +7,33 @@
 
 ## 구조 (ports & adapters)
 
-- `space_a/core/` — 도메인 로직(순수). `models`·`ports`·`services`·`errors`. **adapters/api를 import하지 않는다.**
-- `space_a/adapters/` — 포트 구현. 지금은 `store_memory.py`(인메모리), 나중에 실제 DB로 교체.
-- `space_a/api/` — `rest_server.py` (FastAPI).
+```
+work/
+├── ahub/                     # 애플리케이션 패키지
+│   ├── core/                 # 도메인 로직(순수). adapters/api를 import하지 않는다.
+│   │   ├── models.py         #   도메인 모델
+│   │   ├── ports.py          #   저장소 인터페이스(포트)
+│   │   ├── services.py       #   유스케이스 (SpaceAService)
+│   │   └── errors.py         #   도메인 예외
+│   ├── adapters/             # 포트 구현 (교체 가능)
+│   │   ├── factory.py        #   env 기반 스토어 선택 (make_store)
+│   │   ├── store_memory.py   #   인메모리 (기본)
+│   │   ├── store_sqlite.py   #   SQLite 파일 영속
+│   │   └── store_dynamodb.py #   DynamoDB (서버리스)
+│   └── api/                  # 진입점
+│       ├── rest_server.py    #   FastAPI (create_app 팩토리)
+│       ├── mcp_server.py     #   stdio MCP 서버 (build_mcp)
+│       └── lambda_handler.py #   Lambda 핸들러 (Mangum)
+├── tests/                    # pytest (memory·sqlite 양쪽 검증)
+├── demo_mcp.py               # in-process MCP 흐름 데모
+├── pyproject.toml            # 패키지/의존성
+├── requirements.txt          # 런타임 의존성
+├── Dockerfile                # 컨테이너 이미지
+├── docker-compose.yml        # compose (볼륨 영속)
+├── template.yaml             # SAM 서버리스 스택
+├── SERVERLESS.md             # 서버리스 배포 가이드
+└── README.md
+```
 
 core는 인터페이스(ports)에만 의존하므로, DB/LLM 구현을 갈아끼워도 core는 안 바뀐다.
 
@@ -25,8 +49,8 @@ cd a-hub/work
 uv venv .venv
 uv pip install --native-tls fastapi uvicorn pytest httpx mcp   # 사내망 인증서 이슈로 --native-tls
 
-.venv/bin/python -m pytest                                  # 테스트 155개 (memory·sqlite 양쪽 검증)
-.venv/bin/python -m uvicorn space_a.api.rest_server:create_app --factory --reload   # REST 서버
+.venv/bin/python -m pytest                                  # 테스트 163개 (memory·sqlite 양쪽 검증)
+.venv/bin/python -m uvicorn ahub.api.rest_server:create_app --factory --reload   # REST 서버
 ```
 
 ## 영속성
@@ -34,10 +58,10 @@ uv pip install --native-tls fastapi uvicorn pytest httpx mcp   # 사내망 인�
 기본은 인메모리. `SPACE_A_DB`에 파일 경로를 주면 **SQLite로 영속**된다(stdlib `sqlite3`, 추가 의존성 없음).
 
 ```sh
-SPACE_A_DB=./space_a.db .venv/bin/python -m uvicorn space_a.api.rest_server:create_app --factory
+SPACE_A_DB=./ahub.db .venv/bin/python -m uvicorn ahub.api.rest_server:create_app --factory
 ```
 
-포트&어댑터 구조라 `InMemoryStore` ↔ `SqliteStore` 교체에 core는 안 바뀐다. Docker는 compose가 볼륨에 영속(`SPACE_A_DB=/data/space_a.db`).
+포트&어댑터 구조라 `InMemoryStore` ↔ `SqliteStore` 교체에 core는 안 바뀐다. Docker는 compose가 볼륨에 영속(`SPACE_A_DB=/data/ahub.db`).
 
 ## MCP (에이전트 연결)
 
@@ -48,10 +72,10 @@ SPACE_A_DB=./space_a.db .venv/bin/python -m uvicorn space_a.api.rest_server:crea
 .venv/bin/python demo_mcp.py
 
 # stdio MCP 서버 (SPACE_A_TOKEN 없으면 데모 공간·샘플 지식 시드 + 토큰 stderr 출력)
-.venv/bin/python -m space_a.api.mcp_server
+.venv/bin/python -m ahub.api.mcp_server
 
 # 실제 MCP 클라이언트로 확인 (MCP Inspector)
-npx @modelcontextprotocol/inspector .venv/bin/python -m space_a.api.mcp_server
+npx @modelcontextprotocol/inspector .venv/bin/python -m ahub.api.mcp_server
 ```
 
 **"언제·무엇을" 판단**은 운영자가 에이전트 AGENTS.md에 넣는다 → [지침 템플릿](../../docs/design/collab-space/09-agents-md-template.md).

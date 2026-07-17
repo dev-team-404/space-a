@@ -28,7 +28,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: .
-      Handler: space_a.api.lambda_handler.handler
+      Handler: ahub.api.lambda_handler.handler
       Environment:
         Variables:
           SPACE_A_TABLE: !Ref HubTable

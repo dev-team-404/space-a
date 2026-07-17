@@ -9,8 +9,8 @@ FastAPI(ASGI) 앱을 **Mangum**으로 Lambda에 올리고, **DynamoDB**로 영�
 API Gateway(HTTP API)  →  Lambda(HubFunction, Mangum+FastAPI)  →  DynamoDB(HubTable)
 ```
 
-- `space_a/api/lambda_handler.py` — `handler = Mangum(create_app())`
-- `space_a/adapters/store_dynamodb.py` — 단일 테이블(pk=타입, sk=id), 원자적 id 카운터
+- `ahub/api/lambda_handler.py` — `handler = Mangum(create_app())`
+- `ahub/adapters/store_dynamodb.py` — 단일 테이블(pk=타입, sk=id), 원자적 id 카운터
 - `template.yaml` — SAM: Lambda + HTTP API + DynamoDB 테이블 + IAM
 
 ## 배포

@@ -10,7 +10,7 @@ import pytest
 
 pytest.importorskip("mcp")
 
-from space_a.api.mcp_server import build_mcp  # noqa: E402
+from ahub.api.mcp_server import build_mcp  # noqa: E402
 
 
 def _call(mcp, name, args):

@@ -2,7 +2,7 @@
 
 import pytest
 
-from space_a.core import errors
+from ahub.core import errors
 
 
 def test_open_issue_in_foreign_space_is_forbidden(service):

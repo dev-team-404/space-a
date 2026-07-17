@@ -7,7 +7,7 @@
 import asyncio
 import json
 
-from space_a.api.mcp_server import build_mcp
+from ahub.api.mcp_server import build_mcp
 
 
 async def main() -> None:

@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from space_a.api.rest_server import create_app
+from ahub.api.rest_server import create_app
 
 
 @pytest.fixture

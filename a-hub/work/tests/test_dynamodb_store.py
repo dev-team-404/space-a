@@ -13,9 +13,9 @@ os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
 
 from moto import mock_aws  # noqa: E402
 
-from space_a.adapters.store_dynamodb import DynamoDBStore, create_table  # noqa: E402
-from space_a.core import errors  # noqa: E402
-from space_a.core.services import SpaceAService  # noqa: E402
+from ahub.adapters.store_dynamodb import DynamoDBStore, create_table  # noqa: E402
+from ahub.core import errors  # noqa: E402
+from ahub.core.services import SpaceAService  # noqa: E402
 
 _REGION = "us-east-1"
 

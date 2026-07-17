@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS reuse_events (
 
 
 class SqliteStore(Store):
-    def __init__(self, path: str = "space_a.db") -> None:
+    def __init__(self, path: str = "ahub.db") -> None:
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.Lock()  # 공유 연결 → 모든 접근 직렬화
