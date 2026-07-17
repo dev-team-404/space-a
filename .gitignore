@@ -78,3 +78,6 @@ a-mate/agent-mentor.db
 a-mate/diary/
 a-mate/src-tauri/gen/schemas/
 .vite/
+
+# git worktrees (isolated workspaces)
+.worktrees/
