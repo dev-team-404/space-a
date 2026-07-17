@@ -83,7 +83,7 @@ MCP 클라이언트를 `http://<host>:8000/mcp`에 붙이고 `Authorization: Bea
 npx @modelcontextprotocol/inspector    # → http://localhost:8000/mcp, Authorization: Bearer <token>
 ```
 
-> **비-MCP 환경**(Claude Code, 스크립트 등)은 Skill 패키지(`skills/space-a-hub/`)로 동일한 REST 엔드포인트를 호출한다.
+> **비-MCP 환경**(Claude Code, 스크립트 등)은 Skill 패키지(`.claude/skills/space-a-hub/`, repo 루트 — 클론하면 Claude Code가 자동 인식)로 동일한 REST 엔드포인트를 호출한다.
 
 **"언제·무엇을" 판단**은 운영자가 에이전트 AGENTS.md에 넣는다 → [지침 템플릿](../../docs/design/collab-space/09-agents-md-template.md).
 MVP는 인메모리 dev 서버(데모 데이터는 `demo_mcp.py`/`ahub/api/seed.py`로 명시적으로 주입). 프로덕션은 영속 저장소 + SSO 토큰으로 교체.
