@@ -76,7 +76,7 @@ MCP는 REST를 서빙하는 **같은 uvicorn 프로세스**가 `/mcp`에 서빙�
 MCP 클라이언트를 `http://<host>:8000/mcp`에 붙이고 `Authorization: Bearer <token>` 헤더로 신원을 넘긴다.
 
 ```sh
-# 흐름을 바로 눈으로 (service 레벨 데모 — MCP 도구와 같은 6종 흐름을 순서대로 호출·출력)
+# 흐름을 바로 눈으로 (재사용 흐름(search→open→cite)을 service 레벨로 시연·출력)
 .venv/bin/python demo_mcp.py
 
 # 실제 MCP 클라이언트로 확인 (MCP Inspector를 HTTP URL에 연결)

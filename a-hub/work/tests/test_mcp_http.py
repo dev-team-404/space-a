@@ -93,3 +93,6 @@ def test_mcp_http_without_bearer_is_unauthorized():
         url = f"http://127.0.0.1:{server.port}/mcp"
         result = asyncio.run(_call_no_auth(url))
     assert result.isError
+    # 인증 거부임을 구체적으로 증명 (단순 실패가 아니라 bearer/unauthorized 메시지).
+    msg = result.content[0].text
+    assert "bearer" in msg.lower() or "unauthorized" in msg.lower()

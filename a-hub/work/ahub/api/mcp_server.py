@@ -30,9 +30,9 @@ def build_mcp(service: SpaceAService | None = None) -> FastMCP:
     mcp = FastMCP("space-a-hub", streamable_http_path="/")
 
     @mcp.tool()
-    def get_guide(space_id: str, ctx: Context) -> dict:
-        """이 방(space)의 작성 가이드를 읽는다. 쓰기 전에 먼저 호출하라."""
-        _token(ctx)  # 인증만 강제 (get_guide는 공개 정보지만 신원은 요구)
+    def get_guide(space_id: str) -> dict:
+        """이 방(space)의 작성 가이드를 읽는다. 쓰기 전에 먼저 호출하라.
+        공개 space 정보라 REST와 동일하게 인증을 요구하지 않는다."""
         page = service.get_guide(space_id)
         if page is None:
             return {"guide": None}
