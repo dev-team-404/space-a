@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from ..adapters.factory import make_store
 from ..core import errors
 from ..core.services import SpaceAService
-from ._auth import _bearer
+from ._auth import _bearer, api_key_ok
 
 
 class UTF8JSONResponse(JSONResponse):
@@ -128,6 +128,22 @@ def create_app(
         lifespan=lifespan,
         default_response_class=UTF8JSONResponse,
     )
+
+    @app.middleware("http")
+    async def _api_key_gate(request: Request, call_next):
+        # 고정 공유키 관문 (SPACE_A_API_KEY 설정 시). /mcp 마운트 서브앱 포함
+        # 모든 요청이 부모 앱 미들웨어를 거치므로 여기서 한 번에 검사한다.
+        if not api_key_ok(request.url.path, request.headers.get("x-api-key")):
+            return UTF8JSONResponse(
+                status_code=401,
+                content={
+                    "error": {
+                        "code": "unauthorized",
+                        "message": "invalid or missing x-api-key",
+                    }
+                },
+            )
+        return await call_next(request)
 
     @app.exception_handler(errors.SpaceAError)
     async def _handle(_: Request, exc: errors.SpaceAError):

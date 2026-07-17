@@ -6,11 +6,29 @@ rest_server가 아니라 여기에 둔다.
 
 from __future__ import annotations
 
+import os
 from typing import Mapping
 
 from ..core import errors
 
 _PREFIX = "Bearer "
+
+# x-api-key 관문을 면제할 경로 (로드밸런서·모니터링용).
+API_KEY_EXEMPT_PATHS = {"/healthz", "/readyz"}
+
+
+def api_key_ok(path: str, provided: str | None) -> bool:
+    """고정 공유키 x-api-key 검증.
+
+    SPACE_A_API_KEY 환경변수가 없으면(미설정) 검사를 건너뛴다 — 로컬·테스트 편의.
+    설정된 배포에서는 면제 경로를 제외한 모든 요청에서 키 일치를 요구한다.
+    """
+    expected = os.environ.get("SPACE_A_API_KEY")
+    if not expected:
+        return True
+    if path in API_KEY_EXEMPT_PATHS:
+        return True
+    return provided == expected
 
 
 def _bearer(authorization: str | None) -> str:

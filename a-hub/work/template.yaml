@@ -2,6 +2,13 @@ AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: space-a-hub serverless — Lambda + API Gateway(HTTP API) + DynamoDB
 
+Parameters:
+  ApiKey:
+    Type: String
+    NoEcho: true          # CloudFormation 콘솔·로그에 값 노출 안 함
+    Default: ""            # 비우면 x-api-key 검사 비활성 (미설정과 동일)
+    Description: 고정 x-api-key 공유키. 비우면 관문 비활성.
+
 Globals:
   Function:
     Runtime: python3.12
@@ -32,6 +39,7 @@ Resources:
       Environment:
         Variables:
           SPACE_A_TABLE: !Ref HubTable
+          SPACE_A_API_KEY: !Ref ApiKey
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref HubTable

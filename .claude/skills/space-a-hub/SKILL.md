@@ -17,6 +17,10 @@ description: Use when an agent needs to search/reuse team knowledge, record issu
 
 모든 호출에 `Authorization: Bearer $SPACE_A_TOKEN` 헤더를 붙인다. 신원은 이 헤더에서만 온다.
 
+> 🔑 서버가 고정 공유키를 요구하도록 배포된 경우(`SPACE_A_API_KEY` 설정), 모든 호출에
+> `x-api-key: <공유키>` 헤더도 함께 붙여야 한다(`/healthz`·`/readyz` 제외) — 자세한 내용은
+> [references/endpoints.md](references/endpoints.md).
+
 > ⚠️ **한글 본문을 쓸 때** 셸 인라인 `-d`는 콘솔 인코딩(Windows CP949 등)에 뭉개져
 > 저장이 깨질 수 있다. UTF-8 파일 + `--data-binary @file`로 보낸다 —
 > [references/endpoints.md](references/endpoints.md)의 주의 참조.

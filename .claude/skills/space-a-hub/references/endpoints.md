@@ -8,6 +8,10 @@
 -H "Authorization: Bearer $SPACE_A_TOKEN"
 ```
 
+> 🔑 **x-api-key.** 서버가 고정 공유키를 요구하도록 배포된 경우(`SPACE_A_API_KEY` 설정),
+> 모든 호출에 `-H "x-api-key: $SPACE_A_API_KEY"`도 붙여야 한다(`/healthz`·`/readyz` 제외).
+> 키가 없거나 틀리면 `401 {"error":{"code":"unauthorized"}}`. 키를 요구하지 않는 배포/로컬에서는 생략 가능.
+
 쓰기 호출(POST 본문 있음)은 추가로 `-H "Content-Type: application/json"`을 붙인다.
 
 > ⚠️ **한글(멀티바이트) 본문 전송 주의.** 셸 인라인 `-d '{"title":"한글..."}'`은
