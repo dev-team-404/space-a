@@ -30,12 +30,28 @@ function showPanel(title: string, html: string) {
   panel.hidden = false
 }
 
+async function fetchLobby(): Promise<LobbyView> {
+  const res = await fetch('/api/lobby')
+  if (!res.ok) throw new Error(`GET /api/lobby → ${res.status}`)
+  const lobby: LobbyView = await res.json()
+  if (!Array.isArray(lobby.floors)) throw new Error('로비 응답에 floors가 없음')
+  return lobby
+}
+
 async function main() {
   const app = new Application()
   await app.init({ resizeTo: window, background: '#14171c', antialias: true })
-  document.getElementById('scene')!.appendChild(app.canvas)
+  const scene = document.getElementById('scene')
+  if (!scene) throw new Error('#scene 엘리먼트 없음')
+  scene.appendChild(app.canvas)
 
-  const lobby: LobbyView = await fetch('/api/lobby').then((r) => r.json())
+  let lobby: LobbyView
+  try {
+    lobby = await fetchLobby()
+  } catch (e) {
+    showPanel('연결 오류', `백엔드(/api/lobby)에 연결하지 못했습니다.<br/>${String(e)}`)
+    return
+  }
 
   const building = new Container()
   app.stage.addChild(building)
