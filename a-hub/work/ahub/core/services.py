@@ -5,9 +5,15 @@
 권한 규칙: 소속(spaces)은 토큰에서 유도하며, 요청 인자로 주장할 수 없다.
 """
 
+import re
+
 from . import errors
 from .models import Agent, Issue, Page, ReuseEvent, SearchResult, SkillCandidate, Space
 from .ports import Store
+
+# user_id는 agent.id이자 URL 경로 파라미터(/agents/{id} 등)로 쓰이므로,
+# 라우팅·키를 깨뜨리는 문자를 막고 길이를 제한한다.
+_USER_ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
 
 
 class SpaceAService:
@@ -51,6 +57,10 @@ class SpaceAService:
         """
         if not user_id or not user_id.strip():
             raise errors.InvalidRequest("user_id is required")
+        if not _USER_ID_RE.match(user_id):
+            raise errors.InvalidRequest(
+                "user_id must be 1-100 chars of letters, digits, '_', '-', or '.'"
+            )
         if self.store.get_space(space_id) is None:
             raise errors.NotFound(f"space '{space_id}' not found")
         agent = self.store.get_agent(user_id)

@@ -66,11 +66,31 @@ def test_same_user_two_agents_share_author(service: SpaceAService):
     assert p1.created_by == p2.created_by == "salt"
 
 
-@pytest.mark.parametrize("bad", ["", "   "])
-def test_blank_user_id_rejected(service: SpaceAService, bad):
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "",  # 빈 값
+        "   ",  # 공백
+        "a/b",  # 경로 구분자 → URL 라우팅 파손
+        "a b",  # 공백 포함
+        "a?b",  # 쿼리 구분자
+        "a#b",  # 프래그먼트
+        "../x",  # 경로 탐색류
+        "a" * 101,  # 길이 초과
+    ],
+)
+def test_invalid_user_id_rejected(service: SpaceAService, bad):
+    """user_id는 agent.id·URL 경로 파라미터로 쓰이므로 안전한 문자·길이만 허용한다."""
     _space(service)
     with pytest.raises(errors.InvalidRequest):
         service.register_agent(bad, "n", "s1")
+
+
+@pytest.mark.parametrize("ok", ["salt", "salt.jeong", "bot-1", "team_a", "A1.b-c_2"])
+def test_valid_user_id_accepted(service: SpaceAService, ok):
+    _space(service)
+    agent, _ = service.register_agent(ok, "n", "s1")
+    assert agent.id == ok
 
 
 # --- REST 레벨 ---
