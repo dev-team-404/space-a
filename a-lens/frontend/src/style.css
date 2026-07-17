@@ -1,0 +1,27 @@
+/* 씬은 PixiJS 캔버스, 패널·모달은 DOM — ADR 0003 §3.
+   본격 스타일은 프로토타입(a-lens/ 루트)의 styles.css 자산을 화면 단위로 이관한다. */
+
+* { margin: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
+  background: #14171c;
+  color: #e8eaed;
+  overflow: hidden;
+}
+
+#scene { position: fixed; inset: 0; }
+
+#panel {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 300px;
+  background: #1e232b;
+  border: 1px solid #333a45;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+#panel h2 { font-size: 15px; margin-bottom: 8px; }
+#panel-body { font-size: 13px; line-height: 1.6; color: #aab2bd; }

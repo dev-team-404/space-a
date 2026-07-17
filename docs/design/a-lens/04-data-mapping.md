@@ -138,16 +138,28 @@ Pillar 3 설계를 미러링"이라 명시), 프로토타입은 클라이언트 
 | G7 | `GET /activity`의 tier 트리밍 | 프로토타입 클라이언트 필터 (임시) | 계약에 /activity의 tier 규칙이 없었음. **정책은 결정됨(2026-07-14, 권한 모델 소유자=시각화)**: lobby/guest 응답에는 org-safe 이벤트(`reused`·`knowledge_created`·`skill_proposed`·`condensed`)만, `issue_opened`와 space 전용 문서 관련 summary는 제외. → 계약 반영·서버 집행을 계약 소유자에게 **전달** |
 | G8 | 프레즌스성 필드의 원천 — `agents[].status`(working/idle) · `last_active_at` · `members_online` · `visits` | C2 계약이 로비·방 상세 응답에 포함 | **확정 (2026-07-17)**: 이 값들의 원천은 a-hub-**life**(room server — a-mate 하트비트·방 방문)이므로 **a-lens가 work(C2)와 life를 직접 조회해 조인**한다. C2의 프레즌스성 필드는 사용하지 않음 — 계약 정리는 소유자 몫(#40 통보). 프레즌스는 org-safe(상태 종류만)라 tier 트리밍 불필요. life 하트비트·조회 API 요청: #39 (담당 허준녕) |
 
-## 데이터 흐름 (프로토타입)
+## 데이터 흐름
+
+**구현 (`a-lens/backend/`, ADR 0003)** — 이 문서의 번역이 서버 pipeline로 올라간다:
+
+```
+collector (원천: contracts/fixtures → 추후 work·life 실서버)
+    │
+pipeline   wire → 뷰모델 번역 (이 문서가 스펙 — 하이라이트 랭킹·G8 조인 포함)
+    ▼
+/api/lobby · /api/spaces/{id}  →  frontend는 받은 뷰모델을 그대로 그림
+```
+
+**프로토타입 (`a-lens/prototype/`, 참조 구현)**:
 
 ```
 contracts/fixtures/*.json  ←(모양·시나리오 정합)→  c2-data.js   "가짜 C2 서버 응답"
                                                      │
-                                              c2-adapter.js     wire → 뷰모델 번역 (이 문서가 스펙)
+                                              c2-adapter.js     wire → 뷰모델 번역
                                                      │
 client-data.js (C2 밖: 인증·레이아웃·G2) ──────────→ DB (뷰모델)
-                                                     │
-live-data.js + live-adapter.js (GitHub PR 라이브) ──┤
                                                      ▼
                                                   app.js 렌더
 ```
+
+(GitHub PR 라이브 스냅숏 경로(live-data/live-adapter)는 임시 확인용이어서 제거됨, 2026-07-17)
