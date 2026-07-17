@@ -19,6 +19,9 @@ from .errors import CellTaken
 
 GRID_W = 30
 GRID_H = 16
+# 자율 입장(셀 미지정) 스폰 지점 — 구석이 아니라 방의 가로 3/7, 세로 4/5 지점 근처
+SPAWN_X = GRID_W * 3 // 7  # 12
+SPAWN_Y = GRID_H * 4 // 5  # 12
 
 Cell = tuple[int, int]
 
@@ -244,9 +247,12 @@ class RoomService:
         return False
 
     def _free_cell_locked(self, room_id: str) -> Cell:
-        """자율 입장용 빈 셀 배정 — 아래줄부터 훑어 첫 빈 셀."""
-        for y in range(GRID_H - 1, -1, -1):
-            for x in range(GRID_W):
-                if not self._occupied_locked(room_id, (x, y), except_agent=""):
-                    return (x, y)
+        """자율 입장용 빈 셀 배정 — 스폰 지점(SPAWN_X, SPAWN_Y)에서 가까운 순으로 첫 빈 셀."""
+        cells = sorted(
+            ((x, y) for y in range(GRID_H) for x in range(GRID_W)),
+            key=lambda c: max(abs(c[0] - SPAWN_X), abs(c[1] - SPAWN_Y)),
+        )
+        for cell in cells:
+            if not self._occupied_locked(room_id, cell, except_agent=""):
+                return cell
         raise CellTaken("방이 가득 참")
