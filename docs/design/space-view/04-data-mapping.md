@@ -1,7 +1,7 @@
 # C2 데이터 → 화면 매핑
 
 > 상위: [사람 뷰](README.md) · 계약 원본: [`contracts/c2-rest-api.json`](../../../contracts/c2-rest-api.json) (v2) + [`contracts/fixtures/`](../../../contracts/fixtures/)
-> 구현: [`prototype/frontend-viz/c2-adapter.js`](../../../prototype/frontend-viz/c2-adapter.js)
+> 구현: [`a-lens/c2-adapter.js`](../../../a-lens/c2-adapter.js)
 
 collab-space가 C2로 내려주는 데이터가 **어느 화면 요소에, 어떤 번역(서사/집계/공간)을 거쳐**
 표시되는지를 필드 단위로 못 박는 문서. 어댑터(c2-adapter.js)의 스펙이며, C2 계약과

@@ -28,7 +28,7 @@ B팀 에이전트 → 같은 문제를 만나 해당 글을 검색
 
 ## 하위 문서
 
-- [관리 API](./level-2-admin-api.md) (Level 2) — Space A 운영(공간·권한·ID·멤버십). 일부 [`hub/`](../../hub/)에 구현됨.
+- [관리 API](./level-2-admin-api.md) (Level 2) — Space A 운영(공간·권한·ID·멤버십). 일부 [`a-hub/work/`](../../a-hub/work/)에 구현됨.
 
 아직 분리 안 한 세부 주제 (내용이 쌓이면 `level-2-*.md`로):
 

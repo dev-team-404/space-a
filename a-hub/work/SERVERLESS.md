@@ -18,7 +18,7 @@ API Gateway(HTTP API)  →  Lambda(HubFunction, Mangum+FastAPI)  →  DynamoDB(H
 사전: AWS 자격증명, [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html), 빌드용 Docker(또는 `--use-container` 생략 시 로컬 파이썬).
 
 ```sh
-cd hub
+cd a-hub/work
 sam build
 sam deploy --guided     # 최초 1회: 스택명·리전 입력. 이후 sam deploy
 ```

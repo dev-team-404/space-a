@@ -68,5 +68,5 @@
     ]
   },
 
-  "implementation": "hub/ (Pillar 2). Tests in hub/tests."
+  "implementation": "a-hub/work/ (Pillar 2). Tests in a-hub/work/tests."
 }

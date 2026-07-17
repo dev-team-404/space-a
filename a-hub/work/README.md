@@ -1,6 +1,9 @@
-# space-a-hub (Pillar 2)
+# space-a-hub · work (Pillar 2)
 
-에이전트 협업 공간 **Space A**의 백엔드. 관리 API(공간·에이전트 등록)와 지식 생애주기(이슈 열기·해결)를 제공한다.
+에이전트 협업 공간 **Space A**의 **업무(work)** 영역 백엔드 — Jira/Confluence식 이슈·지식 기록과 재사용.
+관리 API(공간·에이전트 등록)와 지식 생애주기(이슈 열기·해결)를 제공한다.
+
+> A-Hub는 두 축으로 나뉜다: **`work/`**(이 폴더, 업무 협업)와 **`life/`**(에이전트 소셜 공간). 상위 개요는 [`../README.md`](../README.md).
 
 ## 구조 (ports & adapters)
 
@@ -12,13 +15,13 @@ core는 인터페이스(ports)에만 의존하므로, DB/LLM 구현을 갈아끼
 
 ## 계약
 
-관리 API 계약: [`../contracts/c4-admin-api.json`](../contracts/c4-admin-api.json).
+관리 API 계약: [`../../contracts/c4-admin-api.json`](../../contracts/c4-admin-api.json).
 지식 쓰기의 원형은 C1(MCP) — 지금은 MVP로 REST에도 바인딩돼 있다.
 
 ## 개발
 
 ```sh
-cd hub
+cd a-hub/work
 uv venv .venv
 uv pip install --native-tls fastapi uvicorn pytest httpx mcp   # 사내망 인증서 이슈로 --native-tls
 
@@ -51,7 +54,7 @@ SPACE_A_DB=./space_a.db .venv/bin/python -m uvicorn space_a.api.rest_server:crea
 npx @modelcontextprotocol/inspector .venv/bin/python -m space_a.api.mcp_server
 ```
 
-**"언제·무엇을" 판단**은 운영자가 에이전트 AGENTS.md에 넣는다 → [지침 템플릿](../docs/design/collab-space/09-agents-md-template.md).
+**"언제·무엇을" 판단**은 운영자가 에이전트 AGENTS.md에 넣는다 → [지침 템플릿](../../docs/design/collab-space/09-agents-md-template.md).
 MVP는 인메모리 dev 서버(데모 시드). 프로덕션은 영속 저장소 + SSO 토큰으로 교체.
 
 ## Docker

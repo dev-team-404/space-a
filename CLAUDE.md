@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 SPACE-A는 **문서 우선** 프로젝트입니다. 구조·아키텍처 결정은 코드보다 먼저 `docs/`에 기록합니다.
-(구현: `client/` Tauri 클라이언트, `hub/` 협업 허브 백엔드, `room-server/` 방 방문 백엔드, `prototype/` 시각화)
+(구현: `a-mate/` Tauri 클라이언트, `a-hub/` 협업 공간 백엔드(`work/`=업무, `life/`=소셜), `room-server/` 방 방문 백엔드, `a-lens/` 시각화)
 
 ## 문서 구조 (`docs/`)
 
@@ -40,10 +40,14 @@ docs(design): draft frontend visualization spec
 chore: set up gitignore and base structure
 ```
 
-## Tauri 클라이언트 (`client/`) 개발 제약
+## Tauri 클라이언트 (`a-mate/`) 개발 제약
 
-`client/`(Cargo workspace: `crates/core`, `src-tauri`, `src/`)를 만질 때 적용:
+`a-mate/`(Cargo workspace: `crates/core`, `src-tauri`, `src/`)를 만질 때 적용:
 
+- 폴더명 `a-mate`는 README의 Pillar 1 축 이름(**A-Mate**)과 맞춘 것이다.
+  단, 앱의 제품명·코드 식별자는 그대로 **Agent Mentor** / `agent-mentor`(Cargo 크레이트,
+  tauri productName, DB·로그 파일명 등)를 유지한다 — 폴더 이름만 축과 정렬했을 뿐,
+  식별자 리네이밍은 아니다.
 - 제품명: Agent Mentor. 식별자 `agent-mentor`. Claude 외 타 에이전트 확장을 염두에 둔 이름이므로,
   에이전트별 로직은 하드코딩하지 말고 SourceAdapter / Engine 인터페이스 뒤로 추상화할 것.
 - 스택: Tauri v2 + Rust 백엔드. v1 API(SystemTray, tauri::updater, WindowBuilder 등) 금지.
