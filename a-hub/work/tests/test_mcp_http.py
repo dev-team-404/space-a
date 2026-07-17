@@ -2,7 +2,7 @@
 신원을 얻는지. 임시 uvicorn 서버를 띄운다. mcp/uvicorn 없으면 skip."""
 
 import asyncio
-import socket
+import json
 import threading
 import time
 
@@ -20,24 +20,29 @@ from ahub.api.rest_server import create_app  # noqa: E402
 from ahub.core.services import SpaceAService  # noqa: E402
 
 
-def _free_port() -> int:
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    port = s.getsockname()[1]
-    s.close()
-    return port
-
-
 class _Server:
-    def __init__(self, app, port):
-        cfg = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
+    """port=0으로 바인딩하고 기동 후 실제 포트를 읽어와 TOCTOU 경합을 피한다."""
+
+    def __init__(self, app):
+        # timeout_graceful_shutdown: MCP Streamable HTTP는 SSE GET 연결을 열어두므로,
+        # 종료 시 uvicorn이 그 연결을 무한정 기다리다 스레드가 멈추는 경우가 있다.
+        # 유예 시간을 짧게 줘서 남은 연결을 강제로 닫고 확실히 종료시킨다.
+        cfg = uvicorn.Config(
+            app,
+            host="127.0.0.1",
+            port=0,
+            log_level="warning",
+            timeout_graceful_shutdown=1,
+        )
         self.server = uvicorn.Server(cfg)
         self.thread = threading.Thread(target=self.server.run, daemon=True)
+        self.port = None
 
     def __enter__(self):
         self.thread.start()
-        for _ in range(100):
+        for _ in range(200):
             if self.server.started:
+                self.port = self.server.servers[0].sockets[0].getsockname()[1]
                 return self
             time.sleep(0.05)
         raise RuntimeError("server did not start")
@@ -45,6 +50,7 @@ class _Server:
     def __exit__(self, *exc):
         self.server.should_exit = True
         self.thread.join(timeout=5)
+        assert not self.thread.is_alive(), "uvicorn server thread did not stop"
 
 
 async def _call_search(url, token):
@@ -60,29 +66,30 @@ def test_mcp_http_uses_per_request_bearer():
     service.create_space("demo", "데모", guidelines="g")
     _, token = service.register_agent("a", "demo")
     issue = service.open_issue(token, "인증서 오류", "demo")
-    service.resolve_issue(token, issue.id, "갱신", ["재발급"])
+    _, page = service.resolve_issue(token, issue.id, "인증서 갱신", ["재발급"])
 
     app = create_app(service, mount_mcp=True)
-    port = _free_port()
-    url = f"http://127.0.0.1:{port}/mcp"
-    with _Server(app, port):
+    with _Server(app) as server:
+        url = f"http://127.0.0.1:{server.port}/mcp"
         result = asyncio.run(_call_search(url, token))
-    text = result.content[0].text if result.content else ""
-    assert "page_" in text or "results" in text
+
+    assert not result.isError
+    payload = json.loads(result.content[0].text)
+    assert len(payload["results"]) == 1
+    assert payload["results"][0]["page_id"] == page.id
 
 
 def test_mcp_http_without_bearer_is_unauthorized():
     service = SpaceAService(InMemoryStore())
     app = create_app(service, mount_mcp=True)
-    port = _free_port()
-    url = f"http://127.0.0.1:{port}/mcp"
 
-    async def _call_no_auth():
+    async def _call_no_auth(url):
         async with streamablehttp_client(url) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 return await session.call_tool("search_knowledge", {"query": "x"})
 
-    with _Server(app, port):
-        result = asyncio.run(_call_no_auth())
+    with _Server(app) as server:
+        url = f"http://127.0.0.1:{server.port}/mcp"
+        result = asyncio.run(_call_no_auth(url))
     assert result.isError
