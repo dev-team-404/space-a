@@ -96,12 +96,12 @@ function render() {
   fitIso();
 }
 
-// 사무실 씬(1402×1122 디자인 공간)을 씬 영역 크기에 맞춰 스케일
+// 사무실 씬(1448×1086 디자인 공간)을 씬 영역 크기에 맞춰 스케일
 function fitIso() {
   const stage = document.querySelector('.office-stage');
   const fit = document.querySelector('.office-fit');
   if (!stage || !fit) return;
-  const s = Math.min(stage.clientWidth / 1424, stage.clientHeight / 1136, 1.05);
+  const s = Math.min(stage.clientWidth / 1470, stage.clientHeight / 1100, 1.05);
   fit.style.transform = `scale(${s})`;
 }
 window.addEventListener('resize', fitIso);
@@ -246,7 +246,7 @@ function lobbyHTML() {
 
 // ── 스페이스 (F2~F7) ──────────────────────────────────────────────
 
-// 배경 이미지(../assets/office-room.png, 1402×1122) 픽셀 좌표 캘리브레이션.
+// 배경 이미지(../assets/office-room.png, 1448×1086) 픽셀 좌표 캘리브레이션.
 // 각 책상의 의자 위치 = 로봇 스프라이트의 바닥 앵커.
 const DESK_SLOTS = [
   { x: 346, y: 728 }, { x: 650, y: 738 }, { x: 963, y: 742 },
