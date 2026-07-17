@@ -66,3 +66,135 @@ def space_view(space_id: str, tier: str = "member") -> dict:
                 agent["status"] = live.get("status", agent.get("status"))
                 agent["last_active_at"] = live.get("last_active_at")
     return detail
+
+
+# ── C2 wire 브리지 (프로토타입 UI 실데이터 연결용) ──────────────────
+#
+# 프로토타입(c2-adapter.js)은 C2 계약 wire 모양을 기대한다. 허브 스냅숏을 그 모양으로
+# 변환해 내려주면, 프로토타입 화면 그대로 실데이터가 뜬다. hub 원천일 때만 동작 —
+# 픽스처 모드에서는 호출측(c2-live.js)이 프로토타입 내장 가짜 데이터를 그대로 쓴다.
+#
+# 허브에 없는 필드의 기본값은 화면이 깨지지 않는 중립값으로 채우되, 시각 필드는
+# 수집 시각(collected_at)으로 대체한다 — 실제 발생 시각은 #40(타임스탬프) 이후 가능.
+
+_ISSUE_STEP_LABEL = {"open": "이슈 발생", "knowledge_linked": "지식 연결", "resolved": "해결"}
+
+
+def _c2_guard() -> dict | None:
+    snap = collector.snapshot()
+    return snap if snap["source"] == "hub" else None
+
+
+def c2_spaces() -> dict | None:
+    snap = _c2_guard()
+    if snap is None:
+        return None
+    return {
+        "spaces": [
+            {
+                "space_id": f["space_id"],
+                "name": f["name"],
+                "floor": f["floor"],
+                "seed": False,
+                "motto": "",
+                "token_budget": 100,
+                "token_used": 0,  # 토큰 계측은 텔레메트리(계획) 이후
+                "status": "정상",
+                "activity": f["activity"],
+                "members_online": 0,  # 프레즌스(#39) 이후
+                "stats": {**f["stats"], "reuse": f["stats"].get("reuse", 0)},
+                "highlight": f["highlight"],
+                "viewer_tier": "member",  # 인증(G1)은 C2 밖 — 데모는 멤버 뷰
+            }
+            for f in snap["floors"]
+        ]
+    }
+
+
+def c2_space_details() -> dict | None:
+    """프로토타입 어댑터가 기대하는 {space_id: detail} 키드 객체."""
+    snap = _c2_guard()
+    if snap is None:
+        return None
+    at = snap["collected_at"]
+    out: dict[str, dict] = {}
+    for sid, d in snap["details"].items():
+        out[sid] = {
+            "space_id": sid,
+            "viewer_tier": "member",
+            "agents": [
+                {
+                    "agent_id": a["agent_id"],
+                    "name": a["name"],
+                    "role": "지식",
+                    "owner": "",
+                    "status": a.get("status", "idle"),
+                    "status_line": "",  # 서사 부재 — 프레즌스·서사(Q1) 이후
+                }
+                for a in d["agents"]
+            ],
+            "issues": [
+                {
+                    "issue_id": i["issue_id"],
+                    "title": i["title"],
+                    "status": i["status"],
+                    "timeline": [
+                        {
+                            "step": i["status"],
+                            "label": _ISSUE_STEP_LABEL.get(i["status"], i["status"]),
+                            "actor": i.get("opened_by", ""),
+                            "at": at,  # 수집 시각 — 실제 전이 시각은 #40 이후
+                        }
+                    ],
+                }
+                for i in d["issues"]
+            ],
+            "knowledge": [
+                {
+                    "doc_id": k["doc_id"],
+                    "title": k["title"],
+                    "author_agent": "",
+                    "visibility": k.get("visibility", "org"),
+                    "summary": k.get("summary", ""),
+                    "body": k.get("body", ""),
+                    "created_at": at,  # G4(#40) 이후 실제 값
+                    "cited_by": [],
+                    "reuse_count": 0,
+                }
+                for k in d["knowledge"]
+            ],
+            "visits": {"today": 0, "total": 0},  # 방문은 life(#39) 영역
+        }
+    return out
+
+
+def c2_activity() -> dict | None:
+    snap = _c2_guard()
+    if snap is None:
+        return None
+    at = snap["collected_at"]
+    return {"events": [{**e, "at": at} for e in snap["events"]]}
+
+
+def c2_reuse_events() -> dict | None:
+    snap = _c2_guard()
+    if snap is None:
+        return None
+    return {"events": snap["reuse_events"]}  # 허브에 조회 endpoint 부재 — 현재 빈 목록
+
+
+def c2_stats() -> dict | None:
+    snap = _c2_guard()
+    if snap is None:
+        return None
+    return {
+        "period": {},
+        "totals": snap["totals"],
+        "tokens_saved_est": 0,  # 실측 재료 없음 — 0으로 정직하게
+        "top_reused_skills": [],
+        "top_knowledge": [],
+        "by_space": [
+            {"space_id": f["space_id"], "contributed": f["stats"].get("knowledge", 0), "reused": 0}
+            for f in snap["floors"]
+        ],
+    }

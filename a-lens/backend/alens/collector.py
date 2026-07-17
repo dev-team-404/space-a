@@ -18,6 +18,7 @@ import logging
 import os
 import re
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -109,6 +110,21 @@ def _hub_snapshot() -> dict:
                 "highlight": None,  # 서버 서사 부재 — 아래 활동 피드에서 결정론 선정
             }
         )
+        # 지식 본문: 원문 모달(L4 역추적)용. 페이지 수가 적고 30s 캐시라 개별 조회 감당 가능
+        knowledge_docs = []
+        for p in pages:
+            doc = {"doc_id": p["page_id"], "title": p.get("title", "")}
+            try:
+                page = _hub_get(f"/pages/{p['page_id']}")
+                doc["body"] = page.get("body", "")
+                doc["visibility"] = page.get("visibility", "org")
+                doc["summary"] = (page.get("body") or "")[:120]
+            except httpx.HTTPError:
+                doc["body"] = ""
+                doc["visibility"] = "space"  # 못 읽었으면 잠금으로 취급
+                doc["summary"] = ""
+            knowledge_docs.append(doc)
+
         details[sid] = {
             "space_id": sid,
             "agents": [
@@ -116,9 +132,7 @@ def _hub_snapshot() -> dict:
                 for m in members
             ],
             "issues": issues,
-            "knowledge": [
-                {"doc_id": p["page_id"], "title": p.get("title", "")} for p in pages
-            ],
+            "knowledge": knowledge_docs,
         }
         for p in pages:
             all_pages.append({**p, "space_id": sid, "space_name": s.get("name", sid)})
@@ -138,6 +152,7 @@ def _hub_snapshot() -> dict:
 
     return {
         "source": "hub",
+        "collected_at": datetime.now(timezone.utc).isoformat(),  # 타임스탬프 부재(#40) 동안 시각 필드 대체재
         "floors": floors,
         "details": details,
         "totals": totals,
