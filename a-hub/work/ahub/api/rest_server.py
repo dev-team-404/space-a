@@ -101,7 +101,7 @@ def create_app(
     mcp_app = None
     if mount_mcp:
         # 지연 import: Lambda(mount_mcp=False)는 mcp를 import하지 않는다.
-        from ..api.mcp_server import build_mcp
+        from .mcp_server import build_mcp
 
         mcp = build_mcp(service)
         mcp_app = mcp.streamable_http_app()  # session_manager를 지연 생성
@@ -446,6 +446,7 @@ def create_app(
         return {"status": "ready"}
 
     if mcp_app is not None:
+        # pairs with streamable_http_path="/" in build_mcp — mount prefix supplies /mcp
         app.mount("/mcp", mcp_app)
 
     return app

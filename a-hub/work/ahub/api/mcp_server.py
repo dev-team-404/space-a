@@ -25,6 +25,8 @@ def _token(ctx: Context) -> str:
 
 def build_mcp(service: SpaceAService | None = None) -> FastMCP:
     service = service or SpaceAService(make_store())
+    # streamable_http_path="/" because rest_server mounts this app at "/mcp";
+    # the SDK default "/mcp" would yield /mcp/mcp. Keep in sync with that mount.
     mcp = FastMCP("space-a-hub", streamable_http_path="/")
 
     @mcp.tool()
