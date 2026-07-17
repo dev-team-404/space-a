@@ -28,8 +28,22 @@ npm install && npm run dev
 npm run build   # → frontend/dist, 이후 backend만 띄우면 됨
 ```
 
-원천은 기본적으로 `contracts/fixtures/` (C2 서버 구현 전). 실서버 폴링은
-`A_LENS_WORK_URL`(기본 `https://spacea.msalt.net`)·`A_LENS_LIFE_URL`(room-server, #39 대기)로 전환.
+### 데이터 원천 (환경변수 — [`.env.example`](./backend/.env.example) 참고)
+
+허브 주소는 배포에 따라 바뀔 수 있으므로 코드에 고정하지 않는다. 원천은 **스냅숏 단위로
+하나만** 쓴다 — 실데이터와 픽스처를 섞으면 화면이 거짓말을 하기 때문.
+
+| 변수 | 기본값 | 의미 |
+|---|---|---|
+| `A_LENS_SOURCE` | `auto` | `hub`(실서버) / `fixtures`(골든 데이터) / `auto`(허브 실패 시 픽스처 폴백) |
+| `A_LENS_WORK_URL` | `https://spacea.msalt.net` | a-hub-work base URL |
+| `A_LENS_WORK_TOKEN` | (없음) | 허브 Bearer 토큰 — 없으면 인증 필요한 상세는 빈 값으로 강등 |
+| `A_LENS_LIFE_URL` | (없음) | room-server(프레즌스, #39 대기) — 비면 프레즌스 생략 |
+| `A_LENS_CACHE_TTL` | `30` | 허브 폴링 캐시(초) |
+
+C2가 허브에 구현되기 전까지 hub 모드는 현행 REST(`GET /spaces`·tree·issues·members)를
+읽어 뷰모델로 번역한다. 타임스탬프(#40)·ReuseEvent 조회가 없어서 활동 피드는
+`knowledge_created` 합성(page id 순서 = 의사 시간), 재사용 카운트는 0으로 내려간다.
 
 ---
 
