@@ -47,7 +47,13 @@ def build_mcp(service: SpaceAService | None = None) -> FastMCP:
         res = service.search_knowledge(_token(ctx), query, space_id=space_id, limit=limit)
         return {
             "results": [
-                {"page_id": p.id, "space_id": p.space_id, "title": p.title, "source": p.source}
+                {
+                    "page_id": p.id,
+                    "space_id": p.space_id,
+                    "title": p.title,
+                    "source": p.source,
+                    "created_by": p.created_by,
+                }
                 for p in res.pages
             ],
             "scanned": res.scanned,

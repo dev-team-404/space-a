@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS issues (
 CREATE TABLE IF NOT EXISTS pages (
     id TEXT PRIMARY KEY, space_id TEXT, title TEXT, body TEXT, source TEXT,
     parent_id TEXT, status TEXT, visibility TEXT, issue_id TEXT,
-    steps TEXT, superseded_by TEXT, flags INTEGER
+    steps TEXT, superseded_by TEXT, flags INTEGER, created_by TEXT
 );
 CREATE TABLE IF NOT EXISTS reuse_events (
     id TEXT PRIMARY KEY, issue_id TEXT, page_id TEXT, agent_id TEXT, cross_team INTEGER
@@ -44,7 +44,15 @@ class SqliteStore(Store):
         self._lock = threading.Lock()  # 공유 연결 → 모든 접근 직렬화
         with self._lock:
             self._conn.executescript(_SCHEMA)
+            self._migrate()
             self._conn.commit()
+
+    def _migrate(self) -> None:
+        """기존 파일 하위호환: CREATE TABLE IF NOT EXISTS는 컬럼을 추가하지 못하므로,
+        나중에 도입된 컬럼을 idempotent하게 채운다 (이미 있으면 무시)."""
+        cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(pages)")}
+        if "created_by" not in cols:
+            self._conn.execute("ALTER TABLE pages ADD COLUMN created_by TEXT")
 
     def _execute(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
         with self._lock:
@@ -140,12 +148,12 @@ class SqliteStore(Store):
     def add_page(self, page: Page) -> None:
         self._write(
             "INSERT OR REPLACE INTO pages"
-            "(id,space_id,title,body,source,parent_id,status,visibility,issue_id,steps,superseded_by,flags)"
-            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            "(id,space_id,title,body,source,parent_id,status,visibility,issue_id,steps,superseded_by,flags,created_by)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 page.id, page.space_id, page.title, page.body, page.source, page.parent_id,
                 page.status, page.visibility, page.issue_id, json.dumps(page.steps),
-                page.superseded_by, page.flags,
+                page.superseded_by, page.flags, page.created_by,
             ),
         )
 
@@ -202,4 +210,5 @@ class SqliteStore(Store):
             source=r["source"], parent_id=r["parent_id"], status=r["status"],
             visibility=r["visibility"], issue_id=r["issue_id"],
             steps=json.loads(r["steps"]), superseded_by=r["superseded_by"], flags=r["flags"],
+            created_by=r["created_by"],
         )
