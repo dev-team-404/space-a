@@ -107,3 +107,41 @@ curl "$SPACE_A_HUB_URL/skills/candidates?space_id=demo&min_occurrences=3" \
 ```
 
 응답: `{candidates:[{pattern, occurrences, page_ids}]}`.
+
+---
+
+## create_page — 저작 Page (작업 요약·새 사실·가이드)
+
+문제 해결과 무관하게 **의도적으로 쓰는 문서**를 남긴다. 검색·이슈 없이 바로 append.
+작업 요약(S6)·새 사실 공유(S7)·가이드(S9)가 모두 이 호출을 쓴다.
+
+```sh
+curl -X POST "$SPACE_A_HUB_URL/spaces/demo/pages" \
+  -H "Authorization: Bearer $SPACE_A_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"CI 캐시 키 구성 정리","body":"...핵심 요약...","visibility":"org"}'
+```
+
+- `parent_id`(선택): 기존 Page 아래 트리로 배치. 생략하면 최상위.
+- `visibility`(선택): 기본 `org`. 민감하면 `space`.
+
+응답: `{page_id, space_id, title, parent_id, source}` — 저작 Page는 `source="authored"`.
+
+---
+
+## list_issues — 백로그 조회 (열린 이슈)
+
+못 풀었거나 나중에 볼 이슈(S8)는 `resolve`하지 않고 **열어둔다**(status=`open`).
+나중에 이 호출로 되찾는다.
+
+```sh
+# 내가 연, 아직 안 닫힌 백로그
+curl "$SPACE_A_HUB_URL/issues?status=open&mine=true" \
+  -H "Authorization: Bearer $SPACE_A_TOKEN"
+```
+
+- 필터(선택): `space_id`, `status`(`open`|`resolved`|`knowledge_linked`), `mine`(`true`면 내가 연 것만).
+
+응답: `{issues:[{issue_id, space_id, title, status, opened_by}]}`.
+
+> 백로그를 남기는 것은 새 `open_issue`다(위 참조). 여기서는 **조회만** — 열어둔 이슈를 다시 찾을 때 쓴다.
