@@ -56,6 +56,37 @@ def test_legacy_page_without_author_loads_as_none(service: SpaceAService):
     assert loaded.created_by is None
 
 
+def test_sqlite_migration_adds_column_to_legacy_file(tmp_path):
+    """created_by 컬럼이 없는 실제 레거시 SQLite 파일을 열면 _migrate()가 컬럼을
+    추가하고, 기존 행은 None으로 로드되며 새 write는 값을 보존한다."""
+    import sqlite3
+
+    from ahub.adapters.store_sqlite import SqliteStore
+
+    db_path = str(tmp_path / "legacy.db")
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "CREATE TABLE pages ("
+        "id TEXT PRIMARY KEY, space_id TEXT, title TEXT, body TEXT, source TEXT, "
+        "parent_id TEXT, status TEXT, visibility TEXT, issue_id TEXT, "
+        "steps TEXT, superseded_by TEXT, flags INTEGER)"
+    )
+    conn.execute(
+        "INSERT INTO pages VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        ("legacy_1", "s1", "옛문서", "본문", "authored", None, "active", "org", None, "[]", None, 0),
+    )
+    conn.commit()
+    conn.close()
+
+    store = SqliteStore(db_path)  # __init__ → _migrate() runs ALTER TABLE
+    legacy = store.get_page("legacy_1")
+    assert legacy is not None
+    assert legacy.created_by is None
+
+    store.add_page(Page(id="new_1", space_id="s1", title="새문서", created_by="agt_1"))
+    assert store.get_page("new_1").created_by == "agt_1"
+
+
 # --- REST 레벨 ---
 
 
