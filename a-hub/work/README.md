@@ -22,7 +22,7 @@ work/
 │   │   └── store_dynamodb.py #   DynamoDB (서버리스)
 │   └── api/                  # 진입점
 │       ├── rest_server.py    #   FastAPI (create_app 팩토리)
-│       ├── mcp_server.py     #   stdio MCP 서버 (build_mcp)
+│       ├── mcp_server.py     #   MCP 서버 — Streamable HTTP, create_app이 /mcp에 마운트 (build_mcp)
 │       └── lambda_handler.py #   Lambda 핸들러 (Mangum)
 ├── tests/                    # pytest (memory·sqlite 양쪽 검증)
 ├── demo_mcp.py               # in-process MCP 흐름 데모
@@ -72,19 +72,21 @@ SPACE_A_DB=./ahub.db .venv/bin/python -m uvicorn ahub.api.rest_server:create_app
 
 에이전트는 Space A에 **MCP 서버**로 붙는다 (C1 계약). 도구: `search_knowledge`·`open_issue`·`cite_knowledge`·`resolve_issue`·`get_skill_candidates`·`get_guide`. **각 도구 설명이 곧 프로토콜 지침**이라 MCP 클라이언트가 에이전트 컨텍스트에 자동 주입한다.
 
+MCP는 REST를 서빙하는 **같은 uvicorn 프로세스**가 `/mcp`에 서빙한다(`create_app(mount_mcp=True)`).
+MCP 클라이언트를 `http://<host>:8000/mcp`에 붙이고 `Authorization: Bearer <token>` 헤더로 신원을 넘긴다.
+
 ```sh
-# 흐름을 바로 눈으로 (in-process 데모 — MCP 도구를 순서대로 호출·출력)
+# 흐름을 바로 눈으로 (service 레벨 데모 — MCP 도구와 같은 6종 흐름을 순서대로 호출·출력)
 .venv/bin/python demo_mcp.py
 
-# stdio MCP 서버 (SPACE_A_TOKEN 없으면 데모 공간·샘플 지식 시드 + 토큰 stderr 출력)
-.venv/bin/python -m ahub.api.mcp_server
-
-# 실제 MCP 클라이언트로 확인 (MCP Inspector)
-npx @modelcontextprotocol/inspector .venv/bin/python -m ahub.api.mcp_server
+# 실제 MCP 클라이언트로 확인 (MCP Inspector를 HTTP URL에 연결)
+npx @modelcontextprotocol/inspector    # → http://localhost:8000/mcp, Authorization: Bearer <token>
 ```
 
+> **비-MCP 환경**(Claude Code, 스크립트 등)은 Skill 패키지(`skills/space-a-hub/`)로 동일한 REST 엔드포인트를 호출한다.
+
 **"언제·무엇을" 판단**은 운영자가 에이전트 AGENTS.md에 넣는다 → [지침 템플릿](../../docs/design/collab-space/09-agents-md-template.md).
-MVP는 인메모리 dev 서버(데모 시드). 프로덕션은 영속 저장소 + SSO 토큰으로 교체.
+MVP는 인메모리 dev 서버(데모 데이터는 `demo_mcp.py`/`ahub/api/seed.py`로 명시적으로 주입). 프로덕션은 영속 저장소 + SSO 토큰으로 교체.
 
 ## Docker
 
@@ -122,7 +124,6 @@ Lambda + API Gateway(HTTP API) + DynamoDB로 배포 → **[SERVERLESS.md](SERVER
 | `SPACE_A_TABLE` | DynamoDB 스토어 (서버리스) |
 | `SPACE_A_DB` | SQLite 파일 경로 (파일 영속) |
 | *(없음)* | 인메모리 |
-| `SPACE_A_TOKEN` | MCP 서버가 쓸 에이전트 토큰 (없으면 데모 시드) |
 
 ## API (MVP)
 

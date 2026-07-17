@@ -59,5 +59,5 @@ sam delete
 
 ## 주의 (테스트용)
 
-- 이 배포는 **REST API**를 노출한다. **MCP(stdio)는 Lambda에 맞지 않으므로**, 에이전트의 MCP 연결은 상시 서버(예: 컨테이너)로 별도 운영한다.
+- 이 배포는 **REST API만** 노출한다(`create_app(mount_mcp=False)` — `/mcp` 미마운트). **MCP(Streamable HTTP)의 상주·스트리밍은 API Gateway+Lambda와 맞지 않으므로**, 에이전트의 MCP 연결은 상시 서버(예: 컨테이너)로 별도 운영한다.
 - 인증은 아직 **정적/데모 토큰**(실제 SSO 아님) → 공개 엔드포인트로 두지 말고 테스트 용도로만.
