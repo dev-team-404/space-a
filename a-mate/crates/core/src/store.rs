@@ -8,7 +8,7 @@ const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS sessions (
   session_id TEXT PRIMARY KEY, host TEXT, project_id TEXT, agent TEXT,
   first_ts TEXT, last_ts TEXT, git_branch TEXT,
-  cwd TEXT, first_prompt_preview TEXT, first_prompt_source_file TEXT, first_prompt_offset INTEGER
+  cwd TEXT, first_prompt_preview TEXT, first_prompt_source_file TEXT, first_prompt_offset INTEGER, subagent_files INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,6 +75,14 @@ CREATE TABLE IF NOT EXISTS content_items (
   score INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'new',
   first_seen TEXT, last_seen TEXT
 );
+CREATE TABLE IF NOT EXISTS personal_skill_inventory (
+  host TEXT NOT NULL, scope TEXT NOT NULL, name TEXT NOT NULL,
+  path TEXT NOT NULL, body_chars INTEGER DEFAULT 0,
+  PRIMARY KEY (host, path)
+);
+CREATE TABLE IF NOT EXISTS host_settings (
+  host TEXT PRIMARY KEY, default_model TEXT, effort_level TEXT, scanned_at TEXT
+);
 "#;
 
 pub struct SqliteStore {
@@ -108,6 +116,17 @@ fn migrate(conn: &Connection) -> Result<()> {
              ALTER TABLE sessions ADD COLUMN first_prompt_preview TEXT;
              ALTER TABLE sessions ADD COLUMN first_prompt_source_file TEXT;
              ALTER TABLE sessions ADD COLUMN first_prompt_offset INTEGER;
+             DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;",
+        )?;
+    }
+    // v3 수집 마이그레이션 — subagent_files 부재 시 컬럼 추가 + 전체 재수집.
+    // (Agent 툴 매핑·permission-mode·secret_flag·first_prompt 오염 수정이 라인 재해석을 요구 — 스펙 §4.4)
+    let has_subagent_files = conn
+        .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name='subagent_files'")?
+        .exists([])?;
+    if !has_subagent_files {
+        conn.execute_batch(
+            "ALTER TABLE sessions ADD COLUMN subagent_files INTEGER NOT NULL DEFAULT 0;
              DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;",
         )?;
     }
@@ -378,6 +397,52 @@ impl SqliteStore {
         }
         tx.commit()?;
         Ok(())
+    }
+
+    /// 개인 스킬 인벤토리 전체 교체 (host 단위) — 코칭 v3 §4.2
+    pub fn replace_personal_skills(
+        &mut self,
+        host: &str,
+        skills: &[crate::inventory::PersonalSkill],
+    ) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM personal_skill_inventory WHERE host=?1", params![host])?;
+        for s in skills {
+            tx.execute(
+                "INSERT OR REPLACE INTO personal_skill_inventory (host, scope, name, path, body_chars)
+                 VALUES (?1,?2,?3,?4,?5)",
+                params![host, s.scope, s.name, s.path, s.body_chars as i64],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// 호스트 설정 스냅숏 (기본 모델·effort) — R7 확장·R13 OutdatedModel 재료 (코칭 v3 §4.2)
+    pub fn replace_host_settings(
+        &self,
+        host: &str,
+        default_model: Option<&str>,
+        effort_level: Option<&str>,
+        now_ts: &str,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO host_settings (host, default_model, effort_level, scanned_at)
+             VALUES (?1,?2,?3,?4)
+             ON CONFLICT(host) DO UPDATE SET
+               default_model=?2, effort_level=?3, scanned_at=?4",
+            params![host, default_model, effort_level, now_ts],
+        )?;
+        Ok(())
+    }
+
+    /// host의 distinct 세션 cwd 목록 (NULL 제외) — 프로젝트 스코프 개인 스킬 스캔용
+    pub fn session_cwds(&self, host: &str) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT cwd FROM sessions WHERE host=?1 AND cwd IS NOT NULL ORDER BY cwd",
+        )?;
+        let rows = stmt.query_map(params![host], |r| r.get(0))?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     pub fn upsert_diary_index(
@@ -1925,5 +1990,54 @@ mod tests {
         // 멱등: 같은 이벤트 재삽입 시 dedup (uuid None → source_file:offset 키)
         let n = store.upsert_events(&[mk(EventKind::PermissionMode { mode: "plan".into() }, 0)]).unwrap();
         assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn v3_migration_adds_subagent_files_and_wipes_derived_tables() {
+        // 구버전 스키마(서브에이전트 컬럼 없음)를 시뮬레이션할 수 없으므로(open_in_memory는 항상 신 스키마),
+        // 신 스키마에서 컬럼 존재 + 기본값 0만 검증한다. 와이프 경로는 기존 v2.1 전례와 동일 패턴.
+        let store = SqliteStore::open_in_memory().unwrap();
+        let n: i64 = store.conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='subagent_files'",
+            [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1, "sessions.subagent_files 컬럼이 있어야 함");
+    }
+
+    #[test]
+    fn replace_personal_skills_and_host_settings_roundtrip() {
+        use crate::inventory::PersonalSkill;
+        let mut store = SqliteStore::open_in_memory().unwrap();
+        store.replace_personal_skills("Windows", &[
+            PersonalSkill { name: "gh-commit".into(), path: "C:\\u\\.claude\\skills\\gh-commit\\SKILL.md".into(),
+                            body_chars: 300, scope: "user".into() },
+        ]).unwrap();
+        // replace: 다시 부르면 이전 행 대체
+        store.replace_personal_skills("Windows", &[
+            PersonalSkill { name: "deploy".into(), path: "D:\\proj\\.claude\\skills\\deploy\\SKILL.md".into(),
+                            body_chars: 2400, scope: "project".into() },
+        ]).unwrap();
+        let (name, scope, chars): (String, String, i64) = store.conn.query_row(
+            "SELECT name, scope, body_chars FROM personal_skill_inventory WHERE host='Windows'",
+            [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap();
+        assert_eq!((name.as_str(), scope.as_str(), chars), ("deploy", "project", 2400));
+
+        store.replace_host_settings("Windows", Some("claude-fable-5[1m]"), Some("xhigh"), "2026-07-19T10:00:00Z").unwrap();
+        store.replace_host_settings("Windows", Some("claude-sonnet-5"), None, "2026-07-19T11:00:00Z").unwrap(); // upsert
+        let (m, e): (String, Option<String>) = store.conn.query_row(
+            "SELECT default_model, effort_level FROM host_settings WHERE host='Windows'",
+            [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!(m, "claude-sonnet-5");
+        assert_eq!(e, None);
+    }
+
+    #[test]
+    fn session_cwds_returns_distinct_local_host_cwds() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.conn.execute_batch(
+            "INSERT INTO sessions (session_id, host, project_id, cwd) VALUES
+             ('s1','Windows','p','D:\\proj'), ('s2','Windows','p','D:\\proj'),
+             ('s3','wsl:U','p','/home/x/proj'), ('s4','Windows','p',NULL);").unwrap();
+        let cwds = store.session_cwds("Windows").unwrap();
+        assert_eq!(cwds, vec!["D:\\proj".to_string()]); // distinct + host 필터 + NULL 제외
     }
 }

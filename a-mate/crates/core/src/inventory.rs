@@ -8,6 +8,15 @@ pub struct McpServer {
     pub source: String, // "project" | "mcpjson" | "plugin"
 }
 
+/// 개인(비플러그인) 스킬 1건 — ~/.claude/skills 또는 프로젝트 .claude/skills (코칭 v3 §4.2)
+#[derive(Debug, Clone, PartialEq)]
+pub struct PersonalSkill {
+    pub name: String,
+    pub path: String,     // SKILL.md 절대 경로 (PK 성분)
+    pub body_chars: u64,  // SKILL.md 전문 글자수 — R13 PersonalSkillHygiene 판정 재료
+    pub scope: String,    // "user" | "project"
+}
+
 /// enabled 플러그인 하나의 스캔 결과(스킬·MCP 서버). R2 대상은 skill_count>=1.
 #[derive(Debug, Clone)]
 pub struct PluginRecord {
