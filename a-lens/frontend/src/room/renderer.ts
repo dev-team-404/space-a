@@ -157,13 +157,47 @@ export function buildRoomScene(
   // 셸 스프라이트(정방형 다이아)에 맞춰 방은 정사각 격자. 기본 16칸, 책상이 넘치면 확장.
   const W = Math.max(config.size ?? 16, LW, LH)
   const H = W
-  // 책상 클러스터는 방 중앙에 (뒷벽 쪽 여유는 책장·칠판 몫)
+
+  // ── 고정 방 셸 (shell.room, 3면 벽 팔각 방 한 장) — 있으면 floor./wall. 부품 대신 이걸 쓴다 ──
+  // 캘리브레이션(manifest cal)으로 이미지를 2:1 격자 좌표계에 정규화한다:
+  // 좌우 바닥 꼭짓점 ↔ 격자 (0,W)/(W,0), 이미지 기울기(slope)는 비등방 스케일로 보정.
+  const shellKit = kitPiece('shell.room')
+  const shellCal = shellKit?.cal
+  let wallH = WALL_H
+  let cut = 0 // 뒷벽(평면)이 잘라먹는 격자 깊이: gx+gy < cut 영역은 벽 뒤
+  let flatBoard: { x0: number; y0: number; x1: number; y1: number } | null = null
+  if (shellKit && shellCal) {
+    const [lxI, lyI] = shellCal.left
+    const [rxI] = shellCal.right
+    const cxI = (lxI + rxI) / 2
+    const ax = (rxI - lxI) / (2 * W) // 이미지 px / 격자 x단위
+    const ay = ax * (shellCal.slope ?? 0.5)
+    const cyI = lyI - W * ay // 가상 다이아 원점의 이미지 y
+    const sx = TILE_W / 2 / ax
+    const sy = TILE_H / 2 / ay
+    const sp = new Sprite(shellKit.texture)
+    sp.scale.set(sx, sy)
+    sp.position.set(-cxI * sx, -cyI * sy)
+    sp.zIndex = -1000
+    root.addChild(sp)
+    cut = (shellCal.backEdgeY - cyI) / ay
+    const bwCal = shellCal.backWall
+    flatBoard = {
+      x0: (bwCal[0] - cxI) * sx,
+      y0: (bwCal[1] - cyI) * sy,
+      x1: (bwCal[2] - cxI) * sx,
+      y1: (bwCal[3] - cyI) * sy,
+    }
+    wallH = flatBoard.y1 - flatBoard.y0
+  }
+
+  // 책상 클러스터는 방 중앙에 — 단, 뒷벽 컷 안쪽으로 (gx+gy ≥ cut)
   const dx = (W - LW) / 2
-  const dy = Math.max(1.2, (H - LH) / 2)
+  const dy = Math.max(1.2, (H - LH) / 2, cut + 2 - 4 - (W - LW) / 2)
   const slots = baseSlots.map((s) => ({ gx: s.gx + dx, gy: s.gy + dy }))
 
   // ── 바닥 (셸 스프라이트: 윗꼭짓점을 격자 원점에 정렬, 격자 폭에 맞춰 스케일) ──
-  const floorKit = kitPiece(`floor.${floorId}`)
+  const floorKit = shellKit ? null : kitPiece(`floor.${floorId}`)
   if (floorKit) {
     const s = (W * TILE_W) / floorKit.texture.width
     const sp = new Sprite(floorKit.texture)
@@ -173,7 +207,7 @@ export function buildRoomScene(
     sp.position.set(ox + floorKit.offset[0] * s, oy + floorKit.offset[1] * s)
     sp.zIndex = -1000
     root.addChild(sp)
-  } else {
+  } else if (!shellKit) {
     const floorG = new Graphics()
     floorG.zIndex = -1000
     for (let gx = 0; gx < W; gx++) {
@@ -194,8 +228,7 @@ export function buildRoomScene(
 
   // ── 뒷벽 (셸 스프라이트: V자 안쪽 코너를 격자 원점에 정렬) ──
   // 칠판·조명·보드 텍스트는 실제 벽면 높이(wallH)를 기준으로 배치된다.
-  const wallKit = kitPiece(`wall.${wallId}`)
-  let wallH = WALL_H
+  const wallKit = shellKit ? null : kitPiece(`wall.${wallId}`)
   if (wallKit) {
     const s = (W * TILE_W) / wallKit.texture.width
     wallH = wallKit.faceH * s
@@ -206,7 +239,7 @@ export function buildRoomScene(
     sp.position.set(ox + wallKit.offset[0] * s, oy + wallKit.offset[1] * s)
     sp.zIndex = -900
     root.addChild(sp)
-  } else {
+  } else if (!shellKit) {
     const wallsG = new Graphics()
     wallsG.zIndex = -900
     // 오른쪽 뒷벽 (gy=0 면)
@@ -219,54 +252,89 @@ export function buildRoomScene(
     root.addChild(wallsG)
   }
 
-  // ── 칠판 (오른쪽 뒷벽, gy=0 면) — 클릭 → 이슈 패널 ──
-  // 칠판 크기·위치는 벽 크기에 비례 (셸 스프라이트의 벽 높이에 맞춤)
-  const bA = Math.max(1.0, W * 0.1) // 벽을 따라 시작 cell
-  const bB = Math.min(W - 1, W * 0.55)
-  const bBot = wallH * 0.22
-  const bTop = Math.min(wallH * 0.82, bBot + 260)
-  const boardSprite = placeWallSprite(root, `board.${config.board}`, bA, bBot, -890)
-  const boardHit: Container = boardSprite ?? new Graphics()
-  if (!boardSprite) {
-    const boardG = boardHit as Graphics
-    boardG.zIndex = -890
-    boardG
-      .poly([...pt(bA, 0, -bTop), ...pt(bB, 0, -bTop), ...pt(bB, 0, -bBot), ...pt(bA, 0, -bBot)])
-      .fill(board.face)
-      .stroke({ color: board.frame, width: 5 })
-    root.addChild(boardG)
-  }
-  boardHit.eventMode = 'static'
-  boardHit.cursor = 'pointer'
-  boardHit.on('pointertap', () => cb.onBoardTap?.())
-
-  // 칠판 내용 — 이슈 상위 3건 (벽면 기울기에 맞춰 skew, 글씨는 칠판 크기에 비례)
-  const wallSkew = Math.atan2(TILE_H / 2, TILE_W / 2)
+  // ── 칠판 — 클릭 → 이슈 패널 ──
   const chalkSize = Math.max(13, Math.round(wallH * 0.055))
   const chalkGap = chalkSize * 1.9
   const chalkStyle = new TextStyle({ fill: board.chalk, fontSize: chalkSize })
-  data.issues.slice(0, 3).forEach((issue, i) => {
-    const line = new Container()
-    const [lx, ly] = pt(bA + 0.35, 0, -(bTop - chalkSize * 1.7 - i * chalkGap))
-    line.position.set(lx, ly)
-    line.skew.y = wallSkew
-    line.zIndex = -889
+  const issueLine = (issue: SpaceIssue): [Graphics, Text] => {
     const dot = new Graphics().circle(chalkSize * 0.45, chalkSize * 0.55, chalkSize * 0.38).fill(ISSUE_DOT[issue.status] ?? 0xd9a441)
     const label = new Text({
       text: issue.title.length > 16 ? issue.title.slice(0, 16) + '…' : issue.title,
       style: chalkStyle,
     })
     label.x = chalkSize * 1.2
-    line.addChild(dot, label)
-    root.addChild(line)
-  })
-  if (data.issues.length === 0) {
-    const empty = new Text({ text: '이슈 없음', style: chalkStyle })
-    const [ex, ey] = pt(bA + 0.35, 0, -(bTop - chalkSize * 2))
-    empty.position.set(ex, ey)
-    empty.skew.y = wallSkew
-    empty.zIndex = -889
-    root.addChild(empty)
+    return [dot, label]
+  }
+
+  if (flatBoard) {
+    // 고정 셸: 평면 뒷벽 정면에 왜곡 없는 칠판
+    const fbW = flatBoard.x1 - flatBoard.x0
+    const fbH = flatBoard.y1 - flatBoard.y0
+    const rx0 = flatBoard.x0 + fbW * 0.17
+    const rw = fbW * 0.66
+    const ry0 = flatBoard.y0 + fbH * 0.08
+    const rh = fbH * 0.8
+    const boardG = new Graphics()
+    boardG.zIndex = -890
+    boardG.roundRect(rx0, ry0, rw, rh, 4).fill(board.face).stroke({ color: board.frame, width: 6 })
+    boardG.eventMode = 'static'
+    boardG.cursor = 'pointer'
+    boardG.on('pointertap', () => cb.onBoardTap?.())
+    root.addChild(boardG)
+
+    const lines = data.issues.slice(0, 3)
+    lines.forEach((issue, i) => {
+      const line = new Container()
+      line.position.set(rx0 + chalkSize, ry0 + chalkSize * 0.8 + i * chalkGap)
+      line.zIndex = -889
+      line.addChild(...issueLine(issue))
+      root.addChild(line)
+    })
+    if (lines.length === 0) {
+      const empty = new Text({ text: '이슈 없음', style: chalkStyle })
+      empty.position.set(rx0 + chalkSize, ry0 + chalkSize)
+      empty.zIndex = -889
+      root.addChild(empty)
+    }
+  } else {
+    // 코너 셸/폴백: 오른쪽 뒷벽(gy=0 면)에 벽 기울기로 부착
+    const bA = Math.max(1.0, W * 0.1) // 벽을 따라 시작 cell
+    const bB = Math.min(W - 1, W * 0.55)
+    const bBot = wallH * 0.22
+    const bTop = Math.min(wallH * 0.82, bBot + 260)
+    const boardSprite = placeWallSprite(root, `board.${config.board}`, bA, bBot, -890)
+    const boardHit: Container = boardSprite ?? new Graphics()
+    if (!boardSprite) {
+      const boardG = boardHit as Graphics
+      boardG.zIndex = -890
+      boardG
+        .poly([...pt(bA, 0, -bTop), ...pt(bB, 0, -bTop), ...pt(bB, 0, -bBot), ...pt(bA, 0, -bBot)])
+        .fill(board.face)
+        .stroke({ color: board.frame, width: 5 })
+      root.addChild(boardG)
+    }
+    boardHit.eventMode = 'static'
+    boardHit.cursor = 'pointer'
+    boardHit.on('pointertap', () => cb.onBoardTap?.())
+
+    const wallSkew = Math.atan2(TILE_H / 2, TILE_W / 2)
+    data.issues.slice(0, 3).forEach((issue, i) => {
+      const line = new Container()
+      const [lx, ly] = pt(bA + 0.35, 0, -(bTop - chalkSize * 1.7 - i * chalkGap))
+      line.position.set(lx, ly)
+      line.skew.y = wallSkew
+      line.zIndex = -889
+      line.addChild(...issueLine(issue))
+      root.addChild(line)
+    })
+    if (data.issues.length === 0) {
+      const empty = new Text({ text: '이슈 없음', style: chalkStyle })
+      const [ex, ey] = pt(bA + 0.35, 0, -(bTop - chalkSize * 2))
+      empty.position.set(ex, ey)
+      empty.skew.y = wallSkew
+      empty.zIndex = -889
+      root.addChild(empty)
+    }
   }
 
   // ── 책장 — variant에 따라 왼쪽/오른쪽 벽에 배치. 클릭 → 지식 패널 ──
@@ -278,8 +346,8 @@ export function buildRoomScene(
     const [fw, fd] = shelfKit.footprint
     const pos =
       SHELF_SIDE[shelfId] === 'left'
-        ? { gx: 0.15, gy: 1.2 } // 왼쪽 뒷벽 앞
-        : { gx: W - fw - 0.4, gy: 0.18 } // 오른쪽 뒷벽 앞 (칠판 오른쪽)
+        ? { gx: 0.15, gy: Math.max(1.2, cut + 0.4) } // 왼쪽 벽 앞 (뒷벽 컷 안쪽)
+        : { gx: W - fw - 0.4, gy: 0.18 } // 오른쪽 벽 앞
     shelfSprite = placeKitSprite(root, `shelf.${shelfId}`, pos.gx, pos.gy, depth(pos.gx + fw, pos.gy + fd))
     if (shelfSprite) badgePos = [shelfSprite.x, shelfSprite.y - shelfSprite.height - 8]
   }
@@ -346,14 +414,14 @@ export function buildRoomScene(
       p.zIndex = depth(gx, gy)
       root.addChild(p)
     }
-    // 책장이 오른벽이면 화분은 비어 있는 왼벽 쪽으로
-    if (shelfOnRight) plantAt(0.7, 2.6)
+    // 책장이 오른벽이면 화분은 비어 있는 왼벽 쪽으로 (뒷벽 컷 안쪽)
+    if (shelfOnRight) plantAt(0.7, Math.max(2.6, cut + 0.6))
     else plantAt(W - 1.4, 0.6)
     plantAt(0.6, H - 1.6)
   }
   if (config.deco.includes('water-cooler')) {
     const wgx = shelfOnRight ? 0.5 : W - 1.3
-    const wgy = shelfOnRight ? 4.0 : 1.0
+    const wgy = shelfOnRight ? Math.max(4.0, cut + 0.8) : 1.0
     if (!placeKitSprite(root, 'deco.water-cooler', wgx, wgy, depth(wgx, wgy))) {
       const wc = new Graphics()
       drawIsoBox(wc, wgx, wgy, 0.6, 0.6, 46, { top: 0xc9d2d8, left: 0xa9b4bc, right: 0xb8c4cc })
@@ -366,16 +434,28 @@ export function buildRoomScene(
   if (config.deco.includes('string-lights')) {
     const lights = new Graphics()
     lights.zIndex = -880
-    const n = Math.floor(W)
-    for (let i = 0; i < n; i++) {
-      const [lx, ly] = pt(i + 0.5, 0, -(wallH - 12 - (i % 2) * 6))
-      lights.circle(lx, ly, 7).fill({ color: 0xe8b54a, alpha: 0.25 })
-      lights.circle(lx, ly, 3.5).fill(0xf5d78e)
-    }
-    for (let i = 0; i < Math.floor(H); i++) {
-      const [lx, ly] = pt(0, i + 0.5, -(wallH - 12 - (i % 2) * 6))
-      lights.circle(lx, ly, 7).fill({ color: 0xe8b54a, alpha: 0.2 })
-      lights.circle(lx, ly, 3.5).fill(0xecc978)
+    if (flatBoard) {
+      // 고정 셸: 평면 뒷벽 상단을 따라 전구 줄
+      const span = flatBoard.x1 - flatBoard.x0
+      const n = Math.max(6, Math.floor(span / 34))
+      for (let i = 0; i <= n; i++) {
+        const lx = flatBoard.x0 + (span * i) / n
+        const ly = flatBoard.y0 + 4 + (i % 2) * 5
+        lights.circle(lx, ly, 7).fill({ color: 0xe8b54a, alpha: 0.25 })
+        lights.circle(lx, ly, 3.5).fill(0xf5d78e)
+      }
+    } else {
+      const n = Math.floor(W)
+      for (let i = 0; i < n; i++) {
+        const [lx, ly] = pt(i + 0.5, 0, -(wallH - 12 - (i % 2) * 6))
+        lights.circle(lx, ly, 7).fill({ color: 0xe8b54a, alpha: 0.25 })
+        lights.circle(lx, ly, 3.5).fill(0xf5d78e)
+      }
+      for (let i = 0; i < Math.floor(H); i++) {
+        const [lx, ly] = pt(0, i + 0.5, -(wallH - 12 - (i % 2) * 6))
+        lights.circle(lx, ly, 7).fill({ color: 0xe8b54a, alpha: 0.2 })
+        lights.circle(lx, ly, 3.5).fill(0xecc978)
+      }
     }
     root.addChild(lights)
   }

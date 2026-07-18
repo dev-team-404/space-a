@@ -3,16 +3,9 @@
 
 import { Application } from 'pixi.js'
 import type { LobbyFloor } from './api'
-import {
-  BOARD_OPTIONS,
-  DECO_OPTIONS,
-  DESK_OPTIONS,
-  FLOOR_OPTIONS,
-  SHELF_OPTIONS,
-  WALLPAPER_OPTIONS,
-} from './room/catalog'
+import { BOARD_OPTIONS, DECO_OPTIONS, DESK_OPTIONS, SHELF_OPTIONS } from './room/catalog'
 import { buildRoomScene, PREVIEW_DATA } from './room/renderer'
-import type { BoardId, DecoId, DeskChoice, FloorId, RoomConfig, ShelfId, VariantOption, WallpaperId } from './room/types'
+import type { BoardId, DecoId, DeskChoice, RoomConfig, ShelfId, VariantOption } from './room/types'
 import { getRoom } from './store'
 
 export type BuilderOptions = {
@@ -135,8 +128,7 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
     groups.append(label, row)
     row.querySelectorAll('.swatch').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.id === get()))
   }
-  addGroup('벽지', WALLPAPER_OPTIONS, () => state.wallpaper, (id: WallpaperId) => (state.wallpaper = id))
-  addGroup('바닥', FLOOR_OPTIONS, () => state.floor, (id: FloorId) => (state.floor = id))
+  // 벽·바닥은 고정 셸(shell.room)이라 선택 없음 — 추후 변형이 생기면 여기 그룹을 되살린다
   addGroup('책상', DESK_OPTIONS, () => state.desk, (id: DeskChoice) => (state.desk = id))
   addGroup('책장 (지식)', SHELF_OPTIONS, () => state.shelf ?? 's1', (id: ShelfId) => (state.shelf = id))
   addGroup('칠판', BOARD_OPTIONS, () => state.board, (id: BoardId) => (state.board = id))

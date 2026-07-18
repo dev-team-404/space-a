@@ -5,7 +5,20 @@
 
 import { Assets, Texture } from 'pixi.js'
 
-export type KitMount = 'floor' | 'wall-right' | 'shell-floor' | 'shell-wall'
+export type KitMount = 'floor' | 'wall-right' | 'shell-floor' | 'shell-wall' | 'shell-room'
+
+/** shell-room 캘리브레이션 — 트리밍된 이미지 픽셀 좌표 기준 */
+export type KitShellCal = {
+  /** 바닥 왼쪽/오른쪽 꼭짓점 */
+  left: [number, number]
+  right: [number, number]
+  /** 뒷벽(평면) 밑 바닥 시작 y (걸레받이 끝) */
+  backEdgeY: number
+  /** 뒷벽 패널 영역 [x0, y0, x1, y1] — 칠판이 걸리는 면 */
+  backWall: [number, number, number, number]
+  /** 바닥 가장자리의 아이소 기울기 (dy/dx). 2:1이면 0.5 */
+  slope?: number
+}
 
 export type KitPiece = {
   texture: Texture
@@ -18,6 +31,8 @@ export type KitPiece = {
   anchor: [number, number]
   /** shell-wall: 코너 기준 벽면 높이 (에셋 px) — 칠판·조명 배치 계산용 */
   faceH: number
+  /** shell-room 전용 캘리브레이션 */
+  cal?: KitShellCal
 }
 
 type ManifestPiece = {
@@ -27,6 +42,7 @@ type ManifestPiece = {
   mount?: KitMount
   anchor?: [number, number]
   faceH?: number
+  cal?: KitShellCal
 }
 
 type Manifest = {
@@ -67,6 +83,7 @@ export async function loadKit(): Promise<void> {
           mount: p.mount ?? 'floor',
           anchor: p.anchor ?? [0.5, 0],
           faceH: p.faceH ?? 0,
+          cal: p.cal,
         })
       } catch (e) {
         console.warn(`킷 부품 로드 실패: ${key} (${p.file})`, e)
