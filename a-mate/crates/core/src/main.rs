@@ -127,6 +127,29 @@ fn cmd_hub_share(store: &SqliteStore) -> Result<()> {
     Ok(())
 }
 
+/// 텔레메트리(#46) — 지정 날짜(기본: 어제)의 파생 신호를 허브 전용 공간에 발행.
+fn cmd_telemetry(store: &SqliteStore, date: Option<String>) -> Result<()> {
+    let Some(cfg) = agent_mentor::hub::HubConfig::from_env() else {
+        println!("telemetry: SPACE_A_HUB_URL 미설정 — 건너뜀");
+        return Ok(());
+    };
+    let date = date.unwrap_or_else(|| {
+        (chrono::Local::now() - chrono::Duration::days(1)).format("%Y-%m-%d").to_string()
+    });
+    match agent_mentor::hub::run_telemetry_push(store, &cfg, &date)? {
+        agent_mentor::hub::TelemetryOutcome::Published { date, page_id } => {
+            println!("telemetry published: {date} → page {page_id}");
+        }
+        agent_mentor::hub::TelemetryOutcome::AlreadySent => {
+            println!("telemetry: {date} 이미 발행됨 (하루 1회)");
+        }
+        agent_mentor::hub::TelemetryOutcome::Skipped(why) => {
+            println!("telemetry skipped: {why}");
+        }
+    }
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let cmd = args.get(1).map(|s| s.as_str()).unwrap_or("all");
@@ -138,6 +161,7 @@ fn main() -> Result<()> {
         "curate" => cmd_curate(&store)?,
         "diary" => cmd_diary(&store, args.get(2).cloned())?,
         "hub-share" => cmd_hub_share(&store)?,
+        "telemetry" => cmd_telemetry(&store, args.get(2).cloned())?,
         "all" => {
             cmd_ingest(&store)?;
             cmd_inventory(&mut store)?;
@@ -147,7 +171,7 @@ fn main() -> Result<()> {
         }
         other => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: agent-mentor [ingest|inventory|rules|curate|diary [date]|hub-share|all]");
+            eprintln!("usage: agent-mentor [ingest|inventory|rules|curate|diary [date]|hub-share|telemetry [date]|all]");
         }
     }
     Ok(())

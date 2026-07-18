@@ -114,6 +114,8 @@ mod runtime {
                 maybe_generate_chatter_pool(&state.store);
                 // a-hub 지식 공유 — 유의미 finding을 이슈→해결로 발행 (env 미설정 시 no-op)
                 maybe_share_findings(&state.store);
+                // 텔레메트리(#46) — 전날 파생 신호 하루 1회 발행 (env 미설정 시 no-op)
+                maybe_push_telemetry(&state.store);
             }
             Err(e) => {
                 log::error!("pipeline error: {e}");
@@ -383,6 +385,71 @@ mod runtime {
         if published > 0 {
             log::info!("hub 지식 공유: {published}건 발행 (space {})", cfg.space_id);
         }
+    }
+
+    /// 텔레메트리(#46 목표 아키텍처) — 전날치 파생 신호를 하루 1회 발행.
+    /// 락 규율: 브리프 조립(store 읽기)은 짧은 락, 네트워크는 락 밖, 마크는 짧은 락.
+    fn maybe_push_telemetry(store_mutex: &std::sync::Mutex<SqliteStore>) {
+        use agent_mentor::hub::{self, HubClient, HubConfig};
+        let Some(cfg) = HubConfig::from_env() else { return };
+        let yesterday = (chrono::Local::now() - chrono::Duration::days(1))
+            .format("%Y-%m-%d")
+            .to_string();
+        let key = hub::telemetry_state_key(&yesterday);
+
+        // ① 짧은 락: 완료 여부·토큰·브리프
+        let (already, token_opt, brief) = match store_mutex.lock() {
+            Ok(store) => {
+                let already = store
+                    .hub_shared_or_pending_keys()
+                    .map(|k| k.contains(&key))
+                    .unwrap_or(false);
+                let token = cfg.token.clone().or(store.get_setting("knowledge_hub_token").ok().flatten());
+                let brief = hub::build_telemetry_brief(&store, &yesterday, &cfg.user_id).ok();
+                (already, token, brief)
+            }
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        };
+        if already { return; }
+        let Some(token) = token_opt else { return }; // 공유 경로가 최초 register를 담당
+        let Some(brief) = brief else { return };
+        if hub::telemetry_is_empty(&brief) { return; } // 활동 없는 날은 노이즈 — 발행 생략
+
+        // ② 락 밖: 발행 (공간 부트스트랩 포함)
+        let mut client = HubClient { base_url: cfg.base_url.clone(), api_key: cfg.api_key.clone(), token };
+        let space = hub::telemetry_space_id();
+        let title = format!("[telemetry] {} {}", cfg.user_id, yesterday);
+        let body = match serde_json::to_string_pretty(&brief) {
+            Ok(b) => b,
+            Err(e) => { log::warn!("telemetry 직렬화 실패: {e}"); return; }
+        };
+        let page_id = match client.create_page(&space, &title, &body) {
+            Ok(id) => id,
+            Err(_) => {
+                let _ = client.create_space(&space, "a-mate telemetry");
+                match HubClient::register_into(&cfg, &space) {
+                    Ok((agent_id, t)) => {
+                        if let Ok(store) = store_mutex.lock() {
+                            let _ = store.set_setting("knowledge_hub_agent_id", &agent_id);
+                            let _ = store.set_setting("knowledge_hub_token", &t);
+                        }
+                        client.token = t;
+                    }
+                    Err(e) => { log::warn!("telemetry 멤버십 확보 실패(다음 스캔 재시도): {e}"); return; }
+                }
+                match client.create_page(&space, &title, &body) {
+                    Ok(id) => id,
+                    Err(e) => { log::warn!("telemetry 발행 실패(다음 스캔 재시도): {e}"); return; }
+                }
+            }
+        };
+
+        // ③ 짧은 락: 완료 마크
+        let now = chrono::Utc::now().to_rfc3339();
+        if let Ok(store) = store_mutex.lock() {
+            let _ = store.hub_mark_published(&key, &page_id, &now);
+        }
+        log::info!("telemetry 발행: {yesterday} → {page_id} (space {space})");
     }
 
     fn maybe_generate_chatter_pool(store_mutex: &std::sync::Mutex<SqliteStore>) {

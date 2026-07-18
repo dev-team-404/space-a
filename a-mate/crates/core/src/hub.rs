@@ -275,6 +275,11 @@ impl HubClient {
     /// 토큰 발급(등록). 같은 user_id 재등록 = 같은 계정 재사용 (허브 계약).
     /// 등록 자체는 Bearer가 필요 없으므로 token 없이 호출 가능.
     pub fn register(cfg: &HubConfig) -> Result<(String, String)> {
+        Self::register_into(cfg, &cfg.space_id)
+    }
+
+    /// 특정 공간으로 등록(멤버십 병합) — 텔레메트리 전용 공간 부트스트랩용.
+    pub fn register_into(cfg: &HubConfig, space_id: &str) -> Result<(String, String)> {
         let mut r = ureq::post(&format!("{}/agents/register", cfg.base_url))
             .timeout(std::time::Duration::from_secs(TIMEOUT_SECS))
             .set("Content-Type", "application/json");
@@ -285,7 +290,7 @@ impl HubClient {
             .send_json(serde_json::json!({
                 "user_id": cfg.user_id,
                 "name": format!("a-mate/{}", cfg.user_id),
-                "space_id": cfg.space_id,
+                "space_id": space_id,
             }))
             .map_err(|e| anyhow!("hub register 실패: {e}"))?
             .into_json()?;
@@ -315,6 +320,29 @@ impl HubClient {
             .ok_or_else(|| anyhow!("open_issue 응답에 issue_id 없음"))
     }
 
+    /// Page 저작 (텔레메트리 캐리어). 반환 = page_id.
+    pub fn create_page(&self, space_id: &str, title: &str, body: &str) -> Result<String> {
+        let resp: Value = self
+            .req("POST", &format!("/spaces/{space_id}/pages"))
+            .set("Content-Type", "application/json; charset=utf-8")
+            .send_json(serde_json::json!({ "title": title, "body": body, "visibility": "org" }))
+            .map_err(|e| anyhow!("hub create_page 실패: {e}"))?
+            .into_json()?;
+        resp.get("page_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| anyhow!("create_page 응답에 page_id 없음"))
+    }
+
+    /// 공간 생성 (이미 있으면 서버가 4xx — 호출자가 무시).
+    pub fn create_space(&self, id: &str, name: &str) -> Result<()> {
+        self.req("POST", "/spaces")
+            .set("Content-Type", "application/json")
+            .send_json(serde_json::json!({ "id": id, "name": name }))
+            .map_err(|e| anyhow!("hub create_space 실패: {e}"))?;
+        Ok(())
+    }
+
     /// resolve + 지식 발행. 반환 = 발행된 page_id (publish_knowledge=true).
     pub fn resolve_issue(&self, issue_id: &str, summary: &str, steps: &[String]) -> Result<Option<String>> {
         let resp: Value = self
@@ -332,8 +360,155 @@ impl HubClient {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// 텔레메트리 — 목표 아키텍처(#46)의 "A-Mate → A-Hub Work" 행 구현.
+// 파생 신호만(카운트·집계·상태): 토큰 사용량 · 모델 믹스 · 코칭 채택/절감 · MCP 사용 카운트.
+// 원문·경로·프롬프트는 절대 싣지 않는다 ("원문은 로컬을 떠나지 않는다").
+// 캐리어: 허브에 전용 엔드포인트가 생기기 전까지 기존 C2 create_page를 전용 공간에 사용
+// (계약 제안: docs/design/overview-mentor/specs/2026-07-18-hub-telemetry-design.md).
+// ─────────────────────────────────────────────────────────────────────────
+
+/// 계약 버전 태그 — a-lens 등 소비자가 파싱 분기할 수 있게 본문 JSON에 명시.
+pub const TELEMETRY_KIND: &str = "a-mate-telemetry/v0";
+
+pub fn telemetry_space_id() -> String {
+    std::env::var("SPACE_A_TELEMETRY_SPACE_ID")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "a-mate-telemetry".into())
+}
+
+/// 하루치 텔레메트리 브리프 — 전부 store 집계에서 파생(순수 조회, LLM·원문 무개입).
+pub fn build_telemetry_brief(
+    store: &crate::store::SqliteStore,
+    date: &str,
+    agent_id: &str,
+) -> Result<serde_json::Value> {
+    let day = store.summary_for_date(date)?;
+    let mix: serde_json::Map<String, serde_json::Value> = store
+        .model_mix_for_date(date)?
+        .into_iter()
+        .map(|(m, toks)| (m, serde_json::json!(toks)))
+        .collect();
+    let mcp: serde_json::Map<String, serde_json::Value> = store
+        .mcp_call_counts_for_date(date)?
+        .into_iter()
+        .map(|(s, n)| (s, serde_json::json!(n)))
+        .collect();
+    let coaching: serde_json::Map<String, serde_json::Value> = store
+        .findings_status_counts()?
+        .into_iter()
+        .map(|(s, n)| (s, serde_json::json!(n)))
+        .collect();
+    Ok(serde_json::json!({
+        "kind": TELEMETRY_KIND,
+        "date": date,
+        "agent": agent_id,
+        "sessions": day.session_count,
+        "tokens": {
+            "input": day.tok_input,
+            "output": day.tok_output,
+            "cache_read": day.tok_cache_read,
+            "cache_create": day.tok_cache_create,
+        },
+        "model_mix": mix,
+        "coaching": {
+            "by_status": coaching,
+            "est_tokens_savable": store.sum_est_tokens_saved()?,
+        },
+        "mcp_calls": mcp,
+    }))
+}
+
+#[derive(Debug)]
+pub enum TelemetryOutcome {
+    Published { date: String, page_id: String },
+    AlreadySent,
+    Skipped(String),
+}
+
+/// 텔레메트리 상태 키 (hub_share_state 재사용 — page_id가 있으면 그 날짜는 완료).
+pub fn telemetry_state_key(date: &str) -> String {
+    format!("telemetry|{date}")
+}
+
+/// 활동이 전혀 없는 날은 발행하지 않는다 (허브 노이즈 방지 — 빈 날은 신호가 아니다).
+pub fn telemetry_is_empty(brief: &serde_json::Value) -> bool {
+    let sessions = brief.get("sessions").and_then(|v| v.as_u64()).unwrap_or(0);
+    let toks = brief
+        .get("tokens")
+        .and_then(|t| t.as_object())
+        .map(|o| o.values().filter_map(|v| v.as_u64()).sum::<u64>())
+        .unwrap_or(0);
+    sessions == 0 && toks == 0
+}
+
+/// 하루 1회 텔레메트리 발행. 전용 공간이 없으면 생성 + 멤버십 확보(재등록) 후 1회 재시도.
+pub fn run_telemetry_push(
+    store: &crate::store::SqliteStore,
+    cfg: &HubConfig,
+    date: &str,
+) -> Result<TelemetryOutcome> {
+    let key = telemetry_state_key(date);
+    if store.hub_shared_or_pending_keys()?.contains(&key) {
+        return Ok(TelemetryOutcome::AlreadySent);
+    }
+    // 빈 날 가드 — 네트워크 전에 판정 (마크하지 않음: 뒤늦은 backfill이 있으면 다음에 발행)
+    {
+        let probe = build_telemetry_brief(store, date, &cfg.user_id)?;
+        if telemetry_is_empty(&probe) {
+            return Ok(TelemetryOutcome::Skipped(format!("{date}: 활동 없음 — 발행 생략")));
+        }
+    }
+    // 토큰 확보는 기존 공간(cfg.space_id) 기준 — 텔레메트리 공간은 아래 부트스트랩이 담당.
+    let token = match cfg.token.clone().or(store.get_setting("knowledge_hub_token")?) {
+        Some(t) => t,
+        None => match HubClient::register(cfg) {
+            Ok((agent_id, t)) => {
+                store.set_setting("knowledge_hub_agent_id", &agent_id)?;
+                store.set_setting("knowledge_hub_token", &t)?;
+                t
+            }
+            Err(e) => return Ok(TelemetryOutcome::Skipped(format!("register 실패: {e}"))),
+        },
+    };
+    let mut client = HubClient {
+        base_url: cfg.base_url.clone(),
+        api_key: cfg.api_key.clone(),
+        token,
+    };
+    let brief = build_telemetry_brief(store, date, &cfg.user_id)?;
+    let title = format!("[telemetry] {} {}", cfg.user_id, date);
+    let body = serde_json::to_string_pretty(&brief)?;
+    let space = telemetry_space_id();
+
+    let page_id = match client.create_page(&space, &title, &body) {
+        Ok(id) => id,
+        Err(_first) => {
+            // 부트스트랩: 공간 미존재/미멤버십 가능 — 공간 생성(이미 있으면 무시) →
+            // 재등록으로 멤버십 병합(+새 토큰 보존) → 1회 재시도.
+            let _ = client.create_space(&space, "a-mate telemetry");
+            match HubClient::register_into(cfg, &space) {
+                Ok((agent_id, t)) => {
+                    store.set_setting("knowledge_hub_agent_id", &agent_id)?;
+                    store.set_setting("knowledge_hub_token", &t)?;
+                    client.token = t;
+                }
+                Err(e) => return Ok(TelemetryOutcome::Skipped(format!("멤버십 확보 실패: {e}"))),
+            }
+            match client.create_page(&space, &title, &body) {
+                Ok(id) => id,
+                Err(e) => return Ok(TelemetryOutcome::Skipped(format!("create_page 실패: {e}"))),
+            }
+        }
+    };
+    let now = chrono::Utc::now().to_rfc3339();
+    store.hub_mark_published(&key, &page_id, &now)?;
+    Ok(TelemetryOutcome::Published { date: date.to_string(), page_id })
+}
+
 /// pull 방향(팀 지식 → 큐레이션 피드) 소스. 토큰이 없으면 None —
-/// push 경로가 최초 register로 settings(hub_token)를 채우면 그때부터 활성.
+/// push 경로가 최초 register로 settings(knowledge_hub_token)를 채우면 그때부터 활성.
 pub fn pull_source(
     cfg: &HubConfig,
     stored_token: Option<String>,
@@ -545,5 +720,47 @@ mod tests {
         // 주의: 환경변수 전역 상태라 미설정 케이스만 검증 (설정 케이스는 E2E에서)
         std::env::remove_var("SPACE_A_HUB_URL");
         assert!(HubConfig::from_env().is_none());
+    }
+
+    // ── 텔레메트리 브리프 — 파생 신호만, 원문·경로 없음 ──
+
+    #[test]
+    fn telemetry_brief_shape_and_derived_only() {
+        use crate::model::{EventKind, NormModel, NormalizedEvent, TokenUsage, ToolKind};
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        // MCP 호출 이벤트 2건 (jira) + 1건 (notion), 오늘 날짜
+        let mk = |i: u64, server: &str| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "c--users-secret-path".into(),
+            session_id: format!("s{i}"), uuid: Some(format!("u{i}")), parent_uuid: None,
+            is_sidechain: false, ts: Some("2026-07-01T10:00:00Z".into()),
+            source_file: "s.jsonl".into(), source_offset: i,
+            kind: EventKind::ToolCall {
+                kind: ToolKind::McpCall { server: server.into(), tool: "t".into() },
+                raw_name: format!("mcp__{server}__t"),
+                target: Some("우리 회사 기밀 파일 C:/secret/x.xlsx".into()),
+                tool_use_id: None,
+            },
+        };
+        // 빈 store → 빈 날 판정
+        let empty = build_telemetry_brief(&store, "2026-07-01", "palen").unwrap();
+        assert!(telemetry_is_empty(&empty), "활동 없으면 empty");
+
+        store.upsert_events(&[mk(1, "jira"), mk(2, "jira"), mk(3, "notion")]).unwrap();
+        store.rebuild_rollup().unwrap();
+        // 2026-07-01T10:00Z의 로컬(KST) 날짜 = 2026-07-01 (19시)
+        let brief = build_telemetry_brief(&store, "2026-07-01", "palen").unwrap();
+        assert!(!telemetry_is_empty(&brief), "세션이 있으면 발행 대상");
+        assert_eq!(brief["sessions"], 3);
+        assert_eq!(brief["kind"], TELEMETRY_KIND);
+        assert_eq!(brief["agent"], "palen");
+        assert_eq!(brief["mcp_calls"]["jira"], 2);
+        assert_eq!(brief["mcp_calls"]["notion"], 1);
+        // 파생 신호 원칙: 프로젝트 경로·도구 target(파일 경로) 미포함
+        let s = serde_json::to_string(&brief).unwrap();
+        assert!(!s.contains("secret"), "경로/target 누출 금지: {s}");
+        assert!(!s.contains("기밀"));
+        // 상태 키 형식
+        assert_eq!(telemetry_state_key("2026-07-01"), "telemetry|2026-07-01");
     }
 }

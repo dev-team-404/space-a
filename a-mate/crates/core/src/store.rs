@@ -986,6 +986,30 @@ impl SqliteStore {
         Ok(())
     }
 
+    /// 텔레메트리(#46 목표 아키텍처): 특정 로컬 날짜의 MCP 서버별 호출 수 — 파생 카운트만.
+    pub fn mcp_call_counts_for_date(&self, date: &str) -> Result<Vec<(String, u64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT tool_server, COUNT(*) AS n FROM events
+             WHERE date(ts, 'localtime') = ?1 AND tool_server IS NOT NULL
+             GROUP BY tool_server ORDER BY n DESC",
+        )?;
+        let rows = stmt.query_map(params![date], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// 텔레메트리: 코칭 findings 상태별 개수 (채택·해결 흐름의 파생 신호).
+    pub fn findings_status_counts(&self) -> Result<Vec<(String, u64)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT status, COUNT(*) FROM findings GROUP BY status")?;
+        let rows = stmt.query_map([], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
     /// dedup_key로 단건 조회 (hub 재개 경로용).
     pub fn find_finding(&self, dedup_key: &str) -> Result<Option<FindingRow>> {
         let row = self
