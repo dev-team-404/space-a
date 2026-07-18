@@ -60,10 +60,10 @@ function buildBody(bi: number): Shape[] {
       break;
     }
     case 'box': {
-      out.push({ kind: 'rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 10, color: 0 });
+      out.push({ kind: 'rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 14, color: 0 });
       out.push({ kind: 'rrect', x: bv.ledX, y: bv.ledY, w: bv.ledW, h: bv.ledH, r: 6, color: 6, alpha: 0.9 });
       out.push({ kind: 'ellipse', cx: bv.ledX + bv.ledW / 2, cy: bv.ledY + bv.ledH / 2, rx: 4, ry: 4, color: 2 });
-      out.push({ kind: 'stroke-rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 10, color: 5, width: 2 });
+      out.push({ kind: 'stroke-rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 14, color: 5, width: 2 });
       break;
     }
     case 'barrel': {
@@ -73,26 +73,26 @@ function buildBody(bi: number): Shape[] {
       break;
     }
     case 'vest': {
-      out.push({ kind: 'rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 10, color: 0 });
+      out.push({ kind: 'rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 14, color: 0 });
       out.push({ kind: 'rrect', x: bv.x, y: bv.y, w: bv.lapelW, h: bv.h * 0.7, r: 4, color: 2, alpha: 0.8 });
       out.push({ kind: 'rrect', x: bv.x + bv.w - bv.lapelW, y: bv.y, w: bv.lapelW, h: bv.h * 0.7, r: 4, color: 2, alpha: 0.8 });
       out.push({ kind: 'rrect', x: bv.x + bv.w * 0.3, y: bv.y + bv.h * 0.4, w: bv.w * 0.4, h: bv.h * 0.45, r: 8, color: 6, alpha: 0.85 });
-      out.push({ kind: 'stroke-rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 10, color: 5, width: 2 });
+      out.push({ kind: 'stroke-rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 14, color: 5, width: 2 });
       break;
     }
     case 'pocket': {
-      out.push({ kind: 'rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 10, color: 0 });
+      out.push({ kind: 'rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 14, color: 0 });
       out.push({ kind: 'rrect', x: bv.x + bv.w * 0.3, y: bv.y + bv.h * 0.35, w: bv.w * 0.4, h: bv.h * 0.5, r: 8, color: 6, alpha: 0.85 });
       out.push({ kind: 'stroke-rrect', x: bv.pocketX, y: bv.pocketY, w: bv.pocketW, h: bv.pocketH, r: 5, color: 5, width: 1, alpha: 0.5 });
-      out.push({ kind: 'stroke-rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 10, color: 5, width: 2 });
+      out.push({ kind: 'stroke-rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 14, color: 5, width: 2 });
       break;
     }
     case 'striped': {
-      out.push({ kind: 'rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 10, color: 0 });
+      out.push({ kind: 'rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 14, color: 0 });
       out.push({ kind: 'rrect', x: bv.x + 4, y: bv.stripeY1, w: bv.w - 8, h: 4, r: 2, color: 2, alpha: 0.75 });
       out.push({ kind: 'rrect', x: bv.x + 4, y: bv.stripeY2, w: bv.w - 8, h: 4, r: 2, color: 2, alpha: 0.75 });
       out.push({ kind: 'rrect', x: bv.x + 4, y: bv.stripeY3, w: bv.w - 8, h: 4, r: 2, color: 3, alpha: 0.75 });
-      out.push({ kind: 'stroke-rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 10, color: 5, width: 2 });
+      out.push({ kind: 'stroke-rrect', x: bv.x, y: bv.y, w: bv.w, h: bv.h, r: 14, color: 5, width: 2 });
       break;
     }
   }
@@ -166,16 +166,16 @@ function buildHead(hi: number): Shape[] {
       break;
     }
     case 'square': {
-      out.push({ kind: 'rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 14, color: 0 });
+      out.push({ kind: 'rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 24, color: 0 });
       out.push({ kind: 'ellipse', cx: hv.x + 16, cy: hv.y + 12, rx: 9, ry: 6, color: 6, alpha: 0.8 });
-      out.push({ kind: 'stroke-rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 14, color: 5, width: 2 });
+      out.push({ kind: 'stroke-rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 24, color: 5, width: 2 });
       break;
     }
     case 'helmet': {
-      out.push({ kind: 'rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 16, color: 0 });
+      out.push({ kind: 'rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 26, color: 0 });
       out.push({ kind: 'rrect', x: hv.x + 4, y: hv.visorY, w: hv.w - 8, h: hv.visorH, r: hv.visorH / 2, color: 2, alpha: 0.55 });
       out.push({ kind: 'ellipse', cx: hv.x + 16, cy: hv.y + 12, rx: 9, ry: 6, color: 6, alpha: 0.8 });
-      out.push({ kind: 'stroke-rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 16, color: 5, width: 2 });
+      out.push({ kind: 'stroke-rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 26, color: 5, width: 2 });
       break;
     }
     case 'catear': {
@@ -185,16 +185,16 @@ function buildHead(hi: number): Shape[] {
       out.push({ kind: 'stroke-ellipse', cx: hv.x + hv.w - hv.earW / 2 - 2, cy: hv.y - hv.earH / 2 + 4, rx: hv.earW / 2 + 2, ry: hv.earH / 2 + 2, color: 5, width: 2 });
       out.push({ kind: 'ellipse', cx: hv.x + hv.earW / 2 + 2, cy: hv.y - hv.earH / 2 + 5, rx: 4, ry: 5, color: 7, alpha: 0.8 });
       out.push({ kind: 'ellipse', cx: hv.x + hv.w - hv.earW / 2 - 2, cy: hv.y - hv.earH / 2 + 5, rx: 4, ry: 5, color: 7, alpha: 0.8 });
-      out.push({ kind: 'rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 14, color: 0 });
+      out.push({ kind: 'rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 20, color: 0 });
       out.push({ kind: 'ellipse', cx: hv.x + 16, cy: hv.y + 12, rx: 9, ry: 6, color: 6, alpha: 0.8 });
-      out.push({ kind: 'stroke-rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 14, color: 5, width: 2 });
+      out.push({ kind: 'stroke-rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 20, color: 5, width: 2 });
       break;
     }
     case 'crt': {
-      out.push({ kind: 'rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 14, color: 0 });
-      out.push({ kind: 'rrect', x: hv.x + 6, y: hv.y + 6, w: hv.w - 12, h: hv.h - 12, r: 10, color: 2, alpha: 0.35 });
+      out.push({ kind: 'rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 24, color: 0 });
+      out.push({ kind: 'rrect', x: hv.x + 6, y: hv.y + 6, w: hv.w - 12, h: hv.h - 12, r: 18, color: 2, alpha: 0.35 });
       out.push({ kind: 'ellipse', cx: hv.x + 18, cy: hv.y + 13, rx: 9, ry: 6, color: 6, alpha: 0.8 });
-      out.push({ kind: 'stroke-rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 14, color: 5, width: 2 });
+      out.push({ kind: 'stroke-rrect', x: hv.x, y: hv.y, w: hv.w, h: hv.h, r: 24, color: 5, width: 2 });
       break;
     }
     case 'capsule': {

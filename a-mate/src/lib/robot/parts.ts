@@ -34,7 +34,7 @@ export type HeadVariant =
   | { kind: 'capsule'; cx: number; cy: number; rx: number; ry: number };
 
 export const HEAD_VARIANTS: ReadonlyArray<HeadVariant> = [
-  { kind: 'round',   cx: 64, cy: 38, rx: 38, ry: 28 },
+  { kind: 'round',   cx: 64, cy: 38, rx: 39, ry: 30 },
   { kind: 'square',  x: 28, y: 12, w: 72, h: 56, r: 4 },
   { kind: 'helmet',  x: 26, y: 10, w: 76, h: 58, r: 6, visorY: 30, visorH: 16 },
   { kind: 'catear',  x: 30, y: 18, w: 68, h: 52, r: 4, earW: 14, earH: 18 },
@@ -52,12 +52,12 @@ export type BodyVariant =
   | { kind: 'striped'; x: number; y: number; w: number; h: number; r: number; stripeY1: number; stripeY2: number; stripeY3: number };
 
 export const BODY_VARIANTS: ReadonlyArray<BodyVariant> = [
-  { kind: 'round',   cx: 64, cy: 90, rx: 28, ry: 22 },
-  { kind: 'box',     x: 32, y: 70, w: 64, h: 44, r: 4, ledX: 50, ledY: 80, ledW: 28, ledH: 16 },
-  { kind: 'barrel',  cx: 64, cy: 90, rx: 34, ry: 24, neckRx: 22 },
-  { kind: 'vest',    x: 30, y: 70, w: 68, h: 44, r: 4, lapelW: 10 },
-  { kind: 'pocket',  x: 30, y: 70, w: 68, h: 44, r: 4, pocketX: 36, pocketY: 88, pocketW: 20, pocketH: 14 },
-  { kind: 'striped', x: 30, y: 70, w: 68, h: 44, r: 4, stripeY1: 78, stripeY2: 88, stripeY3: 98 },
+  { kind: 'round',   cx: 64, cy: 90, rx: 27, ry: 20 },
+  { kind: 'box',     x: 32, y: 70, w: 64, h: 40, r: 4, ledX: 50, ledY: 80, ledW: 28, ledH: 16 },
+  { kind: 'barrel',  cx: 64, cy: 90, rx: 32, ry: 22, neckRx: 22 },
+  { kind: 'vest',    x: 30, y: 70, w: 68, h: 40, r: 4, lapelW: 10 },
+  { kind: 'pocket',  x: 30, y: 70, w: 68, h: 40, r: 4, pocketX: 36, pocketY: 88, pocketW: 20, pocketH: 14 },
+  { kind: 'striped', x: 30, y: 70, w: 68, h: 40, r: 4, stripeY1: 78, stripeY2: 88, stripeY3: 98 },
 ];
 
 // Antenna variant parameters
@@ -90,7 +90,7 @@ export type EyesVariant =
 export const EYES_VARIANTS: ReadonlyArray<EyesVariant> = [
   { kind: 'round',   lx: 48, rx: 80, ey: 36, er: 9 },
   { kind: 'led',     lx: 48, rx: 80, ey: 36, ew: 12, eh: 16 },
-  { kind: 'star',    lx: 48, rx: 80, ey: 36, sr: 7 },
+  { kind: 'star',    lx: 48, rx: 80, ey: 36, sr: 8 },
   { kind: 'heart',   lx: 48, rx: 80, ey: 36 },
   { kind: 'drowsy',  lx: 48, rx: 80, ey: 36, ew: 14, eh: 4 },
   { kind: 'scanner', ey: 36, x1: 28, x2: 100 },
