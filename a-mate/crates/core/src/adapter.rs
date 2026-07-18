@@ -80,18 +80,24 @@ fn tool_result_content_string(content: Option<&Value>) -> String {
     }
 }
 
+/// user content(문자열 또는 블록 배열)의 텍스트 전문을 평탄화. 시크릿 스캔·미리보기 공용.
+fn content_text(content: Option<&Value>) -> Option<String> {
+    match content {
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(Value::Array(arr)) => Some(
+            arr.iter()
+                .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+                .collect::<Vec<_>>()
+                .join(" "),
+        ),
+        _ => None,
+    }
+}
+
 /// user 프롬프트 미리보기(첫 줄 ≤120자). content가 문자열이면 그대로, 블록 배열이면 text 연결.
 /// tool_result 라인이나 빈 내용은 None. command 마커로 시작하면 None.
 fn extract_prompt_preview(content: Option<&Value>) -> Option<String> {
-    let raw = match content {
-        Some(Value::String(s)) => s.clone(),
-        Some(Value::Array(arr)) => arr
-            .iter()
-            .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
-            .collect::<Vec<_>>()
-            .join(" "),
-        _ => return None,
-    };
+    let raw = content_text(content)?;
     let first_line = raw.lines().next().unwrap_or("").trim();
     if first_line.is_empty()
         || first_line.starts_with("<command")
@@ -261,6 +267,17 @@ impl SourceAdapter for ClaudeCodeAdapter {
                             EventKind::ToolCall { kind, raw_name, target, tool_use_id },
                             (i + 1) as u64,
                         ));
+                        // Bash command 인자 시크릿 스캔 (코칭 v3 §4.2). off_bump 800대 — 블록별 8칸.
+                        if let Some(cmd) = input.get("command").and_then(|x| x.as_str()) {
+                            for (j, pid) in
+                                crate::curation::find_secret_patterns(cmd).iter().enumerate()
+                            {
+                                out.push(mk(
+                                    EventKind::SecretFlag { pattern_id: pid.to_string() },
+                                    800 + (i as u64) * 8 + j as u64,
+                                ));
+                            }
+                        }
                     }
                 }
             }
@@ -285,6 +302,12 @@ impl SourceAdapter for ClaudeCodeAdapter {
             if !had_tool_result {
                 if let Some(preview) = extract_prompt_preview(content) {
                     out.push(mk(EventKind::UserPrompt { preview }, 0)); // off_bump 0 = 라인 시작(deref 포인터)
+                }
+                // 시크릿 스캔은 프롬프트 전문 대상 (미리보기 스킵과 독립 — 코칭 v3 §4.2)
+                if let Some(text) = content_text(content) {
+                    for (i, pid) in crate::curation::find_secret_patterns(&text).iter().enumerate() {
+                        out.push(mk(EventKind::SecretFlag { pattern_id: pid.to_string() }, 800 + i as u64));
+                    }
                 }
             }
         }
@@ -491,5 +514,46 @@ mod tests {
             "message":{"role":"user","content":"<local-command-stdout>Set model to Fable 5</local-command-stdout>"}}"#;
         let evs = adapter().map(line, "s1.jsonl", 0);
         assert!(!evs.iter().any(|e| matches!(e.kind, crate::model::EventKind::UserPrompt { .. })));
+    }
+
+    #[test]
+    fn map_user_prompt_with_secret_emits_flag_without_body() {
+        use crate::model::EventKind;
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u1",
+            "message":{"role":"user","content":"이 키로 배포해줘\nghp_AbCdEf0123456789"}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 100);
+        let sf = evs.iter().find(|e| matches!(e.kind, EventKind::SecretFlag { .. })).unwrap();
+        match &sf.kind {
+            EventKind::SecretFlag { pattern_id } => assert_eq!(pattern_id, "github_token"),
+            k => panic!("expected SecretFlag, got {k:?}"),
+        }
+        // 첫 줄이 평문이므로 UserPrompt도 함께 생성됨 (기능 독립)
+        assert!(evs.iter().any(|e| matches!(e.kind, EventKind::UserPrompt { .. })));
+    }
+
+    #[test]
+    fn map_bash_command_with_secret_emits_flag() {
+        use crate::model::EventKind;
+        let line = r#"{"type":"assistant","sessionId":"s1","uuid":"u2",
+            "message":{"model":"claude-opus-4-8","usage":{"input_tokens":1,"output_tokens":1},
+            "content":[{"type":"tool_use","id":"t1","name":"Bash",
+                        "input":{"command":"export ANTHROPIC_API_KEY=sk-ant-api03-AbCdEfGh123456"}}]}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        let flags: Vec<_> = evs.iter().filter(|e| matches!(e.kind, EventKind::SecretFlag { .. })).collect();
+        assert_eq!(flags.len(), 1);
+        match &flags[0].kind {
+            EventKind::SecretFlag { pattern_id } => assert_eq!(pattern_id, "anthropic_api_key"),
+            k => panic!("expected SecretFlag, got {k:?}"),
+        }
+        // ToolCall(Bash)도 평소대로 생성 (기능 독립)
+        assert!(evs.iter().any(|e| matches!(e.kind, EventKind::ToolCall { .. })));
+    }
+
+    #[test]
+    fn map_clean_lines_emit_no_secret_flag() {
+        let clean_user = r#"{"type":"user","sessionId":"s1","uuid":"u3",
+            "message":{"role":"user","content":"토큰 없이 평범한 요청"}}"#;
+        assert!(!adapter().map(clean_user, "s.jsonl", 0).iter()
+            .any(|e| matches!(e.kind, crate::model::EventKind::SecretFlag { .. })));
     }
 }
