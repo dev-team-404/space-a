@@ -57,7 +57,7 @@
   function objectLayout(o:RoomObject){
     const item=FURNITURE_BY_ID.get(o.asset_id),visualRotation=spriteRotation(o),imageAnchor=item?.render.anchors[visualRotation]??[.5,1] as [number,number];
     if(o.category==='window'){const side=o.wall??'north',i=o.cell[0]+o.size[0]/2,p=side==='west'?iso(0,i):iso(i,0),width=Math.max(62,o.size[0]*TW*.78);return{x:p[0],y:p[1]-WALL*.3,z:5,w:width,anchor:imageAnchor}}
-    const [w,h]=rotatedSize(o.size,o.rotation),ground=spriteGroundAnchor(o,item?.render.footprintAnchor),p=iso(ground[0],ground[1]),width=(item?.render.widthTiles??(w+h)/2)*TW;
+    const [w,h]=rotatedSize(o.size,o.rotation),ground=spriteGroundAnchor(o,item?.render.footprintAnchor),p=iso(ground[0],ground[1]),width=(item?.render.widthTiles[visualRotation]??(w+h)/2)*TW;
     return{x:p[0],y:p[1],z:20+Math.round((ground[0]+ground[1])*10),w:width,anchor:imageAnchor};
   }
 </script>

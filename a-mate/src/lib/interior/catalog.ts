@@ -11,7 +11,7 @@ export type OrientationMode = 'directed' | 'axial' | 'invariant';
 export interface TurnaroundSpec { orientation: OrientationMode; sources: Partial<Record<SpriteSource, Direction>>; }
 export interface ResolvedSpriteView { source: SpriteSource; mirrorX: boolean; facing: Direction; }
 export interface SpriteProjection { scaleY: number; shearY: number; }
-export interface SpriteRenderSpec { widthTiles: number; anchors: Record<Rotation, [number, number]>; footprintAnchor: [number, number]; mirrorX: Record<Rotation, boolean>; projections: Record<Rotation, SpriteProjection>; sources: Record<Rotation, SpriteSource>; }
+export interface SpriteRenderSpec { widthTiles: Record<Rotation, number>; anchors: Record<Rotation, [number, number]>; footprintAnchor: [number, number]; mirrorX: Record<Rotation, boolean>; projections: Record<Rotation, SpriteProjection>; sources: Record<Rotation, SpriteSource>; }
 export interface FurnitureItem { id: string; category: FurnitureCategory; name: string; sprites: Record<Rotation, string>; size: [number, number]; footprint: FootprintCell[]; render: SpriteRenderSpec; turnaround?: TurnaroundSpec; }
 export interface PlacedFurniture { asset_id: string; category: FurnitureCategory | string; cell: [number, number]; size: [number, number]; footprint?: FootprintCell[]; rotation: Rotation; wall?: WallSide | null; }
 export interface InteriorTheme { id: string; name: string; wallpaper: string; floor: string; wall: string; wallSide: string; floorBase: string; floorAlt: string; grout: string; }
@@ -49,7 +49,7 @@ const assetMetrics = assetMetricsJson as Record<string, AssetMetric>;
 const masks: Record<string, string[]> = {
   'sofa.mint-loveseat':['1111','1111'], 'sofa.coral-two-seat':['1111','1111'], 'sofa.lavender-sectional':['11111','11111','00111'], 'sofa.wood-frame':['1111','1111'], 'sofa.navy-modern':['1111','1111'],
   'lighting.warm-floor':['1'], 'lighting.pastel-table':['1'], 'lighting.retro-stand':['1'], 'lighting.paper-lantern':['1'], 'lighting.modern-arc':['10','11'],
-  'desk.compact-study':['111','111'], 'desk.computer':['1111','1111'], 'desk.wood-writing':['111','111'], 'desk.pastel-vanity':['111','111'], 'desk.metal-workstation':['1111','1111'],
+  'desk.compact-study':['111','111'], 'desk.computer':['111','111'], 'desk.wood-writing':['111','111'], 'desk.pastel-vanity':['111','111'], 'desk.metal-workstation':['111','111'],
   'table.round-cafe':['11','11'], 'table.square-two':['11','11'], 'table.wood-four':['1111','1111'], 'table.pastel-breakfast':['11','11'], 'table.dark-modern':['11111','11111'],
   'chair.mint-cafe':['1'], 'chair.coral-compact':['1'], 'chair.warm-wood':['1'], 'chair.pastel-cream':['1'], 'chair.dark-modern':['1'],
   'appliance.retro-tv':['111','111'], 'appliance.compact-fridge':['11','11'], 'appliance.washer':['11','11'], 'appliance.stereo':['111','111'], 'appliance.desktop':['111','111'],
@@ -132,28 +132,76 @@ export const WINDOW_TARGET_EDGE_SLOPE_BY_ROTATION: Partial<Record<Rotation, numb
   180: 0.5,
 };
 
-// The two visible tabletop axes of each NE desk source. These are measured from
-// both outer tabletop edges and averaged because several generated PNGs are not
-// internally parallel. The projection below maps the averaged pair onto the
-// room's exact +0.5/-0.5 floor axes (ADR 0010).
-export const DESK_NE_SOURCE_AXES_BY_ASSET: Record<string, [number, number]> = {
-  'desk.compact-study': [0.62205, -0.48445],
-  'desk.computer': [0.6, -0.45],
-  'desk.wood-writing': [0.517, -0.4865],
-  'desk.pastel-vanity': [0.487, -0.481],
-  'desk.metal-workstation': [0.491, -0.476],
+// Visible floor-support contour for each independent desk source PNG. These are
+// pixel coordinates, not per-direction offsets. Mirrored views reuse the same
+// contacts with their X coordinates reflected (ADR 0011).
+export const DESK_SUPPORT_CONTACTS_BY_ASSET: Record<string, Record<SpriteSource, FootprintCell[]>> = {
+  'desk.compact-study': {
+    sw: [[18,243],[163,319],[167,319],[259,275],[262,273]],
+    ne: [[17,304],[83,340],[88,340],[191,306],[258,281],[262,279]],
+  },
+  'desk.computer': {
+    sw: [[13,234],[58,257],[170,307],[175,307],[252,270],[255,268]],
+    ne: [[13,270],[18,273],[87,311],[90,311],[204,275],[256,255],[259,252]],
+  },
+  'desk.wood-writing': {
+    sw: [[13,208],[16,210],[180,282],[185,282],[257,249],[266,244]],
+    ne: [[11,234],[13,236],[86,276],[92,276],[263,208],[271,204]],
+  },
+  'desk.pastel-vanity': {
+    sw: [[16,273],[69,250],[149,334],[154,334],[205,309],[210,309]],
+    ne: [[17,327],[62,354],[67,354],[162,273],[206,296],[211,296]],
+  },
+  'desk.metal-workstation': {
+    sw: [[12,243],[111,291],[168,320],[171,321],[176,321],[245,287],[253,283]],
+    ne: [[9,270],[13,272],[80,312],[85,312],[185,275],[254,251],[260,247]],
+  },
 };
+export const DESK_SUPPORT_PADDING = 0.02;
 
-// Normalized Y lift required after basis correction so the bottom silhouette
-// remains inside the projected footprint's two front edges. It is measured once
-// per NE source and reused unchanged by its mirrored SW view.
-export const DESK_NE_BOX_LIFT_BY_ASSET: Record<string, number> = {
-  'desk.compact-study': 0.0483,
-  'desk.computer': 0.0564,
-  'desk.wood-writing': 0.0461,
-  'desk.pastel-vanity': 0.0384,
-  'desk.metal-workstation': 0.0558,
-};
+type DeskRegistration = { widthTiles: number; anchor: [number, number] };
+
+function deskRegistration(
+  assetId: string,
+  size: [number, number],
+  rotation: Rotation,
+  metric: AssetMetric,
+  source: SpriteSource,
+  mirrorX: boolean,
+  projection: SpriteProjection,
+  sharedWidthTiles?: number,
+): DeskRegistration {
+  const contacts = DESK_SUPPORT_CONTACTS_BY_ASSET[assetId]?.[source];
+  if (!contacts?.length) throw new Error(`missing desk support contacts: ${assetId}/${source}`);
+  const [width, height] = rotation === 90 || rotation === 270 ? [size[1], size[0]] : size;
+  const worldContacts = contacts.map(([sourceX, sourceY]) => {
+    const x = mirrorX ? metric.width - sourceX : sourceX;
+    const y = projection.shearY * x + projection.scaleY * sourceY;
+    return [(x + 2 * y) / 2, (2 * y - x) / 2] as const;
+  });
+  const u = worldContacts.map(([value]) => value);
+  const v = worldContacts.map(([, value]) => value);
+  const minU = Math.min(...u), maxU = Math.max(...u);
+  const minV = Math.min(...v), maxV = Math.max(...v);
+  const maximumScale = Math.min(
+    (width - 2 * DESK_SUPPORT_PADDING) / (maxU - minU),
+    (height - 2 * DESK_SUPPORT_PADDING) / (maxV - minV),
+  );
+  const scale = sharedWidthTiles === undefined
+    ? maximumScale
+    : Math.min(maximumScale, 2 * sharedWidthTiles / metric.width);
+  // The visible supports sit against the front of the occupied cells. Any
+  // unused depth remains behind the desk instead of making it float midway
+  // through a long 2x4 footprint.
+  const translateU = -DESK_SUPPORT_PADDING - scale * maxU;
+  const translateV = -DESK_SUPPORT_PADDING - scale * maxV;
+  const anchorX = (translateV - translateU) / scale;
+  const anchorY = -(translateU + translateV) / (2 * scale);
+  return {
+    widthTiles: metric.width * scale / 2,
+    anchor: [anchorX / metric.width, anchorY / metric.height],
+  };
+}
 
 const turnaroundFor = (assetId: string, category: FurnitureCategory): TurnaroundSpec | undefined => {
   if (category === 'window') return undefined;
@@ -186,33 +234,37 @@ const make = (category: FurnitureCategory, rows: Array<[string, string, [number,
         const effectiveSlope = view.mirrorX ? -sourceSlope : sourceSlope;
         return { scaleY: 1, shearY: targetSlope - effectiveSlope };
       }
-      if (category === 'desk' && view.source === 'ne') {
-        const [positiveSlope, negativeSlope] = DESK_NE_SOURCE_AXES_BY_ASSET[assetId];
-        const scaleY = 1 / (positiveSlope - negativeSlope);
-        const sourceShearY = 0.5 - scaleY * positiveSlope;
-        return { scaleY, shearY: view.mirrorX ? -sourceShearY : sourceShearY };
-      }
       return { scaleY: 1, shearY: 0 };
+    };
+    const maximumDeskRegistrationFor = (rotation: Rotation): DeskRegistration | undefined => {
+      if (category !== 'desk') return undefined;
+      const view = viewFor(rotation);
+      return deskRegistration(assetId, size, rotation, metricFor(category, id, view.source), view.source, view.mirrorX, projectionFor(rotation));
+    };
+    const sharedDeskWidthTiles = category === 'desk'
+      ? Math.min(...ROTATIONS.map((rotation) => maximumDeskRegistrationFor(rotation)!.widthTiles))
+      : undefined;
+    const deskRegistrationFor = (rotation: Rotation): DeskRegistration | undefined => {
+      if (category !== 'desk') return undefined;
+      const view = viewFor(rotation);
+      return deskRegistration(assetId, size, rotation, metricFor(category, id, view.source), view.source, view.mirrorX, projectionFor(rotation), sharedDeskWidthTiles);
     };
     const anchorFor = (rotation: Rotation): [number, number] => {
       const { source, mirrorX } = viewFor(rotation);
       const metric = metricFor(category, id, source);
+      const registration = deskRegistrationFor(rotation);
+      if (registration) return registration.anchor;
       const measuredImageX = mirrorX ? 1 - metric.ground[0] : metric.ground[0];
-      const [projectedW, projectedH] = rotation === 90 || rotation === 270 ? [size[1], size[0]] : size;
-      // A desk's collision footprint surrounds the whole desk rather than one
-      // arbitrarily lowest leg. Register its complete image box to the projected
-      // footprint and transform that same box anchor with its source basis.
-      const imageX = category === 'desk' ? projectedW / (projectedW + projectedH) : measuredImageX;
       const projection = projectionFor(rotation);
-      const boxLift = category === 'desk' && source === 'ne' ? DESK_NE_BOX_LIFT_BY_ASSET[assetId] : 0;
-      const transformedY = projection.scaleY * metric.ground[1] + projection.shearY * imageX * metric.width / metric.height + boxLift;
-      return [imageX, transformedY];
+      const transformedY = projection.scaleY * metric.ground[1] + projection.shearY * measuredImageX * metric.width / metric.height;
+      return [measuredImageX, transformedY];
     };
+    const baseWidthTiles = widthTiles ?? (size[0] + size[1]) / 2;
     return {
       id: assetId, category, name, size, footprint: cellsFromMask(assetId), turnaround,
       sprites: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, spriteUrl(category, id, viewFor(rotation).source)])) as Record<Rotation, string>,
       render: {
-        widthTiles: widthTiles ?? (size[0] + size[1]) / 2,
+        widthTiles: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, deskRegistrationFor(rotation)?.widthTiles ?? baseWidthTiles])) as Record<Rotation, number>,
         anchors: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, anchorFor(rotation)])) as Record<Rotation, [number, number]>,
         footprintAnchor: FOOTPRINT_ANCHOR_BY_ASSET[assetId] ?? [1, 1],
         mirrorX: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, viewFor(rotation).mirrorX])) as Record<Rotation, boolean>,
@@ -225,7 +277,7 @@ const make = (category: FurnitureCategory, rows: Array<[string, string, [number,
 export const FURNITURE: FurnitureItem[] = [
   ...make('sofa', [['mint-loveseat','민트 러브시트',[4,2]],['coral-two-seat','코랄 2인 소파',[4,2]],['lavender-sectional','라벤더 코너 소파',[5,3]],['wood-frame','우드 프레임 소파',[4,2]],['navy-modern','네이비 모던 소파',[4,2]]]),
   ...make('lighting', [['warm-floor','웜 플로어 램프',[1,1],0.82],['pastel-table','파스텔 테이블 램프',[1,1],0.72],['retro-stand','레트로 스탠드',[1,1],0.9],['paper-lantern','페이퍼 랜턴',[1,1],0.82],['modern-arc','모던 아크 램프',[2,2],1.8]]),
-  ...make('desk', [['compact-study','콤팩트 공부책상',[3,2]],['computer','컴퓨터 책상',[4,2]],['wood-writing','우드 집필책상',[3,2]],['pastel-vanity','파스텔 화장대',[3,2]],['metal-workstation','메탈 워크스테이션',[4,2]]]),
+  ...make('desk', [['compact-study','콤팩트 공부책상',[3,2]],['computer','컴퓨터 책상',[3,2]],['wood-writing','우드 집필책상',[3,2]],['pastel-vanity','파스텔 화장대',[3,2]],['metal-workstation','메탈 워크스테이션',[3,2]]]),
   ...make('table', [['round-cafe','민트 원형 테이블',[2,2]],['square-two','코랄 사각 테이블',[2,2]],['wood-four','우드 다이닝 테이블',[4,2]],['pastel-breakfast','파스텔 테이블',[2,2]],['dark-modern','다크 모던 테이블',[5,2]]]),
   ...make('chair', [['mint-cafe','민트 카페 의자',[1,1],1.05],['coral-compact','코랄 의자',[1,1],1.05],['warm-wood','우드 의자',[1,1],1.05],['pastel-cream','파스텔 의자',[1,1],1.05],['dark-modern','다크 모던 의자',[1,1],1.05]]),
   ...make('appliance', [['retro-tv','레트로 TV',[3,2]],['compact-fridge','콤팩트 냉장고',[2,2]],['washer','세탁기',[2,2]],['stereo','오디오 장식장',[3,2]],['desktop','데스크톱 세트',[3,2]]]),
