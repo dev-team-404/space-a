@@ -93,7 +93,10 @@ fn extract_prompt_preview(content: Option<&Value>) -> Option<String> {
         _ => return None,
     };
     let first_line = raw.lines().next().unwrap_or("").trim();
-    if first_line.is_empty() || first_line.starts_with("<command") {
+    if first_line.is_empty()
+        || first_line.starts_with("<command")
+        || first_line.starts_with("<local-command")
+    {
         return None;
     }
     Some(first_line.chars().take(120).collect())
@@ -188,9 +191,19 @@ impl SourceAdapter for ClaudeCodeAdapter {
             let git_branch = v.get("gitBranch").and_then(|x| x.as_str()).map(String::from);
             out.push(mk(EventKind::SessionMeta { cwd: cwd.to_string(), git_branch }, 900));
         }
-        // compaction 경계
-        if v.get("isCompactSummary").and_then(|x| x.as_bool()).unwrap_or(false) {
+        // compaction 경계 — 구형(isCompactSummary) + 신형(system/compact_boundary) 모두 인지.
+        // trigger(auto/manual) 구분은 Windows 실데이터 핀 후 후속 (코칭 v3 §4.1-5, fail-safe: 미인식=침묵)
+        let compact_boundary = ltype == "system"
+            && v.get("subtype").and_then(|x| x.as_str()) == Some("compact_boundary");
+        if v.get("isCompactSummary").and_then(|x| x.as_bool()).unwrap_or(false) || compact_boundary {
             out.push(mk(EventKind::Compaction, 0));
+            return out;
+        }
+        // permission-mode 라인 → 이벤트 (plan=R16, bypassPermissions=R19 재료 — 코칭 v3 §4.1-4)
+        if ltype == "permission-mode" {
+            if let Some(mode) = v.get("permissionMode").and_then(|x| x.as_str()) {
+                out.push(mk(EventKind::PermissionMode { mode: mode.to_string() }, 0));
+            }
             return out;
         }
 
@@ -440,5 +453,43 @@ mod tests {
         // 같은 오프셋에서 다시 읽으면 새 완결 라인 없음
         let (lines2, _) = adapter().read_incremental(&path, new_off).unwrap();
         assert!(lines2.is_empty());
+    }
+
+    #[test]
+    fn map_permission_mode_line_yields_event() {
+        use crate::model::EventKind;
+        // 실측 형태 (mac jsonl): {"type":"permission-mode","permissionMode":"plan","sessionId":"..."}
+        let line = r#"{"type":"permission-mode","permissionMode":"plan","sessionId":"s1"}"#;
+        let evs = adapter().map(line, "s1.jsonl", 42);
+        assert_eq!(evs.len(), 1);
+        match &evs[0].kind {
+            EventKind::PermissionMode { mode } => assert_eq!(mode, "plan"),
+            k => panic!("expected PermissionMode, got {k:?}"),
+        }
+        // permissionMode 키 부재 → 침묵 (fail-safe)
+        let none = adapter().map(r#"{"type":"permission-mode","sessionId":"s1"}"#, "s1.jsonl", 0);
+        assert!(none.is_empty());
+    }
+
+    #[test]
+    fn map_system_compact_boundary_yields_compaction() {
+        use crate::model::EventKind;
+        // 신형 auto-compact 경계 (공식 문서 형태). trigger 구분은 Windows 실데이터 핀 후 후속 (스펙 §4.1-5)
+        let line = r#"{"type":"system","subtype":"compact_boundary","sessionId":"s1",
+            "compactMetadata":{"trigger":"auto","preCompactTokens":155000}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        assert!(evs.iter().any(|e| matches!(e.kind, EventKind::Compaction)));
+        // 다른 system subtype은 침묵 (fail-safe)
+        let none = adapter().map(r#"{"type":"system","subtype":"turn_duration","sessionId":"s1"}"#, "s1.jsonl", 0);
+        assert!(none.is_empty());
+    }
+
+    #[test]
+    fn map_local_command_stdout_is_not_prompt() {
+        // 실측: 세션 첫 user 라인이 "<local-command-stdout>Set model to ..." 로 오염됨 (스펙 §4.1-2)
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u9",
+            "message":{"role":"user","content":"<local-command-stdout>Set model to Fable 5</local-command-stdout>"}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        assert!(!evs.iter().any(|e| matches!(e.kind, crate::model::EventKind::UserPrompt { .. })));
     }
 }
