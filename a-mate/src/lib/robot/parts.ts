@@ -88,8 +88,8 @@ export type EyesVariant =
   | { kind: 'scanner'; ey: number; x1: number; x2: number };
 
 export const EYES_VARIANTS: ReadonlyArray<EyesVariant> = [
-  { kind: 'round',   lx: 48, rx: 80, ey: 36, er: 7 },
-  { kind: 'led',     lx: 48, rx: 80, ey: 36, ew: 14, eh: 6 },
+  { kind: 'round',   lx: 48, rx: 80, ey: 36, er: 9 },
+  { kind: 'led',     lx: 48, rx: 80, ey: 36, ew: 12, eh: 16 },
   { kind: 'star',    lx: 48, rx: 80, ey: 36, sr: 7 },
   { kind: 'heart',   lx: 48, rx: 80, ey: 36 },
   { kind: 'drowsy',  lx: 48, rx: 80, ey: 36, ew: 14, eh: 4 },
