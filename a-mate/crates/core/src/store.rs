@@ -1993,14 +1993,71 @@ mod tests {
     }
 
     #[test]
-    fn v3_migration_adds_subagent_files_and_wipes_derived_tables() {
-        // 구버전 스키마(서브에이전트 컬럼 없음)를 시뮬레이션할 수 없으므로(open_in_memory는 항상 신 스키마),
-        // 신 스키마에서 컬럼 존재 + 기본값 0만 검증한다. 와이프 경로는 기존 v2.1 전례와 동일 패턴.
-        let store = SqliteStore::open_in_memory().unwrap();
-        let n: i64 = store.conn.query_row(
-            "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name='subagent_files'",
-            [], |r| r.get(0)).unwrap();
-        assert_eq!(n, 1, "sessions.subagent_files 컬럼이 있어야 함");
+    fn migrate_v3_adds_subagent_files_and_forces_recollect() {
+        use crate::finding::{Finding, Severity};
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("m3.db");
+        // v3 마이그레이션 전 스키마(subagent_files 없음)로 DB 선생성
+        let v3_old_schema = SCHEMA.replace(
+            ", subagent_files INTEGER NOT NULL DEFAULT 0",
+            "",
+        );
+        assert!(v3_old_schema.len() < SCHEMA.len(), "v3 subagent_files 컬럼 치환 실패");
+
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(&v3_old_schema).unwrap();
+            conn.execute_batch(
+                "INSERT INTO events (dedup_key, session_id, host, project_id, source_offset, kind)
+                   VALUES ('old:0','s1','Windows','p',0,'assistant_turn');
+                 INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, git_branch)
+                   VALUES ('s1','Windows','p','claude-code','2026-07-05T00:00:00Z','2026-07-05T00:00:00Z',NULL);
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 123);
+                 INSERT INTO daily_rollup (host, project_id, date, session_count)
+                   VALUES ('Windows','p','2026-07-05',1);
+                 INSERT INTO diary_index (date, scope, path, tokens_used, engine)
+                   VALUES ('2026-07-05','Windows','/diary.md',100,'claude-code');",
+            ).unwrap();
+        }
+        // 마이그레이션 전 findings 심어서 보존 검증
+        {
+            let conn = Connection::open(&db).unwrap();
+            let store = SqliteStore { conn };
+            store.upsert_finding(&Finding {
+                rule_id: "R1".into(), severity: Severity::Warn,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "host".into(), scope_ref: "srv".into(),
+                evidence: serde_json::json!({}), est_tokens_saved: 10,
+                prescription: None, dedup_key: "keepv3".into(),
+            }, "2026-07-05T00:00:00Z").unwrap();
+            store.set_finding_status("keepv3", "dismissed").unwrap();
+        }
+
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v3 분기 발화
+
+        // v3 컬럼이 실제로 생겼는지 확인
+        let has_subagent_files = store.conn
+            .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name='subagent_files'").unwrap()
+            .exists([]).unwrap();
+        assert!(has_subagent_files, "sessions.subagent_files 컬럼이 추가돼야 함");
+
+        // 전체 재수집 유도 — events/sessions/ingest_state/daily_rollup 모두 비워짐
+        for table in ["events", "sessions", "ingest_state", "daily_rollup"] {
+            let n: i64 = store.conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap();
+            assert_eq!(n, 0, "{table} 은(는) v3 마이그레이션 후 비워져야 함");
+        }
+
+        // diary_index는 보존
+        let diary_rows: i64 = store.conn
+            .query_row("SELECT COUNT(*) FROM diary_index", [], |r| r.get(0)).unwrap();
+        assert_eq!(diary_rows, 1, "diary_index 는 v3 마이그레이션 후에도 보존돼야 함");
+
+        // findings·status는 보존
+        let rows = store.list_findings_current(true).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].dedup_key, "keepv3");
+        assert_eq!(rows[0].status, "dismissed");
     }
 
     #[test]
