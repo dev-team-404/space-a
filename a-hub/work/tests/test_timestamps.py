@@ -77,6 +77,21 @@ def test_resolve_issue_updates_issue_updated_at(store):
     assert resolved.updated_at == T2
 
 
+def test_resolve_issue_shares_timestamp_with_published_page(store):
+    """한 트랜잭션: 이슈 updated_at과 발행 페이지 created_at/updated_at이 동일 시각.
+
+    기본(실제) clock을 써서, resolve_issue가 now()를 두 번 불러 값이 갈리면
+    실패하도록 한다 — 단일 _ts 공유를 실제로 검증.
+    """
+    svc = SpaceAService(store)  # 실제 UTC clock
+    svc.create_space("s1", "S", purpose="p")
+    _, tok = svc.register_agent("u", "u", "s1")
+    iss = svc.open_issue(tok, "title", "s1")
+    resolved, page = svc.resolve_issue(tok, iss.id, "done", publish_knowledge=True)
+    assert page is not None
+    assert resolved.updated_at == page.created_at == page.updated_at
+
+
 def test_legacy_record_without_timestamps_loads_as_none(store):
     svc = _svc(store, Clock(T1))
     # created_at 지정 없이 직접 저장 → 기존 데이터 시뮬레이션

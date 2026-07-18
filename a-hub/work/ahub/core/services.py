@@ -27,9 +27,13 @@ class SpaceAService:
         self.store = store
         self._now = now or _utc_now  # 주입 가능한 clock (테스트 결정성)
 
-    def _touch(self, obj: Issue | Page) -> None:
-        """상태 변경 저장 직전 updated_at을 갱신한다 (created_at은 보존)."""
-        obj.updated_at = self._now()
+    def _touch(self, obj: Issue | Page, ts: str | None = None) -> None:
+        """상태 변경 저장 직전 updated_at을 갱신한다 (created_at은 보존).
+
+        ts를 주면 그 값을 쓴다 — 한 트랜잭션에서 여러 엔티티가 같은 시각을
+        공유해야 할 때(예: resolve_issue의 이슈+발행 페이지).
+        """
+        obj.updated_at = ts or self._now()
 
     # --- 관리 (control plane) ---
 
@@ -123,13 +127,13 @@ class SpaceAService:
         if issue.space_id not in agent.spaces:
             raise errors.Forbidden("issue belongs to a space you are not a member of")
 
+        _ts = self._now()
         issue.status = "resolved"
-        self._touch(issue)
+        self._touch(issue, _ts)
         self.store.save_issue(issue)
 
         page: Page | None = None
         if publish_knowledge:
-            _ts = self._now()
             page = Page(
                 id=self.store.new_id("page"),
                 space_id=issue.space_id,
