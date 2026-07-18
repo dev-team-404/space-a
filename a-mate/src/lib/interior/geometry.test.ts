@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groundAnchor, occupiedWorldCells, placementOrigin, rotatedOffsets, rotatedOrigin, spriteGroundAnchor, wallPlacementOrigin } from './geometry';
+import { groundAnchor, occupiedWorldCells, placementOrigin, rotatedOffsets, rotatedOrigin, spriteGroundAnchor, wallOccupiedIndices, wallPlacementOrigin } from './geometry';
 
 describe('placement geometry v2', () => {
   it.each([
@@ -43,5 +43,7 @@ describe('placement geometry v2', () => {
     expect(wallPlacementOrigin(0, 5)).toBe(0);
     expect(wallPlacementOrigin(10, 5)).toBe(8);
     expect(wallPlacementOrigin(19, 5)).toBe(15);
+    expect(wallOccupiedIndices(4, 3)).toEqual([4, 5, 6]);
+    expect(wallOccupiedIndices(8, 5)).toEqual([8, 9, 10, 11, 12]);
   });
 });

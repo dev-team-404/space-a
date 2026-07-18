@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { FURNITURE_BY_ID, MIRRORED_DIRECTION, OPPOSITE_DIRECTION, ROTATIONS, SPRITE_DIRECTION_BY_ROTATION, canonicalizeFurnitureGeometry, wallRotation, type SpriteSource } from './catalog';
+import { FURNITURE_BY_ID, MIRRORED_DIRECTION, OPPOSITE_DIRECTION, ROTATIONS, SPRITE_DIRECTION_BY_ROTATION, WINDOW_SOURCE_EDGE_SLOPE_BY_ASSET, WINDOW_TARGET_EDGE_SLOPE_BY_ROTATION, canonicalizeFurnitureGeometry, wallRotation, type Rotation, type SpriteSource } from './catalog';
+import { rotatedSize } from './geometry';
 
 const expectViews = (id: string, sources: SpriteSource[], mirrors: boolean[]) => {
   const item = FURNITURE_BY_ID.get(id)!;
@@ -27,6 +28,22 @@ describe('interior asset orientation contract', () => {
       expect(window.sprites[90]).toBe(window.sprites[180]);
       expect([window.render.mirrorX[90], window.render.mirrorX[180]]).toEqual([true, false]);
     }
+  });
+
+  it('shears every window frame onto the exact isometric wall slope', () => {
+    for (const [id, sourceSlope] of Object.entries(WINDOW_SOURCE_EDGE_SLOPE_BY_ASSET)) {
+      const window = FURNITURE_BY_ID.get(id)!;
+      for (const rotation of [90, 180] as Rotation[]) {
+        const effectiveSource = window.render.mirrorX[rotation] ? -sourceSlope : sourceSlope;
+        expect(effectiveSource + window.render.shearY[rotation]).toBeCloseTo(WINDOW_TARGET_EDGE_SLOPE_BY_ROTATION[rotation]!, 6);
+      }
+    }
+  });
+
+  it('keeps each window wall span proportional to its asset width', () => {
+    expect(['mint-square', 'cream-wood', 'coral-arch', 'lavender-bay', 'navy-wide'].map((id) =>
+      FURNITURE_BY_ID.get(`window.${id}`)!.size[0],
+    )).toEqual([3, 3, 3, 5, 5]);
   });
 
   it('keeps tables and chairs as independently placeable assets', () => {
@@ -73,25 +90,40 @@ describe('interior asset orientation contract', () => {
 
   it('uses full rectangular desk footprints on the sprite-aligned axis', () => {
     const expected = new Map([
-      ['compact-study', [2, 3]],
-      ['computer', [2, 4]],
-      ['wood-writing', [2, 3]],
-      ['pastel-vanity', [2, 3]],
-      ['metal-workstation', [2, 4]],
+      ['compact-study', [3, 2]],
+      ['computer', [4, 2]],
+      ['wood-writing', [3, 2]],
+      ['pastel-vanity', [3, 2]],
+      ['metal-workstation', [4, 2]],
     ] as const);
     for (const [id, size] of expected) {
       const desk = FURNITURE_BY_ID.get(`desk.${id}`)!;
       expect(desk.size).toEqual(size);
       expect(desk.footprint).toHaveLength(size[0] * size[1]);
+      expect(ROTATIONS.map((rotation) => rotatedSize(desk.size, rotation))).toEqual([
+        [...size], [size[1], size[0]], [...size], [size[1], size[0]],
+      ]);
+    }
+  });
+
+  it('keeps every desk contact point on the projected front corner side', () => {
+    for (const id of ['compact-study', 'computer', 'wood-writing', 'pastel-vanity', 'metal-workstation']) {
+      const desk = FURNITURE_BY_ID.get(`desk.${id}`)!;
+      for (const rotation of ROTATIONS) {
+        const [baseW, baseH] = desk.size;
+        const [w, h] = rotation === 90 || rotation === 270 ? [baseH, baseW] : [baseW, baseH];
+        const projectedFrontX = w / (w + h);
+        expect(desk.render.anchors[rotation][0], `${desk.id} ${rotation}°`).toBeCloseTo(projectedFrontX, 6);
+      }
     }
   });
 
   it('migrates stored geometry to the current catalog contract', () => {
     const migrated = canonicalizeFurnitureGeometry({
-      asset_id: 'desk.computer', category: 'desk', cell: [4, 5], size: [4, 2],
+      asset_id: 'desk.computer', category: 'desk', cell: [4, 5], size: [2, 4],
       footprint: [[0, 0]], rotation: 0,
     });
-    expect(migrated.size).toEqual([2, 4]);
+    expect(migrated.size).toEqual([4, 2]);
     expect(migrated.footprint).toHaveLength(8);
     expect(migrated.cell).toEqual([4, 5]);
   });
