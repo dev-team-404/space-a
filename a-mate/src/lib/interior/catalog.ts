@@ -111,7 +111,9 @@ const TURNAROUND_BY_ASSET: Record<string, TurnaroundSpec> = {
 };
 
 const FOOTPRINT_ANCHOR_BY_ASSET: Partial<Record<string, [number, number]>> = {
-  'table.round-cafe': [0.5, 0.5],
+  // The measured bottom pixel is the front edge of the centered 1x1 pedestal,
+  // not the center or the front corner of the complete 2x2 table footprint.
+  'table.round-cafe': [0.75, 0.75],
 };
 
 // Linear regressions of each source PNG's opaque bottom frame. Mirroring only
@@ -162,13 +164,10 @@ const make = (category: FurnitureCategory, rows: Array<[string, string, [number,
     const anchorFor = (rotation: Rotation): [number, number] => {
       const { source, mirrorX } = viewFor(rotation);
       const metric = metricFor(category, id, source);
-      const measuredImageX = mirrorX ? 1 - metric.ground[0] : metric.ground[0];
-      const [projectedW, projectedH] = rotation === 90 || rotation === 270 ? [size[1], size[0]] : size;
-      // Desk render width equals the complete isometric footprint width. Pinning
-      // its image box to the projected front-corner ratio keeps drawers and legs
-      // inside the same cells in all four directions; a lowest-pixel heuristic
-      // would pick a different individual leg for each generated PNG.
-      const imageX = category === 'desk' ? projectedW / (projectedW + projectedH) : measuredImageX;
+      // A PNG's box edges can belong to an elevated tabletop or mirror, so they
+      // do not encode floor corners. Always anchor the measured bottom contact
+      // pixel; mirror the contact together with the rendered image (ADR 0009).
+      const imageX = mirrorX ? 1 - metric.ground[0] : metric.ground[0];
       const transformedY = metric.ground[1] + shearFor(rotation) * imageX * metric.width / metric.height;
       return [imageX, transformedY];
     };

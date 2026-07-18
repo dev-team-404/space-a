@@ -28,9 +28,10 @@ describe('placement geometry v2', () => {
     expect(spriteGroundAnchor({ cell:[3,4], size:[2,4], rotation:90 })).toEqual([7,6]);
   });
 
-  it('supports a centered world contact for pedestal furniture', () => {
+  it('supports an interior world contact for pedestal furniture', () => {
     expect(spriteGroundAnchor({ cell:[3,4], size:[2,2], rotation:0 }, [0.5,0.5])).toEqual([4,5]);
     expect(spriteGroundAnchor({ cell:[3,4], size:[2,2], rotation:90 }, [0.5,0.5])).toEqual([4,5]);
+    expect(spriteGroundAnchor({ cell:[3,4], size:[2,2], rotation:0 }, [0.75,0.75])).toEqual([4.5,5.5]);
   });
 
   it('preserves the anchor when possible and moves inward at an edge', () => {

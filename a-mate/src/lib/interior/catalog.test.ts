@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FURNITURE_BY_ID, MIRRORED_DIRECTION, OPPOSITE_DIRECTION, ROTATIONS, SPRITE_DIRECTION_BY_ROTATION, WINDOW_SOURCE_EDGE_SLOPE_BY_ASSET, WINDOW_TARGET_EDGE_SLOPE_BY_ROTATION, canonicalizeFurnitureGeometry, wallRotation, type Rotation, type SpriteSource } from './catalog';
 import { rotatedSize } from './geometry';
+import assetMetricsJson from './asset-metrics.json';
 
 const expectViews = (id: string, sources: SpriteSource[], mirrors: boolean[]) => {
   const item = FURNITURE_BY_ID.get(id)!;
@@ -106,14 +107,14 @@ describe('interior asset orientation contract', () => {
     }
   });
 
-  it('keeps every desk contact point on the projected front corner side', () => {
+  it('anchors every desk view to its measured source contact pixel', () => {
     for (const id of ['compact-study', 'computer', 'wood-writing', 'pastel-vanity', 'metal-workstation']) {
       const desk = FURNITURE_BY_ID.get(`desk.${id}`)!;
       for (const rotation of ROTATIONS) {
-        const [baseW, baseH] = desk.size;
-        const [w, h] = rotation === 90 || rotation === 270 ? [baseH, baseW] : [baseW, baseH];
-        const projectedFrontX = w / (w + h);
-        expect(desk.render.anchors[rotation][0], `${desk.id} ${rotation}°`).toBeCloseTo(projectedFrontX, 6);
+        const source = desk.render.sources[rotation];
+        const metric = (assetMetricsJson as Record<string, { ground: [number, number] }>)[`desk/${id}/${source}`];
+        const expectedX = desk.render.mirrorX[rotation] ? 1 - metric.ground[0] : metric.ground[0];
+        expect(desk.render.anchors[rotation][0], `${desk.id} ${rotation}°`).toBeCloseTo(expectedX, 6);
       }
     }
   });
@@ -137,8 +138,8 @@ describe('interior asset orientation contract', () => {
     }
   });
 
-  it('anchors the round pedestal table at the footprint center', () => {
-    expect(FURNITURE_BY_ID.get('table.round-cafe')!.render.footprintAnchor).toEqual([0.5, 0.5]);
+  it('anchors the round pedestal table at the front edge of its centered base', () => {
+    expect(FURNITURE_BY_ID.get('table.round-cafe')!.render.footprintAnchor).toEqual([0.75, 0.75]);
   });
 
   it('calibrates the three appliance source-facing groups independently', () => {

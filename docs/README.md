@@ -24,6 +24,7 @@ SPACE-A 프로젝트 문서 모음입니다. (현재 설계 단계)
 | [0006](./adr/0006-asset-facing-metadata-and-view-resolution.md) | 자산 실제 방향 메타데이터로 목표 뷰를 해석한다 | 채택 |
 | [0007](./adr/0007-footprint-axis-and-world-contact-anchor.md) | footprint 축과 월드 접지 앵커를 분리한다 | 채택 |
 | [0008](./adr/0008-projected-footprint-axis-and-wall-shear.md) | 투영 축 기반 footprint와 벽 평면 전단 보정을 정의한다 | 채택 |
+| [0009](./adr/0009-pixel-contact-anchor-over-image-box.md) | 이미지 박스 대신 실제 픽셀 접지점을 배치 기준으로 사용한다 | 채택 |
 
 ## 설계 문서
 
