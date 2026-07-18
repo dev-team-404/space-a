@@ -87,7 +87,14 @@ def build_mcp(service: SpaceAService | None = None) -> FastMCP:
         publish_knowledge: bool = True,
         visibility: str = "org",
     ) -> dict:
-        """해결을 기록하고 이슈를 닫는다. publish_knowledge면 해결이 Page로 발행된다."""
+        """해결을 기록하고 이슈를 닫는다. publish_knowledge면 해결이 Page로 발행된다.
+
+        공유 수준은 visibility로 조절한다: 남에게 도움될 **공유 가치**가 있으면
+        visibility="org"(전사 공개)로 발행해 팀이 재사용하게 하고, 개인적 해결
+        기록이면 visibility="space"로 낮춘다.
+
+        참고: MCP는 이슈가 열린 그 space에 발행한다. 개인 전용 공간(personal-*)
+        신규 생성이나 자유 Page 저작은 MCP 범위 밖이며 REST(스킬)가 담당한다."""
         issue, page = service.resolve_issue(
             _token(ctx),
             issue_id,
