@@ -2,7 +2,7 @@
   import { robotSpecForSeed, roomCapabilities, roomMoveCell, roomSaveDesign, roomView, type RoomMe, type RoomObject, type RoomState } from '../api';
   import { drawRobot, type RobotSpec } from '../robot/render'; import { frameAt } from '../robot/anim';
   import FurnitureSprite from './FurnitureSprite.svelte';
-  import { CATEGORY_LABELS, FURNITURE, FURNITURE_BY_ID, ROTATIONS, THEMES, themeFor, wallRotation, type FurnitureCategory, type PlacedFurniture, type Rotation, type WallSide } from '../interior/catalog';
+  import { CATEGORY_LABELS, FURNITURE, FURNITURE_BY_ID, ROTATIONS, THEMES, canonicalizeFurnitureGeometry, themeFor, wallRotation, type FurnitureCategory, type PlacedFurniture, type Rotation, type WallSide } from '../interior/catalog';
   import { ROOM_GRID, isInsideRoom, occupiedWorldCells, placementOrigin, rotatedOffsets, rotatedOrigin, rotatedSize, spriteGroundAnchor, wallOccupiedIndices, wallPlacementOrigin } from '../interior/geometry';
   const VW=900,VH=460,TW=28,TH=14,OX=450,OY=140,WALL=110;
   const GRID_W=ROOM_GRID.w,GRID_H=ROOM_GRID.h;
@@ -28,7 +28,7 @@
       {agent_id:'preview-guest',name:'유연',cell:[18,17],is_owner:false,mascot_seed:'preview-guest'},
     ]};
   }
-  async function poll(){if(previewMode||editing)return;try{const v=await roomView();me=v.me;room=v.room;error='';}catch(e){error=`${e}`}}
+  async function poll(){if(previewMode||editing)return;try{const v=await roomView();me=v.me;room={...v.room,design:normalizedDesign(v.room.design)};error='';}catch(e){error=`${e}`}}
   poll(); $effect(()=>{const t=setInterval(poll,2000);return()=>clearInterval(t)});
   function msg(s:string){flash=s;setTimeout(()=>{if(flash===s)flash=''},2200)}
   function cells(o:Pick<RoomObject,'cell'|'size'|'rotation'|'footprint'>){return occupiedWorldCells(o).map(([x,y])=>`${x},${y}`)}
@@ -46,18 +46,18 @@
   function removePlaced(i:number){if(draft)draft.objects=draft.objects.filter((_,n)=>n!==i);menu=null}
   function openMenu(e:MouseEvent,index:number){if(!editing)return;e.preventDefault();const host=(e.currentTarget as HTMLElement).closest('.scene')!.getBoundingClientRect();menu={index,x:e.clientX-host.left,y:e.clientY-host.top}}
   async function assertProtocol(){if(previewMode)return true;try{const c=await roomCapabilities();if(c.room_protocol===3&&c.grid.w===GRID_W&&c.grid.h===GRID_H&&c.floor_min_y===0&&c.footprint_mask)return true}catch{}msg('룸 서버가 구버전입니다. 새 room-server를 재시작해야 인테리어를 저장할 수 있습니다.');return false}
-  function normalizedDesign(design:RoomState['design']){const next:RoomState['design']=JSON.parse(JSON.stringify(design));next.objects=next.objects.filter(o=>o.category!=='dining').map(o=>o.category==='window'&&(o.wall==='north'||o.wall==='west')?{...o,rotation:wallRotation(o.wall)}:o);return next}
+  function normalizedDesign(design:RoomState['design']){const next:RoomState['design']=JSON.parse(JSON.stringify(design));next.objects=next.objects.filter(o=>o.category!=='dining').map(o=>{const canonical=canonicalizeFurnitureGeometry(o);return canonical.category==='window'&&(canonical.wall==='north'||canonical.wall==='west')?{...canonical,rotation:wallRotation(canonical.wall)}:canonical});return next}
   async function beginEdit(){if(room&&isOwner&&await assertProtocol()){draft=normalizedDesign(room.design);editing=true}}
   function chooseCategory(c:FurnitureCategory){category=c;selectedId=FURNITURE.find(i=>i.category===c)!.id;rotation=c==='window'?wallRotation(wall):0}
   function chooseTheme(id:string,floor:string){if(draft){draft.wallpaper=id;draft.floor=floor}}
   function cancel(){editing=false;draft=null}
-  async function save(){if(!room||!draft||!await assertProtocol())return;saving=true;try{room=await roomSaveDesign(room.room_id,draft);editing=false;draft=null;msg('인테리어를 저장했어요.')}catch(e){msg(`저장 실패: ${e}`)}finally{saving=false}}
+  async function save(){if(!room||!draft||!await assertProtocol())return;saving=true;try{const saved=await roomSaveDesign(room.room_id,draft);room={...saved,design:normalizedDesign(saved.design)};editing=false;draft=null;msg('인테리어를 저장했어요.')}catch(e){msg(`저장 실패: ${e}`)}finally{saving=false}}
   const specs=new Map<string,RobotSpec>(); function robot(node:HTMLCanvasElement,name:string){let raf=0;const run=(spec:RobotSpec)=>{const c=node.getContext('2d')!;const loop=(t:number)=>{drawRobot(c,spec,frameAt('idle',t));raf=requestAnimationFrame(loop)};loop(0)};specs.has(name)?run(specs.get(name)!):robotSpecForSeed(name).then(s=>{specs.set(name,s);run(s)});return{destroy:()=>cancelAnimationFrame(raf)}}
   function spriteRotation(o:RoomObject|PlacedFurniture):Rotation{return o.category==='window'&&(o.wall==='north'||o.wall==='west')?wallRotation(o.wall):o.rotation}
   function objectLayout(o:RoomObject){
     const item=FURNITURE_BY_ID.get(o.asset_id),visualRotation=spriteRotation(o),imageAnchor=item?.render.anchors[visualRotation]??[.5,1] as [number,number];
     if(o.category==='window'){const side=o.wall??'north',i=o.cell[0]+o.size[0]/2,p=side==='west'?iso(0,i):iso(i,0),width=Math.max(62,o.size[0]*TW*.78);return{x:p[0],y:p[1]-WALL*.3,z:5,w:width,anchor:imageAnchor}}
-    const [w,h]=rotatedSize(o.size,o.rotation),ground=spriteGroundAnchor(o),p=iso(ground[0],ground[1]),width=(item?.render.widthTiles??(w+h)/2)*TW;
+    const [w,h]=rotatedSize(o.size,o.rotation),ground=spriteGroundAnchor(o,item?.render.footprintAnchor),p=iso(ground[0],ground[1]),width=(item?.render.widthTiles??(w+h)/2)*TW;
     return{x:p[0],y:p[1],z:20+Math.round((ground[0]+ground[1])*10),w:width,anchor:imageAnchor};
   }
 </script>
@@ -81,7 +81,7 @@
             {#each rotatedOffsets(placed) as offset}
               <polygon class="placed-cell" points={tile(placed.cell[0]+offset[0],placed.cell[1]+offset[1])}/>
             {/each}
-            {@const groundPoint=spriteGroundAnchor(placed)}
+            {@const groundPoint=spriteGroundAnchor(placed,FURNITURE_BY_ID.get(placed.asset_id)?.render.footprintAnchor)}
             {@const groundPixel=iso(groundPoint[0],groundPoint[1])}
             <circle class="ground-point" cx={groundPixel[0]} cy={groundPixel[1]} r="2.4"/>
           {/if}

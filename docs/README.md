@@ -22,6 +22,7 @@ SPACE-A 프로젝트 문서 모음입니다. (현재 설계 단계)
 | [0004](./adr/0004-interior-asset-orientation-contract.md) | 인테리어 자산 방향·앵커 계약을 정의한다 | 채택 |
 | [0005](./adr/0005-independent-interior-assets-and-ground-metrics.md) | 테이블·의자를 분리하고 접지 메트릭을 사용한다 | 채택 |
 | [0006](./adr/0006-asset-facing-metadata-and-view-resolution.md) | 자산 실제 방향 메타데이터로 목표 뷰를 해석한다 | 채택 |
+| [0007](./adr/0007-footprint-axis-and-world-contact-anchor.md) | footprint 축과 월드 접지 앵커를 분리한다 | 채택 |
 
 ## 설계 문서
 

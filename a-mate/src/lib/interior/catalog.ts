@@ -6,11 +6,12 @@ export type Direction = 'ne' | 'se' | 'sw' | 'nw';
 export type SpriteSource = 'ne' | 'sw';
 export type WallSide = 'north' | 'west';
 export type FootprintCell = [number, number];
+type WallSlope = 'up-right' | 'down-right';
 
 export type OrientationMode = 'directed' | 'axial' | 'invariant';
 export interface TurnaroundSpec { orientation: OrientationMode; sources: Partial<Record<SpriteSource, Direction>>; }
 export interface ResolvedSpriteView { source: SpriteSource; mirrorX: boolean; facing: Direction; }
-export interface SpriteRenderSpec { widthTiles: number; anchors: Record<Rotation, [number, number]>; mirrorX: Record<Rotation, boolean>; sources: Record<Rotation, SpriteSource>; }
+export interface SpriteRenderSpec { widthTiles: number; anchors: Record<Rotation, [number, number]>; footprintAnchor: [number, number]; mirrorX: Record<Rotation, boolean>; sources: Record<Rotation, SpriteSource>; }
 export interface FurnitureItem { id: string; category: FurnitureCategory; name: string; sprites: Record<Rotation, string>; size: [number, number]; footprint: FootprintCell[]; render: SpriteRenderSpec; turnaround?: TurnaroundSpec; }
 export interface PlacedFurniture { asset_id: string; category: FurnitureCategory | string; cell: [number, number]; size: [number, number]; footprint?: FootprintCell[]; rotation: Rotation; wall?: WallSide | null; }
 export interface InteriorTheme { id: string; name: string; wallpaper: string; floor: string; wall: string; wallSide: string; floorBase: string; floorAlt: string; grout: string; }
@@ -48,7 +49,7 @@ const assetMetrics = assetMetricsJson as Record<string, AssetMetric>;
 const masks: Record<string, string[]> = {
   'sofa.mint-loveseat':['1111','1111'], 'sofa.coral-two-seat':['1111','1111'], 'sofa.lavender-sectional':['11111','11111','00111'], 'sofa.wood-frame':['1111','1111'], 'sofa.navy-modern':['1111','1111'],
   'lighting.warm-floor':['1'], 'lighting.pastel-table':['1'], 'lighting.retro-stand':['1'], 'lighting.paper-lantern':['1'], 'lighting.modern-arc':['10','11'],
-  'desk.compact-study':['111','010'], 'desk.computer':['1111','0110'], 'desk.wood-writing':['111','010'], 'desk.pastel-vanity':['111','010'], 'desk.metal-workstation':['1111','0100'],
+  'desk.compact-study':['11','11','11'], 'desk.computer':['11','11','11','11'], 'desk.wood-writing':['11','11','11'], 'desk.pastel-vanity':['11','11','11'], 'desk.metal-workstation':['11','11','11','11'],
   'table.round-cafe':['11','11'], 'table.square-two':['11','11'], 'table.wood-four':['1111','1111'], 'table.pastel-breakfast':['11','11'], 'table.dark-modern':['11111','11111'],
   'chair.mint-cafe':['1'], 'chair.coral-compact':['1'], 'chair.warm-wood':['1'], 'chair.pastel-cream':['1'], 'chair.dark-modern':['1'],
   'appliance.retro-tv':['111','111'], 'appliance.compact-fridge':['11','11'], 'appliance.washer':['11','11'], 'appliance.stereo':['111','111'], 'appliance.desktop':['111','111'],
@@ -110,6 +111,26 @@ const TURNAROUND_BY_ASSET: Record<string, TurnaroundSpec> = {
   'appliance.desktop': directed('sw', 'ne'),
 };
 
+const FOOTPRINT_ANCHOR_BY_ASSET: Partial<Record<string, [number, number]>> = {
+  'table.round-cafe': [0.5, 0.5],
+};
+
+// The generated window PNGs do not share one source perspective. Mirroring by
+// wall alone therefore fixes one group while reversing the other. Record each
+// source image's visible top-edge slope and mirror only when it differs from
+// the wall plane on which it is rendered.
+const WINDOW_SOURCE_SLOPE_BY_ASSET: Record<string, WallSlope> = {
+  'window.mint-square': 'up-right',
+  'window.cream-wood': 'up-right',
+  'window.coral-arch': 'down-right',
+  'window.lavender-bay': 'down-right',
+  'window.navy-wide': 'down-right',
+};
+const WINDOW_TARGET_SLOPE_BY_ROTATION: Partial<Record<Rotation, WallSlope>> = {
+  90: 'up-right',
+  180: 'down-right',
+};
+
 const turnaroundFor = (assetId: string, category: FurnitureCategory): TurnaroundSpec | undefined => {
   if (category === 'window') return undefined;
   const spec = TURNAROUND_BY_ASSET[assetId];
@@ -120,9 +141,12 @@ const make = (category: FurnitureCategory, rows: Array<[string, string, [number,
   rows.map(([id, name, size, widthTiles]) => {
     const assetId = `${category}.${id}`;
     const turnaround = turnaroundFor(assetId, category);
-    const viewFor = (rotation: Rotation): ResolvedSpriteView => turnaround
-      ? resolveTurnaroundView(turnaround, SPRITE_DIRECTION_BY_ROTATION[rotation])
-      : { source: 'ne', mirrorX: rotation === 90, facing: SPRITE_DIRECTION_BY_ROTATION[rotation] };
+    const viewFor = (rotation: Rotation): ResolvedSpriteView => {
+      if (turnaround) return resolveTurnaroundView(turnaround, SPRITE_DIRECTION_BY_ROTATION[rotation]);
+      const sourceSlope = WINDOW_SOURCE_SLOPE_BY_ASSET[assetId];
+      const targetSlope = WINDOW_TARGET_SLOPE_BY_ROTATION[rotation] ?? sourceSlope;
+      return { source: 'ne', mirrorX: sourceSlope !== targetSlope, facing: SPRITE_DIRECTION_BY_ROTATION[rotation] };
+    };
     const anchorFor = (rotation: Rotation): [number, number] => {
       const { source, mirrorX } = viewFor(rotation);
       const [x, y] = metricFor(category, id, source).ground;
@@ -134,6 +158,7 @@ const make = (category: FurnitureCategory, rows: Array<[string, string, [number,
       render: {
         widthTiles: widthTiles ?? (size[0] + size[1]) / 2,
         anchors: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, anchorFor(rotation)])) as Record<Rotation, [number, number]>,
+        footprintAnchor: FOOTPRINT_ANCHOR_BY_ASSET[assetId] ?? [1, 1],
         mirrorX: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, viewFor(rotation).mirrorX])) as Record<Rotation, boolean>,
         sources: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, viewFor(rotation).source])) as Record<Rotation, SpriteSource>,
       },
@@ -143,13 +168,24 @@ const make = (category: FurnitureCategory, rows: Array<[string, string, [number,
 export const FURNITURE: FurnitureItem[] = [
   ...make('sofa', [['mint-loveseat','민트 러브시트',[4,2]],['coral-two-seat','코랄 2인 소파',[4,2]],['lavender-sectional','라벤더 코너 소파',[5,3]],['wood-frame','우드 프레임 소파',[4,2]],['navy-modern','네이비 모던 소파',[4,2]]]),
   ...make('lighting', [['warm-floor','웜 플로어 램프',[1,1],0.82],['pastel-table','파스텔 테이블 램프',[1,1],0.72],['retro-stand','레트로 스탠드',[1,1],0.9],['paper-lantern','페이퍼 랜턴',[1,1],0.82],['modern-arc','모던 아크 램프',[2,2],1.8]]),
-  ...make('desk', [['compact-study','콤팩트 공부책상',[3,2]],['computer','컴퓨터 책상',[4,2]],['wood-writing','우드 집필책상',[3,2]],['pastel-vanity','파스텔 화장대',[3,2]],['metal-workstation','메탈 워크스테이션',[4,2]]]),
+  ...make('desk', [['compact-study','콤팩트 공부책상',[2,3]],['computer','컴퓨터 책상',[2,4]],['wood-writing','우드 집필책상',[2,3]],['pastel-vanity','파스텔 화장대',[2,3]],['metal-workstation','메탈 워크스테이션',[2,4]]]),
   ...make('table', [['round-cafe','민트 원형 테이블',[2,2]],['square-two','코랄 사각 테이블',[2,2]],['wood-four','우드 다이닝 테이블',[4,2]],['pastel-breakfast','파스텔 테이블',[2,2]],['dark-modern','다크 모던 테이블',[5,2]]]),
   ...make('chair', [['mint-cafe','민트 카페 의자',[1,1],1.05],['coral-compact','코랄 의자',[1,1],1.05],['warm-wood','우드 의자',[1,1],1.05],['pastel-cream','파스텔 의자',[1,1],1.05],['dark-modern','다크 모던 의자',[1,1],1.05]]),
   ...make('appliance', [['retro-tv','레트로 TV',[3,2]],['compact-fridge','콤팩트 냉장고',[2,2]],['washer','세탁기',[2,2]],['stereo','오디오 장식장',[3,2]],['desktop','데스크톱 세트',[3,2]]]),
   ...make('window', [['mint-square','민트 사각창',[3,2]],['cream-wood','크림 우드창',[3,2]],['coral-arch','코랄 아치창',[3,3]],['lavender-bay','라벤더 베이창',[5,3]],['navy-wide','네이비 와이드창',[5,2]]]),
 ];
 export const FURNITURE_BY_ID = new Map(FURNITURE.map((item) => [item.id, item]));
+
+export function canonicalizeFurnitureGeometry<T extends PlacedFurniture>(object: T): T {
+  const item = FURNITURE_BY_ID.get(object.asset_id);
+  if (!item) return object;
+  return {
+    ...object,
+    category: item.category,
+    size: [...item.size] as [number, number],
+    footprint: item.footprint.map((cell) => [...cell] as FootprintCell),
+  } as T;
+}
 
 export const THEMES: InteriorTheme[] = [
   ['lavender-dream','라벤더 드림','#e8e1f4','#d8cce9','#eadbc6','#dfc9ad','#c6ae90'],

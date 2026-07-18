@@ -28,6 +28,11 @@ describe('placement geometry v2', () => {
     expect(spriteGroundAnchor({ cell:[3,4], size:[2,4], rotation:90 })).toEqual([7,6]);
   });
 
+  it('supports a centered world contact for pedestal furniture', () => {
+    expect(spriteGroundAnchor({ cell:[3,4], size:[2,2], rotation:0 }, [0.5,0.5])).toEqual([4,5]);
+    expect(spriteGroundAnchor({ cell:[3,4], size:[2,2], rotation:90 }, [0.5,0.5])).toEqual([4,5]);
+  });
+
   it('preserves the anchor when possible and moves inward at an edge', () => {
     const sofa = { cell:[0,18] as [number,number], size:[4,2] as [number,number], rotation:0 as const };
     expect(rotatedOrigin(sofa, 90)).toEqual([1,16]);

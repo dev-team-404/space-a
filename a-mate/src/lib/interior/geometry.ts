@@ -62,9 +62,9 @@ export function groundAnchor(object: GeometryObject): [number, number] {
   return [object.cell[0] + w / 2, object.cell[1] + h / 2];
 }
 
-export function spriteGroundAnchor(object: GeometryObject): [number, number] {
+export function spriteGroundAnchor(object: GeometryObject, footprintAnchor: WorldCell = [1, 1]): [number, number] {
   const [w, h] = rotatedSize(object.size, object.rotation);
-  return [object.cell[0] + w, object.cell[1] + h];
+  return [object.cell[0] + w * footprintAnchor[0], object.cell[1] + h * footprintAnchor[1]];
 }
 
 export function isInsideRoom(object: GeometryObject, grid = ROOM_GRID): boolean {
