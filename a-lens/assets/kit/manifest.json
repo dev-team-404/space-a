@@ -10,6 +10,17 @@
     "desk.d6": { "file": "desk-d6.png", "footprint": [2, 1] },
     "desk.d7": { "file": "desk-d7.png", "footprint": [2, 1] },
     "desk.d8": { "file": "desk-d8.png", "footprint": [2, 1] },
-    "desk.d9": { "file": "desk-d9.png", "footprint": [2, 1] }
+    "desk.d9": { "file": "desk-d9.png", "footprint": [2, 1] },
+    "shelf.s1": { "file": "shelf-s1.png", "footprint": [0.5, 1.0] },
+    "shelf.s2": { "file": "shelf-s2.png", "footprint": [0.5, 1.0] },
+    "shelf.s3": { "file": "shelf-s3.png", "footprint": [1.0, 0.5] },
+    "shelf.s4": { "file": "shelf-s4.png", "footprint": [1.0, 0.5] },
+    "shelf.s5": { "file": "shelf-s5.png", "footprint": [1.4, 0.5] },
+    "shelf.s6": { "file": "shelf-s6.png", "footprint": [1.2, 0.5] },
+    "shelf.s7": { "file": "shelf-s7.png", "footprint": [2.2, 0.5] },
+    "shelf.s8": { "file": "shelf-s8.png", "footprint": [2.2, 0.5] },
+    "shelf.s9": { "file": "shelf-s9.png", "footprint": [1.2, 0.5] },
+    "shelf.s10": { "file": "shelf-s10.png", "footprint": [1.2, 0.5] },
+    "shelf.s11": { "file": "shelf-s11.png", "footprint": [0.7, 0.5] }
   }
 }

@@ -8,10 +8,11 @@ import {
   DECO_OPTIONS,
   DESK_OPTIONS,
   FLOOR_OPTIONS,
+  SHELF_OPTIONS,
   WALLPAPER_OPTIONS,
 } from './room/catalog'
 import { buildRoomScene, PREVIEW_DATA } from './room/renderer'
-import type { BoardId, DecoId, DeskChoice, FloorId, RoomConfig, VariantOption, WallpaperId } from './room/types'
+import type { BoardId, DecoId, DeskChoice, FloorId, RoomConfig, ShelfId, VariantOption, WallpaperId } from './room/types'
 import { getRoom } from './store'
 
 export type BuilderOptions = {
@@ -21,10 +22,22 @@ export type BuilderOptions = {
   onSaved: (config: RoomConfig) => void
 }
 
+// 프리뷰 Pixi 앱은 싱글턴 — 열 때마다 destroy/재생성하면 두 번째부터 공유 텍스처
+// 상태가 깨져 본 씬 렌더링이 실패한다 (실측). canvas만 모달에 다시 붙인다.
+let previewApp: Application | null = null
+async function ensurePreviewApp(): Promise<Application> {
+  if (!previewApp) {
+    previewApp = new Application()
+    await previewApp.init({ width: 460, height: 330, background: '#0d1220', antialias: true })
+  }
+  return previewApp
+}
+
 const DEFAULTS: Omit<RoomConfig, 'space_id' | 'space_name' | 'created_at'> = {
   wallpaper: 'wood-night',
   floor: 'plank',
   desk: 'd1',
+  shelf: 's1',
   board: 'chalk-green',
   deco: ['plant', 'string-lights'],
   desks: 'auto',
@@ -35,7 +48,7 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
   if (!host) throw new Error('#builder 엘리먼트 없음')
 
   const state: RoomConfig = opts.initial
-    ? { ...opts.initial, deco: [...opts.initial.deco] }
+    ? { ...opts.initial, shelf: opts.initial.shelf ?? 's1', deco: [...opts.initial.deco] }
     : {
         space_id: opts.floors[0]?.space_id ?? '',
         space_name: opts.floors[0]?.name ?? '',
@@ -123,6 +136,7 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
   addGroup('벽지', WALLPAPER_OPTIONS, () => state.wallpaper, (id: WallpaperId) => (state.wallpaper = id))
   addGroup('바닥', FLOOR_OPTIONS, () => state.floor, (id: FloorId) => (state.floor = id))
   addGroup('책상', DESK_OPTIONS, () => state.desk, (id: DeskChoice) => (state.desk = id))
+  addGroup('책장 (지식)', SHELF_OPTIONS, () => state.shelf ?? 's1', (id: ShelfId) => (state.shelf = id))
   addGroup('칠판', BOARD_OPTIONS, () => state.board, (id: BoardId) => (state.board = id))
 
   // ── 책상 수 (자동 = 에이전트 수 따라감) ──
@@ -160,10 +174,9 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
     decoRow.appendChild(chip)
   }
 
-  // ── 라이브 프리뷰 (별도 Pixi Application) ──
+  // ── 라이브 프리뷰 (싱글턴 Pixi Application 재사용) ──
   const previewHost = host.querySelector<HTMLElement>('#b-preview-canvas')!
-  const preview = new Application()
-  await preview.init({ width: 460, height: 330, background: '#0d1220', antialias: true })
+  const preview = await ensurePreviewApp()
   previewHost.appendChild(preview.canvas)
 
   function renderPreview() {
@@ -182,9 +195,9 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
 
   // ── 닫기 / 저장 ──
   const close = () => {
-    preview.destroy(true, { children: true })
+    preview.stage.removeChildren().forEach((c) => c.destroy({ children: true }))
     host.hidden = true
-    host.innerHTML = ''
+    host.innerHTML = '' // canvas는 DOM에서만 떨어지고 앱은 재사용
   }
   host.querySelector('[data-act="close"]')!.addEventListener('click', close)
   host.querySelector('[data-act="save"]')!.addEventListener('click', () => {

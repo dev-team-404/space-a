@@ -1,7 +1,7 @@
 // 부품 카탈로그 — variant별 팔레트. room.png(아이소 픽셀아트, 야간 우드톤)를 레퍼런스로 삼되
 // 지금은 Graphics 프리미티브로 그린다. 스프라이트 에셋이 생기면 여기 팔레트가 텍스처 키로 바뀐다.
 
-import type { BoardId, DecoId, DeskChoice, DeskId, FloorId, VariantOption, WallpaperId } from './types'
+import type { BoardId, DecoId, DeskChoice, DeskId, FloorId, ShelfId, VariantOption, WallpaperId } from './types'
 
 export type WallPalette = { wall: number; trim: number; shade: number }
 export type FloorPalette = { a: number; b: number; edge: number }
@@ -40,6 +40,17 @@ export function resolveDeskId(choice: string, k = 0): DeskId {
   return LEGACY_DESK_IDS[choice] ?? 'd1'
 }
 
+/** 책장 variant가 붙는 벽 — 스프라이트가 그려진 원근 방향에 따름 */
+export const SHELF_SIDE: Record<ShelfId, 'left' | 'right'> = {
+  s1: 'left', s2: 'left',
+  s3: 'right', s4: 'right', s5: 'right', s6: 'right', s7: 'right',
+  s8: 'right', s9: 'right', s10: 'right', s11: 'right',
+}
+
+export function resolveShelfId(v: string | undefined): ShelfId {
+  return v && v in SHELF_SIDE ? (v as ShelfId) : 's1'
+}
+
 export const BOARDS: Record<BoardId, BoardPalette> = {
   'chalk-green': { frame: 0x8a5b2e, face: 0x2d4a3a, chalk: 0xe8e6d8 },
   'chalk-black': { frame: 0x8a5b2e, face: 0x23262b, chalk: 0xe8e6d8 },
@@ -71,6 +82,21 @@ export const DESK_OPTIONS: VariantOption<DeskChoice>[] = [
   { id: 'd8', label: '트리플 모니터', swatch: '#a5713d', thumb: deskThumb('d8') },
   { id: 'd9', label: '수납형 노트북', swatch: '#a5713d', thumb: deskThumb('d9') },
   { id: 'mix', label: '랜덤 믹스', swatch: '#d9a441' },
+]
+
+const shelfThumb = (id: ShelfId) => `/assets/kit/shelf-${id}.png`
+export const SHELF_OPTIONS: VariantOption<ShelfId>[] = [
+  { id: 's1', label: '왼벽 높은 1', swatch: '#8a5b2e', thumb: shelfThumb('s1') },
+  { id: 's2', label: '왼벽 높은 2', swatch: '#8a5b2e', thumb: shelfThumb('s2') },
+  { id: 's3', label: '오른벽 높은 1', swatch: '#8a5b2e', thumb: shelfThumb('s3') },
+  { id: 's4', label: '오른벽 높은 2', swatch: '#8a5b2e', thumb: shelfThumb('s4') },
+  { id: 's5', label: '오른벽 낮은 1', swatch: '#8a5b2e', thumb: shelfThumb('s5') },
+  { id: 's6', label: '오른벽 낮은 2', swatch: '#8a5b2e', thumb: shelfThumb('s6') },
+  { id: 's7', label: '낮은 가로 1', swatch: '#8a5b2e', thumb: shelfThumb('s7') },
+  { id: 's8', label: '낮은 가로 2', swatch: '#8a5b2e', thumb: shelfThumb('s8') },
+  { id: 's9', label: '중간 높이 1', swatch: '#8a5b2e', thumb: shelfThumb('s9') },
+  { id: 's10', label: '중간 높이 2', swatch: '#8a5b2e', thumb: shelfThumb('s10') },
+  { id: 's11', label: '좁은 책장', swatch: '#8a5b2e', thumb: shelfThumb('s11') },
 ]
 
 export const BOARD_OPTIONS: VariantOption<BoardId>[] = [

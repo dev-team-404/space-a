@@ -27,8 +27,8 @@
 
 | 키 | 내용 | footprint (칸) | 대략 캔버스 |
 |---|---|---|---|
-| `desk.oak` / `desk.walnut` / `desk.white` | 책상 세트 (모니터·의자·소품 포함) | [2, 1] | ~480×480 |
-| `shelf.default` | 책장 (책 꽂힌 상태) | [0.7, 2.4] | ~440×640 |
+| `desk.d1`~`desk.d9` | 책상 세트 (모니터·의자·소품 포함) — **desk.png 시트에서 추출 완료** | [2, 1] | ~480×480 |
+| `shelf.s1`~`shelf.s11` | 책장 — **book.png 시트에서 추출 완료** (s1·s2 왼벽용, s3~s11 오른벽용) | manifest 참조 | ~440×640 |
 | `board.chalk-green` / `board.chalk-black` / `board.glass` | 칠판/보드 (벽 원근, 면은 비워둘 것 — 이슈 텍스트를 코드가 얹음) | wall-right, 벽 4.6칸 | ~640×520 |
 | `deco.plant` | 화분 | [0.55, 0.55] | ~200×280 |
 | `deco.water-cooler` | 정수기 | [0.6, 0.6] | ~200×320 |

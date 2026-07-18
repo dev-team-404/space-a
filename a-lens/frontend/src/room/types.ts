@@ -6,6 +6,8 @@ export type FloorId = 'plank' | 'checker' | 'stone'
 export type DeskId = 'd1' | 'd2' | 'd3' | 'd4' | 'd5' | 'd6' | 'd7' | 'd8' | 'd9'
 /** 'mix'면 책상마다 d1~d9를 돌아가며 배치 */
 export type DeskChoice = DeskId | 'mix'
+/** 책장 11종 — book.png 시트에서 추출 (s1~s2 왼쪽 벽용, s3~s11 오른쪽 벽용) */
+export type ShelfId = 's1' | 's2' | 's3' | 's4' | 's5' | 's6' | 's7' | 's8' | 's9' | 's10' | 's11'
 export type BoardId = 'chalk-green' | 'chalk-black' | 'glass'
 export type DecoId = 'plant' | 'water-cooler' | 'rug' | 'string-lights'
 
@@ -18,6 +20,8 @@ export type RoomConfig = {
   wallpaper: WallpaperId
   floor: FloorId
   desk: DeskChoice
+  /** 지식 책장 — 없으면(구버전 저장분) s1 */
+  shelf?: ShelfId
   board: BoardId
   deco: DecoId[]
   /** 책상 수 — 'auto'면 에이전트 수를 따라감. 이전 버전 저장분에는 없을 수 있다. */

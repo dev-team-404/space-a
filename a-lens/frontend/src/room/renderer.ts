@@ -4,7 +4,7 @@
 
 import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js'
 import type { SpaceAgent, SpaceIssue } from '../api'
-import { BOARDS, DESKS, FLOORS, WALLPAPERS, resolveDeskId } from './catalog'
+import { BOARDS, DESKS, FLOORS, SHELF_SIDE, WALLPAPERS, resolveDeskId, resolveShelfId } from './catalog'
 import { TILE_W, TILE_H, WALL_H, isoX, isoY, depth } from './iso'
 import { kitPiece, kitPieceScale } from './kit'
 import type { RoomConfig } from './types'
@@ -222,8 +222,20 @@ export function buildRoomScene(
     root.addChild(empty)
   }
 
-  // ── 책장 (왼쪽 뒷벽 앞) — 클릭 → 지식 패널 ──
-  const shelfSprite = placeKitSprite(root, 'shelf.default', 0.15, 1.2, depth(1, 2))
+  // ── 책장 — variant에 따라 왼쪽/오른쪽 벽에 배치. 클릭 → 지식 패널 ──
+  const shelfId = resolveShelfId(config.shelf)
+  const shelfKit = kitPiece(`shelf.${shelfId}`)
+  let shelfSprite: Sprite | null = null
+  let badgePos: [number, number] = [0, 0]
+  if (shelfKit) {
+    const [fw, fd] = shelfKit.footprint
+    const pos =
+      SHELF_SIDE[shelfId] === 'left'
+        ? { gx: 0.15, gy: 1.2 } // 왼쪽 뒷벽 앞
+        : { gx: W - fw - 0.4, gy: 0.18 } // 오른쪽 뒷벽 앞 (칠판 오른쪽)
+    shelfSprite = placeKitSprite(root, `shelf.${shelfId}`, pos.gx, pos.gy, depth(pos.gx + fw, pos.gy + fd))
+    if (shelfSprite) badgePos = [shelfSprite.x, shelfSprite.y - shelfSprite.height - 8]
+  }
   const shelfHit: Container = shelfSprite ?? new Graphics()
   if (!shelfSprite) {
     const shelfG = shelfHit as Graphics
@@ -244,6 +256,8 @@ export function buildRoomScene(
     }
     shelfG.zIndex = depth(1, 2)
     root.addChild(shelfG)
+    const [fx, fy] = pt(0.5, 2.2, -118)
+    badgePos = [fx, fy]
   }
   shelfHit.eventMode = 'static'
   shelfHit.cursor = 'pointer'
@@ -251,9 +265,8 @@ export function buildRoomScene(
 
   const countStyle = new TextStyle({ fill: 0xf0e6d2, fontSize: 12, fontWeight: 'bold' })
   const shelfBadge = new Text({ text: `지식 ${data.knowledgeCount}`, style: countStyle })
-  const [sbx, sby] = pt(0.5, 2.2, -118)
-  shelfBadge.position.set(sbx - shelfBadge.width / 2, sby)
-  shelfBadge.zIndex = depth(1, 2) + 0.1
+  shelfBadge.position.set(badgePos[0] - shelfBadge.width / 2, badgePos[1])
+  shelfBadge.zIndex = (shelfSprite?.zIndex ?? depth(1, 2)) + 0.1
   root.addChild(shelfBadge)
 
   // ── 장식 (킷 스프라이트 우선, 없으면 Graphics 폴백) ──
@@ -269,6 +282,7 @@ export function buildRoomScene(
       root.addChild(rug)
     }
   }
+  const shelfOnRight = SHELF_SIDE[shelfId] === 'right'
   if (config.deco.includes('plant')) {
     const plantAt = (gx: number, gy: number) => {
       if (placeKitSprite(root, 'deco.plant', gx, gy, depth(gx, gy))) return
@@ -281,12 +295,14 @@ export function buildRoomScene(
       p.zIndex = depth(gx, gy)
       root.addChild(p)
     }
-    plantAt(W - 1.4, 0.6)
+    // 책장이 오른벽이면 화분은 비어 있는 왼벽 쪽으로
+    if (shelfOnRight) plantAt(0.7, 2.6)
+    else plantAt(W - 1.4, 0.6)
     plantAt(0.6, H - 1.6)
   }
   if (config.deco.includes('water-cooler')) {
-    const wgx = W - 1.3
-    const wgy = 1.0
+    const wgx = shelfOnRight ? 0.5 : W - 1.3
+    const wgy = shelfOnRight ? 4.0 : 1.0
     if (!placeKitSprite(root, 'deco.water-cooler', wgx, wgy, depth(wgx, wgy))) {
       const wc = new Graphics()
       drawIsoBox(wc, wgx, wgy, 0.6, 0.6, 46, { top: 0xc9d2d8, left: 0xa9b4bc, right: 0xb8c4cc })
