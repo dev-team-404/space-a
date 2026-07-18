@@ -1058,6 +1058,22 @@ pub fn ingest_file(
         all.extend(evs);
     }
     let inserted = store.upsert_events(&all)?;
+
+    // 서브에이전트 하위 트랜스크립트 수 — <세션id>/subagents/*.jsonl 존재 카운트만 (전문 파싱은 후속, 코칭 v3 §4.1-3)
+    let sub_dir = file.with_extension("").join("subagents");
+    if let Ok(entries) = std::fs::read_dir(&sub_dir) {
+        let n = entries
+            .flatten()
+            .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jsonl"))
+            .count() as i64;
+        if let Some(sid) = file.file_stem().and_then(|s| s.to_str()) {
+            store.conn.execute(
+                "UPDATE sessions SET subagent_files=?2 WHERE session_id=?1",
+                rusqlite::params![sid, n],
+            )?;
+        }
+    }
+
     store.set_offset(&file_key, new_offset)?;
     Ok(inserted)
 }
@@ -2096,5 +2112,49 @@ mod tests {
              ('s3','wsl:U','p','/home/x/proj'), ('s4','Windows','p',NULL);").unwrap();
         let cwds = store.session_cwds("Windows").unwrap();
         assert_eq!(cwds, vec!["D:\\proj".to_string()]); // distinct + host 필터 + NULL 제외
+    }
+
+    #[test]
+    fn ingest_file_counts_subagent_transcripts() {
+        use crate::adapter::ClaudeCodeAdapter;
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let proj = dir.path().join("C--Users-jibin");
+        std::fs::create_dir_all(proj.join("abc").join("subagents")).unwrap();
+        // 세션 jsonl + 서브에이전트 파일 2개 (+ jsonl 아닌 파일 1개는 미집계)
+        let file = proj.join("abc.jsonl");
+        let mut f = std::fs::File::create(&file).unwrap();
+        writeln!(f, r#"{{"type":"assistant","sessionId":"abc","uuid":"u1","timestamp":"2026-07-19T10:00:00Z","message":{{"model":"claude-opus-4-8","usage":{{"input_tokens":1,"output_tokens":1}}}}}}"#).unwrap();
+        for name in ["agent-a.jsonl", "agent-b.jsonl"] {
+            std::fs::File::create(proj.join("abc").join("subagents").join(name)).unwrap();
+        }
+        std::fs::File::create(proj.join("abc").join("subagents").join("note.txt")).unwrap();
+
+        let store = SqliteStore::open_in_memory().unwrap();
+        let adapter = ClaudeCodeAdapter { root: dir.path().into(), host: "Windows".into() };
+        ingest_file(&store, &adapter, &file).unwrap();
+
+        let n: i64 = store.conn.query_row(
+            "SELECT subagent_files FROM sessions WHERE session_id='abc'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 2);
+    }
+
+    #[test]
+    fn ingest_file_without_subagent_dir_keeps_zero() {
+        use crate::adapter::ClaudeCodeAdapter;
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let proj = dir.path().join("C--Users-jibin");
+        std::fs::create_dir_all(&proj).unwrap();
+        let file = proj.join("solo.jsonl");
+        let mut f = std::fs::File::create(&file).unwrap();
+        writeln!(f, r#"{{"type":"assistant","sessionId":"solo","uuid":"u1","timestamp":"2026-07-19T10:00:00Z","message":{{"model":"claude-opus-4-8","usage":{{"input_tokens":1,"output_tokens":1}}}}}}"#).unwrap();
+
+        let store = SqliteStore::open_in_memory().unwrap();
+        let adapter = ClaudeCodeAdapter { root: dir.path().into(), host: "Windows".into() };
+        ingest_file(&store, &adapter, &file).unwrap();
+        let n: i64 = store.conn.query_row(
+            "SELECT subagent_files FROM sessions WHERE session_id='solo'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
     }
 }
