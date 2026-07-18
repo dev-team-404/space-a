@@ -320,7 +320,9 @@ impl SqliteStore {
                 last_seen = ?11,
                 occurrences = occurrences + 1,
                 est_tokens_saved = ?9,
-                evidence_json = ?8",
+                evidence_json = ?8,
+                severity = ?3,
+                prescription_json = ?10",
             params![
                 f.dedup_key, f.rule_id, f.severity.as_str(), f.scope_host, f.scope_project,
                 f.scope_kind, f.scope_ref, evidence, f.est_tokens_saved as i64, presc, now_ts
@@ -1570,6 +1572,45 @@ mod tests {
 
         // 절약가능 합계는 active만
         assert_eq!(store.sum_est_tokens_saved().unwrap(), 100);
+    }
+
+    #[test]
+    fn upsert_finding_refreshes_severity_and_prescription_but_keeps_status() {
+        // R10 강등(Warn→Info, prescription 제거)이 기존 DB에도 upsert로 반영돼야 한다 (스펙 §3.2).
+        // status(사용자 처분)는 upsert가 건드리지 않아야 한다.
+        let store = SqliteStore::open_in_memory().unwrap();
+        let f = Finding {
+            rule_id: "R10".into(),
+            severity: Severity::Warn,
+            scope_host: Some("Windows".into()),
+            scope_project: Some("p".into()),
+            scope_kind: "project".into(),
+            scope_ref: "p".into(),
+            evidence: serde_json::json!({"n": 1}),
+            est_tokens_saved: 500,
+            prescription: Some(Prescription {
+                kind: "automation_model_config".into(),
+                payload: serde_json::json!({}),
+            }),
+            dedup_key: "R10|W|p".into(),
+        };
+        store.upsert_finding(&f, "2026-07-01T10:00:00Z").unwrap();
+        assert!(store.set_finding_status("R10|W|p", "dismissed").unwrap());
+
+        let f2 = Finding { severity: Severity::Info, prescription: None, ..f };
+        store.upsert_finding(&f2, "2026-07-02T10:00:00Z").unwrap();
+
+        let (severity, prescription_json, status): (String, Option<String>, String) = store
+            .conn
+            .query_row(
+                "SELECT severity, prescription_json, status FROM findings WHERE dedup_key='R10|W|p'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(severity, "info");
+        assert!(prescription_json.is_none());
+        assert_eq!(status, "dismissed");
     }
 
     #[test]
