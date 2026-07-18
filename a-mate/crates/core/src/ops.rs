@@ -131,7 +131,14 @@ pub fn run_inventory(store: &mut SqliteStore) -> Result<Vec<String>> {
         // v3: 개인 스킬 인벤토리 — 사용자 스코프 + 프로젝트 스코프(.claude/skills, 로컬 존재 cwd만)
         let mut personal =
             crate::inventory::scan_personal_skills(&hs.claude_root.join("skills"), "user");
-        for cwd in store.session_cwds(&hs.host).unwrap_or_default() {
+        let cwds = match store.session_cwds(&hs.host) {
+            Ok(c) => c,
+            Err(e) => {
+                warnings.push(format!("host {} 세션 cwd 조회 실패 — 프로젝트 스킬 스캔 스킵: {e}", hs.host));
+                Vec::new()
+            }
+        };
+        for cwd in cwds {
             let p = std::path::Path::new(&cwd).join(".claude").join("skills");
             personal.extend(crate::inventory::scan_personal_skills(&p, "project"));
         }
