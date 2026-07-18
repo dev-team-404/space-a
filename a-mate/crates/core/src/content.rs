@@ -272,12 +272,13 @@ fn tidy_body(body: &str) -> String {
 }
 
 /// 팁 텍스트 → (역량 축, 태그). 키워드로 프론티어/태그 매칭이 되게 한다(특이도 높은 것 우선).
-fn classify_boris(text: &str) -> (Option<Dimension>, Vec<String>) {
+/// boris·팀 지식 등 소스 무관 공용 — 소스 태그는 호출자가 앞에 붙인다.
+fn classify_keywords(text: &str) -> (Option<Dimension>, Vec<String>) {
     use Dimension::*;
     let t = text.to_lowercase();
     let has = |k: &str| t.contains(k);
     let mut dim: Option<Dimension> = None;
-    let mut tags = vec!["boris".to_string()];
+    let mut tags: Vec<String> = Vec::new();
     if has("subagent") || has("worktree") || has("parallel") || has("orchestr") || has("background agent") {
         dim = dim.or(Some(Orchestration));
         tags.push("subagent".into());
@@ -328,7 +329,8 @@ impl BorisTipsSource {
             .filter(|(t, b)| !t.trim().is_empty() && !b.trim().is_empty())
             .take(self.max_items)
             .map(|(t, b)| {
-                let (dimension, trigger_tags) = classify_boris(&format!("{t} {b}"));
+                let (dimension, mut trigger_tags) = classify_keywords(&format!("{t} {b}"));
+                trigger_tags.insert(0, "boris".into());
                 let hx = Sha256::digest(t.trim().as_bytes());
                 ContentItem {
                     id: format!("boris-{:02x}{:02x}{:02x}", hx[0], hx[1], hx[2]),
@@ -356,6 +358,108 @@ impl ContentSource for BorisTipsSource {
             .call()?
             .into_string()?;
         Ok(self.parse_html(&body))
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// 팀 지식(Space A) — a-hub에 발행된 다른 팀원의 지식 페이지를 "오늘의 배움" 피드로.
+// pull 방향 (push는 hub.rs). 내 페이지는 제외(에코 방지 — agent_id == user_id 계약).
+// 관대: 트리/페이지 실패는 스킵, 소스 전체 실패도 상위에서 warn 후 계속.
+// ─────────────────────────────────────────────────────────────────────────
+
+pub struct HubKnowledgeSource {
+    pub base_url: String,
+    pub api_key: String,
+    pub token: String,
+    pub space_id: String,
+    /// 내 발행분 제외용 — 허브 계약상 agent_id == user_id.
+    pub own_agent_id: String,
+    pub max_items: usize,
+}
+
+impl HubKnowledgeSource {
+    fn get_json(&self, path: &str) -> Result<serde_json::Value> {
+        let mut r = ureq::get(&format!("{}{}", self.base_url.trim_end_matches('/'), path))
+            .timeout(std::time::Duration::from_secs(10))
+            .set("Authorization", &format!("Bearer {}", self.token));
+        if !self.api_key.is_empty() {
+            r = r.set("x-api-key", &self.api_key);
+        }
+        Ok(r.call()?.into_json()?)
+    }
+
+    /// 트리 평탄화 → 남의 페이지만 → 최신순(page id 숫자 접미사 DESC) 상위 max — 순수.
+    pub fn pick_page_ids(tree: &serde_json::Value, own_agent_id: &str, max: usize) -> Vec<String> {
+        fn walk(nodes: &[serde_json::Value], own: &str, out: &mut Vec<(u64, String)>) {
+            for n in nodes {
+                let created_by = n.get("created_by").and_then(|v| v.as_str()).unwrap_or("");
+                if let Some(id) = n.get("page_id").and_then(|v| v.as_str()) {
+                    if created_by != own {
+                        let seq = id
+                            .rsplit(['_', '-'])
+                            .next()
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or(0);
+                        out.push((seq, id.to_string()));
+                    }
+                }
+                if let Some(ch) = n.get("children").and_then(|v| v.as_array()) {
+                    walk(ch, own, out);
+                }
+            }
+        }
+        let mut acc: Vec<(u64, String)> = Vec::new();
+        if let Some(nodes) = tree.as_array() {
+            walk(nodes, own_agent_id, &mut acc);
+        }
+        acc.sort_by(|a, b| b.0.cmp(&a.0));
+        acc.into_iter().take(max).map(|(_, id)| id).collect()
+    }
+
+    /// 페이지 JSON → ContentItem — 순수. 제목/본문 빈 것은 None.
+    pub fn item_from_page(page: &serde_json::Value) -> Option<ContentItem> {
+        let id = page.get("page_id").and_then(|v| v.as_str())?;
+        let title = page.get("title").and_then(|v| v.as_str())?.trim().to_string();
+        if title.is_empty() {
+            return None;
+        }
+        let body = page.get("body").and_then(|v| v.as_str()).unwrap_or("");
+        let author = page.get("created_by").and_then(|v| v.as_str()).unwrap_or("팀");
+        let (dimension, mut tags) = classify_keywords(&format!("{title} {body}"));
+        tags.insert(0, "team".into());
+        Some(ContentItem {
+            id: format!("hub-{id}"),
+            kind: ItemKind::Tip,
+            title,
+            body: format!("{} — {author}님의 팀 지식 (Space A)", tidy_body(body)),
+            source_url: None, // 허브에 사람용 웹 UI가 없어 링크 생략 (a-lens가 사람용 뷰)
+            dimension,
+            trigger_tags: tags,
+            base_priority: 5,
+        })
+    }
+}
+
+impl ContentSource for HubKnowledgeSource {
+    fn id(&self) -> &str {
+        "hub-knowledge"
+    }
+    fn fetch(&self) -> Result<Vec<ContentItem>> {
+        let tree = self.get_json(&format!("/spaces/{}/tree", self.space_id))?;
+        let nodes = tree.get("tree").cloned().unwrap_or_else(|| serde_json::json!([]));
+        let ids = Self::pick_page_ids(&nodes, &self.own_agent_id, self.max_items);
+        let mut out = Vec::new();
+        for id in ids {
+            match self.get_json(&format!("/pages/{id}")) {
+                Ok(p) => {
+                    if let Some(item) = Self::item_from_page(&p) {
+                        out.push(item);
+                    }
+                }
+                Err(e) => eprintln!("[curation] hub page {id} fetch 실패(계속): {e}"),
+            }
+        }
+        Ok(out)
     }
 }
 
@@ -622,5 +726,50 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert!(!items[0].body.contains("View original post"), "아티팩트 제거: {}", items[0].body);
         assert!(items[0].body.contains('…'), "긴 본문 축약: {}", items[0].body);
+    }
+
+    // ── 팀 지식(pull) — HubKnowledgeSource 순수 함수 ──
+
+    #[test]
+    fn hub_pick_excludes_own_pages_sorts_desc_and_caps() {
+        let tree = serde_json::json!([
+            { "page_id": "page_3", "created_by": "salt", "children": [
+                { "page_id": "page_9", "created_by": "salt", "children": [] }
+            ]},
+            { "page_id": "page_7", "created_by": "palen", "children": [] }, // 내 것 — 제외
+            { "page_id": "page_5", "created_by": "jun", "children": [] },
+            { "page_id": "page_1", "created_by": "salt", "children": [] },
+        ]);
+        let ids = HubKnowledgeSource::pick_page_ids(&tree, "palen", 3);
+        assert_eq!(ids, vec!["page_9", "page_5", "page_3"]); // 최신순, 내 것 제외, 상한 3
+    }
+
+    #[test]
+    fn hub_item_maps_page_with_team_tag_and_author() {
+        let page = serde_json::json!({
+            "page_id": "page_42",
+            "title": "CI 캐시 키 구성 정리",
+            "body": "브랜치별 캐시 키에 lockfile 해시를 섞으면 miss가 줄어든다.",
+            "created_by": "salt"
+        });
+        let item = HubKnowledgeSource::item_from_page(&page).expect("유효한 페이지");
+        assert_eq!(item.id, "hub-page_42");
+        assert_eq!(item.title, "CI 캐시 키 구성 정리");
+        assert_eq!(item.trigger_tags.first().map(|s| s.as_str()), Some("team"));
+        assert!(item.body.contains("salt님의 팀 지식"), "저자 표기: {}", item.body);
+    }
+
+    #[test]
+    fn hub_item_rejects_empty_title_and_classifies_keywords() {
+        assert!(HubKnowledgeSource::item_from_page(&serde_json::json!({
+            "page_id": "page_1", "title": "  ", "body": "x"
+        }))
+        .is_none());
+        // 키워드 분류 공용화 — skill 언급이면 SkillReuse 축
+        let item = HubKnowledgeSource::item_from_page(&serde_json::json!({
+            "page_id": "page_2", "title": "Use the deploy skill", "body": "repeatable skill flow", "created_by": "salt"
+        }))
+        .unwrap();
+        assert_eq!(item.dimension, Some(Dimension::SkillReuse));
     }
 }

@@ -132,8 +132,16 @@ mod runtime {
     /// 노출 목록이 있으면 `content:ready`를 emit해 프론트가 즉시 반영(coach:finding 선례).
     /// 네트워크 실패는 조용히(빈 피드로 진행 — 내장 팁만으로도 코칭 성립).
     fn maybe_curate_content(app: &AppHandle, store_mutex: &std::sync::Mutex<SqliteStore>) {
+        // ⓪ 짧은 락: 팀 지식(pull) 소스 구성에 필요한 저장 토큰만 읽고 즉시 해제
+        let hub_src = agent_mentor::hub::HubConfig::from_env().and_then(|cfg| {
+            let stored = match store_mutex.lock() {
+                Ok(store) => store.get_setting("hub_token").ok().flatten(),
+                Err(_) => None,
+            };
+            agent_mentor::hub::pull_source(&cfg, stored)
+        });
         // ① 락 밖: 피드 소스 네트워크 fetch (실패해도 빈 벡터)
-        let feed = agent_mentor::ops::fetch_feed_items();
+        let feed = agent_mentor::ops::fetch_feed_items(hub_src);
         let now = chrono::Utc::now().to_rfc3339();
 
         // ② 락: run_curation(감지→랭킹→persist) → 노출 목록 → 즉시 해제

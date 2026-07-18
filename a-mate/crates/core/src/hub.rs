@@ -332,6 +332,23 @@ impl HubClient {
     }
 }
 
+/// pull 방향(팀 지식 → 큐레이션 피드) 소스. 토큰이 없으면 None —
+/// push 경로가 최초 register로 settings(hub_token)를 채우면 그때부터 활성.
+pub fn pull_source(
+    cfg: &HubConfig,
+    stored_token: Option<String>,
+) -> Option<crate::content::HubKnowledgeSource> {
+    let token = cfg.token.clone().or(stored_token)?;
+    Some(crate::content::HubKnowledgeSource {
+        base_url: cfg.base_url.clone(),
+        api_key: cfg.api_key.clone(),
+        token,
+        space_id: cfg.space_id.clone(),
+        own_agent_id: cfg.user_id.clone(),
+        max_items: 5,
+    })
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // 오케스트레이션 — CLI·단일 스레드용 (Tauri는 락 규율에 맞춰 단계 호출)
 // ─────────────────────────────────────────────────────────────────────────

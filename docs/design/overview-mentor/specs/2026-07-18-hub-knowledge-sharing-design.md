@@ -119,9 +119,13 @@ settings에 `hub_token`·`hub_agent_id` 보존(자동 register 결과).
   3. 같은 store에서 재실행 → **0건 발행**(dedup) 확인.
   4. 앱 실기동에서 파이프라인 편승이 무해하게 동작(공유 대상 0건 시 no-op 로그)함을 확인.
 
-## 10. 유예 (다음 확장)
+## 10. 후속 (같은 날 구현·유예 구분)
 
-- **pull 방향** — 허브 지식을 a-mate 큐레이션 피드로 (`HubContentSource`, boris-tips 패턴 재사용).
-- 마스코트 말풍선으로 "허브에 지식 공유했어요" 알림(현재는 로그만).
-- R6(SKILL.md 초안) 구현 시 스킬 초안도 같은 경로로 발행.
-- 트레이 토글(현재는 env로만 on/off).
+- ~~**pull 방향**~~ → **구현됨(같은 브랜치)**: `content.rs::HubKnowledgeSource` — 허브 팀 지식 페이지를
+  큐레이션 피드로 pull. 트리에서 **남의 페이지만**(에코 방지, agent_id==user_id 계약) 최신순 5건,
+  키워드 분류(공용 `classify_keywords`)로 역량 축 매핑, 태그 `team`. 토큰은 push가 register로
+  채운 settings(hub_token) 재사용 — 토큰 없으면 조용히 생략. E2E: 타 에이전트 저작 페이지가
+  `hub-page_*`로 피드 유입 + 본인 발행분 제외 확인.
+- 마스코트 말풍선으로 "허브에 지식 공유했어요" 알림(현재는 로그만) — 유예.
+- R6(SKILL.md 초안) 구현 시 스킬 초안도 같은 경로로 발행 — 유예.
+- 트레이 토글(현재는 env로만 on/off) — 유예.

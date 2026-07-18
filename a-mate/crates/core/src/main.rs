@@ -59,7 +59,13 @@ fn cmd_curate(store: &SqliteStore) -> Result<()> {
             n
         }
         Err(_) => {
-            let n = ops::fetch_feed_items();
+            // 팀 지식(pull)은 허브 설정+토큰(env 또는 settings 보존분)이 있을 때만
+            let hub_src = agent_mentor::hub::HubConfig::from_env()
+                .and_then(|cfg| {
+                    let stored = store.get_setting("hub_token").ok().flatten();
+                    agent_mentor::hub::pull_source(&cfg, stored)
+                });
+            let n = ops::fetch_feed_items(hub_src);
             eprintln!("feed: 네트워크에서 {}건", n.len());
             n
         }
