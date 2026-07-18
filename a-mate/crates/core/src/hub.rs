@@ -368,12 +368,12 @@ pub fn run_share(store: &crate::store::SqliteStore, cfg: &HubConfig) -> Result<S
     let now = chrono::Utc::now().to_rfc3339();
 
     // ① 토큰 확보: env > settings 보존분 > 자동 register(결과는 settings에 보존)
-    let token = match cfg.token.clone().or(store.get_setting("hub_token")?) {
+    let token = match cfg.token.clone().or(store.get_setting("knowledge_hub_token")?) {
         Some(t) => t,
         None => match HubClient::register(cfg) {
             Ok((agent_id, t)) => {
-                store.set_setting("hub_agent_id", &agent_id)?;
-                store.set_setting("hub_token", &t)?;
+                store.set_setting("knowledge_hub_agent_id", &agent_id)?;
+                store.set_setting("knowledge_hub_token", &t)?;
                 t
             }
             Err(e) => {

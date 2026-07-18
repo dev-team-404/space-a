@@ -135,7 +135,7 @@ mod runtime {
         // ⓪ 짧은 락: 팀 지식(pull) 소스 구성에 필요한 저장 토큰만 읽고 즉시 해제
         let hub_src = agent_mentor::hub::HubConfig::from_env().and_then(|cfg| {
             let stored = match store_mutex.lock() {
-                Ok(store) => store.get_setting("hub_token").ok().flatten(),
+                Ok(store) => store.get_setting("knowledge_hub_token").ok().flatten(),
                 Err(_) => None,
             };
             agent_mentor::hub::pull_source(&cfg, stored)
@@ -297,7 +297,7 @@ mod runtime {
         // ① 락: 토큰·재개 목록·신규 후보 조회 → 즉시 해제
         let (token_opt, pending, picked) = match store_mutex.lock() {
             Ok(store) => {
-                let token = cfg.token.clone().or(store.get_setting("hub_token").ok().flatten());
+                let token = cfg.token.clone().or(store.get_setting("knowledge_hub_token").ok().flatten());
                 let pending: Vec<(String, String, agent_mentor::store::FindingRow)> = store
                     .hub_share_pending()
                     .unwrap_or_default()
@@ -327,8 +327,8 @@ mod runtime {
             None => match HubClient::register(&cfg) {
                 Ok((agent_id, t)) => {
                     if let Ok(store) = store_mutex.lock() {
-                        let _ = store.set_setting("hub_agent_id", &agent_id);
-                        let _ = store.set_setting("hub_token", &t);
+                        let _ = store.set_setting("knowledge_hub_agent_id", &agent_id);
+                        let _ = store.set_setting("knowledge_hub_token", &t);
                     }
                     t
                 }

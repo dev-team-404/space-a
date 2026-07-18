@@ -70,7 +70,7 @@ Engine 선례(§ CLAUDE.md "외부 전송은 선택으로만")를 그대로 따�
 ```
 SPACE_A_HUB_URL      # 필수. 미설정이면 공유 기능 전체가 조용히 no-op
 SPACE_A_API_KEY      # 서버 게이트 키 (배포가 요구할 때)
-SPACE_A_TOKEN        # 선택. 없으면 최초 1회 자동 register 후 settings(hub_token)에 보존
+SPACE_A_TOKEN        # 선택. 없으면 최초 1회 자동 register 후 settings(knowledge_hub_token)에 보존
 SPACE_A_SPACE_ID     # 선택. 기본 sw-innov
 SPACE_A_USER         # 선택. register용 user_id. 기본 %USERNAME%
 SPACE_A_SHARE        # 선택. "off"면 URL이 있어도 공유만 끔 (a-lens 등 다른 용도와 분리)
@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS hub_share_state (
 );
 ```
 
-settings에 `hub_token`·`hub_agent_id` 보존(자동 register 결과).
+settings에 `knowledge_hub_token`·`knowledge_hub_agent_id` 보존 (기존 방 방문 기능의 `hub_token`(room-server용)과 키 충돌 방지)(자동 register 결과).
 
 ## 8. 코드 배치
 
@@ -124,7 +124,7 @@ settings에 `hub_token`·`hub_agent_id` 보존(자동 register 결과).
 - ~~**pull 방향**~~ → **구현됨(같은 브랜치)**: `content.rs::HubKnowledgeSource` — 허브 팀 지식 페이지를
   큐레이션 피드로 pull. 트리에서 **남의 페이지만**(에코 방지, agent_id==user_id 계약) 최신순 5건,
   키워드 분류(공용 `classify_keywords`)로 역량 축 매핑, 태그 `team`. 토큰은 push가 register로
-  채운 settings(hub_token) 재사용 — 토큰 없으면 조용히 생략. E2E: 타 에이전트 저작 페이지가
+  채운 settings(knowledge_hub_token) 재사용 — 토큰 없으면 조용히 생략. E2E: 타 에이전트 저작 페이지가
   `hub-page_*`로 피드 유입 + 본인 발행분 제외 확인.
 - 마스코트 말풍선으로 "허브에 지식 공유했어요" 알림(현재는 로그만) — 유예.
 - R6(SKILL.md 초안) 구현 시 스킬 초안도 같은 경로로 발행 — 유예.
