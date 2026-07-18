@@ -53,6 +53,8 @@ def build_mcp(service: SpaceAService | None = None) -> FastMCP:
                     "title": p.title,
                     "source": p.source,
                     "created_by": p.created_by,
+                    "created_at": p.created_at,
+                    "updated_at": p.updated_at,
                 }
                 for p in res.pages
             ],
