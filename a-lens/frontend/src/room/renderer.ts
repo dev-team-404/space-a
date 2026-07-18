@@ -90,18 +90,26 @@ function shade(color: number, f: number): number {
   return (r << 16) | (g << 8) | b
 }
 
-/** 책상 배치 계산 — 에이전트 수에 맞춰 격자를 자동으로 늘린다 (책상 5개 고정 한계 해소). */
+// 책상 그리드: 가로 최대 4 × 세로 최대 3 = 12개. 1.7배로 커진 스프라이트가 겹치지
+// 않도록 열·행 간격을 넉넉히 잡는다 (열 4.2칸, 행 3.8칸).
+const DESK_COLS = 4
+const DESK_COL_GAP = 4.2
+const DESK_ROW_GAP = 3.8
+const DESK_GX0 = 1.5
+const DESK_GY0 = 2.5
+
+/** 책상 배치 계산 — 에이전트 수에 맞춰 4×3 격자로 채운다. */
 function layoutDesks(count: number): { slots: { gx: number; gy: number }[]; W: number; H: number } {
-  const cols = Math.min(3, Math.max(1, count))
-  const rows = Math.max(1, Math.ceil(count / 3))
+  const cols = Math.min(DESK_COLS, Math.max(1, count))
+  const rows = Math.max(1, Math.ceil(count / DESK_COLS))
   const slots: { gx: number; gy: number }[] = []
   for (let k = 0; k < count; k++) {
-    const col = k % 3
-    const row = Math.floor(k / 3)
-    slots.push({ gx: 1.5 + col * 3, gy: 2.5 + row * 3 })
+    const col = k % DESK_COLS
+    const row = Math.floor(k / DESK_COLS)
+    slots.push({ gx: DESK_GX0 + col * DESK_COL_GAP, gy: DESK_GY0 + row * DESK_ROW_GAP })
   }
-  const W = Math.max(8, 1.5 + cols * 3 + 0.5)
-  const H = Math.max(8, 2.5 + rows * 3 + 1.5)
+  const W = Math.max(8, DESK_GX0 + cols * DESK_COL_GAP + 0.5)
+  const H = Math.max(8, DESK_GY0 + rows * DESK_ROW_GAP + 1.5)
   return { slots, W, H }
 }
 

@@ -130,7 +130,7 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
 
   // ── 책상 수 (자동 = 에이전트 수 따라감) ──
   const desksRow = host.querySelector<HTMLElement>('#b-desks')!
-  const deskChoices: ('auto' | number)[] = ['auto', 1, 2, 3, 4, 5, 6, 7, 8]
+  const deskChoices: ('auto' | number)[] = ['auto', 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
   for (const choice of deskChoices) {
     const chip = document.createElement('button')
     chip.className = 'chip'
