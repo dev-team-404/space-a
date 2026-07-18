@@ -71,6 +71,55 @@ pub fn plugin_purpose(plugin_key: &str) -> Option<&'static str> {
     }
 }
 
+/// R20 시크릿 패턴 큐레이션 (코칭 v3 §11.2). (pattern_id, 접두). 버전업 가능한 상수.
+/// 주의: 매칭된 본문은 절대 저장·로그하지 않는다 — pattern_id만 반환.
+const SECRET_PREFIXES: &[(&str, &str)] = &[
+    ("anthropic_api_key", "sk-ant-"),
+    ("github_token", "ghp_"),
+    ("github_token", "gho_"),
+    ("github_token", "github_pat_"),
+    ("slack_token", "xoxb-"),
+    ("slack_token", "xoxp-"),
+];
+
+/// 접두 뒤 토큰 문자([A-Za-z0-9_-]) 연속 길이 — 짧은 언급(문서 인용) 오탐 억제용.
+fn token_len_after(text: &str, start: usize) -> usize {
+    text[start..]
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+        .count()
+}
+
+/// text에서 감지된 시크릿 pattern_id 목록 (정렬·dedup). 본문은 반환하지 않는다.
+pub fn find_secret_patterns(text: &str) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = Vec::new();
+    for (id, prefix) in SECRET_PREFIXES {
+        if let Some(pos) = text.find(prefix) {
+            if token_len_after(text, pos + prefix.len()) >= 8 {
+                out.push(id);
+            }
+        }
+    }
+    // 개인키 블록: BEGIN 헤더에 PRIVATE KEY 명시된 경우만
+    if let Some(pos) = text.find("-----BEGIN ") {
+        if text[pos..].contains("PRIVATE KEY-----") {
+            out.push("private_key_block");
+        }
+    }
+    // AWS Access Key ID: "AKIA" + 대문자/숫자 16자
+    if let Some(pos) = text.find("AKIA") {
+        let rest = text[pos + 4..].as_bytes();
+        if rest.len() >= 16
+            && rest[..16].iter().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+        {
+            out.push("aws_access_key");
+        }
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,5 +138,30 @@ mod tests {
         let recs = BuiltinCurationSource.recommend(&WorkPattern::LargeImplNoSkill);
         assert!(!recs.is_empty());
         assert!(recs.iter().any(|r| r.match_substrings.iter().any(|s| s.contains("writing-plans"))));
+    }
+
+    #[test]
+    fn secret_patterns_hit_known_key_shapes() {
+        assert_eq!(find_secret_patterns("here sk-ant-api03-AbCdEfGh123456 end"), vec!["anthropic_api_key"]);
+        assert_eq!(find_secret_patterns("token=ghp_AbCdEf0123456789"), vec!["github_token"]);
+        assert_eq!(find_secret_patterns("pat github_pat_11ABCDEFG_xyz123"), vec!["github_token"]);
+        assert_eq!(find_secret_patterns("AKIAIOSFODNN7EXAMPLE"), vec!["aws_access_key"]);
+        assert_eq!(find_secret_patterns("xoxb-123456789012-abcdef"), vec!["slack_token"]);
+        assert_eq!(find_secret_patterns("-----BEGIN RSA PRIVATE KEY-----\nMII..."), vec!["private_key_block"]);
+        // 복수 종류 → 정렬된 dedup 목록
+        assert_eq!(
+            find_secret_patterns("ghp_AbCdEf0123456789 and sk-ant-api03-AbCdEfGh123456"),
+            vec!["anthropic_api_key", "github_token"]
+        );
+    }
+
+    #[test]
+    fn secret_patterns_suppress_short_or_prose_mentions() {
+        // 접두 뒤 토큰이 짧으면(문서 언급 수준) 침묵 — 오탐 억제
+        assert!(find_secret_patterns("환경변수 이름은 sk-ant- 로 시작해요").is_empty());
+        assert!(find_secret_patterns("ghp_ 접두 토큰을 쓰세요").is_empty());
+        assert!(find_secret_patterns("AKIA만 적으면 안 돼요").is_empty());
+        assert!(find_secret_patterns("-----BEGIN CERTIFICATE-----").is_empty()); // PRIVATE KEY 아님
+        assert!(find_secret_patterns("평범한 문장").is_empty());
     }
 }
