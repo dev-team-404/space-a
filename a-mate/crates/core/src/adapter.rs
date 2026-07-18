@@ -105,6 +105,10 @@ fn extract_prompt_preview(content: Option<&Value>) -> Option<String> {
     {
         return None;
     }
+    // 시크릿 포함 첫 줄은 미리보기로 저장하지 않는다 (본문 미저장 원칙 — 코칭 v3 §4.2; SecretFlag는 별도 방출됨)
+    if !crate::curation::find_secret_patterns(first_line).is_empty() {
+        return None;
+    }
     Some(first_line.chars().take(120).collect())
 }
 
@@ -304,6 +308,8 @@ impl SourceAdapter for ClaudeCodeAdapter {
                     out.push(mk(EventKind::UserPrompt { preview }, 0)); // off_bump 0 = 라인 시작(deref 포인터)
                 }
                 // 시크릿 스캔은 프롬프트 전문 대상 (미리보기 스킵과 독립 — 코칭 v3 §4.2)
+                // SecretFlag의 source_offset(off_bump 800대)은 dedup 전용이며 deref 포인터가 아니다
+                // (전문 확인은 세션 상세 경유 — PR② R20 참고).
                 if let Some(text) = content_text(content) {
                     for (i, pid) in crate::curation::find_secret_patterns(&text).iter().enumerate() {
                         out.push(mk(EventKind::SecretFlag { pattern_id: pid.to_string() }, 800 + i as u64));
@@ -555,5 +561,30 @@ mod tests {
             "message":{"role":"user","content":"토큰 없이 평범한 요청"}}"#;
         assert!(!adapter().map(clean_user, "s.jsonl", 0).iter()
             .any(|e| matches!(e.kind, crate::model::EventKind::SecretFlag { .. })));
+    }
+
+    #[test]
+    fn map_user_prompt_first_line_secret_suppresses_preview_but_still_flags() {
+        use crate::model::EventKind;
+        // 첫 줄 자체에 시크릿이 있으면 미리보기(첫 줄 저장)는 침묵하되, SecretFlag는 그대로 방출.
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u12",
+            "message":{"role":"user","content":"배포 토큰은 ghp_AbCdEf0123456789 입니다"}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        assert!(!evs.iter().any(|e| matches!(e.kind, EventKind::UserPrompt { .. })));
+        assert!(evs.iter().any(|e| matches!(&e.kind,
+            EventKind::SecretFlag { pattern_id } if pattern_id == "github_token")));
+    }
+
+    #[test]
+    fn map_tool_result_content_with_secret_does_not_flag() {
+        use crate::model::EventKind;
+        // tool_result 본문은 에이전트(도구) 측 산출물 — !had_tool_result 가드로 시크릿 스캔 대상에서 제외.
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u13",
+            "message":{"role":"user","content":[
+              {"type":"tool_result","tool_use_id":"t1","is_error":false,
+               "content":"... ghp_AbCdEf0123456789 ..."}]}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        assert!(!evs.iter().any(|e| matches!(e.kind, EventKind::SecretFlag { .. })));
+        assert!(evs.iter().any(|e| matches!(e.kind, EventKind::ToolResult { .. })));
     }
 }

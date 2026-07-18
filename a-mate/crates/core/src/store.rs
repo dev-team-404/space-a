@@ -1062,6 +1062,7 @@ pub fn ingest_file(
     let inserted = store.upsert_events(&all)?;
 
     // 서브에이전트 하위 트랜스크립트 수 — <세션id>/subagents/*.jsonl 존재 카운트만 (전문 파싱은 후속, 코칭 v3 §4.1-3)
+    // 이 카운트는 subagents/ 아래 모든 *.jsonl을 포함한다 — 스펙 §4.1-3의 agent-*.jsonl보다 넓은 상위집합(의도).
     let sub_dir = file.with_extension("").join("subagents");
     if let Ok(entries) = std::fs::read_dir(&sub_dir) {
         let n = entries

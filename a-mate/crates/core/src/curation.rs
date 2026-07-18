@@ -80,6 +80,8 @@ const SECRET_PREFIXES: &[(&str, &str)] = &[
     ("github_token", "github_pat_"),
     ("slack_token", "xoxb-"),
     ("slack_token", "xoxp-"),
+    ("slack_token", "xoxa-"),
+    ("google_api_key", "AIza"),
 ];
 
 /// 접두 뒤 토큰 문자([A-Za-z0-9_-]) 연속 길이 — 짧은 언급(문서 인용) 오탐 억제용.
@@ -147,6 +149,8 @@ mod tests {
         assert_eq!(find_secret_patterns("pat github_pat_11ABCDEFG_xyz123"), vec!["github_token"]);
         assert_eq!(find_secret_patterns("AKIAIOSFODNN7EXAMPLE"), vec!["aws_access_key"]);
         assert_eq!(find_secret_patterns("xoxb-123456789012-abcdef"), vec!["slack_token"]);
+        assert_eq!(find_secret_patterns("key=AIzaSyA1234567890abcdefghij"), vec!["google_api_key"]);
+        assert_eq!(find_secret_patterns("xoxa-2-123456789012-abcdef"), vec!["slack_token"]);
         assert_eq!(find_secret_patterns("-----BEGIN RSA PRIVATE KEY-----\nMII..."), vec!["private_key_block"]);
         // 복수 종류 → 정렬된 dedup 목록
         assert_eq!(
@@ -161,6 +165,7 @@ mod tests {
         assert!(find_secret_patterns("환경변수 이름은 sk-ant- 로 시작해요").is_empty());
         assert!(find_secret_patterns("ghp_ 접두 토큰을 쓰세요").is_empty());
         assert!(find_secret_patterns("AKIA만 적으면 안 돼요").is_empty());
+        assert!(find_secret_patterns("AIza 로 시작하는 키").is_empty());
         assert!(find_secret_patterns("-----BEGIN CERTIFICATE-----").is_empty()); // PRIVATE KEY 아님
         assert!(find_secret_patterns("평범한 문장").is_empty());
     }
