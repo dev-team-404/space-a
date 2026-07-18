@@ -1,7 +1,7 @@
 // 부품 카탈로그 — variant별 팔레트. room.png(아이소 픽셀아트, 야간 우드톤)를 레퍼런스로 삼되
 // 지금은 Graphics 프리미티브로 그린다. 스프라이트 에셋이 생기면 여기 팔레트가 텍스처 키로 바뀐다.
 
-import type { BoardId, DecoId, DeskId, FloorId, VariantOption, WallpaperId } from './types'
+import type { BoardId, DecoId, DeskChoice, DeskId, FloorId, VariantOption, WallpaperId } from './types'
 
 export type WallPalette = { wall: number; trim: number; shade: number }
 export type FloorPalette = { a: number; b: number; edge: number }
@@ -21,10 +21,23 @@ export const FLOORS: Record<FloorId, FloorPalette> = {
   stone: { a: 0x707a86, b: 0x646d78, edge: 0x525a64 },
 }
 
+// 스프라이트가 못 뜰 때(킷 로드 실패)의 Graphics 폴백 팔레트 — 시트가 전부 우드톤이라 공통
+const WOOD_DESK: DeskPalette = { top: 0xa5713d, side: 0x8a5b2e, leg: 0x6b4423 }
 export const DESKS: Record<DeskId, DeskPalette> = {
-  oak: { top: 0xa5713d, side: 0x8a5b2e, leg: 0x6b4423 },
-  walnut: { top: 0x6e4a2c, side: 0x593a20, leg: 0x452c17 },
-  white: { top: 0xd8d5cd, side: 0xbcb8ae, leg: 0x8f8c84 },
+  d1: WOOD_DESK, d2: WOOD_DESK, d3: WOOD_DESK,
+  d4: WOOD_DESK, d5: WOOD_DESK, d6: WOOD_DESK,
+  d7: { top: 0xa5713d, side: 0x8a5b2e, leg: 0x3a3f46 }, // 메탈 프레임
+  d8: WOOD_DESK, d9: WOOD_DESK,
+}
+
+/** 구버전 저장분(oak/walnut/white) → 새 id 마이그레이션 */
+export const LEGACY_DESK_IDS: Record<string, DeskId> = { oak: 'd1', walnut: 'd6', white: 'd7' }
+
+/** 'mix'·구버전 id를 실제 DeskId로 해석. k = 책상 인덱스(mix 순환용) */
+export function resolveDeskId(choice: string, k = 0): DeskId {
+  if (choice === 'mix') return `d${(k % 9) + 1}` as DeskId
+  if (choice in DESKS) return choice as DeskId
+  return LEGACY_DESK_IDS[choice] ?? 'd1'
 }
 
 export const BOARDS: Record<BoardId, BoardPalette> = {
@@ -46,10 +59,18 @@ export const FLOOR_OPTIONS: VariantOption<FloorId>[] = [
   { id: 'stone', label: '스톤 타일', swatch: '#707a86' },
 ]
 
-export const DESK_OPTIONS: VariantOption<DeskId>[] = [
-  { id: 'oak', label: '오크 책상', swatch: '#a5713d' },
-  { id: 'walnut', label: '월넛 책상', swatch: '#6e4a2c' },
-  { id: 'white', label: '화이트 책상', swatch: '#d8d5cd' },
+const deskThumb = (id: DeskId) => `/assets/kit/desk-${id}.png`
+export const DESK_OPTIONS: VariantOption<DeskChoice>[] = [
+  { id: 'd1', label: '듀얼 모니터', swatch: '#a5713d', thumb: deskThumb('d1') },
+  { id: 'd2', label: '와이드 듀얼', swatch: '#a5713d', thumb: deskThumb('d2') },
+  { id: 'd3', label: '노트북 캐비닛', swatch: '#a5713d', thumb: deskThumb('d3') },
+  { id: 'd4', label: '선반형', swatch: '#a5713d', thumb: deskThumb('d4') },
+  { id: 'd5', label: '책장 수납', swatch: '#a5713d', thumb: deskThumb('d5') },
+  { id: 'd6', label: 'ㄱ자 코너', swatch: '#6e4a2c', thumb: deskThumb('d6') },
+  { id: 'd7', label: '미니멀 메탈', swatch: '#3a3f46', thumb: deskThumb('d7') },
+  { id: 'd8', label: '트리플 모니터', swatch: '#a5713d', thumb: deskThumb('d8') },
+  { id: 'd9', label: '수납형 노트북', swatch: '#a5713d', thumb: deskThumb('d9') },
+  { id: 'mix', label: '랜덤 믹스', swatch: '#d9a441' },
 ]
 
 export const BOARD_OPTIONS: VariantOption<BoardId>[] = [

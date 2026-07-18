@@ -11,7 +11,7 @@ import {
   WALLPAPER_OPTIONS,
 } from './room/catalog'
 import { buildRoomScene, PREVIEW_DATA } from './room/renderer'
-import type { BoardId, DecoId, DeskId, FloorId, RoomConfig, VariantOption, WallpaperId } from './room/types'
+import type { BoardId, DecoId, DeskChoice, FloorId, RoomConfig, VariantOption, WallpaperId } from './room/types'
 import { getRoom } from './store'
 
 export type BuilderOptions = {
@@ -24,7 +24,7 @@ export type BuilderOptions = {
 const DEFAULTS: Omit<RoomConfig, 'space_id' | 'space_name' | 'created_at'> = {
   wallpaper: 'wood-night',
   floor: 'plank',
-  desk: 'oak',
+  desk: 'd1',
   board: 'chalk-green',
   deco: ['plant', 'string-lights'],
   desks: 'auto',
@@ -106,7 +106,9 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
     for (const opt of options) {
       const btn = document.createElement('button')
       btn.className = 'swatch'
-      btn.innerHTML = `<span class="swatch-dot" style="background:${opt.swatch}"></span>${opt.label}`
+      btn.innerHTML = opt.thumb
+        ? `<img class="swatch-thumb" src="${opt.thumb}" alt="" />${opt.label}`
+        : `<span class="swatch-dot" style="background:${opt.swatch}"></span>${opt.label}`
       btn.dataset.id = opt.id
       btn.addEventListener('click', () => {
         set(opt.id)
@@ -120,7 +122,7 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
   }
   addGroup('벽지', WALLPAPER_OPTIONS, () => state.wallpaper, (id: WallpaperId) => (state.wallpaper = id))
   addGroup('바닥', FLOOR_OPTIONS, () => state.floor, (id: FloorId) => (state.floor = id))
-  addGroup('책상', DESK_OPTIONS, () => state.desk, (id: DeskId) => (state.desk = id))
+  addGroup('책상', DESK_OPTIONS, () => state.desk, (id: DeskChoice) => (state.desk = id))
   addGroup('칠판', BOARD_OPTIONS, () => state.board, (id: BoardId) => (state.board = id))
 
   // ── 책상 수 (자동 = 에이전트 수 따라감) ──

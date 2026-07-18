@@ -2,7 +2,10 @@
 
 export type WallpaperId = 'wood-night' | 'sage' | 'terracotta' | 'slate'
 export type FloorId = 'plank' | 'checker' | 'stone'
-export type DeskId = 'oak' | 'walnut' | 'white'
+/** 책상 9종 — desk.png 시트에서 추출한 스프라이트 (assets/kit/desk-d*.png) */
+export type DeskId = 'd1' | 'd2' | 'd3' | 'd4' | 'd5' | 'd6' | 'd7' | 'd8' | 'd9'
+/** 'mix'면 책상마다 d1~d9를 돌아가며 배치 */
+export type DeskChoice = DeskId | 'mix'
 export type BoardId = 'chalk-green' | 'chalk-black' | 'glass'
 export type DecoId = 'plant' | 'water-cooler' | 'rug' | 'string-lights'
 
@@ -14,7 +17,7 @@ export type RoomConfig = {
   space_name: string
   wallpaper: WallpaperId
   floor: FloorId
-  desk: DeskId
+  desk: DeskChoice
   board: BoardId
   deco: DecoId[]
   /** 책상 수 — 'auto'면 에이전트 수를 따라감. 이전 버전 저장분에는 없을 수 있다. */
@@ -27,4 +30,6 @@ export type VariantOption<Id extends string> = {
   label: string
   /** 선택 UI 스와치 색 */
   swatch: string
+  /** 스프라이트 썸네일 URL (있으면 스와치 대신 이미지 표시) */
+  thumb?: string
 }

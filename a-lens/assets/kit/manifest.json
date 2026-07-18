@@ -1,5 +1,15 @@
 {
   "_docs": "부품 PNG 등록 파일 — 제작 규격은 README.md. 등록된 부품만 Sprite로 그려지고 나머지는 Graphics 폴백.",
   "scale": 0.25,
-  "pieces": {}
+  "pieces": {
+    "desk.d1": { "file": "desk-d1.png", "footprint": [2, 1] },
+    "desk.d2": { "file": "desk-d2.png", "footprint": [2, 1] },
+    "desk.d3": { "file": "desk-d3.png", "footprint": [2, 1] },
+    "desk.d4": { "file": "desk-d4.png", "footprint": [2, 1] },
+    "desk.d5": { "file": "desk-d5.png", "footprint": [2, 1] },
+    "desk.d6": { "file": "desk-d6.png", "footprint": [2, 1] },
+    "desk.d7": { "file": "desk-d7.png", "footprint": [2, 1] },
+    "desk.d8": { "file": "desk-d8.png", "footprint": [2, 1] },
+    "desk.d9": { "file": "desk-d9.png", "footprint": [2, 1] }
+  }
 }

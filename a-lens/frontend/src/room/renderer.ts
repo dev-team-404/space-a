@@ -4,7 +4,7 @@
 
 import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js'
 import type { SpaceAgent, SpaceIssue } from '../api'
-import { BOARDS, DESKS, FLOORS, WALLPAPERS } from './catalog'
+import { BOARDS, DESKS, FLOORS, WALLPAPERS, resolveDeskId } from './catalog'
 import { TILE_W, TILE_H, WALL_H, isoX, isoY, depth } from './iso'
 import { kitPiece, kitPieceScale } from './kit'
 import type { RoomConfig } from './types'
@@ -133,7 +133,7 @@ export function buildRoomScene(
 
   const wall = WALLPAPERS[config.wallpaper]
   const floor = FLOORS[config.floor]
-  const desk = DESKS[config.desk]
+  const desk = DESKS[resolveDeskId(config.desk)]
   const board = BOARDS[config.board]
 
   // 책상 수 — 'auto'(또는 구버전 저장분)면 에이전트 수를 따라감
@@ -313,11 +313,13 @@ export function buildRoomScene(
     root.addChild(lights)
   }
 
-  // ── 책상 (deskCount만큼 — 에이전트보다 많으면 빈 책상) ──
-  slots.forEach(({ gx, gy }) => {
-    if (placeKitSprite(root, `desk.${config.desk}`, gx, gy, depth(gx + 1, gy + 0.5))) return
+  // ── 책상 (deskCount만큼 — 에이전트보다 많으면 빈 책상, 'mix'면 종류 순환) ──
+  slots.forEach(({ gx, gy }, k) => {
+    const deskId = resolveDeskId(config.desk, k)
+    if (placeKitSprite(root, `desk.${deskId}`, gx, gy, depth(gx + 1, gy + 0.5))) return
+    const dp = DESKS[deskId]
     const dg = new Graphics()
-    drawIsoBox(dg, gx, gy, 2, 1, 34, { top: desk.top, left: shade(desk.side, 0.9), right: desk.side })
+    drawIsoBox(dg, gx, gy, 2, 1, 34, { top: dp.top, left: shade(dp.side, 0.9), right: dp.side })
     // 모니터
     const [mx, my] = pt(gx + 1.0, gy + 0.35, -34)
     dg.poly([mx - 14, my - 30, mx + 14, my - 16, mx + 14, my + 4, mx - 14, my - 10]).fill(0x23262b)
@@ -345,7 +347,11 @@ export function buildRoomScene(
     robot.addChild(rg)
     const nameTag = new Text({ text: agent.name, style: nameStyle })
     nameTag.position.set(-nameTag.width / 2, 6)
-    robot.addChild(nameTag)
+    // 앞줄 책상 스프라이트 위에서도 읽히도록 반투명 필 배경
+    const namePill = new Graphics()
+      .roundRect(-nameTag.width / 2 - 5, 4, nameTag.width + 10, 17, 8)
+      .fill({ color: 0x0d1220, alpha: 0.7 })
+    robot.addChild(namePill, nameTag)
     // 작업 중이면 말풍선 점 표시
     if (agent.status === 'working') {
       const bub = new Graphics()
