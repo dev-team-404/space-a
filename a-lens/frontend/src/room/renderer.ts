@@ -68,13 +68,13 @@ function drawIsoBox(
  * 킷 스프라이트 배치 — 있으면 Sprite를 얹고 true, 없으면 false(호출부가 Graphics 폴백).
  * floor 부품 앵커: footprint 다이아몬드의 남쪽(앞) 꼭짓점 = 이미지 하단 중앙.
  */
-function placeKitSprite(root: Container, key: string, gx: number, gy: number, zIndex: number): Sprite | null {
+function placeKitSprite(root: Container, key: string, gx: number, gy: number, zIndex: number, mul = 1): Sprite | null {
   const piece = kitPiece(key)
   if (!piece || piece.mount !== 'floor') return null
   const [w, d] = piece.footprint
   const sp = new Sprite(piece.texture)
   sp.anchor.set(0.5, 1)
-  const s = kitPieceScale()
+  const s = kitPieceScale() * mul
   sp.scale.set(s)
   const [x, y] = pt(gx + w, gy + d)
   sp.position.set(x + piece.offset[0] * s, y + piece.offset[1] * s)
@@ -176,9 +176,11 @@ export function buildRoomScene(
   const slots = baseSlots.map((s) => ({ gx: s.gx + dx, gy: s.gy + dy }))
 
   // ── 책상 (deskCount만큼 — 에이전트보다 많으면 빈 책상, 'mix'면 종류 순환) ──
+  // 새 desk 스프라이트가 시트보다 작게 잘려 나와, 배경 대비 살짝 키워 얹는다.
+  const DESK_SCALE = 1.7
   slots.forEach(({ gx, gy }, k) => {
     const deskId = resolveDeskId(config.desk, k)
-    if (placeKitSprite(root, `desk.${deskId}`, gx, gy, depth(gx + 1, gy + 0.5))) return
+    if (placeKitSprite(root, `desk.${deskId}`, gx, gy, depth(gx + 1, gy + 0.5), DESK_SCALE)) return
     const dp = DESKS[deskId]
     const dg = new Graphics()
     drawIsoBox(dg, gx, gy, 2, 1, 34, { top: dp.top, left: shade(dp.side, 0.9), right: dp.side })
