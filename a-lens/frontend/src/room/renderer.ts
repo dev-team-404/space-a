@@ -4,7 +4,17 @@
 
 import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js'
 import type { SpaceAgent, SpaceIssue } from '../api'
-import { BOARDS, DESKS, FLOORS, SHELF_SIDE, WALLPAPERS, resolveDeskId, resolveShelfId } from './catalog'
+import {
+  BOARDS,
+  DESKS,
+  FLOORS,
+  SHELF_SIDE,
+  WALLPAPERS,
+  resolveDeskId,
+  resolveFloorId,
+  resolveShelfId,
+  resolveWallpaperId,
+} from './catalog'
 import { TILE_W, TILE_H, WALL_H, isoX, isoY, depth } from './iso'
 import { kitPiece, kitPieceScale } from './kit'
 import type { RoomConfig } from './types'
@@ -118,8 +128,8 @@ function layoutDesks(count: number): { slots: { gx: number; gy: number }[]; W: n
     const row = Math.floor(k / 3)
     slots.push({ gx: 1.5 + col * 3, gy: 2.5 + row * 3 })
   }
-  const W = Math.max(9, 1.5 + cols * 3 + 1)
-  const H = Math.max(9, 2.5 + rows * 3 + 3)
+  const W = Math.max(8, 1.5 + cols * 3 + 0.5)
+  const H = Math.max(8, 2.5 + rows * 3 + 1.5)
   return { slots, W, H }
 }
 
@@ -131,8 +141,10 @@ export function buildRoomScene(
   const root = new Container()
   root.sortableChildren = true
 
-  const wall = WALLPAPERS[config.wallpaper]
-  const floor = FLOORS[config.floor]
+  const wallId = resolveWallpaperId(config.wallpaper)
+  const floorId = resolveFloorId(config.floor)
+  const wall = WALLPAPERS[wallId]
+  const floor = FLOORS[floorId]
   const desk = DESKS[resolveDeskId(config.desk)]
   const board = BOARDS[config.board]
 
@@ -141,45 +153,74 @@ export function buildRoomScene(
     1,
     config.desks == null || config.desks === 'auto' ? data.agents.length : config.desks,
   )
-  const { slots, W, H } = layoutDesks(deskCount)
+  const { slots, W: LW, H: LH } = layoutDesks(deskCount)
+  // 셸 스프라이트(정방형 다이아)에 맞춰 방은 정사각 격자
+  const W = Math.max(LW, LH)
+  const H = W
 
-  // ── 바닥 ──
-  const floorG = new Graphics()
-  floorG.zIndex = -1000
-  for (let gx = 0; gx < W; gx++) {
-    for (let gy = 0; gy < H; gy++) {
-      const alt =
-        config.floor === 'checker' ? (gx + gy) % 2 === 0 : config.floor === 'plank' ? gy % 2 === 0 : (gx * 7 + gy * 3) % 5 < 3
-      const [tx, ty] = pt(gx, gy)
-      floorG
-        .poly([tx, ty, tx + TILE_W / 2, ty + TILE_H / 2, tx, ty + TILE_H, tx - TILE_W / 2, ty + TILE_H / 2])
-        .fill(alt ? floor.a : floor.b)
-        .stroke({ color: floor.edge, width: 1, alpha: 0.35 })
+  // ── 바닥 (셸 스프라이트: 윗꼭짓점을 격자 원점에 정렬, 격자 폭에 맞춰 스케일) ──
+  const floorKit = kitPiece(`floor.${floorId}`)
+  if (floorKit) {
+    const s = (W * TILE_W) / floorKit.texture.width
+    const sp = new Sprite(floorKit.texture)
+    sp.anchor.set(floorKit.anchor[0], floorKit.anchor[1])
+    sp.scale.set(s)
+    const [ox, oy] = pt(0, 0)
+    sp.position.set(ox + floorKit.offset[0] * s, oy + floorKit.offset[1] * s)
+    sp.zIndex = -1000
+    root.addChild(sp)
+  } else {
+    const floorG = new Graphics()
+    floorG.zIndex = -1000
+    for (let gx = 0; gx < W; gx++) {
+      for (let gy = 0; gy < H; gy++) {
+        const alt = (gx + gy) % 2 === 0
+        const [tx, ty] = pt(gx, gy)
+        floorG
+          .poly([tx, ty, tx + TILE_W / 2, ty + TILE_H / 2, tx, ty + TILE_H, tx - TILE_W / 2, ty + TILE_H / 2])
+          .fill(alt ? floor.a : floor.b)
+          .stroke({ color: floor.edge, width: 1, alpha: 0.35 })
+      }
     }
+    floorG
+      .poly([...pt(0, 0), ...pt(W, 0), ...pt(W, H), ...pt(0, H)])
+      .stroke({ color: floor.edge, width: 3, alpha: 0.9 })
+    root.addChild(floorG)
   }
-  // 바닥 테두리(마감)
-  floorG
-    .poly([...pt(0, 0), ...pt(W, 0), ...pt(W, H), ...pt(0, H)])
-    .stroke({ color: floor.edge, width: 3, alpha: 0.9 })
-  root.addChild(floorG)
 
-  // ── 뒷벽 두 면 ──
-  const wallsG = new Graphics()
-  wallsG.zIndex = -900
-  // 오른쪽 뒷벽 (gy=0 면)
-  wallsG.poly([...pt(0, 0, -WALL_H), ...pt(W, 0, -WALL_H), ...pt(W, 0), ...pt(0, 0)]).fill(wall.wall)
-  // 왼쪽 뒷벽 (gx=0 면)
-  wallsG.poly([...pt(0, 0, -WALL_H), ...pt(0, H, -WALL_H), ...pt(0, H), ...pt(0, 0)]).fill(wall.shade)
-  // 걸레받이 트림
-  wallsG.poly([...pt(0, 0, -10), ...pt(W, 0, -10), ...pt(W, 0), ...pt(0, 0)]).fill(wall.trim)
-  wallsG.poly([...pt(0, 0, -10), ...pt(0, H, -10), ...pt(0, H), ...pt(0, 0)]).fill(shade(wall.trim, 0.85))
-  root.addChild(wallsG)
+  // ── 뒷벽 (셸 스프라이트: V자 안쪽 코너를 격자 원점에 정렬) ──
+  // 칠판·조명·보드 텍스트는 실제 벽면 높이(wallH)를 기준으로 배치된다.
+  const wallKit = kitPiece(`wall.${wallId}`)
+  let wallH = WALL_H
+  if (wallKit) {
+    const s = (W * TILE_W) / wallKit.texture.width
+    wallH = wallKit.faceH * s
+    const sp = new Sprite(wallKit.texture)
+    sp.anchor.set(wallKit.anchor[0], wallKit.anchor[1])
+    sp.scale.set(s)
+    const [ox, oy] = pt(0, 0)
+    sp.position.set(ox + wallKit.offset[0] * s, oy + wallKit.offset[1] * s)
+    sp.zIndex = -900
+    root.addChild(sp)
+  } else {
+    const wallsG = new Graphics()
+    wallsG.zIndex = -900
+    // 오른쪽 뒷벽 (gy=0 면)
+    wallsG.poly([...pt(0, 0, -wallH), ...pt(W, 0, -wallH), ...pt(W, 0), ...pt(0, 0)]).fill(wall.wall)
+    // 왼쪽 뒷벽 (gx=0 면)
+    wallsG.poly([...pt(0, 0, -wallH), ...pt(0, H, -wallH), ...pt(0, H), ...pt(0, 0)]).fill(wall.shade)
+    // 걸레받이 트림
+    wallsG.poly([...pt(0, 0, -10), ...pt(W, 0, -10), ...pt(W, 0), ...pt(0, 0)]).fill(wall.trim)
+    wallsG.poly([...pt(0, 0, -10), ...pt(0, H, -10), ...pt(0, H), ...pt(0, 0)]).fill(shade(wall.trim, 0.85))
+    root.addChild(wallsG)
+  }
 
   // ── 칠판 (오른쪽 뒷벽, gy=0 면) — 클릭 → 이슈 패널 ──
-  const bA = 1.2 // 벽을 따라 시작 cell
-  const bB = Math.min(W - 1, bA + 4.6)
-  const bTop = WALL_H - 18
-  const bBot = 38
+  // 칠판 크기·위치는 벽 크기에 비례 (셸 스프라이트의 벽 높이에 맞춤)
+  const bA = Math.max(1.0, W * 0.1) // 벽을 따라 시작 cell
+  const bB = Math.min(W - 1, W * 0.55)
+  const bBot = wallH * 0.22
+  const bTop = Math.min(wallH * 0.82, bBot + 260)
   const boardSprite = placeWallSprite(root, `board.${config.board}`, bA, bBot, -890)
   const boardHit: Container = boardSprite ?? new Graphics()
   if (!boardSprite) {
@@ -317,12 +358,12 @@ export function buildRoomScene(
     lights.zIndex = -880
     const n = Math.floor(W)
     for (let i = 0; i < n; i++) {
-      const [lx, ly] = pt(i + 0.5, 0, -(WALL_H - 12 - (i % 2) * 6))
+      const [lx, ly] = pt(i + 0.5, 0, -(wallH - 12 - (i % 2) * 6))
       lights.circle(lx, ly, 7).fill({ color: 0xe8b54a, alpha: 0.25 })
       lights.circle(lx, ly, 3.5).fill(0xf5d78e)
     }
     for (let i = 0; i < Math.floor(H); i++) {
-      const [lx, ly] = pt(0, i + 0.5, -(WALL_H - 12 - (i % 2) * 6))
+      const [lx, ly] = pt(0, i + 0.5, -(wallH - 12 - (i % 2) * 6))
       lights.circle(lx, ly, 7).fill({ color: 0xe8b54a, alpha: 0.2 })
       lights.circle(lx, ly, 3.5).fill(0xecc978)
     }

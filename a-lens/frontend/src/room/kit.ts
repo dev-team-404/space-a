@@ -5,7 +5,7 @@
 
 import { Assets, Texture } from 'pixi.js'
 
-export type KitMount = 'floor' | 'wall-right'
+export type KitMount = 'floor' | 'wall-right' | 'shell-floor' | 'shell-wall'
 
 export type KitPiece = {
   texture: Texture
@@ -14,6 +14,10 @@ export type KitPiece = {
   /** 앵커 미세 보정 px (에셋 원본 픽셀 기준) */
   offset: [number, number]
   mount: KitMount
+  /** 셸 부품: 이미지 내 앵커점 (0~1 비율). floor=윗꼭짓점, wall=V자 안쪽 코너 */
+  anchor: [number, number]
+  /** shell-wall: 코너 기준 벽면 높이 (에셋 px) — 칠판·조명 배치 계산용 */
+  faceH: number
 }
 
 type ManifestPiece = {
@@ -21,6 +25,8 @@ type ManifestPiece = {
   footprint?: [number, number]
   offset?: [number, number]
   mount?: KitMount
+  anchor?: [number, number]
+  faceH?: number
 }
 
 type Manifest = {
@@ -59,6 +65,8 @@ export async function loadKit(): Promise<void> {
           footprint: p.footprint ?? [1, 1],
           offset: p.offset ?? [0, 0],
           mount: p.mount ?? 'floor',
+          anchor: p.anchor ?? [0.5, 0],
+          faceH: p.faceH ?? 0,
         })
       } catch (e) {
         console.warn(`킷 부품 로드 실패: ${key} (${p.file})`, e)

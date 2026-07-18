@@ -1,7 +1,9 @@
 // 방 = 데이터. 이미지 좌표 캘리브레이션 없이 격자 + variant 선택만으로 방을 그린다 (#44 4번).
 
-export type WallpaperId = 'wood-night' | 'sage' | 'terracotta' | 'slate'
-export type FloorId = 'plank' | 'checker' | 'stone'
+/** 벽 4종 — floor-wall.png 시트에서 추출 (코너 스프라이트) */
+export type WallpaperId = 'w1' | 'w2' | 'w3' | 'w4'
+/** 바닥 4종 — floor-wall.png 시트에서 추출 (육각 슬래브 스프라이트) */
+export type FloorId = 'f1' | 'f2' | 'f3' | 'f4'
 /** 책상 9종 — desk.png 시트에서 추출한 스프라이트 (assets/kit/desk-d*.png) */
 export type DeskId = 'd1' | 'd2' | 'd3' | 'd4' | 'd5' | 'd6' | 'd7' | 'd8' | 'd9'
 /** 'mix'면 책상마다 d1~d9를 돌아가며 배치 */

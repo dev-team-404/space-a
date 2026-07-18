@@ -8,17 +8,37 @@ export type FloorPalette = { a: number; b: number; edge: number }
 export type DeskPalette = { top: number; side: number; leg: number }
 export type BoardPalette = { frame: number; face: number; chalk: number }
 
+// Graphics 폴백 팔레트 — 시트 4종의 근사색
 export const WALLPAPERS: Record<WallpaperId, WallPalette> = {
-  'wood-night': { wall: 0x7a5a3a, trim: 0x5c4127, shade: 0x684c30 },
-  sage: { wall: 0x6f7d62, trim: 0x53614a, shade: 0x60705a }, // 세이지 그린
-  terracotta: { wall: 0x9c5f43, trim: 0x7a4630, shade: 0x8a5238 },
-  slate: { wall: 0x4c5566, trim: 0x39404e, shade: 0x424a5a },
+  w1: { wall: 0xb08a5a, trim: 0x6b4423, shade: 0x9c7a4e }, // 라이트 우드 패널
+  w2: { wall: 0x9a958a, trim: 0x3a3d42, shade: 0x878378 }, // 콘크리트 패널
+  w3: { wall: 0xd8c9a8, trim: 0x8a5b2e, shade: 0xc4b696 }, // 크림 패널
+  w4: { wall: 0x8a4438, trim: 0x4a2620, shade: 0x793a30 }, // 레드 브릭
 }
 
 export const FLOORS: Record<FloorId, FloorPalette> = {
-  plank: { a: 0x8a5f36, b: 0x81572f, edge: 0x6b4423 },
-  checker: { a: 0x8a6a45, b: 0x74563a, edge: 0x5f4630 },
-  stone: { a: 0x707a86, b: 0x646d78, edge: 0x525a64 },
+  f1: { a: 0x9c6a38, b: 0x92622f, edge: 0x6b4423 }, // 오크 마루
+  f2: { a: 0x76685c, b: 0x6c5f54, edge: 0x50463e }, // 그레이 우드
+  f3: { a: 0xbe8848, b: 0xb27e40, edge: 0x8a5b2e }, // 라이트 오크
+  f4: { a: 0x6e3428, b: 0x642e23, edge: 0x47201a }, // 다크 마호가니
+}
+
+/** 구버전 저장분 → 새 id 마이그레이션 */
+export const LEGACY_WALL_IDS: Record<string, WallpaperId> = {
+  'wood-night': 'w1', sage: 'w3', terracotta: 'w4', slate: 'w2',
+}
+export const LEGACY_FLOOR_IDS: Record<string, FloorId> = {
+  plank: 'f1', checker: 'f3', stone: 'f2',
+}
+
+export function resolveWallpaperId(v: string): WallpaperId {
+  if (v in WALLPAPERS) return v as WallpaperId
+  return LEGACY_WALL_IDS[v] ?? 'w1'
+}
+
+export function resolveFloorId(v: string): FloorId {
+  if (v in FLOORS) return v as FloorId
+  return LEGACY_FLOOR_IDS[v] ?? 'f1'
 }
 
 // 스프라이트가 못 뜰 때(킷 로드 실패)의 Graphics 폴백 팔레트 — 시트가 전부 우드톤이라 공통
@@ -58,16 +78,17 @@ export const BOARDS: Record<BoardId, BoardPalette> = {
 }
 
 export const WALLPAPER_OPTIONS: VariantOption<WallpaperId>[] = [
-  { id: 'wood-night', label: '우드 나이트', swatch: '#7a5a3a' },
-  { id: 'sage', label: '세이지', swatch: '#6f7d62' },
-  { id: 'terracotta', label: '테라코타', swatch: '#9c5f43' },
-  { id: 'slate', label: '슬레이트', swatch: '#4c5566' },
+  { id: 'w1', label: '라이트 우드', swatch: '#b08a5a', thumb: '/assets/kit/wall-w1.png' },
+  { id: 'w2', label: '콘크리트', swatch: '#9a958a', thumb: '/assets/kit/wall-w2.png' },
+  { id: 'w3', label: '크림 패널', swatch: '#d8c9a8', thumb: '/assets/kit/wall-w3.png' },
+  { id: 'w4', label: '레드 브릭', swatch: '#8a4438', thumb: '/assets/kit/wall-w4.png' },
 ]
 
 export const FLOOR_OPTIONS: VariantOption<FloorId>[] = [
-  { id: 'plank', label: '원목 마루', swatch: '#8a5f36' },
-  { id: 'checker', label: '체커', swatch: '#74563a' },
-  { id: 'stone', label: '스톤 타일', swatch: '#707a86' },
+  { id: 'f1', label: '오크 마루', swatch: '#9c6a38', thumb: '/assets/kit/floor-f1.png' },
+  { id: 'f2', label: '그레이 우드', swatch: '#76685c', thumb: '/assets/kit/floor-f2.png' },
+  { id: 'f3', label: '라이트 오크', swatch: '#be8848', thumb: '/assets/kit/floor-f3.png' },
+  { id: 'f4', label: '다크 마호가니', swatch: '#6e3428', thumb: '/assets/kit/floor-f4.png' },
 ]
 
 const deskThumb = (id: DeskId) => `/assets/kit/desk-${id}.png`

@@ -34,8 +34,8 @@ async function ensurePreviewApp(): Promise<Application> {
 }
 
 const DEFAULTS: Omit<RoomConfig, 'space_id' | 'space_name' | 'created_at'> = {
-  wallpaper: 'wood-night',
-  floor: 'plank',
+  wallpaper: 'w1',
+  floor: 'f1',
   desk: 'd1',
   shelf: 's1',
   board: 'chalk-green',

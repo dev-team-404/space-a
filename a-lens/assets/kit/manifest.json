@@ -21,6 +21,14 @@
     "shelf.s8": { "file": "shelf-s8.png", "footprint": [2.2, 0.5] },
     "shelf.s9": { "file": "shelf-s9.png", "footprint": [1.2, 0.5] },
     "shelf.s10": { "file": "shelf-s10.png", "footprint": [1.2, 0.5] },
-    "shelf.s11": { "file": "shelf-s11.png", "footprint": [0.7, 0.5] }
+    "shelf.s11": { "file": "shelf-s11.png", "footprint": [0.7, 0.5] },
+    "floor.f1": { "file": "floor-f1.png", "mount": "shell-floor", "anchor": [0.497, 0] },
+    "floor.f2": { "file": "floor-f2.png", "mount": "shell-floor", "anchor": [0.492, 0] },
+    "floor.f3": { "file": "floor-f3.png", "mount": "shell-floor", "anchor": [0.494, 0] },
+    "floor.f4": { "file": "floor-f4.png", "mount": "shell-floor", "anchor": [0.487, 0] },
+    "wall.w1": { "file": "wall-w1.png", "mount": "shell-wall", "anchor": [0.5, 0.6575], "faceH": 167 },
+    "wall.w2": { "file": "wall-w2.png", "mount": "shell-wall", "anchor": [0.5, 0.6522], "faceH": 165 },
+    "wall.w3": { "file": "wall-w3.png", "mount": "shell-wall", "anchor": [0.5, 0.6575], "faceH": 167 },
+    "wall.w4": { "file": "wall-w4.png", "mount": "shell-wall", "anchor": [0.5, 0.6535], "faceH": 166 }
   }
 }
