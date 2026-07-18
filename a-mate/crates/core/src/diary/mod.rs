@@ -138,10 +138,18 @@ pub fn finding_advice(
         "R7" => {
             let ratio = evidence.get("ratio_pct").and_then(|v| v.as_u64()).unwrap_or(0);
             let n = evidence.get("total_sessions").and_then(|v| v.as_u64()).unwrap_or(0);
-            (
-                format!("이 프로젝트 세션의 {ratio}%({n}건)가 Opus로 처리한 가벼운 잔심부름이었어요 (~{est_tokens_saved}토큰 비용-등가)"),
-                "다음엔 `claude --model sonnet`으로 시작하거나 settings.json에서 기본 모델을 낮춰보세요".to_string(),
-            )
+            let mut detail = format!(
+                "이 프로젝트 세션의 {ratio}%({n}건)가 Opus로 처리한 가벼운 잔심부름이었어요 (~{est_tokens_saved}토큰 비용-등가)"
+            );
+            if let Some(m) = evidence.get("default_model").and_then(|v| v.as_str()) {
+                detail.push_str(&format!(" · 기본 모델 {m}"));
+            }
+            let mut action =
+                "다음엔 `claude --model sonnet`으로 시작하거나 settings.json에서 기본 모델을 낮춰보세요".to_string();
+            if let Some(e) = evidence.get("effort_level").and_then(|v| v.as_str()) {
+                action.push_str(&format!(" — effort({e})도 작업 난이도에 맞게 낮출 수 있어요"));
+            }
+            (detail, action)
         }
         "R9" => {
             let total = evidence.get("total_requests").and_then(|v| v.as_u64()).unwrap_or(0);
@@ -1576,6 +1584,18 @@ mod tests {
         assert!(detail.contains("75"));
         assert!(detail.contains("3건"));
         assert!(action.contains("claude --model sonnet"));
+    }
+
+    #[test]
+    fn finding_advice_r7_mentions_default_model_and_effort_when_present() {
+        let (detail, action) = super::finding_advice(
+            "R7",
+            &serde_json::json!({"ratio_pct": 75, "total_sessions": 3,
+                "default_model": "claude-fable-5[1m]", "effort_level": "xhigh"}),
+            48320,
+        );
+        assert!(detail.contains("claude-fable-5[1m]"));
+        assert!(action.contains("effort(xhigh)"));
     }
 
     #[test]
