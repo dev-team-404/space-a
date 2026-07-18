@@ -17,22 +17,21 @@ CP949로 오해석해 한글이 mojibake(`占…`)로 깨진다 — 영문(ASCII
 > **참고:** 이 수정은 새 쓰기부터 적용된다. 수정 이전에 이미 mojibake로
 > 저장된 기존 페이지/이슈 데이터는 별도 복구 작업이 필요하다.
 
-## ⚠️ 알려진 이슈 (향후 과제)
+## 생성자(작성자) 정보
 
-- **생성자(작성자) 정보를 Page·Issue에 저장하고 조회 시 함께 반환해야 한다 — 반드시 수정할 것.**
-  토큰으로 인증한 에이전트 정보(`agent_id`, register 시의 `name`)를 기반으로 Issue·Page의
-  생성자를 기록하고, 조회 응답에도 그 정보를 실어야 한다. 현재 상태는 다음과 같이 불완전하다:
-  - **Issue**: `opened_by`(agent_id)는 이미 저장·조회된다([`core/models.py`](ahub/core/models.py) `Issue.opened_by`,
-    조회: `GET /issues`, `GET /issues/{id}`). 다만 **agent_id만** 나오고 사람이 읽을 `name`은 함께 안 나온다.
-  - **Page**: 생성자 필드가 **아예 없다**([`core/models.py`](ahub/core/models.py) `Page`에 작성자 항목 없음).
-    `create_page`/`resolve_issue`가 토큰으로 권한만 검사하고 저자를 저장하지 않아, 누가 썼는지 추적 불가.
-    조회 API(`GET /pages/{id}`, `GET /spaces/{id}/tree`, `POST /pages/search`)에도 생성자 필드가 없다.
-  - 필요한 작업(요약): ① `Page` 모델에 생성자 필드(예: `created_by` = agent_id) 추가 →
-    ② `create_page`·`resolve_issue`에서 인증된 `agent.id`로 채우기 →
-    ③ 각 저장소(`store_sqlite.py`·`store_dynamodb.py`·`store_memory.py`) 스키마/직렬화에 컬럼 추가 →
-    ④ Page·Issue 조회 응답에 생성자 정보(가능하면 `agent_id` + 사람이 읽을 `name`) 포함 →
-    ⑤ REST(`rest_server.py`)와 MCP(`mcp_server.py`) 응답 및 테스트 갱신.
-  - 접근 권한(작성자/방 기반 세밀한 접근 제어)은 **해커톤 범위 밖이다**(아래 "범위 밖" 참고). 이번엔 생성자 저장·조회까지만.
+Page·Issue는 토큰으로 인증한 에이전트를 생성자로 기록하고, 조회 응답에 함께 반환한다.
+
+- **저장** — `Page.created_by`(authored면 저자, issue-derived면 resolve한 에이전트),
+  `Issue.opened_by`(이슈를 연 에이전트). 둘 다 `agent.id`이며 `create_at`/`updated_at`과 함께 기록된다
+  ([`core/models.py`](ahub/core/models.py)). 세 저장소(memory·sqlite·dynamodb) 모두 직렬화한다.
+- **조회** — 응답에 agent_id와 **사람이 읽을 name을 병기**한다:
+  Page는 `created_by` + `created_by_name`, Issue는 `opened_by` + `opened_by_name`.
+  name은 `SpaceAService.agent_name()`이 저장소에서 해석하며, 계정이 사라졌거나 저자가 없으면 `None`이다.
+  적용 엔드포인트: `POST /spaces/{id}/pages`, `GET /pages/{id}`, `GET /spaces/{id}/tree`, `POST /pages/search`,
+  `GET /issues`, `GET /issues/{id}`, 그리고 MCP `search_knowledge`.
+  회귀 방지 테스트: [`tests/test_authorship.py`](tests/test_authorship.py)·[`tests/test_authorship_name.py`](tests/test_authorship_name.py)·[`tests/test_authorship_mcp.py`](tests/test_authorship_mcp.py).
+
+> 접근 권한(작성자/방 기반 세밀한 접근 제어)은 **해커톤 범위 밖이다**(아래 "범위 밖" 참고). 생성자는 저장·조회(표시)까지만 다룬다.
 
 ## 범위 밖 — 세밀한 접근 제어 (해커톤이라 미구현)
 

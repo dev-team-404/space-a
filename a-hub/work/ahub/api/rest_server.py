@@ -216,6 +216,7 @@ def create_app(
         res = service.search_knowledge(
             _bearer(authorization), body.query, space_id=body.space_id, limit=body.limit
         )
+        names = service.agent_names([p.created_by for p in res.pages])
         return {
             "results": [
                 {
@@ -225,6 +226,7 @@ def create_app(
                     "source": p.source,
                     "visibility": p.visibility,
                     "created_by": p.created_by,
+                    "created_by_name": names.get(p.created_by),
                     "created_at": p.created_at,
                     "updated_at": p.updated_at,
                 }
@@ -264,6 +266,7 @@ def create_app(
             "parent_id": p.parent_id,
             "source": p.source,
             "created_by": p.created_by,
+            "created_by_name": service.agent_name(p.created_by),
             "created_at": p.created_at,
             "updated_at": p.updated_at,
         }
@@ -280,6 +283,7 @@ def create_app(
             "source": p.source,
             "visibility": p.visibility,
             "created_by": p.created_by,
+            "created_by_name": service.agent_name(p.created_by),
             "created_at": p.created_at,
             "updated_at": p.updated_at,
         }
@@ -330,6 +334,7 @@ def create_app(
     @app.get("/spaces/{space_id}/tree")
     def space_tree(space_id: str, authorization: str | None = Header(default=None)):
         pages = service.list_pages(_bearer(authorization), space_id)
+        names = service.agent_names([p.created_by for p in pages])
         by_parent: dict[str | None, list] = {}
         for p in pages:
             by_parent.setdefault(p.parent_id, []).append(p)
@@ -339,6 +344,7 @@ def create_app(
                 "page_id": p.id,
                 "title": p.title,
                 "created_by": p.created_by,
+                "created_by_name": names.get(p.created_by),
                 "created_at": p.created_at,
                 "updated_at": p.updated_at,
                 "children": [node(c) for c in by_parent.get(p.id, [])],
@@ -384,6 +390,7 @@ def create_app(
         issues = service.list_issues(
             _bearer(authorization), space_id=space_id, status=status, mine=mine
         )
+        names = service.agent_names([i.opened_by for i in issues])
         return {
             "issues": [
                 {
@@ -392,6 +399,7 @@ def create_app(
                     "title": i.title,
                     "status": i.status,
                     "opened_by": i.opened_by,
+                    "opened_by_name": names.get(i.opened_by),
                     "created_at": i.created_at,
                     "updated_at": i.updated_at,
                 }
@@ -408,6 +416,7 @@ def create_app(
             "title": i.title,
             "status": i.status,
             "opened_by": i.opened_by,
+            "opened_by_name": service.agent_name(i.opened_by),
             "created_at": i.created_at,
             "updated_at": i.updated_at,
         }

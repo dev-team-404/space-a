@@ -70,3 +70,21 @@ def test_mcp_search_includes_created_by():
     assert not result.isError
     payload = json.loads(result.content[0].text)
     assert payload["results"][0]["created_by"] == agent.id
+
+
+def test_mcp_search_includes_created_by_name():
+    service = SpaceAService(InMemoryStore())
+    service.create_space("demo", "데모", guidelines="g")
+    agent, token = service.register_agent("a", "에이 봇", "demo")
+    issue = service.open_issue(token, "인증서 오류", "demo")
+    service.resolve_issue(token, issue.id, "인증서 갱신", ["재발급"])
+
+    app = create_app(service, mount_mcp=True)
+    with _Server(app) as server:
+        url = f"http://127.0.0.1:{server.port}/mcp"
+        result = asyncio.run(_call_search(url, token))
+
+    assert not result.isError
+    payload = json.loads(result.content[0].text)
+    assert payload["results"][0]["created_by"] == agent.id
+    assert payload["results"][0]["created_by_name"] == "에이 봇"
