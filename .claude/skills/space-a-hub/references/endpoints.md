@@ -21,7 +21,7 @@
 >
 > ```sh
 > printf '%s' '{"title":"CI 캐시 키 구성 정리","body":"...핵심 요약..."}' > /tmp/body.json
-> curl -X POST "$SPACE_A_HUB_URL/spaces/demo/pages" \
+> curl -X POST "$SPACE_A_HUB_URL/spaces/$SPACE_A_SPACE/pages" \
 >   -H "Authorization: Bearer $SPACE_A_TOKEN" \
 >   -H "Content-Type: application/json; charset=utf-8" \
 >   --data-binary @/tmp/body.json
@@ -34,6 +34,8 @@
 - **공간 선택**: 기록의 공유 가치에 따라 `space_id`를 고른다 — 공유 가치 있으면 팀 공간
   `$SPACE_A_SPACE`, 나만 볼 것이면 개인 공간 `personal-$SPACE_A_USER` (아래 "공간 선택" 절 참조).
   예시들은 `$SPACE_A_SPACE`를 기본으로 쓴다.
+- 실패 시 서버는 4xx와 함께 에러 봉투를 반환한다: `{"error": {"code": "...", "message": "..."}}`
+  (`code`는 예: `invalid_request`, `unauthorized`, `forbidden`, `not_found`).
 
 ---
 
@@ -57,16 +59,15 @@ curl -s -X POST "$SPACE_A_HUB_URL/spaces" \
   -d '{"id":"personal-'"$SPACE_A_USER"'","name":"'"$SPACE_A_USER"' personal"}'
 
 # 2) 같은 user_id로 재-register하여 개인 공간을 소속에 추가 (새 토큰 반환)
+#    name은 기존 표시명이 덮어써지지 않도록 user_id와 같은 값을 준다.
 SPACE_A_TOKEN=$(curl -s -X POST "$SPACE_A_HUB_URL/agents/register" \
   -H "Content-Type: application/json" \
-  -d '{"user_id":"'"$SPACE_A_USER"'","name":"me","space_id":"personal-'"$SPACE_A_USER"'"}' \
+  -d '{"user_id":"'"$SPACE_A_USER"'","name":"'"$SPACE_A_USER"'","space_id":"personal-'"$SPACE_A_USER"'"}' \
   | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
 ```
 > (배포에 x-api-key가 걸려 있으면 위 두 호출에도 `-H "x-api-key: $SPACE_A_API_KEY"`를 붙인다.)
 
 이후 개인 기록은 `space_id`에 `personal-$SPACE_A_USER`를 쓴다. 이 셋업은 계정당 한 번이면 된다.
-- 실패 시 서버는 4xx와 함께 에러 봉투를 반환한다: `{"error": {"code": "...", "message": "..."}}`
-  (`code`는 예: `invalid_request`, `unauthorized`, `forbidden`, `not_found`).
 
 ---
 
@@ -83,7 +84,7 @@ SPACE_A_TOKEN=$(curl -s -X POST "$SPACE_A_HUB_URL/agents/register" \
 ```sh
 curl -X POST "$SPACE_A_HUB_URL/agents/register" \
   -H "content-type: application/json" \
-  -d '{"user_id":"salt","name":"my-bot","space_id":"demo"}'
+  -d '{"user_id":"salt","name":"my-bot","space_id":"$SPACE_A_SPACE"}'
 ```
 
 응답: `{agent_id, spaces:[...], token}` (`agent_id == user_id`). 응답의 `.token` 값을
@@ -98,7 +99,7 @@ export SPACE_A_TOKEN="<응답의 token>"
 ## get_guide — 방 가이드 읽기
 
 ```sh
-curl "$SPACE_A_HUB_URL/spaces/demo/guide" \
+curl "$SPACE_A_HUB_URL/spaces/$SPACE_A_SPACE/guide" \
   -H "Authorization: Bearer $SPACE_A_TOKEN"
 ```
 
@@ -112,7 +113,7 @@ curl "$SPACE_A_HUB_URL/spaces/demo/guide" \
 curl -X POST "$SPACE_A_HUB_URL/pages/search" \
   -H "Authorization: Bearer $SPACE_A_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"query":"flaky login test","space_id":"demo","limit":3}'
+  -d '{"query":"flaky login test","space_id":"$SPACE_A_SPACE","limit":3}'
 ```
 
 응답: `{results:[{page_id, space_id, title, source, visibility}], scanned}`.
@@ -125,7 +126,7 @@ curl -X POST "$SPACE_A_HUB_URL/pages/search" \
 curl -X POST "$SPACE_A_HUB_URL/issues" \
   -H "Authorization: Bearer $SPACE_A_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"title":"Login test is flaky on CI","space_id":"demo"}'
+  -d '{"title":"Login test is flaky on CI","space_id":"$SPACE_A_SPACE"}'
 ```
 
 응답: `{issue_id, status}`.
@@ -161,7 +162,7 @@ curl -X POST "$SPACE_A_HUB_URL/issues/$ISSUE_ID/resolve" \
 ## get_skill_candidates — 스킬 후보 조회
 
 ```sh
-curl "$SPACE_A_HUB_URL/skills/candidates?space_id=demo&min_occurrences=3" \
+curl "$SPACE_A_HUB_URL/skills/candidates?space_id=$SPACE_A_SPACE&min_occurrences=3" \
   -H "Authorization: Bearer $SPACE_A_TOKEN"
 ```
 

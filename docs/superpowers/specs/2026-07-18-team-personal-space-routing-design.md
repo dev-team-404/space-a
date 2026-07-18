@@ -41,7 +41,7 @@
 
 - space_id를 쓰는 예시(create_page·open_issue·search·list_issues)에 "팀이면 `$SPACE_A_SPACE`,
   개인이면 `personal-$SPACE_A_USER`" 선택 안내.
-- 개인 공간 생성 스니펫(404면 생성) 추가.
+- 개인 공간 셋업 스니펫(공간 생성 — 이미 존재 시 400 무시 → 같은 user_id 재-register로 멤버십 병합) 추가.
 
 ### 3. MCP — mcp_server.py (docstring만)
 
