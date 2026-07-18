@@ -464,6 +464,17 @@ class SpaceAService:
             raise errors.NotFound(f"agent '{agent_id}' not found")
         return target
 
+    def agent_name(self, agent_id: str | None) -> str | None:
+        """저자 agent_id → 사람이 읽을 name. 없거나 사라진 계정이면 None.
+
+        조회 응답에 created_by/opened_by(agent_id) 옆에 이름을 병기할 때 쓴다.
+        신원(auth)이 아니라 표시용 조회라 토큰을 요구하지 않는다.
+        """
+        if not agent_id:
+            return None
+        agent = self.store.get_agent(agent_id)
+        return agent.name if agent is not None else None
+
     def revoke_agent(self, token: str, agent_id: str) -> None:
         caller = self._authed_agent(token)
         if agent_id != caller.id:
