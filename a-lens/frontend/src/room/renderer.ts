@@ -153,10 +153,14 @@ export function buildRoomScene(
     1,
     config.desks == null || config.desks === 'auto' ? data.agents.length : config.desks,
   )
-  const { slots, W: LW, H: LH } = layoutDesks(deskCount)
-  // 셸 스프라이트(정방형 다이아)에 맞춰 방은 정사각 격자
-  const W = Math.max(LW, LH)
+  const { slots: baseSlots, W: LW, H: LH } = layoutDesks(deskCount)
+  // 셸 스프라이트(정방형 다이아)에 맞춰 방은 정사각 격자. 기본 16칸, 책상이 넘치면 확장.
+  const W = Math.max(config.size ?? 16, LW, LH)
   const H = W
+  // 책상 클러스터는 방 중앙에 (뒷벽 쪽 여유는 책장·칠판 몫)
+  const dx = (W - LW) / 2
+  const dy = Math.max(1.2, (H - LH) / 2)
+  const slots = baseSlots.map((s) => ({ gx: s.gx + dx, gy: s.gy + dy }))
 
   // ── 바닥 (셸 스프라이트: 윗꼭짓점을 격자 원점에 정렬, 격자 폭에 맞춰 스케일) ──
   const floorKit = kitPiece(`floor.${floorId}`)
@@ -236,27 +240,29 @@ export function buildRoomScene(
   boardHit.cursor = 'pointer'
   boardHit.on('pointertap', () => cb.onBoardTap?.())
 
-  // 칠판 내용 — 이슈 상위 3건 (벽면 기울기에 맞춰 skew)
+  // 칠판 내용 — 이슈 상위 3건 (벽면 기울기에 맞춰 skew, 글씨는 칠판 크기에 비례)
   const wallSkew = Math.atan2(TILE_H / 2, TILE_W / 2)
-  const chalkStyle = new TextStyle({ fill: board.chalk, fontSize: 13 })
+  const chalkSize = Math.max(13, Math.round(wallH * 0.055))
+  const chalkGap = chalkSize * 1.9
+  const chalkStyle = new TextStyle({ fill: board.chalk, fontSize: chalkSize })
   data.issues.slice(0, 3).forEach((issue, i) => {
     const line = new Container()
-    const [lx, ly] = pt(bA + 0.35, 0, -(bTop - 22 - i * 24))
+    const [lx, ly] = pt(bA + 0.35, 0, -(bTop - chalkSize * 1.7 - i * chalkGap))
     line.position.set(lx, ly)
     line.skew.y = wallSkew
     line.zIndex = -889
-    const dot = new Graphics().circle(6, 7, 5).fill(ISSUE_DOT[issue.status] ?? 0xd9a441)
+    const dot = new Graphics().circle(chalkSize * 0.45, chalkSize * 0.55, chalkSize * 0.38).fill(ISSUE_DOT[issue.status] ?? 0xd9a441)
     const label = new Text({
       text: issue.title.length > 16 ? issue.title.slice(0, 16) + '…' : issue.title,
       style: chalkStyle,
     })
-    label.x = 16
+    label.x = chalkSize * 1.2
     line.addChild(dot, label)
     root.addChild(line)
   })
   if (data.issues.length === 0) {
     const empty = new Text({ text: '이슈 없음', style: chalkStyle })
-    const [ex, ey] = pt(bA + 0.35, 0, -(bTop - 26))
+    const [ex, ey] = pt(bA + 0.35, 0, -(bTop - chalkSize * 2))
     empty.position.set(ex, ey)
     empty.skew.y = wallSkew
     empty.zIndex = -889
@@ -304,7 +310,11 @@ export function buildRoomScene(
   shelfHit.cursor = 'pointer'
   shelfHit.on('pointertap', () => cb.onShelfTap?.())
 
-  const countStyle = new TextStyle({ fill: 0xf0e6d2, fontSize: 12, fontWeight: 'bold' })
+  const countStyle = new TextStyle({
+    fill: 0xf0e6d2,
+    fontSize: Math.max(12, Math.round(wallH * 0.05)),
+    fontWeight: 'bold',
+  })
   const shelfBadge = new Text({ text: `지식 ${data.knowledgeCount}`, style: countStyle })
   shelfBadge.position.set(badgePos[0] - shelfBadge.width / 2, badgePos[1])
   shelfBadge.zIndex = (shelfSprite?.zIndex ?? depth(1, 2)) + 0.1
@@ -427,7 +437,7 @@ export function buildRoomScene(
   data.agents.forEach((agent, k) => {
     const slot = slots[k]
     if (slot) makeRobot(agent, k, slot.gx + 1, slot.gy + 1.6) // 책상 앞에 앉음
-    else makeRobot(agent, k, 1.5 + ((k - slots.length) % 5) * 1.7, H - 1.6) // 서 있음
+    else makeRobot(agent, k, dx + 1.5 + ((k - slots.length) % 5) * 1.7, dy + LH - 1.2) // 서 있음
   })
 
   return root

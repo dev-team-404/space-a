@@ -69,6 +69,8 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
           <select id="b-space" ${opts.initial ? 'disabled' : ''}></select>
           <div id="b-space-note" class="field-note"></div>
           <div id="b-groups"></div>
+          <label class="field-label">방 크기</label>
+          <div id="b-size" class="chip-row"></div>
           <label class="field-label">책상 수</label>
           <div id="b-desks" class="chip-row"></div>
           <label class="field-label">장식</label>
@@ -138,6 +140,28 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
   addGroup('책상', DESK_OPTIONS, () => state.desk, (id: DeskChoice) => (state.desk = id))
   addGroup('책장 (지식)', SHELF_OPTIONS, () => state.shelf ?? 's1', (id: ShelfId) => (state.shelf = id))
   addGroup('칠판', BOARD_OPTIONS, () => state.board, (id: BoardId) => (state.board = id))
+
+  // ── 방 크기 ──
+  const sizeRow = host.querySelector<HTMLElement>('#b-size')!
+  const SIZES: { cells: number; label: string }[] = [
+    { cells: 12, label: '아담' },
+    { cells: 16, label: '보통' },
+    { cells: 20, label: '대형' },
+  ]
+  for (const { cells, label } of SIZES) {
+    const chip = document.createElement('button')
+    chip.className = 'chip'
+    chip.textContent = label
+    chip.dataset.size = String(cells)
+    chip.addEventListener('click', () => {
+      state.size = cells
+      sizeRow.querySelectorAll('.chip').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.size === String(cells)))
+      renderPreview()
+    })
+    sizeRow.appendChild(chip)
+  }
+  const currentSize = state.size ?? 16
+  sizeRow.querySelectorAll('.chip').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.size === String(currentSize)))
 
   // ── 책상 수 (자동 = 에이전트 수 따라감) ──
   const desksRow = host.querySelector<HTMLElement>('#b-desks')!

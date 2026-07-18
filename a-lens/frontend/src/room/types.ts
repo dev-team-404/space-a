@@ -28,6 +28,8 @@ export type RoomConfig = {
   deco: DecoId[]
   /** 책상 수 — 'auto'면 에이전트 수를 따라감. 이전 버전 저장분에는 없을 수 있다. */
   desks?: 'auto' | number
+  /** 방 크기 (격자 한 변 셀 수). 없으면 16. 책상이 더 필요하면 자동으로 늘어남 */
+  size?: number
   created_at: string
 }
 
