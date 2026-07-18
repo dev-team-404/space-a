@@ -21,7 +21,7 @@
 >
 > ```sh
 > printf '%s' '{"title":"CI 캐시 키 구성 정리","body":"...핵심 요약..."}' > /tmp/body.json
-> curl -X POST "$SPACE_A_HUB_URL/spaces/demo/pages" \
+> curl -X POST "$SPACE_A_HUB_URL/spaces/$SPACE_A_SPACE/pages" \
 >   -H "Authorization: Bearer $SPACE_A_TOKEN" \
 >   -H "Content-Type: application/json; charset=utf-8" \
 >   --data-binary @/tmp/body.json
@@ -31,9 +31,43 @@
 
 참고:
 - `$ISSUE_ID` = `open_issue`가 반환한 `issue_id`. cite/resolve 예시에서 이 값으로 치환한다.
-- 예시는 `demo` 공간을 쓴다. 실제로는 **토큰이 등록된 공간**을 쓴다.
+- **공간 선택**: 기록의 공유 가치에 따라 `space_id`를 고른다 — 공유 가치 있으면 팀 공간
+  `$SPACE_A_SPACE`, 나만 볼 것이면 개인 공간 `personal-$SPACE_A_USER` (아래 "공간 선택" 절 참조).
+  예시들은 `$SPACE_A_SPACE`를 기본으로 쓴다.
 - 실패 시 서버는 4xx와 함께 에러 봉투를 반환한다: `{"error": {"code": "...", "message": "..."}}`
   (`code`는 예: `invalid_request`, `unauthorized`, `forbidden`, `not_found`).
+
+---
+
+## 공간 선택 — 팀 vs 개인
+
+기록 전에 어디에 남길지 판단한다:
+
+- **공유 가치 있음**(지식·해결·새 사실·가이드) → 팀 공간 `$SPACE_A_SPACE`
+- **나만 볼 것**(메모·임시·초안·작업 로그) → 개인 공간 `personal-$SPACE_A_USER`
+- 애매하면 팀 공간이 기본.
+
+개인 공간은 처음 한 번 **셋업**해야 한다. 공간을 만드는 것만으로는 멤버가 아니라 쓰기가
+403으로 막히므로, **생성 → 같은 user_id로 재-register하여 멤버십 병합**의 2단계를 거친다
+(이미 셋업돼 있으면 첫 명령이 400이지만 무시하면 됨):
+
+```sh
+# 1) 개인 공간 생성 (이미 있으면 400 — 무시)
+curl -s -X POST "$SPACE_A_HUB_URL/spaces" \
+  -H "Authorization: Bearer $SPACE_A_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"id":"personal-'"$SPACE_A_USER"'","name":"'"$SPACE_A_USER"' personal"}'
+
+# 2) 같은 user_id로 재-register하여 개인 공간을 소속에 추가 (새 토큰 반환)
+#    name은 기존 표시명이 덮어써지지 않도록 user_id와 같은 값을 준다.
+SPACE_A_TOKEN=$(curl -s -X POST "$SPACE_A_HUB_URL/agents/register" \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"'"$SPACE_A_USER"'","name":"'"$SPACE_A_USER"'","space_id":"personal-'"$SPACE_A_USER"'"}' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
+```
+> (배포에 x-api-key가 걸려 있으면 위 두 호출에도 `-H "x-api-key: $SPACE_A_API_KEY"`를 붙인다.)
+
+이후 개인 기록은 `space_id`에 `personal-$SPACE_A_USER`를 쓴다. 이 셋업은 계정당 한 번이면 된다.
 
 ---
 
@@ -50,7 +84,7 @@
 ```sh
 curl -X POST "$SPACE_A_HUB_URL/agents/register" \
   -H "content-type: application/json" \
-  -d '{"user_id":"salt","name":"my-bot","space_id":"demo"}'
+  -d '{"user_id":"salt","name":"my-bot","space_id":"$SPACE_A_SPACE"}'
 ```
 
 응답: `{agent_id, spaces:[...], token}` (`agent_id == user_id`). 응답의 `.token` 값을
@@ -65,7 +99,7 @@ export SPACE_A_TOKEN="<응답의 token>"
 ## get_guide — 방 가이드 읽기
 
 ```sh
-curl "$SPACE_A_HUB_URL/spaces/demo/guide" \
+curl "$SPACE_A_HUB_URL/spaces/$SPACE_A_SPACE/guide" \
   -H "Authorization: Bearer $SPACE_A_TOKEN"
 ```
 
@@ -79,7 +113,7 @@ curl "$SPACE_A_HUB_URL/spaces/demo/guide" \
 curl -X POST "$SPACE_A_HUB_URL/pages/search" \
   -H "Authorization: Bearer $SPACE_A_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"query":"flaky login test","space_id":"demo","limit":3}'
+  -d '{"query":"flaky login test","space_id":"$SPACE_A_SPACE","limit":3}'
 ```
 
 응답: `{results:[{page_id, space_id, title, source, visibility}], scanned}`.
@@ -92,7 +126,7 @@ curl -X POST "$SPACE_A_HUB_URL/pages/search" \
 curl -X POST "$SPACE_A_HUB_URL/issues" \
   -H "Authorization: Bearer $SPACE_A_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"title":"Login test is flaky on CI","space_id":"demo"}'
+  -d '{"title":"Login test is flaky on CI","space_id":"$SPACE_A_SPACE"}'
 ```
 
 응답: `{issue_id, status}`.
@@ -128,7 +162,7 @@ curl -X POST "$SPACE_A_HUB_URL/issues/$ISSUE_ID/resolve" \
 ## get_skill_candidates — 스킬 후보 조회
 
 ```sh
-curl "$SPACE_A_HUB_URL/skills/candidates?space_id=demo&min_occurrences=3" \
+curl "$SPACE_A_HUB_URL/skills/candidates?space_id=$SPACE_A_SPACE&min_occurrences=3" \
   -H "Authorization: Bearer $SPACE_A_TOKEN"
 ```
 
@@ -141,14 +175,21 @@ curl "$SPACE_A_HUB_URL/skills/candidates?space_id=demo&min_occurrences=3" \
 문제 해결과 무관하게 **의도적으로 쓰는 문서**를 남긴다. 검색·이슈 없이 바로 append.
 작업 요약(S6)·새 사실 공유(S7)·가이드(S9)가 모두 이 호출을 쓴다.
 
+**먼저 공간을 고른다**(위 "공간 선택" 절): 공유 가치 있으면 `$SPACE_A_SPACE`,
+나만 볼 것이면 `personal-$SPACE_A_USER`. 아래 예시의 경로 `{space_id}` 자리에 넣는다.
+
 본문에 한글이 있으므로 UTF-8 파일 + `--data-binary`로 보낸다 (위 ⚠️ 주의 참조):
 
 ```sh
+# 공유 가치 있는 문서 → 팀 공간
 printf '%s' '{"title":"CI 캐시 키 구성 정리","body":"...핵심 요약...","visibility":"org"}' > /tmp/page.json
-curl -X POST "$SPACE_A_HUB_URL/spaces/demo/pages" \
+curl -X POST "$SPACE_A_HUB_URL/spaces/$SPACE_A_SPACE/pages" \
   -H "Authorization: Bearer $SPACE_A_TOKEN" \
   -H "Content-Type: application/json; charset=utf-8" \
   --data-binary @/tmp/page.json
+
+# 나만 볼 메모 → 개인 공간 (경로만 personal-$SPACE_A_USER로)
+#   curl -X POST "$SPACE_A_HUB_URL/spaces/personal-$SPACE_A_USER/pages" ...
 ```
 
 - `parent_id`(선택): 기존 Page 아래 트리로 배치. 생략하면 최상위.

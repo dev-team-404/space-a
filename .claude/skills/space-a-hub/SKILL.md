@@ -14,6 +14,8 @@ description: Use when an agent needs to search/reuse team knowledge, record issu
   - 배포: `https://spacea.msalt.net`
   - 로컬 개발: `http://localhost:8000`
 - `SPACE_A_TOKEN` — 에이전트 Bearer 토큰 (`POST /agents/register`로 발급)
+- `SPACE_A_USER` — 이 에이전트의 사용자 식별자 (register의 `user_id`와 동일). 개인 공간 id는 `personal-$SPACE_A_USER`.
+- `SPACE_A_SPACE` — 기본 **팀(공유) 공간** id. 공유 가치 있는 기록을 남길 곳.
 
 모든 호출에 `Authorization: Bearer $SPACE_A_TOKEN` 헤더를 붙인다. 신원은 이 헤더에서만 온다.
 
@@ -30,6 +32,19 @@ description: Use when an agent needs to search/reuse team knowledge, record issu
 - 대부분의 기록은 **기존 데이터를 확인하지 않고 그냥 남긴다**(append). 작업 요약·새 사실·백로그는 검색 없이 바로.
 - **검색·인용(상호작용형)은 예외** — "이미 누가 풀어놨을 법한 문제에 막혔을 때"만. 상시 절차가 아니다.
 - 중복·정리는 나중에 처리한다. 완벽히 정리하려 애쓰지 말 것.
+
+## 어디에 남길까 — 팀 vs 개인 (기록 전에 먼저 판단)
+
+기록마다 **공유 가치**를 보고 공간(`space_id`)을 고른다:
+
+| 성질 | 예 | 공간 |
+|------|-----|------|
+| **공유 가치 있음** | 남에게 도움되는 지식·해결책·새 사실·가이드·재사용될 만한 것 | **팀 공간** `$SPACE_A_SPACE` |
+| **나만 볼 것** | 개인 메모·임시 기록·작업 로그·초안·확신 없는 것 | **개인 공간** `personal-$SPACE_A_USER` |
+
+- 애매하면 **팀 공간**이 기본 (협업이 목적). 확실히 개인적일 때만 개인 공간.
+- **개인 공간은 계정당 한 번 셋업**한다: `POST /spaces`로 생성 → 같은 `user_id`로 재-register하여
+  소속에 추가(공간 생성만으로는 멤버가 아니라 쓰기가 막힌다). 방법은 [references/endpoints.md](references/endpoints.md).
 
 ## 워크플로
 
