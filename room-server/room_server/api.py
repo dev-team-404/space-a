@@ -66,7 +66,12 @@ def create_app(rooms: RoomService | None = None) -> FastAPI:
             "description": "방 방문 서버 — 개인 방·에이전트 위치·방 디자인 (docs/design/room-visit.md)",
             "auth": "Authorization: Bearer <token> (등록: POST /rooms/register)",
             "openapi": "/docs",
+            "room_protocol": 3,
         }
+
+    @app.get("/capabilities")
+    def capabilities():
+        return {"room_protocol": 3, "grid": {"w": 20, "h": 20}, "floor_min_y": 0, "footprint_mask": True, "wall_objects": True}
 
     @app.post("/rooms/register", status_code=201)
     def room_register(body: RoomRegisterBody):

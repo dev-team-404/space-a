@@ -6,6 +6,7 @@
 """
 
 import os
+import json
 import sqlite3
 
 from .rooms import Room, RoomAgent, RoomDesign, RoomObject
@@ -22,7 +23,13 @@ CREATE TABLE IF NOT EXISTS room_objects (
   room_id TEXT NOT NULL,
   kind    TEXT NOT NULL,
   x       INTEGER NOT NULL,
-  y       INTEGER NOT NULL
+  y       INTEGER NOT NULL,
+  category TEXT NOT NULL DEFAULT 'legacy',
+  w INTEGER NOT NULL DEFAULT 1,
+  h INTEGER NOT NULL DEFAULT 1,
+  rotation INTEGER NOT NULL DEFAULT 0,
+  wall TEXT,
+  footprint TEXT
 );
 CREATE TABLE IF NOT EXISTS agents (
   agent_id    TEXT PRIMARY KEY,
@@ -47,7 +54,24 @@ class SqliteStore:
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(_SCHEMA)
+        self._migrate_room_objects()
         self._conn.commit()
+
+    def _migrate_room_objects(self) -> None:
+        columns = {row[1] for row in self._conn.execute("PRAGMA table_info(room_objects)")}
+        for name, ddl in [
+            ("category", "TEXT NOT NULL DEFAULT 'legacy'"),
+            ("w", "INTEGER NOT NULL DEFAULT 1"),
+            ("h", "INTEGER NOT NULL DEFAULT 1"),
+            ("rotation", "INTEGER NOT NULL DEFAULT 0"),
+            ("wall", "TEXT"),
+            ("footprint", "TEXT"),
+        ]:
+            if name not in columns:
+                self._conn.execute(f"ALTER TABLE room_objects ADD COLUMN {name} {ddl}")
+        # ADR 0005 intentionally drops the old combined table+chair assets. They cannot be
+        # migrated without preserving the inconsistent chair counts and collision masks.
+        self._conn.execute("DELETE FROM room_objects WHERE category = 'dining'")
 
     @classmethod
     def from_env(cls) -> "SqliteStore | None":
@@ -59,8 +83,20 @@ class SqliteStore:
     def load(self) -> tuple[dict[str, Room], dict[str, RoomAgent], dict[str, str]]:
         c = self._conn
         objects: dict[str, list[RoomObject]] = {}
-        for room_id, kind, x, y in c.execute("SELECT room_id, kind, x, y FROM room_objects"):
-            objects.setdefault(room_id, []).append(RoomObject(kind=kind, cell=(x, y)))
+        for room_id, asset_id, x, y, category, w, h, rotation, wall, footprint in c.execute(
+            "SELECT room_id, kind, x, y, category, w, h, rotation, wall, footprint FROM room_objects"
+        ):
+            objects.setdefault(room_id, []).append(
+                RoomObject(
+                    asset_id=asset_id,
+                    category=category,
+                    cell=(x, y),
+                    size=(w, h),
+                    rotation=rotation,
+                    wall=wall,
+                    footprint=tuple(tuple(cell) for cell in json.loads(footprint)) if footprint else None,
+                )
+            )
         rooms = {
             room_id: Room(
                 id=room_id,
@@ -112,8 +148,16 @@ class SqliteStore:
         )
         self._conn.execute("DELETE FROM room_objects WHERE room_id = ?", (room.id,))
         self._conn.executemany(
-            "INSERT INTO room_objects VALUES (?, ?, ?, ?)",
-            [(room.id, o.kind, o.cell[0], o.cell[1]) for o in room.design.objects],
+            "INSERT INTO room_objects (room_id, kind, x, y, category, w, h, rotation, wall, footprint) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    room.id, o.asset_id, o.cell[0], o.cell[1], o.category,
+                    o.size[0], o.size[1], o.rotation, o.wall,
+                    json.dumps(o.footprint) if o.footprint else None,
+                )
+                for o in room.design.objects
+            ],
         )
         self._conn.commit()
 

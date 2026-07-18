@@ -1,0 +1,522 @@
+{
+    "appliance/compact-fridge/ne":  {
+                                        "width":  203,
+                                        "height":  336,
+                                        "ground":  [
+                                                       0.470443,
+                                                       0.994048
+                                                   ]
+                                    },
+    "appliance/compact-fridge/sw":  {
+                                        "width":  203,
+                                        "height":  333,
+                                        "ground":  [
+                                                       0.5,
+                                                       0.993994
+                                                   ]
+                                    },
+    "appliance/desktop/ne":  {
+                                 "width":  251,
+                                 "height":  285,
+                                 "ground":  [
+                                                0.515936,
+                                                0.992982
+                                            ]
+                             },
+    "appliance/desktop/sw":  {
+                                 "width":  251,
+                                 "height":  308,
+                                 "ground":  [
+                                                0.503984,
+                                                0.993506
+                                            ]
+                             },
+    "appliance/retro-tv/ne":  {
+                                  "width":  270,
+                                  "height":  318,
+                                  "ground":  [
+                                                 0.342593,
+                                                 0.993711
+                                             ]
+                              },
+    "appliance/retro-tv/sw":  {
+                                  "width":  270,
+                                  "height":  321,
+                                  "ground":  [
+                                                 0.327778,
+                                                 0.993769
+                                             ]
+                              },
+    "appliance/stereo/ne":  {
+                                "width":  276,
+                                "height":  290,
+                                "ground":  [
+                                               0.697464,
+                                               0.993103
+                                           ]
+                            },
+    "appliance/stereo/sw":  {
+                                "width":  269,
+                                "height":  299,
+                                "ground":  [
+                                               0.685874,
+                                               0.993311
+                                           ]
+                            },
+    "appliance/washer/ne":  {
+                                "width":  222,
+                                "height":  318,
+                                "ground":  [
+                                               0.457207,
+                                               0.993711
+                                           ]
+                            },
+    "appliance/washer/sw":  {
+                                "width":  223,
+                                "height":  320,
+                                "ground":  [
+                                               0.553812,
+                                               0.99375
+                                           ]
+                            },
+    "chair/coral-compact/ne":  {
+                                   "width":  194,
+                                   "height":  320,
+                                   "ground":  [
+                                                  0.456186,
+                                                  0.99375
+                                              ]
+                               },
+    "chair/coral-compact/sw":  {
+                                   "width":  181,
+                                   "height":  291,
+                                   "ground":  [
+                                                  0.461326,
+                                                  0.993127
+                                              ]
+                               },
+    "chair/dark-modern/ne":  {
+                                 "width":  206,
+                                 "height":  332,
+                                 "ground":  [
+                                                0.458738,
+                                                0.993976
+                                            ]
+                             },
+    "chair/dark-modern/sw":  {
+                                 "width":  205,
+                                 "height":  296,
+                                 "ground":  [
+                                                0.52439,
+                                                0.993243
+                                            ]
+                             },
+    "chair/mint-cafe/ne":  {
+                               "width":  196,
+                               "height":  324,
+                               "ground":  [
+                                              0.477041,
+                                              0.993827
+                                          ]
+                           },
+    "chair/mint-cafe/sw":  {
+                               "width":  186,
+                               "height":  285,
+                               "ground":  [
+                                              0.502688,
+                                              0.992982
+                                          ]
+                           },
+    "chair/pastel-cream/ne":  {
+                                  "width":  203,
+                                  "height":  324,
+                                  "ground":  [
+                                                 0.470443,
+                                                 0.993827
+                                             ]
+                              },
+    "chair/pastel-cream/sw":  {
+                                  "width":  194,
+                                  "height":  292,
+                                  "ground":  [
+                                                 0.518041,
+                                                 0.993151
+                                             ]
+                              },
+    "chair/warm-wood/ne":  {
+                               "width":  200,
+                               "height":  326,
+                               "ground":  [
+                                              0.4875,
+                                              0.993865
+                                          ]
+                           },
+    "chair/warm-wood/sw":  {
+                               "width":  204,
+                               "height":  294,
+                               "ground":  [
+                                              0.571078,
+                                              0.993197
+                                          ]
+                           },
+    "desk/compact-study/ne":  {
+                                  "width":  265,
+                                  "height":  343,
+                                  "ground":  [
+                                                 0.326415,
+                                                 0.994169
+                                             ]
+                              },
+    "desk/compact-study/sw":  {
+                                  "width":  265,
+                                  "height":  322,
+                                  "ground":  [
+                                                 0.624528,
+                                                 0.993789
+                                             ]
+                              },
+    "desk/computer/ne":  {
+                             "width":  267,
+                             "height":  314,
+                             "ground":  [
+                                            0.335206,
+                                            0.993631
+                                        ]
+                         },
+    "desk/computer/sw":  {
+                             "width":  266,
+                             "height":  310,
+                             "ground":  [
+                                            0.652256,
+                                            0.993548
+                                        ]
+                         },
+    "desk/metal-workstation/ne":  {
+                                      "width":  267,
+                                      "height":  315,
+                                      "ground":  [
+                                                     0.312734,
+                                                     0.993651
+                                                 ]
+                                  },
+    "desk/metal-workstation/sw":  {
+                                      "width":  260,
+                                      "height":  324,
+                                      "ground":  [
+                                                     0.667308,
+                                                     0.993827
+                                                 ]
+                                  },
+    "desk/pastel-vanity/ne":  {
+                                  "width":  229,
+                                  "height":  357,
+                                  "ground":  [
+                                                 0.281659,
+                                                 0.994398
+                                             ]
+                              },
+    "desk/pastel-vanity/sw":  {
+                                  "width":  229,
+                                  "height":  337,
+                                  "ground":  [
+                                                 0.661572,
+                                                 0.994065
+                                             ]
+                              },
+    "desk/wood-writing/ne":  {
+                                 "width":  283,
+                                 "height":  279,
+                                 "ground":  [
+                                                0.316254,
+                                                0.992832
+                                            ]
+                             },
+    "desk/wood-writing/sw":  {
+                                 "width":  279,
+                                 "height":  285,
+                                 "ground":  [
+                                                0.657706,
+                                                0.992982
+                                            ]
+                             },
+    "lighting/modern-arc/ne":  {
+                                   "width":  205,
+                                   "height":  237,
+                                   "ground":  [
+                                                  0.797561,
+                                                  0.991561
+                                              ]
+                               },
+    "lighting/modern-arc/sw":  {
+                                   "width":  205,
+                                   "height":  252,
+                                   "ground":  [
+                                                  0.212195,
+                                                  0.992063
+                                              ]
+                               },
+    "lighting/paper-lantern/ne":  {
+                                      "width":  91,
+                                      "height":  256,
+                                      "ground":  [
+                                                     0.5,
+                                                     0.992188
+                                                 ]
+                                  },
+    "lighting/paper-lantern/sw":  {
+                                      "width":  92,
+                                      "height":  257,
+                                      "ground":  [
+                                                     0.505435,
+                                                     0.992218
+                                                 ]
+                                  },
+    "lighting/pastel-table/ne":  {
+                                     "width":  91,
+                                     "height":  154,
+                                     "ground":  [
+                                                    0.489011,
+                                                    0.987013
+                                                ]
+                                 },
+    "lighting/pastel-table/sw":  {
+                                     "width":  92,
+                                     "height":  155,
+                                     "ground":  [
+                                                    0.505435,
+                                                    0.987097
+                                                ]
+                                 },
+    "lighting/retro-stand/ne":  {
+                                    "width":  103,
+                                    "height":  259,
+                                    "ground":  [
+                                                   0.509709,
+                                                   0.992278
+                                               ]
+                                },
+    "lighting/retro-stand/sw":  {
+                                    "width":  103,
+                                    "height":  260,
+                                    "ground":  [
+                                                   0.5,
+                                                   0.992308
+                                               ]
+                                },
+    "lighting/warm-floor/ne":  {
+                                   "width":  64,
+                                   "height":  245,
+                                   "ground":  [
+                                                  0.507812,
+                                                  0.991837
+                                              ]
+                               },
+    "lighting/warm-floor/sw":  {
+                                   "width":  63,
+                                   "height":  246,
+                                   "ground":  [
+                                                  0.5,
+                                                  0.99187
+                                              ]
+                               },
+    "sofa/coral-two-seat/ne":  {
+                                   "width":  279,
+                                   "height":  262,
+                                   "ground":  [
+                                                  0.310036,
+                                                  0.992366
+                                              ]
+                               },
+    "sofa/coral-two-seat/sw":  {
+                                   "width":  279,
+                                   "height":  237,
+                                   "ground":  [
+                                                  0.310036,
+                                                  0.991561
+                                              ]
+                               },
+    "sofa/lavender-sectional/ne":  {
+                                       "width":  330,
+                                       "height":  252,
+                                       "ground":  [
+                                                      0.240909,
+                                                      0.992063
+                                                  ]
+                                   },
+    "sofa/lavender-sectional/sw":  {
+                                       "width":  336,
+                                       "height":  223,
+                                       "ground":  [
+                                                      0.424107,
+                                                      0.991031
+                                                  ]
+                                   },
+    "sofa/mint-loveseat/ne":  {
+                                  "width":  260,
+                                  "height":  253,
+                                  "ground":  [
+                                                 0.321154,
+                                                 0.992095
+                                             ]
+                              },
+    "sofa/mint-loveseat/sw":  {
+                                  "width":  260,
+                                  "height":  222,
+                                  "ground":  [
+                                                 0.321154,
+                                                 0.990991
+                                             ]
+                              },
+    "sofa/navy-modern/ne":  {
+                                "width":  270,
+                                "height":  255,
+                                "ground":  [
+                                               0.312963,
+                                               0.992157
+                                           ]
+                            },
+    "sofa/navy-modern/sw":  {
+                                "width":  270,
+                                "height":  242,
+                                "ground":  [
+                                               0.312963,
+                                               0.991736
+                                           ]
+                            },
+    "sofa/wood-frame/ne":  {
+                               "width":  261,
+                               "height":  247,
+                               "ground":  [
+                                              0.327586,
+                                              0.991903
+                                          ]
+                           },
+    "sofa/wood-frame/sw":  {
+                               "width":  259,
+                               "height":  222,
+                               "ground":  [
+                                              0.341699,
+                                              0.990991
+                                          ]
+                           },
+    "table/dark-modern/ne":  {
+                                 "width":  332,
+                                 "height":  280,
+                                 "ground":  [
+                                                0.302711,
+                                                0.992857
+                                            ]
+                             },
+    "table/dark-modern/sw":  {
+                                 "width":  328,
+                                 "height":  279,
+                                 "ground":  [
+                                                0.657012,
+                                                0.992832
+                                            ]
+                             },
+    "table/pastel-breakfast/ne":  {
+                                      "width":  216,
+                                      "height":  231,
+                                      "ground":  [
+                                                     0.460648,
+                                                     0.991342
+                                                 ]
+                                  },
+    "table/pastel-breakfast/sw":  {
+                                      "width":  216,
+                                      "height":  231,
+                                      "ground":  [
+                                                     0.543981,
+                                                     0.991342
+                                                 ]
+                                  },
+    "table/round-cafe/ne":  {
+                                "width":  164,
+                                "height":  186,
+                                "ground":  [
+                                               0.496951,
+                                               0.989247
+                                           ]
+                            },
+    "table/round-cafe/sw":  {
+                                "width":  164,
+                                "height":  186,
+                                "ground":  [
+                                               0.503049,
+                                               0.989247
+                                           ]
+                            },
+    "table/square-two/ne":  {
+                                "width":  225,
+                                "height":  226,
+                                "ground":  [
+                                               0.5,
+                                               0.99115
+                                           ]
+                            },
+    "table/square-two/sw":  {
+                                "width":  225,
+                                "height":  226,
+                                "ground":  [
+                                               0.5,
+                                               0.99115
+                                           ]
+                            },
+    "table/wood-four/ne":  {
+                               "width":  312,
+                               "height":  271,
+                               "ground":  [
+                                              0.338141,
+                                              0.99262
+                                          ]
+                           },
+    "table/wood-four/sw":  {
+                               "width":  306,
+                               "height":  268,
+                               "ground":  [
+                                              0.668301,
+                                              0.992537
+                                          ]
+                           },
+    "window/coral-arch/ne":  {
+                                 "width":  458,
+                                 "height":  915,
+                                 "ground":  [
+                                                0.979258,
+                                                0.997814
+                                            ]
+                             },
+    "window/cream-wood/ne":  {
+                                 "width":  664,
+                                 "height":  776,
+                                 "ground":  [
+                                                0.03238,
+                                                0.997423
+                                            ]
+                             },
+    "window/lavender-bay/ne":  {
+                                   "width":  813,
+                                   "height":  629,
+                                   "ground":  [
+                                                  0.963715,
+                                                  0.99682
+                                              ]
+                               },
+    "window/mint-square/ne":  {
+                                  "width":  572,
+                                  "height":  602,
+                                  "ground":  [
+                                                 0.041084,
+                                                 0.996678
+                                             ]
+                              },
+    "window/navy-wide/ne":  {
+                                "width":  1061,
+                                "height":  343,
+                                "ground":  [
+                                               0.984449,
+                                               0.994169
+                                           ]
+                            }
+}

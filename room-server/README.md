@@ -3,7 +3,8 @@
 방 방문(Room Visit) 서버 — 개인 방·에이전트 위치·방 디자인.
 **hub(Space/Page 협업 허브)와 별개의 서버 프로세스**입니다. 설계: [docs/design/room-visit.md](../docs/design/room-visit.md)
 
-- 유저당 방 1개 (30×16 셀 격자), 에이전트 위치의 단일 원천
+- 유저당 방 1개 (20×20 아이소메트릭 바닥 셀), 에이전트 위치의 단일 원천
+- room protocol v3: 가구별 footprint와 벽에서 파생되는 창문 방향(`west=90`, `north=180`)
 - 겹침 금지: "빈 셀일 때만 점유"를 전역 락 안에서 원자 처리 (`409 cell_taken`)
 - 영속화: `ROOM_SERVER_DB` 설정 시 SQLite(볼륨)로 등록·방·위치·디자인 유지
   (compose 기본 활성). 미설정이면 인메모리 — 재시작 시 초기화
@@ -34,4 +35,4 @@ pytest
 | GET | `/rooms/{id}` | 방 상태 (디자인 + 입장자) |
 | POST | `/rooms/{id}/enter` | 입장 (cell 생략 시 서버가 빈 셀 배정) |
 | POST | `/rooms/{id}/move` | 방 안 셀 이동 |
-| PUT | `/rooms/{id}/design` | 방 디자인 변경 (주인만) |
+| PUT | `/rooms/{id}/design` | 방 디자인 변경 (주인만, 다중 셀 footprint·4방향 회전 포함) |

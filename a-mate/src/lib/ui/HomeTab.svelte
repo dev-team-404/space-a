@@ -32,6 +32,7 @@
   // 방 서버 연결 시 격자 방(RoomView), 미연결 시 기존 장식 방(MiniRoom) — 원기능 보존
   // 설정 창에서 연결하는 순간 바뀌도록 settings:changed와 창 포커스에 반응한다
   let hubConnected = $state(false);
+  const interiorPreview = import.meta.env.DEV && new URLSearchParams(location.search).has('interiorPreview');
   const checkHub = () => hubSettingsGet().then((h) => (hubConnected = h.connected)).catch(() => {});
   checkHub();
 
@@ -75,7 +76,7 @@
 </script>
 
 <section class="home">
-  {#if hubConnected}
+  {#if hubConnected || interiorPreview}
     <RoomView />
   {:else}
     <MiniRoom advice={topAdvice} />
@@ -119,7 +120,12 @@
 </section>
 
 <style>
-  .home { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+  /* content가 스크롤 컨테이너이므로 홈 자체는 내용 높이를 보존한다.
+     flex:1 + 기본 shrink 조합은 방이 커질 때 아래 카드가 방 위로 겹쳐 보일 수 있다. */
+  .home {
+    padding: 14px 16px; display: flex; flex-direction: column; gap: 12px;
+    flex: 0 0 auto; min-height: 100%; box-sizing: border-box; position: relative;
+  }
   .strip {
     display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--ink-soft);
     background: var(--frame-bg); border-radius: var(--radius-m); box-shadow: var(--shadow-soft);
@@ -127,7 +133,7 @@
   }
   .strip b { color: var(--ink); }
   .strip .save b { color: var(--accent); }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; position: relative; flex: 0 0 auto; }
   /* grid 아이템 기본 min-width:auto가 긴 top3(nowrap)에 밀려 컬럼을 늘리는 것 방지 — 1fr 고정·ellipsis 복구 */
   .grid > :global(*) { min-width: 0; }
   .status {

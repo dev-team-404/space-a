@@ -1,7 +1,7 @@
 """방 방문(Room Visit) — 개인 방·에이전트 위치·방 디자인.
 
 설계: docs/design/room-visit.md
-- 유저당 방 1개, 30×16 정사각 셀 격자. 에이전트 점유 = 논리 1셀.
+- 유저당 방 1개, 20×20 정사각 셀 격자. 에이전트 점유 = 논리 1셀.
 - 위치의 단일 원천은 서버. 겹침 금지는 전역 락 안에서 "빈 셀일 때만 점유"로 원자 처리.
 - 방 디자인(벽지·바닥·가구)은 방문자에게 보여주는 공개 표면이므로 서버가 가진다.
   사적 내용(다이어리 등)은 클라이언트에만 있다 — 여기 없음이 설계다.
@@ -17,19 +17,40 @@ from dataclasses import dataclass, field
 from . import errors
 from .errors import CellTaken
 
-GRID_W = 30
-GRID_H = 16
+GRID_W = 20
+GRID_H = 20
+FLOOR_Y = 0
 # 자율 입장(셀 미지정) 스폰 지점 — 구석이 아니라 방의 가로 3/7, 세로 4/5 지점 근처
 SPAWN_X = GRID_W * 3 // 7  # 12
 SPAWN_Y = GRID_H * 4 // 5  # 12
+WINDOW_ROTATION_BY_WALL = {"west": 90, "north": 180}
 
 Cell = tuple[int, int]
 
 
 @dataclass
 class RoomObject:
-    kind: str  # 클라이언트가 해석하는 가구 식별자 (예: "plant", "rug")
+    asset_id: str
+    category: str
     cell: Cell
+    size: tuple[int, int] = (1, 1)
+    rotation: int = 0
+    wall: str | None = None
+    footprint: tuple[Cell, ...] | None = None
+
+    def occupied_cells(self) -> set[Cell]:
+        w, h = self.size
+        source = self.footprint or tuple((x, y) for y in range(h) for x in range(w))
+        if self.rotation == 90:
+            rotated = ((h - 1 - y, x) for x, y in source)
+        elif self.rotation == 180:
+            rotated = ((w - 1 - x, h - 1 - y) for x, y in source)
+        elif self.rotation == 270:
+            rotated = ((y, w - 1 - x) for x, y in source)
+        else:
+            rotated = iter(source)
+        x0, y0 = self.cell
+        return {(x0 + dx, y0 + dy) for dx, dy in rotated}
 
 
 @dataclass
@@ -78,6 +99,16 @@ class RoomService:
         self._tokens: dict[str, str] = {}  # token -> agent_id
         if store is not None:
             self._rooms, self._agents, self._tokens = store.load()
+            # protocol v2에서는 창문 회전이 자유값이었다. v3부터 벽이 방향의 단일 원천이다.
+            for room in self._rooms.values():
+                changed = False
+                for obj in room.design.objects:
+                    expected = WINDOW_ROTATION_BY_WALL.get(obj.wall) if obj.category == "window" else None
+                    if expected is not None and obj.rotation != expected:
+                        obj.rotation = expected
+                        changed = True
+                if changed:
+                    store.save_design(room)
 
     # --- 신원 ---
 
@@ -151,7 +182,18 @@ class RoomService:
                 "design": {
                     "wallpaper": room.design.wallpaper,
                     "floor": room.design.floor,
-                    "objects": [{"kind": o.kind, "cell": list(o.cell)} for o in room.design.objects],
+                    "objects": [
+                        {
+                            "asset_id": o.asset_id,
+                            "category": o.category,
+                            "cell": list(o.cell),
+                            "size": list(o.size),
+                            "rotation": o.rotation,
+                            "wall": o.wall,
+                            "footprint": [list(cell) for cell in o.footprint] if o.footprint else None,
+                        }
+                        for o in room.design.objects
+                    ],
                 },
                 "occupants": [
                     {
@@ -218,14 +260,69 @@ class RoomService:
             if room.owner_agent_id != agent.agent_id:
                 raise errors.Forbidden("방 주인만 디자인을 바꿀 수 있음")
             objects: list[RoomObject] = []
+            occupied: set = set()
             for o in design.get("objects", []):
                 cell = (int(o["cell"][0]), int(o["cell"][1]))
                 _validate_cell(cell)
+                size_raw = o.get("size", [1, 1])
+                size = (int(size_raw[0]), int(size_raw[1]))
+                if not (1 <= size[0] <= 8 and 1 <= size[1] <= 8):
+                    raise errors.InvalidRequest("가구 크기는 각 축 1~8셀이어야 함")
+                rotation = int(o.get("rotation", 0))
+                if rotation not in (0, 90, 180, 270):
+                    raise errors.InvalidRequest("회전은 0/90/180/270만 허용")
+                category = str(o.get("category", "legacy"))
+                wall = o.get("wall")
+                footprint_raw = o.get("footprint")
+                footprint = None
+                if footprint_raw is not None:
+                    if not isinstance(footprint_raw, list) or not 1 <= len(footprint_raw) <= 64:
+                        raise errors.InvalidRequest("가구 footprint는 1~64개 셀이어야 함")
+                    footprint = tuple((int(cell[0]), int(cell[1])) for cell in footprint_raw)
+                    if len(set(footprint)) != len(footprint) or any(x < 0 or y < 0 or x >= size[0] or y >= size[1] for x, y in footprint):
+                        raise errors.InvalidRequest("가구 footprint 셀이 기본 크기를 벗어남")
+                asset_id = str(o.get("asset_id", o.get("kind", "unknown"))).strip()
+                if not asset_id or len(asset_id) > 80 or len(category) > 40:
+                    raise errors.InvalidRequest("잘못된 가구 식별자")
+                obj = RoomObject(
+                    asset_id=asset_id,
+                    category=category,
+                    cell=cell,
+                    size=size,
+                    rotation=rotation,
+                    wall=str(wall) if wall is not None else None,
+                    footprint=footprint,
+                )
+                cells = obj.occupied_cells()
+                if category == "window":
+                    if obj.wall not in ("north", "west"):
+                        raise errors.InvalidRequest("창문 벽은 north 또는 west여야 함")
+                    expected_rotation = WINDOW_ROTATION_BY_WALL[obj.wall]
+                    if obj.rotation != expected_rotation:
+                        raise errors.InvalidRequest(
+                            f"창문 방향은 설치 벽에 고정됨: {obj.wall} 벽은 rotation={expected_rotation}"
+                        )
+                    limit = GRID_W if obj.wall == "north" else GRID_H
+                    if cell[0] < 0 or cell[0] + size[0] > limit:
+                        raise errors.InvalidRequest("창문이 벽 범위를 벗어남")
+                    wall_cells = {(obj.wall, x) for x in range(cell[0], cell[0] + size[0])}
+                    if wall_cells & occupied:
+                        raise CellTaken("창문끼리 겹침")
+                    occupied.update(wall_cells)
+                    objects.append(obj)
+                    continue
+                if any(not (0 <= x < GRID_W and 0 <= y < GRID_H) for x, y in cells):
+                    raise errors.InvalidRequest("가구가 방 범위를 벗어남")
+                if any(y < 0 for _, y in cells):
+                    raise errors.InvalidRequest("가구는 바닥 영역에만 배치할 수 있음")
+                if cells & occupied:
+                    raise CellTaken("가구끼리 겹침")
                 # 에이전트가 서 있는 셀에는 가구를 못 놓는다
                 for a in self._agents.values():
-                    if a.at_room == room_id and a.cell == cell:
-                        raise CellTaken(f"셀 ({cell[0]},{cell[1]})에 에이전트가 있음")
-                objects.append(RoomObject(kind=str(o["kind"]), cell=cell))
+                    if a.at_room == room_id and a.cell in cells:
+                        raise CellTaken(f"셀 ({a.cell[0]},{a.cell[1]})에 에이전트가 있음")
+                occupied.update(cells)
+                objects.append(obj)
             room.design = RoomDesign(
                 wallpaper=str(design.get("wallpaper", room.design.wallpaper)),
                 floor=str(design.get("floor", room.design.floor)),
@@ -242,14 +339,14 @@ class RoomService:
             if a.agent_id != except_agent and a.at_room == room_id and a.cell == cell:
                 return True
         room = self._rooms.get(room_id)
-        if room and any(o.cell == cell for o in room.design.objects):
+        if room and any(o.category != "window" and cell in o.occupied_cells() for o in room.design.objects):
             return True
         return False
 
     def _free_cell_locked(self, room_id: str) -> Cell:
         """자율 입장용 빈 셀 배정 — 스폰 지점(SPAWN_X, SPAWN_Y)에서 가까운 순으로 첫 빈 셀."""
         cells = sorted(
-            ((x, y) for y in range(GRID_H) for x in range(GRID_W)),
+            ((x, y) for y in range(FLOOR_Y, GRID_H) for x in range(GRID_W)),
             key=lambda c: max(abs(c[0] - SPAWN_X), abs(c[1] - SPAWN_Y)),
         )
         for cell in cells:

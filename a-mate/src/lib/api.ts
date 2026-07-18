@@ -150,8 +150,17 @@ export interface RoomState {
   owner_name: string;
   owner_mascot_seed: string; // 주인이 방을 비워도 프로필 로봇을 그릴 수 있게 서버가 항상 준다
   grid: { w: number; h: number };
-  design: { wallpaper: string; floor: string; objects: { kind: string; cell: [number, number] }[] };
+  design: { wallpaper: string; floor: string; objects: RoomObject[] };
   occupants: RoomOccupant[];
+}
+export interface RoomObject {
+  asset_id: string;
+  category: string;
+  cell: [number, number];
+  size: [number, number];
+  footprint?: [number, number][];
+  rotation: 0 | 90 | 180 | 270;
+  wall?: 'north' | 'west' | null;
 }
 export interface RoomMe {
   agent_id: string;
@@ -165,14 +174,18 @@ export interface RoomListEntry {
   owner_name: string;
   occupants: number;
 }
+export interface RoomCapabilities { room_protocol: number; grid: { w: number; h: number }; floor_min_y: number; footprint_mask: boolean; wall_objects: boolean }
 
 export const hubSettingsGet = () => invoke<HubSettings>('hub_settings_get');
 export const hubConnect = (url: string, user: string) =>
   invoke<HubSettings>('hub_connect', { url, user });
 export const roomView = () => invoke<{ me: RoomMe; room: RoomState }>('room_view');
+export const roomCapabilities = () => invoke<RoomCapabilities>('room_capabilities');
 export const roomsList = () => invoke<{ rooms: RoomListEntry[] }>('rooms_list');
 export const roomGoto = (roomId: string) => invoke<RoomMe>('room_goto', { roomId });
 export const roomMoveCell = (x: number, y: number) => invoke<RoomMe>('room_move_cell', { x, y });
+export const roomSaveDesign = (roomId: string, design: RoomState['design']) =>
+  invoke<RoomState>('room_save_design', { roomId, design });
 export const robotSpecForSeed = (seed: string) => invoke<RobotSpec>('robot_spec_for_seed', { seed });
 export const openSettingsWindow = () => invoke<void>('open_settings_window');
 // 마스코트 창 확장/복귀 — 위치+크기를 네이티브에서 한 번에 적용 (중간 프레임 깜빡임 방지)

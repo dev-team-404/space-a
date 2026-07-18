@@ -4,7 +4,7 @@ import pytest
 
 from room_server import errors
 from room_server.errors import CellTaken
-from room_server.rooms import GRID_H, GRID_W, SPAWN_X, SPAWN_Y, RoomService
+from room_server.rooms import FLOOR_Y, GRID_H, GRID_W, SPAWN_X, SPAWN_Y, RoomService
 
 
 @pytest.fixture
@@ -56,17 +56,17 @@ def test_visit_other_room_leaves_previous(rooms):
 def test_cell_conflict_is_atomic_reject(rooms):
     _, token_a, room_a = rooms.register("A")
     _, token_b, _ = rooms.register("B")
-    rooms.enter(token_b, room_a.id, cell=(5, 5))
+    rooms.enter(token_b, room_a.id, cell=(5, FLOOR_Y))
     with pytest.raises(CellTaken):
-        rooms.move(token_a, (5, 5))
+        rooms.move(token_a, (5, FLOOR_Y))
     with pytest.raises(CellTaken):
-        rooms.enter(token_a, room_a.id, cell=(5, 5))
+        rooms.enter(token_a, room_a.id, cell=(5, FLOOR_Y))
 
 
 def test_move_within_room_and_bounds(rooms):
     _, token, _ = rooms.register("A")
-    me = rooms.move(token, (0, 0))
-    assert me["cell"] == [0, 0]
+    me = rooms.move(token, (0, FLOOR_Y))
+    assert me["cell"] == [0, FLOOR_Y]
     with pytest.raises(errors.InvalidRequest):
         rooms.move(token, (GRID_W, 0))
     with pytest.raises(errors.InvalidRequest):
@@ -78,17 +78,38 @@ def test_design_owner_only_and_furniture_blocks(rooms):
     _, token_b, _ = rooms.register("B")
     with pytest.raises(errors.Forbidden):
         rooms.set_design(token_b, room_a.id, {"objects": []})
-    rooms.move(token_a, (0, 0))
+    rooms.move(token_a, (0, FLOOR_Y))
     state = rooms.set_design(
-        token_a, room_a.id, {"wallpaper": "mint", "objects": [{"kind": "plant", "cell": [3, 3]}]}
+        token_a, room_a.id, {"wallpaper": "mint", "objects": [{"asset_id": "sofa.mint", "category": "sofa", "cell": [3, 8], "size": [3, 2], "rotation": 0}]}
     )
     assert state["design"]["wallpaper"] == "mint"
     # 가구 셀은 이동 불가
     with pytest.raises(CellTaken):
-        rooms.move(token_a, (3, 3))
+        rooms.move(token_a, (4, 9))
     # 에이전트가 서 있는 셀에는 가구를 못 놓음
     with pytest.raises(CellTaken):
-        rooms.set_design(token_a, room_a.id, {"objects": [{"kind": "rug", "cell": [0, 0]}]})
+        rooms.set_design(token_a, room_a.id, {"objects": [{"asset_id": "desk.one", "category": "desk", "cell": [0, FLOOR_Y], "size": [2, 2], "rotation": 0}]})
+
+
+def test_wall_floor_and_rotation_footprint_rules(rooms):
+    _, token, room = rooms.register("A")
+    rooms.set_design(token, room.id, {"objects": [
+        {"asset_id": "window.mint", "category": "window", "cell": [2, 0], "size": [3, 2], "rotation": 180, "wall": "north"},
+        {"asset_id": "sofa.mint", "category": "sofa", "cell": [10, 8], "size": [4, 2], "rotation": 90},
+    ]})
+    # 4x2 소파를 90도 회전하면 2x4 footprint 전체가 막힌다.
+    with pytest.raises(CellTaken):
+        rooms.move(token, (11, 11))
+    with pytest.raises(errors.InvalidRequest):
+        rooms.move(token, (1, FLOOR_Y - 1))
+    with pytest.raises(errors.InvalidRequest):
+        rooms.set_design(token, room.id, {"objects": [
+            {"asset_id": "window.bad", "category": "window", "cell": [0, 0], "size": [2, 2], "rotation": 0, "wall": "ceiling"},
+        ]})
+    with pytest.raises(errors.InvalidRequest):
+        rooms.set_design(token, room.id, {"objects": [
+            {"asset_id": "window.wrong-way", "category": "window", "cell": [0, 0], "size": [2, 2], "rotation": 90, "wall": "north"},
+        ]})
 
 
 def test_auto_cell_assignment_no_overlap(rooms):
@@ -103,6 +124,21 @@ def test_auto_cell_assignment_no_overlap(rooms):
 def test_unknown_token_rejected(rooms):
     with pytest.raises(errors.Unauthorized):
         rooms.me("no-such-token")
+
+
+def test_shape_footprint_allows_interlocking_empty_cells(rooms):
+    _, token, room = rooms.register("A")
+    rooms.move(token, (19, 19))
+    l_mask = [[0, 0], [1, 0], [2, 0], [0, 1], [0, 2]]
+    state = rooms.set_design(token, room.id, {"objects": [
+        {"asset_id": "sofa.corner", "category": "sofa", "cell": [1, 1], "size": [3, 3], "footprint": l_mask, "rotation": 0},
+        {"asset_id": "lighting.lamp", "category": "lighting", "cell": [2, 2], "size": [1, 1], "footprint": [[0, 0]], "rotation": 0},
+    ]})
+    assert state["design"]["objects"][0]["footprint"] == l_mask
+    with pytest.raises(CellTaken):
+        rooms.move(token, (1, 2))
+    with pytest.raises(CellTaken):
+        rooms.move(token, (2, 2))
 
 
 def test_rename_updates_agent_and_room(rooms):
