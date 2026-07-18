@@ -176,35 +176,53 @@ impl Default for ClaudeChangelogSource {
         ClaudeChangelogSource {
             url: "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md"
                 .into(),
-            max_items: 5,
+            // AX 튜터 원칙(2026-07-19): 소식은 배움의 조미료지 주식이 아니다 — 최대 2건.
+            max_items: 2,
         }
     }
 }
 
+/// 사용자가 "써볼 수 있는" 기능 소식인가 — 버그픽스·리버트·내부 정리는 배움이 아니다.
+/// 기본 폐쇄: 기능 신설 신호가 없으면 버린다 (AX 튜터는 패치노트 리더가 아니다).
+fn is_feature_note(line: &str) -> bool {
+    let l = line.to_lowercase();
+    const STARTS: [&str; 7] = ["add", "new ", "support", "introduc", "enable", "launch", "allow"];
+    if STARTS.iter().any(|p| l.starts_with(p)) {
+        return true;
+    }
+    const CONTAINS: [&str; 3] = ["can now", "now supports", "now available"];
+    CONTAINS.iter().any(|p| l.contains(p))
+}
+
 impl ClaudeChangelogSource {
-    /// 마크다운 CHANGELOG를 관대하게 파싱: `## <version>` 헤더 + 뒤따르는 첫 bullet들.
+    /// 몇 개 버전 헤더까지 훑을지 — 최근 버전들이 전부 픽스뿐이어도 기능 릴리스를 찾도록.
+    const SCAN_VERSIONS: usize = 12;
+
+    /// 마크다운 CHANGELOG를 관대하게 파싱: `## <version>` 헤더 + **기능 신설 bullet만**.
+    /// 픽스만 있는 버전은 아이템을 만들지 않는다.
     pub fn parse_markdown(&self, md: &str) -> Vec<ContentItem> {
         let mut out = Vec::new();
         let mut cur_ver: Option<String> = None;
         let mut bullets: Vec<String> = Vec::new();
+        let mut seen_versions = 0usize;
 
         let flush = |ver: &Option<String>, bullets: &[String], out: &mut Vec<ContentItem>| {
             let Some(ver) = ver else { return };
             if bullets.is_empty() {
-                return;
+                return; // 기능 소식 없음 → 침묵
             }
             let body = bullets.join(" · ");
             out.push(ContentItem {
                 id: format!("cc-changelog-{ver}"),
                 kind: ItemKind::News,
-                title: format!("Claude Code {ver} 업데이트"),
+                title: format!("Claude Code {ver} — 새 기능"),
                 body,
                 source_url: Some(
                     "https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md".into(),
                 ),
                 dimension: None,
                 trigger_tags: vec!["changelog".into(), "claude-code".into()],
-                base_priority: 10, // 최신 소식은 살짝 가산
+                base_priority: 10,
             });
         };
 
@@ -214,12 +232,14 @@ impl ClaudeChangelogSource {
                 // 새 버전 헤더 → 직전 블록 확정
                 flush(&cur_ver, &bullets, &mut out);
                 bullets.clear();
-                if out.len() >= self.max_items {
+                seen_versions += 1;
+                if out.len() >= self.max_items || seen_versions > Self::SCAN_VERSIONS {
+                    out.truncate(self.max_items);
                     return out;
                 }
                 cur_ver = Some(rest.trim().to_string());
             } else if let Some(rest) = t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")) {
-                if cur_ver.is_some() && bullets.len() < 4 {
+                if cur_ver.is_some() && bullets.len() < 3 && is_feature_note(rest.trim()) {
                     bullets.push(rest.trim().to_string());
                 }
             }
@@ -474,6 +494,8 @@ pub const SCORE_SUPPRESS: i64 = -1000;
 pub const SCORE_FRONTIER_BOOST: i64 = 500;
 pub const SCORE_TAG_MATCH: i64 = 300;
 pub const SCORE_TAG_MISS: i64 = -600;
+/// changelog 소식 기본 점수 — 어떤 팁(비프론티어 ~40 포함)보다도 낮게 (2026-07-19 품질 개편).
+pub const SCORE_NEWS: i64 = 25;
 
 /// 이 아이템을 지금 이 사용자에게 보여줄 가치. 클수록 상단. 0 미만은 숨김 후보.
 pub fn score(item: &ContentItem, profile: &CompetencyProfile) -> i64 {
@@ -501,9 +523,12 @@ pub fn score(item: &ContentItem, profile: &CompetencyProfile) -> i64 {
                 .trigger_tags
                 .iter()
                 .any(|t| profile.active_tags.contains(t));
-            if hit || item.trigger_tags.iter().any(|t| t == "changelog") {
-                // changelog는 전원 관심사(신기능) — 소소하게 노출 허용
+            if hit {
                 SCORE_TAG_MATCH + item.base_priority
+            } else if item.trigger_tags.iter().any(|t| t == "changelog") {
+                // 소식은 배움(팁)보다 항상 아래 — 팁이 전부 쿨다운일 때만 상단에 오른다.
+                // (AX 튜터 원칙: 패치노트가 커리큘럼을 밀어내면 안 된다)
+                SCORE_NEWS + item.base_priority
             } else {
                 SCORE_TAG_MISS + item.base_priority
             }
@@ -526,7 +551,10 @@ pub fn coach_prompt(title: &str, body: &str, personal: Option<&str>) -> (String,
     let system = "당신은 사용자의 AI 코딩(Claude Code) 습관을 코칭하는 멘토입니다. \
         반드시 사용자의 실제 로그 데이터를 근거로, 일반론이 아니라 이 사람에게 맞는 조언을 \
         존댓말로 1~2문장(120자 이내) 한국어로 쓰세요. 데이터 수치를 자연스럽게 인용하고, \
-        인사말·따옴표·과장 없이 핵심만."
+        인사말·따옴표·과장 없이 핵심만. \
+        새 기능 소식이라면: 원문(패치노트)을 번역·반복하지 말고, 이 기능으로 '무엇이 가능해졌고 \
+        언제 어떤 명령·방법으로 써보면 되는지'를 구체적으로 안내하세요. 쓸 만한 활용법이 \
+        떠오르지 않는 소식이면 억지로 포장하지 말고 어떤 상황에 해당되는지만 짧게 알려주세요."
         .to_string();
     let data = personal.unwrap_or("(개인 데이터 없음 — 일반 원칙만)");
     let user = format!(
@@ -659,15 +687,71 @@ mod tests {
     }
 
     #[test]
-    fn changelog_parse_extracts_versions_and_bullets() {
+    fn changelog_keeps_only_feature_notes_and_skips_fix_only_versions() {
         let src = ClaudeChangelogSource::default();
-        let md = "# Changelog\n\n## 2.1.0\n\n- Added ToolSearch for deferred tools\n- Fixed a crash\n\n## 2.0.9\n\n- Improved permissions\n";
+        let md = "# Changelog\n\n\
+            ## 2.1.2\n\n- Fixed /model dialog blocked in background sessions\n- Reverted an overly broad guard\n\n\
+            ## 2.1.0\n\n- Added ToolSearch for deferred tools\n- Fixed a crash\n\n\
+            ## 2.0.9\n\n- Improved permissions\n\n\
+            ## 2.0.8\n\n- You can now resume agents across restarts\n";
         let items = src.parse_markdown(md);
+        // 픽스만 있는 2.1.2·2.0.9는 침묵, 기능 있는 2.1.0·2.0.8만
         assert_eq!(items.len(), 2);
         assert!(items[0].title.contains("2.1.0"));
+        assert!(items[0].title.contains("새 기능"));
         assert!(items[0].body.contains("ToolSearch"));
-        assert_eq!(items[0].dimension, None);
+        assert!(!items[0].body.contains("Fixed"), "픽스 라인 제외: {}", items[0].body);
+        assert!(items[1].body.contains("resume agents"));
         assert!(items[0].trigger_tags.contains(&"changelog".to_string()));
+    }
+
+    #[test]
+    fn stale_feed_items_are_pruned_but_dismissed_kept() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        let mk = |id: &str| ContentItem {
+            id: id.into(), kind: ItemKind::News, title: "t".into(), body: "b".into(),
+            source_url: None, dimension: None, trigger_tags: vec!["changelog".into()],
+            base_priority: 0,
+        };
+        // 1차 스캔: old-news 2건 (하나는 사용자가 닫음)
+        store.replace_content_items(&[(mk("old-1"), 100), (mk("old-2"), 100)], "2026-07-18T00:00:00Z").unwrap();
+        store.set_content_status("old-2", "dismissed", "2026-07-18T01:00:00Z").unwrap();
+        // 2차 스캔: 피드에 new-1만 남음 → old-1(new)은 프룬, old-2(dismissed)는 쿨다운 기록으로 보존
+        store.replace_content_items(&[(mk("new-1"), 50)], "2026-07-19T00:00:00Z").unwrap();
+        let ids: Vec<String> = store
+            .conn
+            .prepare("SELECT id FROM content_items ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<std::result::Result<_, _>>()
+            .unwrap();
+        assert_eq!(ids, vec!["new-1".to_string(), "old-2".to_string()]);
+    }
+
+    #[test]
+    fn changelog_caps_news_at_two_even_with_many_feature_versions() {
+        let src = ClaudeChangelogSource::default();
+        let mut md = String::from("# Changelog\n\n");
+        for i in 0..6 {
+            md.push_str(&format!("## 3.0.{i}\n\n- Added feature {i}\n\n"));
+        }
+        assert_eq!(src.parse_markdown(&md).len(), 2, "소식은 조미료 — 최대 2건");
+    }
+
+    #[test]
+    fn news_scores_below_any_tip() {
+        // 소식(태그 미적중)은 비프론티어 팁(100-60+0=40)보다도 낮아야 한다
+        let news = ContentItem {
+            id: "cc-changelog-9.9".into(), kind: ItemKind::News, title: "t".into(), body: "b".into(),
+            source_url: None, dimension: None,
+            trigger_tags: vec!["changelog".into(), "claude-code".into()],
+            base_priority: 10,
+        };
+        let p = profile_with(&[Dimension::ContextHygiene, Dimension::SkillReuse], &[]);
+        let s = score(&news, &p);
+        assert!(s > 0, "그래도 노출은 가능해야 (팁 전멸 시)");
+        assert!(s < 40, "팁보다 항상 아래: {s}");
     }
 
     #[test]

@@ -686,6 +686,16 @@ impl SqliteStore {
                         item.source_url, tags, score, now_ts],
             )?;
         }
+        // 피드에서 사라진 아이템 프룬(2026-07-19): 소식·외부 팁은 일시적 — 랭킹에 없으면
+        // 낡은 점수로 상단을 점령한다. 단, 사용자가 닫은(dismissed 등) 행은 쿨다운 기록이라 보존.
+        if !ranked.is_empty() {
+            let placeholders = vec!["?"; ranked.len()].join(",");
+            let sql = format!(
+                "DELETE FROM content_items WHERE status='new' AND id NOT IN ({placeholders})"
+            );
+            let ids: Vec<&str> = ranked.iter().map(|(i, _)| i.id.as_str()).collect();
+            self.conn.execute(&sql, rusqlite::params_from_iter(ids))?;
+        }
         tx.commit()?;
         Ok(())
     }
