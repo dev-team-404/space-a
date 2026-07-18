@@ -83,6 +83,12 @@ CREATE TABLE IF NOT EXISTS personal_skill_inventory (
 CREATE TABLE IF NOT EXISTS host_settings (
   host TEXT PRIMARY KEY, default_model TEXT, effort_level TEXT, scanned_at TEXT
 );
+CREATE TABLE IF NOT EXISTS hub_share_state (
+  dedup_key TEXT PRIMARY KEY,
+  issue_id  TEXT,
+  page_id   TEXT,
+  shared_at TEXT
+);
 "#;
 
 pub struct SqliteStore {
@@ -933,6 +939,90 @@ impl SqliteStore {
             params![key, value],
         )?;
         Ok(())
+    }
+
+    // ── a-hub 지식 공유 상태 (hub.rs — 스펙 2026-07-18-hub-knowledge-sharing §7) ──
+
+    /// 이슈를 열었거나 발행까지 끝난 dedup_key 전부 — "다시 열지 않을" 집합.
+    pub fn hub_shared_or_pending_keys(&self) -> Result<std::collections::HashSet<String>> {
+        let mut stmt = self.conn.prepare("SELECT dedup_key FROM hub_share_state")?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        let mut out = std::collections::HashSet::new();
+        for k in rows {
+            out.insert(k?);
+        }
+        Ok(out)
+    }
+
+    /// open은 됐는데 resolve(발행)가 안 된 것 — 다음 스캔이 재개한다 (중복 이슈 방지).
+    pub fn hub_share_pending(&self) -> Result<Vec<(String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT dedup_key, issue_id FROM hub_share_state
+             WHERE issue_id IS NOT NULL AND page_id IS NULL",
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    pub fn hub_mark_issue(&self, dedup_key: &str, issue_id: &str, now_ts: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO hub_share_state (dedup_key, issue_id, shared_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(dedup_key) DO UPDATE SET issue_id=?2, shared_at=?3",
+            params![dedup_key, issue_id, now_ts],
+        )?;
+        Ok(())
+    }
+
+    pub fn hub_mark_published(&self, dedup_key: &str, page_id: &str, now_ts: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO hub_share_state (dedup_key, page_id, shared_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(dedup_key) DO UPDATE SET page_id=?2, shared_at=?3",
+            params![dedup_key, page_id, now_ts],
+        )?;
+        Ok(())
+    }
+
+    /// dedup_key로 단건 조회 (hub 재개 경로용).
+    pub fn find_finding(&self, dedup_key: &str) -> Result<Option<FindingRow>> {
+        let row = self
+            .conn
+            .query_row(
+                "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
+                        evidence_json, est_tokens_saved, prescription_json, dedup_key,
+                        last_seen, occurrences, status
+                 FROM findings WHERE dedup_key=?1",
+                params![dedup_key],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?, r.get::<_, String>(1)?,
+                        r.get::<_, Option<String>>(2)?, r.get::<_, Option<String>>(3)?,
+                        r.get::<_, String>(4)?, r.get::<_, String>(5)?,
+                        r.get::<_, String>(6)?, r.get::<_, i64>(7)?,
+                        r.get::<_, Option<String>>(8)?, r.get::<_, String>(9)?,
+                        r.get::<_, Option<String>>(10)?, r.get::<_, i64>(11)?,
+                        r.get::<_, String>(12)?,
+                    ))
+                },
+            )
+            .optional()?;
+        Ok(row.map(
+            |(rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
+              evidence_json, est, prescription_json, dedup_key, last_seen, occ, status)| {
+                FindingRow {
+                    rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
+                    evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
+                    est_tokens_saved: est as u64,
+                    prescription: prescription_json.and_then(|s| serde_json::from_str(&s).ok()),
+                    dedup_key, last_seen,
+                    occurrences: occ as u64,
+                    status,
+                }
+            },
+        ))
     }
 
     pub fn all_settings(&self) -> Result<Vec<(String, String)>> {

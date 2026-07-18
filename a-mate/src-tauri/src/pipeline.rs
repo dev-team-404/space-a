@@ -112,6 +112,8 @@ mod runtime {
                 maybe_generate_daily_line(app, &state.store);
                 // 잡담 풀 — 동일 규율, 이벤트 없음(프론트 타이머가 pull)
                 maybe_generate_chatter_pool(&state.store);
+                // a-hub 지식 공유 — 유의미 finding을 이슈→해결로 발행 (env 미설정 시 no-op)
+                maybe_share_findings(&state.store);
             }
             Err(e) => {
                 log::error!("pipeline error: {e}");
@@ -276,6 +278,105 @@ mod runtime {
     /// 잡담 풀 — scan:done마다 fp가 stale할 때만 재생성 (스펙 §3). 엔진 없으면 no-op.
     /// 네트워크(LLM)는 daily-line과 동일하게 store 락 밖에서 호출. 이벤트는 emit하지
     /// 않는다 — 프론트 잡담 타이머가 발화 시점에 get_chatter_pool로 pull한다.
+    /// a-hub 지식 공유 — 스캔 편승. 네트워크는 전부 **락 밖**, 마크 persist는 짧은 락으로.
+    /// env(SPACE_A_HUB_URL) 미설정이면 no-op. 실패는 warn 후 다음 스캔 재시도(스펙 §6).
+    /// 스펙: docs/design/overview-mentor/specs/2026-07-18-hub-knowledge-sharing-design.md
+    fn maybe_share_findings(store_mutex: &std::sync::Mutex<SqliteStore>) {
+        use agent_mentor::hub::{self, HubClient, HubConfig};
+        let Some(cfg) = HubConfig::from_env() else { return };
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // ① 락: 토큰·재개 목록·신규 후보 조회 → 즉시 해제
+        let (token_opt, pending, picked) = match store_mutex.lock() {
+            Ok(store) => {
+                let token = cfg.token.clone().or(store.get_setting("hub_token").ok().flatten());
+                let pending: Vec<(String, String, agent_mentor::store::FindingRow)> = store
+                    .hub_share_pending()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|(k, i)| store.find_finding(&k).ok().flatten().map(|f| (k, i, f)))
+                    .collect();
+                let findings = store.list_findings_current(false).unwrap_or_default();
+                let already = store.hub_shared_or_pending_keys().unwrap_or_default();
+                let picked: Vec<agent_mentor::store::FindingRow> =
+                    hub::select_shareable(&findings, &already, cfg.min_tokens)
+                        .into_iter()
+                        .cloned()
+                        .collect();
+                (token, pending, picked)
+            }
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        }; // guard drops here — 네트워크 전에 락 해제
+
+        // 대상이 없으면 네트워크(등록 포함) 자체를 하지 않는다
+        if pending.is_empty() && picked.is_empty() {
+            return;
+        }
+
+        // ② 락 밖: 토큰 확보 (최초 1회 자동 register → settings 보존)
+        let token = match token_opt {
+            Some(t) => t,
+            None => match HubClient::register(&cfg) {
+                Ok((agent_id, t)) => {
+                    if let Ok(store) = store_mutex.lock() {
+                        let _ = store.set_setting("hub_agent_id", &agent_id);
+                        let _ = store.set_setting("hub_token", &t);
+                    }
+                    t
+                }
+                Err(e) => { log::warn!("hub register 실패(다음 스캔 재시도): {e}"); return; }
+            },
+        };
+        let client = HubClient {
+            base_url: cfg.base_url.clone(),
+            api_key: cfg.api_key.clone(),
+            token,
+        };
+
+        let mut published = 0usize;
+
+        // ③ 재개: open만 되고 발행 안 된 것 resolve (중복 이슈 방지)
+        for (dedup_key, issue_id, f) in pending {
+            let Some(content) = hub::render_share(&f) else { continue };
+            match client.resolve_issue(&issue_id, &content.summary, &content.steps) {
+                Ok(Some(page_id)) => {
+                    if let Ok(store) = store_mutex.lock() {
+                        let _ = store.hub_mark_published(&dedup_key, &page_id, &now);
+                    }
+                    published += 1;
+                }
+                Ok(None) => log::warn!("hub {dedup_key}: resolve 응답에 page_id 없음"),
+                Err(e) => log::warn!("hub {dedup_key}: resolve 재개 실패: {e}"),
+            }
+        }
+
+        // ④ 신규: open_issue → 마크 → resolve(발행) → 마크
+        for f in picked {
+            let Some(content) = hub::render_share(&f) else { continue };
+            let issue_id = match client.open_issue(&cfg.space_id, &content.title) {
+                Ok(id) => id,
+                Err(e) => { log::warn!("hub {}: open_issue 실패: {e}", f.dedup_key); continue; }
+            };
+            if let Ok(store) = store_mutex.lock() {
+                let _ = store.hub_mark_issue(&f.dedup_key, &issue_id, &now);
+            }
+            match client.resolve_issue(&issue_id, &content.summary, &content.steps) {
+                Ok(Some(page_id)) => {
+                    if let Ok(store) = store_mutex.lock() {
+                        let _ = store.hub_mark_published(&f.dedup_key, &page_id, &now);
+                    }
+                    published += 1;
+                }
+                Ok(None) => log::warn!("hub {}: resolve 응답에 page_id 없음", f.dedup_key),
+                Err(e) => log::warn!("hub {}: resolve 실패(다음 스캔 재개): {e}", f.dedup_key),
+            }
+        }
+
+        if published > 0 {
+            log::info!("hub 지식 공유: {published}건 발행 (space {})", cfg.space_id);
+        }
+    }
+
     fn maybe_generate_chatter_pool(store_mutex: &std::sync::Mutex<SqliteStore>) {
         let engine = match store_mutex.lock() {
             Ok(store) => crate::resolve_engine(&store),

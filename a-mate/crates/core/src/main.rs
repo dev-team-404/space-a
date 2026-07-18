@@ -99,6 +99,28 @@ fn cmd_diary(store: &SqliteStore, date: Option<String>) -> Result<()> {
     Ok(())
 }
 
+/// a-hub 지식 공유 — 유의미 finding을 이슈→해결로 발행 (SPACE_A_HUB_URL 미설정 시 no-op).
+fn cmd_hub_share(store: &SqliteStore) -> Result<()> {
+    let Some(cfg) = agent_mentor::hub::HubConfig::from_env() else {
+        println!("hub-share: SPACE_A_HUB_URL 미설정 (또는 SPACE_A_SHARE=off) — 건너뜀");
+        return Ok(());
+    };
+    let report = agent_mentor::hub::run_share(store, &cfg)?;
+    for w in &report.warnings {
+        eprintln!("warn: {w}");
+    }
+    for (key, page) in &report.published {
+        println!("published: {key} → page {page}");
+    }
+    println!(
+        "hub-share: {}건 발행({}건 재개), {}건 보류/비대상",
+        report.published.len(),
+        report.resumed,
+        report.skipped
+    );
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let cmd = args.get(1).map(|s| s.as_str()).unwrap_or("all");
@@ -109,6 +131,7 @@ fn main() -> Result<()> {
         "rules" => cmd_rules(&store)?,
         "curate" => cmd_curate(&store)?,
         "diary" => cmd_diary(&store, args.get(2).cloned())?,
+        "hub-share" => cmd_hub_share(&store)?,
         "all" => {
             cmd_ingest(&store)?;
             cmd_inventory(&mut store)?;
@@ -118,7 +141,7 @@ fn main() -> Result<()> {
         }
         other => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: agent-mentor [ingest|inventory|rules|curate|diary [date]|all]");
+            eprintln!("usage: agent-mentor [ingest|inventory|rules|curate|diary [date]|hub-share|all]");
         }
     }
     Ok(())
