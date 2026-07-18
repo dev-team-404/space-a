@@ -213,8 +213,8 @@ function buildCheeks(hi: number): Shape[] {
   const cheekY = b.cy + b.ry * 0.38;
   const cheekDist = b.rx * 0.6;
   return [
-    { kind: 'ellipse', cx: b.cx - cheekDist, cy: cheekY, rx: 7, ry: 4.5, color: 7, alpha: 0.7 },
-    { kind: 'ellipse', cx: b.cx + cheekDist, cy: cheekY, rx: 7, ry: 4.5, color: 7, alpha: 0.7 },
+    { kind: 'ellipse', cx: b.cx - cheekDist, cy: cheekY, rx: 7.5, ry: 5, color: 7, alpha: 0.8 },
+    { kind: 'ellipse', cx: b.cx + cheekDist, cy: cheekY, rx: 7.5, ry: 5, color: 7, alpha: 0.8 },
   ];
 }
 
@@ -232,18 +232,18 @@ function buildMouth(hi: number, expression: Expression): Shape[] {
     // 잠 — 작은 'o' 입
     return [{ kind: 'stroke-ellipse', cx: b.cx, cy: my, rx: 3, ry: 3.5, color: 5, width: 2 }];
   }
-  // 기본 — 잔잔한 미소
+  // 기본 — 잔잔한 미소 (미니미: 작고 은은하게)
   return [
-    { kind: 'arc', cx: b.cx, cy: my - 3, rx: 6, ry: 4.5, start: 0.18 * Math.PI, end: 0.82 * Math.PI, color: 5, width: 2 },
+    { kind: 'arc', cx: b.cx, cy: my - 3, rx: 5, ry: 3.5, start: 0.2 * Math.PI, end: 0.8 * Math.PI, color: 5, width: 2 },
   ];
 }
 
-// 눈동자 공통: 어두운 눈 + 큰 반짝(좌상) + 작은 반짝(우하) — 생기의 핵심
+// 눈동자 공통 — 미니미 감성: 작고 단순한 세로 타원 눈 + 반짝 1개 (왕눈 금지)
 function pupil(cx: number, cy: number, r: number): Shape[] {
+  const rx = r * 0.52, ry = r * 0.78;
   return [
-    { kind: 'ellipse', cx, cy, rx: r, ry: r, color: 5 },
-    { kind: 'ellipse', cx: cx - r * 0.3, cy: cy - r * 0.35, rx: r * 0.38, ry: r * 0.38, color: 4 },
-    { kind: 'ellipse', cx: cx + r * 0.35, cy: cy + r * 0.3, rx: r * 0.16, ry: r * 0.16, color: 4, alpha: 0.9 },
+    { kind: 'ellipse', cx, cy, rx, ry, color: 5, alpha: 0.92 },
+    { kind: 'ellipse', cx: cx - rx * 0.3, cy: cy - ry * 0.35, rx: rx * 0.42, ry: rx * 0.42, color: 4 },
   ];
 }
 
@@ -292,10 +292,11 @@ function buildEyes(ei: number, hi: number, expression: Expression): Shape[] {
     }
     case 'led': {
       // 세로 캡슐 눈 (다마고치풍) + 반짝
-      out.push({ kind: 'rrect', x: ev.lx - ev.ew / 2, y: eyeY - ev.eh / 2, w: ev.ew, h: ev.eh, r: ev.ew / 2, color: 5 });
-      out.push({ kind: 'rrect', x: ev.rx - ev.ew / 2, y: eyeY - ev.eh / 2, w: ev.ew, h: ev.eh, r: ev.ew / 2, color: 5 });
-      out.push({ kind: 'ellipse', cx: ev.lx - 2, cy: eyeY - ev.eh * 0.2, rx: 3, ry: 3.5, color: 4 });
-      out.push({ kind: 'ellipse', cx: ev.rx - 2, cy: eyeY - ev.eh * 0.2, rx: 3, ry: 3.5, color: 4 });
+      const lw = ev.ew * 0.75, lh = ev.eh * 0.75;
+      out.push({ kind: 'rrect', x: ev.lx - lw / 2, y: eyeY - lh / 2, w: lw, h: lh, r: lw / 2, color: 5, alpha: 0.92 });
+      out.push({ kind: 'rrect', x: ev.rx - lw / 2, y: eyeY - lh / 2, w: lw, h: lh, r: lw / 2, color: 5, alpha: 0.92 });
+      out.push({ kind: 'ellipse', cx: ev.lx - 1.5, cy: eyeY - lh * 0.22, rx: 2.2, ry: 2.6, color: 4 });
+      out.push({ kind: 'ellipse', cx: ev.rx - 1.5, cy: eyeY - lh * 0.22, rx: 2.2, ry: 2.6, color: 4 });
       break;
     }
     case 'star': {
@@ -419,7 +420,14 @@ export function buildRobotShapes(spec: RobotSpec, frame: Frame): Shape[] {
 // drawRobot
 function drawShape(ctx: CanvasRenderingContext2D, s: Shape, palette: ReadonlyArray<string>): void {
   ctx.save();
-  if (s.alpha !== undefined) ctx.globalAlpha = s.alpha;
+  if (s.alpha !== undefined) {
+    ctx.globalAlpha = s.alpha;
+  } else if (s.color === 5) {
+    // 미니미 감성(2026-07-19): 묵직한 외곽선 대신 부드러운 반투명 선.
+    // 구조 아웃라인(stroke/line)은 0.55, 표정(arc·눈 fill)은 또렷하게 0.85.
+    if (s.kind === 'stroke-rrect' || s.kind === 'stroke-ellipse' || s.kind === 'line') ctx.globalAlpha = 0.55;
+    else if (s.kind === 'arc') ctx.globalAlpha = 0.85;
+  }
   const color = palette[s.color];
   if (s.kind === 'ellipse') {
     ctx.fillStyle = color;

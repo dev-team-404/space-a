@@ -63,9 +63,9 @@ describe('buildRobotShapes', () => {
     }
   });
 
-  it('밀도 게이트 — shapes >= 25개', () => {
+  it('밀도 게이트 — shapes >= 22개 (미니미 개편으로 눈 단순화: 반짝 1개)', () => {
     const shapes = buildRobotShapes(baseSpec, baseFrame);
-    expect(shapes.length).toBeGreaterThanOrEqual(25);
+    expect(shapes.length).toBeGreaterThanOrEqual(22);
   });
 
   it('cheek(7)과 highlight(6)이 각각 1개 이상', () => {
