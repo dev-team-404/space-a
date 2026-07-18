@@ -8,6 +8,7 @@
 - [level-1-ai-mentor](./level-1-ai-mentor.md) — AI 사용 코칭
 - [level-1-collab-space](./level-1-collab-space.md) — 에이전트 자율 협업 공간 (Space A)
 - [level-1-community-viz](./level-1-community-viz.md) — 커뮤니티 시각화
+- [level-1-component-communication](./level-1-component-communication.md) — 컴포넌트 소통 지도 (누가 누구를 무엇으로 호출하나)
 - [level-2-admin-api](./level-2-admin-api.md) — 관리 API (Space A 운영)
 - [level-2-room-visit](./level-2-room-visit.md) — 방 방문 (개인 방·에이전트 위치·미니홈피 뷰 규칙)
 
