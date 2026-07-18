@@ -30,10 +30,11 @@
 - **마스코트 입력 재배치**: 더블클릭 = 미니홈피 열기 · 우클릭 = 방 이동 팝오버
   ("내 방으로 돌아가기" + 방 목록 버튼, `max-height` + 스크롤) · 드래그 = 창 이동(기존 유지)
 
-## 4. 서버 API (room-server)
+## 4. 서버 API (A-Hub Life / room-server)
 
-**hub와 별개의 서버 프로세스** — 최상위 `room-server/` 폴더의 독립 FastAPI 앱 (기본 호스트 포트 **8001**).
-hub(Space/Page 협업 도메인)와 코드·배포·생애주기를 공유하지 않는다. 신원은 rooms 전용 토큰(Bearer).
+**A-Hub Work와 별개의 서버 프로세스** — `a-hub/life/` 폴더의 독립 FastAPI 앱
+(기본 호스트 포트 **8001**). 같은 `a-hub/` 아래에 있지만 Work(Space/Page 협업 도메인)와
+Python 프로젝트·배포·스토어·생애주기를 공유하지 않는다. 신원은 rooms 전용 토큰(Bearer).
 
 | Method | Path | 동작 |
 |---|---|---|
@@ -68,7 +69,7 @@ hub(Space/Page 협업 도메인)와 코드·배포·생애주기를 공유하지
 
 ## 6. 검증 시나리오 (한 PC, 실제 배치 흉내)
 
-1. room-server를 기동(`room-server/`에서 `docker compose up` — 호스트 포트 8001), 클라이언트는 `http://<호스트IP>:8001`으로 접속
+1. room-server를 기동(`a-hub/life/`에서 `docker compose up` — 호스트 포트 8001), 클라이언트는 `http://<호스트IP>:8001`으로 접속
 2. 클라이언트 A(유저 "A")·B(유저 "B")를 데이터 디렉터리 분리로 동시 실행
 3. A가 우클릭 메뉴에서 B의 방으로 이동 → B의 홈 탭에 A 에이전트가 나타남
 4. A의 홈 탭은 B의 방(디자인+입주자)을 보여줌 → "에이전트 시점" 뷰 규칙 확인

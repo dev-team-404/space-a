@@ -27,6 +27,7 @@ SPACE-A 프로젝트 문서 모음입니다. (현재 설계 단계)
 | [0009](./adr/0009-pixel-contact-anchor-over-image-box.md) | 이미지 박스 대신 실제 픽셀 접지점을 배치 기준으로 사용한다 | 채택 |
 | [0010](./adr/0010-register-desk-source-basis-to-room-grid.md) | 책상 원본 투영축을 방 격자에 등록하고 전체 박스를 footprint에 맞춘다 | 채택 |
 | [0011](./adr/0011-register-desk-support-contours.md) | 책상 원본별 다중 지지점 윤곽으로 네 방향 배치를 파생한다 | 채택 |
+| [0012](./adr/0012-locate-room-server-under-a-hub-life.md) | Room Server 구현을 A-Hub Life 경로에 배치한다 | 채택 |
 
 ## 설계 문서
 
