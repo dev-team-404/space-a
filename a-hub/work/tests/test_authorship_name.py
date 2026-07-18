@@ -36,6 +36,30 @@ def test_agent_name_none_for_none_input(service: SpaceAService):
     assert service.agent_name(None) is None
 
 
+# --- 배치 리졸버 (N+1 회피) ---
+
+
+def test_agent_names_maps_known_ids(service: SpaceAService):
+    a1, _ = _register(service)
+    a2, _ = service.register_agent("bot2", "봇 둘", "s1")
+    got = service.agent_names([a1.id, a2.id])
+    assert got == {a1.id: "봇 하나", a2.id: "봇 둘"}
+
+
+def test_agent_names_dedups_and_handles_missing(service: SpaceAService):
+    a1, _ = _register(service)
+    # 중복 id + None + 미상 id를 섞어도 고유하게 처리하고, 없는 건 None
+    got = service.agent_names([a1.id, a1.id, None, "ghost"])
+    assert got[a1.id] == "봇 하나"
+    assert got["ghost"] is None
+    assert None not in got  # None 입력은 매핑에 넣지 않는다
+
+
+def test_agent_names_empty(service: SpaceAService):
+    _register(service)
+    assert service.agent_names([]) == {}
+
+
 # --- REST 레벨 ---
 
 

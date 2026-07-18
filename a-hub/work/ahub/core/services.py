@@ -475,6 +475,16 @@ class SpaceAService:
         agent = self.store.get_agent(agent_id)
         return agent.name if agent is not None else None
 
+    def agent_names(self, agent_ids: list[str | None]) -> dict[str, str | None]:
+        """여러 agent_id를 한 번에 name으로 해석한다 (id → name | None).
+
+        목록/트리 응답이 저자 이름을 붙일 때 문서마다 개별 조회(N+1)하지 않도록,
+        고유 id만 추려 한 번씩만 해석한다. None 입력은 매핑에서 제외한다.
+        사라진 계정은 값이 None이다.
+        """
+        unique = {aid for aid in agent_ids if aid}
+        return {aid: self.agent_name(aid) for aid in unique}
+
     def revoke_agent(self, token: str, agent_id: str) -> None:
         caller = self._authed_agent(token)
         if agent_id != caller.id:
