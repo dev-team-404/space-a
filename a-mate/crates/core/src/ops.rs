@@ -120,6 +120,24 @@ pub fn run_inventory(store: &mut SqliteStore) -> Result<Vec<String>> {
         } else {
             store.replace_plugin_inventory(&hs.host, &plugins)?;
         }
+        // v3: 호스트 설정 스냅숏 — R7 확장·R13 OutdatedModel 재료 (코칭 v3 §4.2)
+        let default_model = settings.get("model").and_then(|v| v.as_str());
+        let effort = settings.get("effortLevel").and_then(|v| v.as_str());
+        if let Err(e) = store.replace_host_settings(
+            &hs.host, default_model, effort, &chrono::Utc::now().to_rfc3339(),
+        ) {
+            warnings.push(format!("host {} 설정 스냅숏 실패: {e}", hs.host));
+        }
+        // v3: 개인 스킬 인벤토리 — 사용자 스코프 + 프로젝트 스코프(.claude/skills, 로컬 존재 cwd만)
+        let mut personal =
+            crate::inventory::scan_personal_skills(&hs.claude_root.join("skills"), "user");
+        for cwd in store.session_cwds(&hs.host).unwrap_or_default() {
+            let p = std::path::Path::new(&cwd).join(".claude").join("skills");
+            personal.extend(crate::inventory::scan_personal_skills(&p, "project"));
+        }
+        if let Err(e) = store.replace_personal_skills(&hs.host, &personal) {
+            warnings.push(format!("host {} 개인 스킬 스캔 실패: {e}", hs.host));
+        }
     }
     Ok(warnings)
 }
