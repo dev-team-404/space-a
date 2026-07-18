@@ -150,6 +150,24 @@ fn cmd_telemetry(store: &SqliteStore, date: Option<String>) -> Result<()> {
     Ok(())
 }
 
+/// 세션 회고(스펙 2026-07-19) — "고생 끝 해결" 세션을 로컬 생성 요약으로 발행. Engine 필수.
+fn cmd_retro(store: &SqliteStore) -> Result<()> {
+    let Some(cfg) = agent_mentor::hub::HubConfig::from_env() else {
+        println!("retro: SPACE_A_HUB_URL 미설정 — 건너뜀");
+        return Ok(());
+    };
+    let Some(engine) = OpenAiCompatEngine::from_env() else {
+        println!("retro: 엔진 미설정 — 발행 보류 (품질 > 정시성)");
+        return Ok(());
+    };
+    let published = agent_mentor::hub::run_retro_push(store, &cfg, &engine)?;
+    for (sess, page) in &published {
+        println!("retro published: {} → page {page}", &sess[..8.min(sess.len())]);
+    }
+    println!("retro: {}건 발행", published.len());
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let cmd = args.get(1).map(|s| s.as_str()).unwrap_or("all");
@@ -162,6 +180,7 @@ fn main() -> Result<()> {
         "diary" => cmd_diary(&store, args.get(2).cloned())?,
         "hub-share" => cmd_hub_share(&store)?,
         "telemetry" => cmd_telemetry(&store, args.get(2).cloned())?,
+        "retro" => cmd_retro(&store)?,
         "all" => {
             cmd_ingest(&store)?;
             cmd_inventory(&mut store)?;

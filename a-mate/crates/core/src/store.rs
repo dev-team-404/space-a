@@ -1010,6 +1010,81 @@ impl SqliteStore {
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
     }
 
+    /// 세션 회고(스펙 2026-07-19): "고생 끝 해결" 후보 세션.
+    /// 조건: 종료(last_ts < settled_before) ∧ 오류(error+denied) ≥ min_errors ∧ 규모 ≥ min_events.
+    /// 회복 여부(last_result_ok)는 호출자가 필터 — 실패로 끝난 세션은 지식이 아니라 백로그감.
+    pub fn struggle_sessions(
+        &self,
+        min_errors: u64,
+        min_events: u64,
+        settled_before: &str,
+    ) -> Result<Vec<StruggleSession>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT s.session_id, s.host, s.project_id, s.first_prompt_preview, s.first_ts, s.last_ts,
+                    (SELECT COUNT(*) FROM events e WHERE e.session_id=s.session_id
+                       AND e.result_status IN ('error','denied')) AS errs,
+                    (SELECT COUNT(*) FROM events e WHERE e.session_id=s.session_id) AS total,
+                    (SELECT e.result_status FROM events e WHERE e.session_id=s.session_id
+                       AND e.kind='tool_result' ORDER BY e.id DESC LIMIT 1) AS last_status
+             FROM sessions s
+             WHERE s.last_ts IS NOT NULL AND s.last_ts < ?3
+               AND (SELECT COUNT(*) FROM events e WHERE e.session_id=s.session_id
+                      AND e.result_status IN ('error','denied')) >= ?1
+               AND (SELECT COUNT(*) FROM events e WHERE e.session_id=s.session_id) >= ?2
+             ORDER BY s.last_ts DESC",
+        )?;
+        let rows = stmt.query_map(params![min_errors as i64, min_events as i64, settled_before], |r| {
+            Ok((
+                r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?, r.get::<_, Option<String>>(2)?,
+                r.get::<_, Option<String>>(3)?, r.get::<_, Option<String>>(4)?, r.get::<_, Option<String>>(5)?,
+                r.get::<_, i64>(6)?, r.get::<_, i64>(7)?, r.get::<_, Option<String>>(8)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (session_id, host, project_id, preview, first_ts, last_ts, errs, total, last_status) = row?;
+            // 오류가 난 도구들 (call↔result 조인, 결정론 식별)
+            let mut tstmt = self.conn.prepare(
+                "SELECT COALESCE(c.raw_name, c.tool_kind, '?') AS t, COUNT(*) AS n
+                 FROM events r
+                 LEFT JOIN events c ON c.tool_use_id = r.tool_use_id AND c.kind='tool_call'
+                   AND c.session_id = r.session_id
+                 WHERE r.session_id=?1 AND r.kind='tool_result'
+                   AND r.result_status IN ('error','denied')
+                 GROUP BY t ORDER BY n DESC",
+            )?;
+            let tools = tstmt
+                .query_map(params![session_id], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            out.push(StruggleSession {
+                session_id,
+                host: host.unwrap_or_default(),
+                project_id: project_id.unwrap_or_default(),
+                first_prompt_preview: preview,
+                first_ts,
+                last_ts,
+                error_count: errs as u64,
+                total_events: total as u64,
+                error_tools: tools,
+                last_result_ok: last_status.as_deref() == Some("ok"),
+            });
+        }
+        Ok(out)
+    }
+
+    /// hub_share_state에서 특정 접두사 키가 특정 날짜(shared_at 접두사)에 몇 건인지 — 일일 상한용.
+    pub fn hub_share_count_on(&self, key_prefix: &str, date_prefix: &str) -> Result<u64> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM hub_share_state
+             WHERE dedup_key LIKE ?1 || '%' AND shared_at LIKE ?2 || '%'",
+            params![key_prefix, date_prefix],
+            |r| r.get(0),
+        )?;
+        Ok(n as u64)
+    }
+
     /// dedup_key로 단건 조회 (hub 재개 경로용).
     pub fn find_finding(&self, dedup_key: &str) -> Result<Option<FindingRow>> {
         let row = self
@@ -1139,6 +1214,23 @@ pub struct ContentRow {
     /// "당신 로그: …" — 사용자 실측 데이터로 접지한 근거 줄. list_content read 시점 계산.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub personal: Option<String>,
+}
+
+/// "고생 끝 해결" 후보 세션 (세션 회고 스펙 2026-07-19).
+#[derive(Debug, Clone)]
+pub struct StruggleSession {
+    pub session_id: String,
+    pub host: String,
+    pub project_id: String,
+    /// 원문 프로즈 — Engine(로컬 생성 요약)까지만 간다. 허브 본문 직행 금지.
+    pub first_prompt_preview: Option<String>,
+    pub first_ts: Option<String>,
+    pub last_ts: Option<String>,
+    pub error_count: u64,
+    pub total_events: u64,
+    /// (도구명, 오류 횟수) — 결정론 식별
+    pub error_tools: Vec<(String, u64)>,
+    pub last_result_ok: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

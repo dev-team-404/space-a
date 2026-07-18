@@ -116,6 +116,8 @@ mod runtime {
                 maybe_share_findings(&state.store);
                 // 텔레메트리(#46) — 전날 파생 신호 하루 1회 발행 (env 미설정 시 no-op)
                 maybe_push_telemetry(&state.store);
+                // 세션 회고 — "고생 끝 해결" 세션을 로컬 생성 요약으로 발행 (Engine 필요)
+                maybe_post_retros(&state.store);
             }
             Err(e) => {
                 log::error!("pipeline error: {e}");
@@ -450,6 +452,62 @@ mod runtime {
             let _ = store.hub_mark_published(&key, &page_id, &now);
         }
         log::info!("telemetry 발행: {yesterday} → {page_id} (space {space})");
+    }
+
+    /// 세션 회고(스펙 2026-07-19) — 고생 끝 해결 세션을 Engine 요약으로 발행.
+    /// 락 규율: 선별·토큰은 짧은 락, Engine·네트워크는 락 밖, 마크는 짧은 락.
+    fn maybe_post_retros(store_mutex: &std::sync::Mutex<SqliteStore>) {
+        use agent_mentor::diary::engine::Engine as _;
+        use agent_mentor::hub::{self, HubClient, HubConfig};
+        if !hub::retro_enabled() { return; }
+        let Some(cfg) = HubConfig::from_env() else { return };
+
+        // ① 짧은 락: 후보·토큰·엔진 해석
+        let (candidates, token_opt, engine) = match store_mutex.lock() {
+            Ok(store) => {
+                let cands = hub::select_retros(&store, chrono::Utc::now()).unwrap_or_default();
+                let token = cfg.token.clone().or(store.get_setting("knowledge_hub_token").ok().flatten());
+                let engine = crate::resolve_engine(&store);
+                (cands, token, engine)
+            }
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        };
+        if candidates.is_empty() { return; }
+        let Some(token) = token_opt else { return }; // 지식 공유 경로가 최초 register 담당
+        let Some(engine) = engine else { return };   // Engine 없으면 보류 (품질 > 정시성)
+
+        let client = HubClient { base_url: cfg.base_url.clone(), api_key: cfg.api_key.clone(), token };
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // ② 락 밖: Engine 요약 → issue→resolve
+        for (key, s) in candidates {
+            let (system, user) = hub::retro_prompt(&s);
+            let reply = match engine.generate(&system, &user) {
+                Ok(o) => o.text,
+                Err(e) => { log::warn!("retro engine 실패(보류): {e}"); continue; }
+            };
+            let Some((title, summary)) = hub::parse_retro_reply(&reply) else {
+                log::warn!("retro 응답 파싱 실패(보류)");
+                continue;
+            };
+            let issue_id = match client.open_issue(&cfg.space_id, &format!("[a-mate 회고] {title}")) {
+                Ok(id) => id,
+                Err(e) => { log::warn!("retro open_issue 실패: {e}"); continue; }
+            };
+            if let Ok(store) = store_mutex.lock() {
+                let _ = store.hub_mark_issue(&key, &issue_id, &now);
+            }
+            match client.resolve_issue(&issue_id, &summary, &hub::retro_steps(&s)) {
+                Ok(Some(page_id)) => {
+                    if let Ok(store) = store_mutex.lock() {
+                        let _ = store.hub_mark_published(&key, &page_id, &now);
+                    }
+                    log::info!("세션 회고 발행: {} → {page_id}", &s.session_id[..8.min(s.session_id.len())]);
+                }
+                Ok(None) => log::warn!("retro resolve 응답에 page_id 없음"),
+                Err(e) => log::warn!("retro resolve 실패(다음 스캔 재개): {e}"),
+            }
+        }
     }
 
     fn maybe_generate_chatter_pool(store_mutex: &std::sync::Mutex<SqliteStore>) {

@@ -507,6 +507,172 @@ pub fn run_telemetry_push(
     Ok(TelemetryOutcome::Published { date: date.to_string(), page_id })
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// 세션 회고 — "고생 끝 해결" 세션을 로컬 생성 요약으로 발행 (스펙 2026-07-19).
+// 트리거는 결정론(오류→회복), 서사는 Engine(LLM), 수치는 브리프만(정밀도의 선).
+// 허브 글쓰기 단일 창구 = a-mate: 세션 속 에이전트는 재사용 가치를 모른다(사후 조망 필요).
+// ─────────────────────────────────────────────────────────────────────────
+
+/// 하루 상한 — 허브도 나깅 방지 대상.
+pub const RETRO_DAILY_CAP: u64 = 2;
+pub const RETRO_MIN_ERRORS_DEFAULT: u64 = 3;
+pub const RETRO_MIN_EVENTS_DEFAULT: u64 = 20;
+/// 세션 "종료" 판정 — 마지막 활동 후 이 시간 조용하면 끝난 세션.
+pub const RETRO_SETTLE_MINUTES: i64 = 30;
+
+pub fn retro_state_key(session_id: &str) -> String {
+    format!("retro|{session_id}")
+}
+
+fn retro_min_errors() -> u64 {
+    std::env::var("SPACE_A_RETRO_MIN_ERRORS").ok().and_then(|v| v.parse().ok()).unwrap_or(RETRO_MIN_ERRORS_DEFAULT)
+}
+fn retro_min_events() -> u64 {
+    std::env::var("SPACE_A_RETRO_MIN_EVENTS").ok().and_then(|v| v.parse().ok()).unwrap_or(RETRO_MIN_EVENTS_DEFAULT)
+}
+pub fn retro_enabled() -> bool {
+    !std::env::var("SPACE_A_RETRO").map(|v| v == "off").unwrap_or(false)
+}
+
+/// 소요 분 계산 (rfc3339). 실패 시 0.
+fn minutes_between(a: Option<&str>, b: Option<&str>) -> i64 {
+    match (
+        a.and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()),
+        b.and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok()),
+    ) {
+        (Some(x), Some(y)) => (y - x).num_minutes().max(0),
+        _ => 0,
+    }
+}
+
+/// 회고 후보 선별 — store 읽기만 (락 규율: 호출자가 짧은 락 안에서 부른다).
+/// 반환: (state_key, 세션). 회복(last ok) ∧ 미발행 ∧ 하루 상한 이내.
+pub fn select_retros(
+    store: &crate::store::SqliteStore,
+    now_utc: chrono::DateTime<chrono::Utc>,
+) -> Result<Vec<(String, crate::store::StruggleSession)>> {
+    let cutoff = (now_utc - chrono::Duration::minutes(RETRO_SETTLE_MINUTES)).to_rfc3339();
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let already = store.hub_shared_or_pending_keys()?;
+    let used_today = store.hub_share_count_on("retro|", &today)?;
+    let remaining = RETRO_DAILY_CAP.saturating_sub(used_today) as usize;
+    let out = store
+        .struggle_sessions(retro_min_errors(), retro_min_events(), &cutoff)?
+        .into_iter()
+        .filter(|s| s.last_result_ok)
+        .map(|s| (retro_state_key(&s.session_id), s))
+        .filter(|(k, _)| !already.contains(k))
+        .take(remaining)
+        .collect();
+    Ok(out)
+}
+
+/// Engine에 넘길 프롬프트 — 정밀도의 선: 브리프의 사실·수치만 인용, 새 수치 발명 금지.
+/// 원문(작업 미리보기)은 여기(Engine)까지만 간다.
+pub fn retro_prompt(s: &crate::store::StruggleSession) -> (String, String) {
+    let tools = s
+        .error_tools
+        .iter()
+        .map(|(t, n)| format!("{t} {n}회"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mins = minutes_between(s.first_ts.as_deref(), s.last_ts.as_deref());
+    let system = "너는 개발팀 지식 허브에 올릴 세션 회고를 쓰는 조수다. 아래 사실만 근거로 \
+        한국어로 쓴다. 새로운 수치·파일명·경로를 지어내지 않는다. 회사·개인 식별 정보는 넣지 않는다. \
+        JSON으로만 답한다: {\"title\": \"한 줄 제목(문제+해결 요지)\", \"summary\": \"2~3문장 — 무엇을 하다 어떤 시행착오를 겪었고 어떻게 마무리됐는지\"}"
+        .to_string();
+    let user = format!(
+        "작업(첫 요청 미리보기): {}\n시행착오: 도구 오류 총 {}회 ({})\n마무리: 마지막 도구 실행은 정상(회복)\n규모: 이벤트 {}건, 약 {}분",
+        s.first_prompt_preview.as_deref().unwrap_or("(미상)"),
+        s.error_count,
+        tools,
+        s.total_events,
+        mins,
+    );
+    (system, user)
+}
+
+/// Engine 응답에서 title/summary 추출 (관대한 파싱 — 첫 { .. } 블록).
+pub fn parse_retro_reply(text: &str) -> Option<(String, String)> {
+    let start = text.find('{')?;
+    let end = text.rfind('}')?;
+    let v: serde_json::Value = serde_json::from_str(&text[start..=end]).ok()?;
+    let title = v.get("title")?.as_str()?.trim().to_string();
+    let summary = v.get("summary")?.as_str()?.trim().to_string();
+    if title.is_empty() || summary.is_empty() {
+        return None;
+    }
+    Some((title, summary))
+}
+
+/// 허브에 실을 steps — 결정론만 (원문 미리보기·경로·세션 id 금지).
+pub fn retro_steps(s: &crate::store::StruggleSession) -> Vec<String> {
+    let tools = s
+        .error_tools
+        .iter()
+        .map(|(t, n)| format!("{t} {n}회"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mins = minutes_between(s.first_ts.as_deref(), s.last_ts.as_deref());
+    vec![
+        format!("시행착오: 도구 오류 총 {}회 ({tools})", s.error_count),
+        "해결: 마지막 도구 실행 정상 — 회복 확인 (a-mate 세션 회고)".into(),
+        format!("규모: 이벤트 {}건 · 약 {mins}분", s.total_events),
+    ]
+}
+
+/// CLI·단일 스레드용 전 과정. Engine 없으면 발행 보류(품질 > 정시성).
+pub fn run_retro_push(
+    store: &crate::store::SqliteStore,
+    cfg: &HubConfig,
+    engine: &dyn crate::diary::engine::Engine,
+) -> Result<Vec<(String, String)>> {
+    let mut published = Vec::new();
+    if !retro_enabled() {
+        return Ok(published);
+    }
+    let candidates = select_retros(store, chrono::Utc::now())?;
+    if candidates.is_empty() {
+        return Ok(published);
+    }
+    let token = match cfg.token.clone().or(store.get_setting("knowledge_hub_token")?) {
+        Some(t) => t,
+        None => {
+            let (agent_id, t) = HubClient::register(cfg)?;
+            store.set_setting("knowledge_hub_agent_id", &agent_id)?;
+            store.set_setting("knowledge_hub_token", &t)?;
+            t
+        }
+    };
+    let client = HubClient {
+        base_url: cfg.base_url.clone(),
+        api_key: cfg.api_key.clone(),
+        token,
+    };
+    let now = chrono::Utc::now().to_rfc3339();
+    for (key, s) in candidates {
+        let (system, user) = retro_prompt(&s);
+        let reply = match engine.generate(&system, &user) {
+            Ok(o) => o.text,
+            Err(e) => {
+                eprintln!("[retro] engine 실패(보류): {e}");
+                continue;
+            }
+        };
+        let Some((title, summary)) = parse_retro_reply(&reply) else {
+            eprintln!("[retro] 응답 파싱 실패(보류)");
+            continue;
+        };
+        let issue_id = client.open_issue(&cfg.space_id, &format!("[a-mate 회고] {title}"))?;
+        store.hub_mark_issue(&key, &issue_id, &now)?;
+        if let Some(page_id) = client.resolve_issue(&issue_id, &summary, &retro_steps(&s))? {
+            store.hub_mark_published(&key, &page_id, &now)?;
+            published.push((s.session_id.clone(), page_id));
+        }
+    }
+    Ok(published)
+}
+
 /// pull 방향(팀 지식 → 큐레이션 피드) 소스. 토큰이 없으면 None —
 /// push 경로가 최초 register로 settings(knowledge_hub_token)를 채우면 그때부터 활성.
 pub fn pull_source(
@@ -720,6 +886,89 @@ mod tests {
         // 주의: 환경변수 전역 상태라 미설정 케이스만 검증 (설정 케이스는 E2E에서)
         std::env::remove_var("SPACE_A_HUB_URL");
         assert!(HubConfig::from_env().is_none());
+    }
+
+    // ── 세션 회고 — 선별 조건·스크럽·파싱 ──
+
+    fn seed_session(store: &crate::store::SqliteStore, sess: &str, n_err: u64, last_ok: bool, n_pad: u64) {
+        use crate::model::{EventKind, NormModel, NormalizedEvent, ResultStatus, TokenUsage, ToolKind};
+        let mut evs = Vec::new();
+        let mut off = 0u64;
+        let mut push = |kind: EventKind, off: &mut u64| {
+            evs.push(NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(),
+                host: "Windows".into(), project_id: "c--users-secret".into(),
+                session_id: sess.into(), uuid: Some(format!("{sess}-u{off}")), parent_uuid: None,
+                is_sidechain: false, ts: Some("2026-07-01T10:00:00Z".into()),
+                source_file: "s.jsonl".into(), source_offset: *off,
+                kind,
+            });
+            *off += 1;
+        };
+        // 패딩(규모) — assistant turns
+        for _ in 0..n_pad {
+            push(EventKind::AssistantTurn {
+                model: NormModel::from_raw_id("claude-haiku-4-5"),
+                usage: TokenUsage { input: 10, ..Default::default() },
+                web_search: 0, web_fetch: 0,
+            }, &mut off);
+        }
+        // 오류 call/result 쌍
+        for i in 0..n_err {
+            let tid = format!("{sess}-t{i}");
+            push(EventKind::ToolCall {
+                kind: ToolKind::Execute, raw_name: "Bash".into(),
+                target: Some("C:/secret/build.sh".into()), tool_use_id: Some(tid.clone()),
+            }, &mut off);
+            push(EventKind::ToolResult { tool_use_id: tid, status: ResultStatus::Error }, &mut off);
+        }
+        // 마지막 결과
+        let tid = format!("{sess}-tf");
+        push(EventKind::ToolCall {
+            kind: ToolKind::Execute, raw_name: "Bash".into(),
+            target: None, tool_use_id: Some(tid.clone()),
+        }, &mut off);
+        push(EventKind::ToolResult {
+            tool_use_id: tid,
+            status: if last_ok { ResultStatus::Ok } else { ResultStatus::Error },
+        }, &mut off);
+        store.upsert_events(&evs).unwrap();
+    }
+
+    #[test]
+    fn retro_selects_only_recovered_struggles_and_steps_are_scrubbed() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        seed_session(&store, "sA", 4, true, 20);  // 고생 + 회복 → 선정
+        seed_session(&store, "sB", 4, false, 20); // 회복 없음 → 제외
+        seed_session(&store, "sC", 1, true, 20);  // 오류 미달 → 제외
+        let picked = select_retros(&store, chrono::Utc::now()).unwrap();
+        assert_eq!(picked.len(), 1);
+        assert_eq!(picked[0].1.session_id, "sA");
+        assert!(picked[0].1.error_tools.iter().any(|(t, n)| t == "Bash" && *n >= 4));
+        // steps 스크럽: 경로·세션 id·프로젝트 슬러그 금지
+        let steps = retro_steps(&picked[0].1).join(" ");
+        assert!(steps.contains("Bash"));
+        assert!(!steps.contains("secret"));
+        assert!(!steps.contains("sA"));
+    }
+
+    #[test]
+    fn retro_daily_cap_blocks_further_posts() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        seed_session(&store, "sA", 4, true, 20);
+        let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+        store.hub_mark_published("retro|x1", "p1", &format!("{today}T01:00:00Z")).unwrap();
+        store.hub_mark_published("retro|x2", "p2", &format!("{today}T02:00:00Z")).unwrap();
+        assert!(select_retros(&store, chrono::Utc::now()).unwrap().is_empty(), "하루 2건 상한");
+    }
+
+    #[test]
+    fn retro_reply_parsing_is_lenient() {
+        let (t, s) = parse_retro_reply("네! {\"title\":\"포트 예약 이슈 해결\",\"summary\":\"요약.\"} 끝").unwrap();
+        assert_eq!(t, "포트 예약 이슈 해결");
+        assert_eq!(s, "요약.");
+        assert!(parse_retro_reply("json 아님").is_none());
+        assert!(parse_retro_reply("{\"title\":\"\",\"summary\":\"x\"}").is_none());
     }
 
     // ── 텔레메트리 브리프 — 파생 신호만, 원문·경로 없음 ──
