@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FURNITURE_BY_ID, MIRRORED_DIRECTION, OPPOSITE_DIRECTION, ROTATIONS, SPRITE_DIRECTION_BY_ROTATION, WINDOW_SOURCE_EDGE_SLOPE_BY_ASSET, WINDOW_TARGET_EDGE_SLOPE_BY_ROTATION, canonicalizeFurnitureGeometry, wallRotation, type Rotation, type SpriteSource } from './catalog';
+import { DESK_NE_BOX_LIFT_BY_ASSET, DESK_NE_SOURCE_AXES_BY_ASSET, FURNITURE_BY_ID, MIRRORED_DIRECTION, OPPOSITE_DIRECTION, ROTATIONS, SPRITE_DIRECTION_BY_ROTATION, WINDOW_SOURCE_EDGE_SLOPE_BY_ASSET, WINDOW_TARGET_EDGE_SLOPE_BY_ROTATION, canonicalizeFurnitureGeometry, wallRotation, type Rotation, type SpriteSource } from './catalog';
 import { rotatedSize } from './geometry';
 import assetMetricsJson from './asset-metrics.json';
 
@@ -36,7 +36,8 @@ describe('interior asset orientation contract', () => {
       const window = FURNITURE_BY_ID.get(id)!;
       for (const rotation of [90, 180] as Rotation[]) {
         const effectiveSource = window.render.mirrorX[rotation] ? -sourceSlope : sourceSlope;
-        expect(effectiveSource + window.render.shearY[rotation]).toBeCloseTo(WINDOW_TARGET_EDGE_SLOPE_BY_ROTATION[rotation]!, 6);
+        const projection = window.render.projections[rotation];
+        expect(projection.shearY + projection.scaleY * effectiveSource).toBeCloseTo(WINDOW_TARGET_EDGE_SLOPE_BY_ROTATION[rotation]!, 6);
       }
     }
   });
@@ -107,15 +108,44 @@ describe('interior asset orientation contract', () => {
     }
   });
 
-  it('anchors every desk view to its measured source contact pixel', () => {
+  it('registers every desk image box to the projected footprint corner', () => {
     for (const id of ['compact-study', 'computer', 'wood-writing', 'pastel-vanity', 'metal-workstation']) {
       const desk = FURNITURE_BY_ID.get(`desk.${id}`)!;
       for (const rotation of ROTATIONS) {
         const source = desk.render.sources[rotation];
-        const metric = (assetMetricsJson as Record<string, { ground: [number, number] }>)[`desk/${id}/${source}`];
-        const expectedX = desk.render.mirrorX[rotation] ? 1 - metric.ground[0] : metric.ground[0];
+        const metric = (assetMetricsJson as Record<string, { width: number; height: number; ground: [number, number] }>)[`desk/${id}/${source}`];
+        const [projectedW, projectedH] = rotation === 90 || rotation === 270 ? [desk.size[1], desk.size[0]] : desk.size;
+        const expectedX = projectedW / (projectedW + projectedH);
+        const projection = desk.render.projections[rotation];
+        const boxLift = source === 'ne' ? DESK_NE_BOX_LIFT_BY_ASSET[desk.id] : 0;
+        const expectedY = projection.scaleY * metric.ground[1] + projection.shearY * expectedX * metric.width / metric.height + boxLift;
         expect(desk.render.anchors[rotation][0], `${desk.id} ${rotation}°`).toBeCloseTo(expectedX, 6);
+        expect(desk.render.anchors[rotation][1], `${desk.id} ${rotation}°`).toBeCloseTo(expectedY, 6);
       }
+    }
+  });
+
+  it('maps both NE desk source axes onto the room grid in SE and SW views', () => {
+    for (const [assetId, [positiveSlope, negativeSlope]] of Object.entries(DESK_NE_SOURCE_AXES_BY_ASSET)) {
+      const desk = FURNITURE_BY_ID.get(assetId)!;
+      for (const rotation of [90, 180] as Rotation[]) {
+        const mirrored = desk.render.mirrorX[rotation];
+        const effectivePositive = mirrored ? -negativeSlope : positiveSlope;
+        const effectiveNegative = mirrored ? -positiveSlope : negativeSlope;
+        const projection = desk.render.projections[rotation];
+        expect(projection.shearY + projection.scaleY * effectivePositive, `${assetId} ${rotation}° positive`).toBeCloseTo(0.5, 6);
+        expect(projection.shearY + projection.scaleY * effectiveNegative, `${assetId} ${rotation}° negative`).toBeCloseTo(-0.5, 6);
+      }
+    }
+  });
+
+  it('reuses one NE box containment lift for both mirrored desk views', () => {
+    for (const assetId of Object.keys(DESK_NE_BOX_LIFT_BY_ASSET)) {
+      const desk = FURNITURE_BY_ID.get(assetId)!;
+      expect(desk.render.sources[90]).toBe('ne');
+      expect(desk.render.sources[180]).toBe('ne');
+      expect(DESK_NE_BOX_LIFT_BY_ASSET[assetId]).toBeGreaterThan(0);
+      expect(DESK_NE_BOX_LIFT_BY_ASSET[assetId]).toBeLessThan(0.06);
     }
   });
 

@@ -10,7 +10,8 @@ export type FootprintCell = [number, number];
 export type OrientationMode = 'directed' | 'axial' | 'invariant';
 export interface TurnaroundSpec { orientation: OrientationMode; sources: Partial<Record<SpriteSource, Direction>>; }
 export interface ResolvedSpriteView { source: SpriteSource; mirrorX: boolean; facing: Direction; }
-export interface SpriteRenderSpec { widthTiles: number; anchors: Record<Rotation, [number, number]>; footprintAnchor: [number, number]; mirrorX: Record<Rotation, boolean>; shearY: Record<Rotation, number>; sources: Record<Rotation, SpriteSource>; }
+export interface SpriteProjection { scaleY: number; shearY: number; }
+export interface SpriteRenderSpec { widthTiles: number; anchors: Record<Rotation, [number, number]>; footprintAnchor: [number, number]; mirrorX: Record<Rotation, boolean>; projections: Record<Rotation, SpriteProjection>; sources: Record<Rotation, SpriteSource>; }
 export interface FurnitureItem { id: string; category: FurnitureCategory; name: string; sprites: Record<Rotation, string>; size: [number, number]; footprint: FootprintCell[]; render: SpriteRenderSpec; turnaround?: TurnaroundSpec; }
 export interface PlacedFurniture { asset_id: string; category: FurnitureCategory | string; cell: [number, number]; size: [number, number]; footprint?: FootprintCell[]; rotation: Rotation; wall?: WallSide | null; }
 export interface InteriorTheme { id: string; name: string; wallpaper: string; floor: string; wall: string; wallSide: string; floorBase: string; floorAlt: string; grout: string; }
@@ -131,6 +132,29 @@ export const WINDOW_TARGET_EDGE_SLOPE_BY_ROTATION: Partial<Record<Rotation, numb
   180: 0.5,
 };
 
+// The two visible tabletop axes of each NE desk source. These are measured from
+// both outer tabletop edges and averaged because several generated PNGs are not
+// internally parallel. The projection below maps the averaged pair onto the
+// room's exact +0.5/-0.5 floor axes (ADR 0010).
+export const DESK_NE_SOURCE_AXES_BY_ASSET: Record<string, [number, number]> = {
+  'desk.compact-study': [0.62205, -0.48445],
+  'desk.computer': [0.6, -0.45],
+  'desk.wood-writing': [0.517, -0.4865],
+  'desk.pastel-vanity': [0.487, -0.481],
+  'desk.metal-workstation': [0.491, -0.476],
+};
+
+// Normalized Y lift required after basis correction so the bottom silhouette
+// remains inside the projected footprint's two front edges. It is measured once
+// per NE source and reused unchanged by its mirrored SW view.
+export const DESK_NE_BOX_LIFT_BY_ASSET: Record<string, number> = {
+  'desk.compact-study': 0.0483,
+  'desk.computer': 0.0564,
+  'desk.wood-writing': 0.0461,
+  'desk.pastel-vanity': 0.0384,
+  'desk.metal-workstation': 0.0558,
+};
+
 const turnaroundFor = (assetId: string, category: FurnitureCategory): TurnaroundSpec | undefined => {
   if (category === 'window') return undefined;
   const spec = TURNAROUND_BY_ASSET[assetId];
@@ -153,22 +177,35 @@ const make = (category: FurnitureCategory, rows: Array<[string, string, [number,
       const mirrorX = targetSlope === undefined ? false : Math.sign(sourceSlope) !== Math.sign(targetSlope);
       return { source: 'ne', mirrorX, facing: SPRITE_DIRECTION_BY_ROTATION[rotation] };
     };
-    const shearFor = (rotation: Rotation) => {
-      if (category !== 'window') return 0;
-      const targetSlope = WINDOW_TARGET_EDGE_SLOPE_BY_ROTATION[rotation];
-      if (targetSlope === undefined) return 0;
-      const sourceSlope = windowSourceSlope();
-      const effectiveSlope = viewFor(rotation).mirrorX ? -sourceSlope : sourceSlope;
-      return targetSlope - effectiveSlope;
+    const projectionFor = (rotation: Rotation): SpriteProjection => {
+      const view = viewFor(rotation);
+      if (category === 'window') {
+        const targetSlope = WINDOW_TARGET_EDGE_SLOPE_BY_ROTATION[rotation];
+        if (targetSlope === undefined) return { scaleY: 1, shearY: 0 };
+        const sourceSlope = windowSourceSlope();
+        const effectiveSlope = view.mirrorX ? -sourceSlope : sourceSlope;
+        return { scaleY: 1, shearY: targetSlope - effectiveSlope };
+      }
+      if (category === 'desk' && view.source === 'ne') {
+        const [positiveSlope, negativeSlope] = DESK_NE_SOURCE_AXES_BY_ASSET[assetId];
+        const scaleY = 1 / (positiveSlope - negativeSlope);
+        const sourceShearY = 0.5 - scaleY * positiveSlope;
+        return { scaleY, shearY: view.mirrorX ? -sourceShearY : sourceShearY };
+      }
+      return { scaleY: 1, shearY: 0 };
     };
     const anchorFor = (rotation: Rotation): [number, number] => {
       const { source, mirrorX } = viewFor(rotation);
       const metric = metricFor(category, id, source);
-      // A PNG's box edges can belong to an elevated tabletop or mirror, so they
-      // do not encode floor corners. Always anchor the measured bottom contact
-      // pixel; mirror the contact together with the rendered image (ADR 0009).
-      const imageX = mirrorX ? 1 - metric.ground[0] : metric.ground[0];
-      const transformedY = metric.ground[1] + shearFor(rotation) * imageX * metric.width / metric.height;
+      const measuredImageX = mirrorX ? 1 - metric.ground[0] : metric.ground[0];
+      const [projectedW, projectedH] = rotation === 90 || rotation === 270 ? [size[1], size[0]] : size;
+      // A desk's collision footprint surrounds the whole desk rather than one
+      // arbitrarily lowest leg. Register its complete image box to the projected
+      // footprint and transform that same box anchor with its source basis.
+      const imageX = category === 'desk' ? projectedW / (projectedW + projectedH) : measuredImageX;
+      const projection = projectionFor(rotation);
+      const boxLift = category === 'desk' && source === 'ne' ? DESK_NE_BOX_LIFT_BY_ASSET[assetId] : 0;
+      const transformedY = projection.scaleY * metric.ground[1] + projection.shearY * imageX * metric.width / metric.height + boxLift;
       return [imageX, transformedY];
     };
     return {
@@ -179,7 +216,7 @@ const make = (category: FurnitureCategory, rows: Array<[string, string, [number,
         anchors: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, anchorFor(rotation)])) as Record<Rotation, [number, number]>,
         footprintAnchor: FOOTPRINT_ANCHOR_BY_ASSET[assetId] ?? [1, 1],
         mirrorX: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, viewFor(rotation).mirrorX])) as Record<Rotation, boolean>,
-        shearY: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, shearFor(rotation)])) as Record<Rotation, number>,
+        projections: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, projectionFor(rotation)])) as Record<Rotation, SpriteProjection>,
         sources: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, viewFor(rotation).source])) as Record<Rotation, SpriteSource>,
       },
     };
