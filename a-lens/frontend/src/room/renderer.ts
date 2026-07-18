@@ -71,14 +71,14 @@ function drawIsoBox(
  * 킷 스프라이트 배치 — 있으면 Sprite를 얹고 true, 없으면 false(호출부가 Graphics 폴백).
  * floor 부품 앵커: footprint 다이아몬드의 남쪽(앞) 꼭짓점 = 이미지 하단 중앙.
  */
-function placeKitSprite(root: Container, key: string, gx: number, gy: number, zIndex: number, mul = 1): Sprite | null {
+function placeKitSprite(root: Container, key: string, gx: number, gy: number, zIndex: number, mul = 1, yRatio = 1): Sprite | null {
   const piece = kitPiece(key)
   if (!piece || piece.mount !== 'floor') return null
   const [w, d] = piece.footprint
   const sp = new Sprite(piece.texture)
   sp.anchor.set(0.5, 1)
   const s = kitPieceScale() * mul
-  sp.scale.set(s)
+  sp.scale.set(s, s * yRatio)
   const [x, y] = pt(gx + w, gy + d)
   sp.position.set(x + piece.offset[0] * s, y + piece.offset[1] * s)
   sp.zIndex = zIndex
@@ -101,17 +101,22 @@ const DESK_ROW_GAP = 3.8
 const DESK_GX0 = 1.5
 const DESK_GY0 = 2.5
 
-/** 책상 배치 계산 — 에이전트 수에 맞춰 4×3 격자로 채운다. */
+/** 책상 배치 계산 — 줄을 균등 분배하고 각 줄을 중앙 정렬해, 추가될수록 가운데에서 퍼진다.
+ *  예: 1개 = 중앙 하나, 2개 = 나란히, 5개 = 뒷줄 3 + 앞줄 2(가운데 정렬). */
 function layoutDesks(count: number): { slots: { gx: number; gy: number }[]; W: number; H: number } {
-  const cols = Math.min(DESK_COLS, Math.max(1, count))
   const rows = Math.max(1, Math.ceil(count / DESK_COLS))
+  const base = Math.floor(count / rows)
+  const extra = count % rows
+  const rowSizes = Array.from({ length: rows }, (_, r) => base + (r < extra ? 1 : 0))
+  const maxCols = Math.max(...rowSizes)
   const slots: { gx: number; gy: number }[] = []
-  for (let k = 0; k < count; k++) {
-    const col = k % DESK_COLS
-    const row = Math.floor(k / DESK_COLS)
-    slots.push({ gx: DESK_GX0 + col * DESK_COL_GAP, gy: DESK_GY0 + row * DESK_ROW_GAP })
-  }
-  const W = Math.max(8, DESK_GX0 + cols * DESK_COL_GAP + 0.5)
+  rowSizes.forEach((n, r) => {
+    const off = (maxCols - n) / 2 // 짧은 줄은 반 칸씩 밀어 중앙 정렬
+    for (let c = 0; c < n; c++) {
+      slots.push({ gx: DESK_GX0 + (off + c) * DESK_COL_GAP, gy: DESK_GY0 + r * DESK_ROW_GAP })
+    }
+  })
+  const W = Math.max(8, DESK_GX0 + maxCols * DESK_COL_GAP + 0.5)
   const H = Math.max(8, DESK_GY0 + rows * DESK_ROW_GAP + 1.5)
   return { slots, W, H }
 }
@@ -189,9 +194,12 @@ export function buildRoomScene(
   // ── 책상 (deskCount만큼 — 에이전트보다 많으면 빈 책상, 'mix'면 종류 순환) ──
   // 새 desk 스프라이트가 시트보다 작게 잘려 나와, 배경 대비 살짝 키워 얹는다.
   const DESK_SCALE = 1.7
+  // desk 스프라이트는 ~30°(slope 0.577) 다이메트릭으로 그려져 배경(2:1, slope 0.5)보다 가파르다.
+  // 세로를 0.5/0.577로 눌러 평면 각도를 방 바닥·벽과 맞춘다.
+  const DESK_Y_RATIO = 0.87
   slots.forEach(({ gx, gy }, k) => {
     const deskId = resolveDeskId(config.desk, k)
-    if (placeKitSprite(root, `desk.${deskId}`, gx, gy, depth(gx + 1, gy + 0.5), DESK_SCALE)) return
+    if (placeKitSprite(root, `desk.${deskId}`, gx, gy, depth(gx + 1, gy + 0.5), DESK_SCALE, DESK_Y_RATIO)) return
     const dp = DESKS[deskId]
     const dg = new Graphics()
     drawIsoBox(dg, gx, gy, 2, 1, 34, { top: dp.top, left: shade(dp.side, 0.9), right: dp.side })
