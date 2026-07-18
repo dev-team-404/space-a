@@ -11,17 +11,11 @@
     "desk.d7": { "file": "desk-d7.png", "footprint": [2, 1] },
     "desk.d8": { "file": "desk-d8.png", "footprint": [2, 1] },
     "desk.d9": { "file": "desk-d9.png", "footprint": [2, 1] },
-    "shelf.s1": { "file": "shelf-s1.png", "footprint": [0.5, 1.0] },
-    "shelf.s2": { "file": "shelf-s2.png", "footprint": [0.5, 1.0] },
-    "shelf.s3": { "file": "shelf-s3.png", "footprint": [1.0, 0.5] },
-    "shelf.s4": { "file": "shelf-s4.png", "footprint": [1.0, 0.5] },
-    "shelf.s5": { "file": "shelf-s5.png", "footprint": [1.4, 0.5] },
-    "shelf.s6": { "file": "shelf-s6.png", "footprint": [1.2, 0.5] },
-    "shelf.s7": { "file": "shelf-s7.png", "footprint": [2.2, 0.5] },
-    "shelf.s8": { "file": "shelf-s8.png", "footprint": [2.2, 0.5] },
-    "shelf.s9": { "file": "shelf-s9.png", "footprint": [1.2, 0.5] },
-    "shelf.s10": { "file": "shelf-s10.png", "footprint": [1.2, 0.5] },
-    "shelf.s11": { "file": "shelf-s11.png", "footprint": [0.7, 0.5] },
+    "shelf.s1": { "file": "shelf-s1.png", "footprint": [0.5, 1.4] },
+    "shelf.s7": { "file": "shelf-s7.png", "footprint": [0.5, 2.4] },
+    "shelf.s9": { "file": "shelf-s9.png", "footprint": [0.5, 1.4] },
+    "shelf.s11": { "file": "shelf-s11.png", "footprint": [0.5, 1.0] },
+    "board.chalk-green": { "file": "board-chalk-green.png", "mount": "board" },
     "shell.room": {
       "file": "shell-room.png",
       "mount": "shell-room",
@@ -32,6 +26,31 @@
         "backWall": [475, 28, 1000, 235],
         "slope": 0.6
       }
+    },
+    "room.r1": {
+      "file": "room-preset-1.png",
+      "mount": "shell-room",
+      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "slope": 0.5 }
+    },
+    "room.r2": {
+      "file": "room-preset-2.png",
+      "mount": "shell-room",
+      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "slope": 0.5 }
+    },
+    "room.r3": {
+      "file": "room-preset-3.png",
+      "mount": "shell-room",
+      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "slope": 0.5 }
+    },
+    "room.r4": {
+      "file": "room-preset-4.png",
+      "mount": "shell-room",
+      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "slope": 0.5 }
+    },
+    "room.r5": {
+      "file": "room-preset-5.png",
+      "mount": "shell-room",
+      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "slope": 0.5 }
     }
   }
 }

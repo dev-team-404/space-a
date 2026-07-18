@@ -1,6 +1,6 @@
 // 만든 방 저장소 — 지금은 localStorage. 방 공유가 필요해지면 backend 저장으로 승격한다.
 
-import { resolveDeskId, resolveFloorId, resolveWallpaperId } from './room/catalog'
+import { resolveDeskId, resolveRoomId } from './room/catalog'
 import type { RoomConfig } from './room/types'
 
 const KEY = 'a-lens.rooms.v1'
@@ -11,12 +11,11 @@ export function loadRooms(): RoomConfig[] {
     if (!raw) return []
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
-    // 구버전 저장분 마이그레이션 (desk/wallpaper/floor 구 id → 시트 기반 새 id)
+    // 구버전 저장분 마이그레이션 (desk 구 id → 시트 기반 새 id, room 프리셋 정규화)
     return (parsed as RoomConfig[]).map((r) => ({
       ...r,
       desk: r.desk === 'mix' ? 'mix' : resolveDeskId(String(r.desk)),
-      wallpaper: resolveWallpaperId(String(r.wallpaper)),
-      floor: resolveFloorId(String(r.floor)),
+      room: resolveRoomId(r.room),
     }))
   } catch {
     return []

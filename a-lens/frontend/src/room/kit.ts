@@ -5,7 +5,7 @@
 
 import { Assets, Texture } from 'pixi.js'
 
-export type KitMount = 'floor' | 'wall-right' | 'shell-floor' | 'shell-wall' | 'shell-room'
+export type KitMount = 'floor' | 'wall-right' | 'shell-floor' | 'shell-wall' | 'shell-room' | 'board'
 
 /** shell-room 캘리브레이션 — 트리밍된 이미지 픽셀 좌표 기준 */
 export type KitShellCal = {
@@ -14,8 +14,10 @@ export type KitShellCal = {
   right: [number, number]
   /** 뒷벽(평면) 밑 바닥 시작 y (걸레받이 끝) */
   backEdgeY: number
-  /** 뒷벽 패널 영역 [x0, y0, x1, y1] — 칠판이 걸리는 면 */
+  /** 뒷벽 패널 영역 [x0, y0, x1, y1] — 칠판이 걸리는 면 (클릭 → 이슈 패널) */
   backWall: [number, number, number, number]
+  /** 왼벽 책장 영역 [x0, y0, x1, y1] — 있으면 클릭 → 지식 패널 */
+  shelfArea?: [number, number, number, number]
   /** 바닥 가장자리의 아이소 기울기 (dy/dx). 2:1이면 0.5 */
   slope?: number
 }

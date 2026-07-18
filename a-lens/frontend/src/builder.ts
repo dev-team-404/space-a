@@ -3,9 +3,9 @@
 
 import { Application } from 'pixi.js'
 import type { LobbyFloor } from './api'
-import { BOARD_OPTIONS, DECO_OPTIONS, DESK_OPTIONS, SHELF_OPTIONS } from './room/catalog'
+import { DESK_OPTIONS, ROOM_OPTIONS, resolveRoomId } from './room/catalog'
 import { buildRoomScene, PREVIEW_DATA } from './room/renderer'
-import type { BoardId, DecoId, DeskChoice, RoomConfig, ShelfId, VariantOption } from './room/types'
+import type { DeskChoice, RoomConfig, RoomPresetId, VariantOption } from './room/types'
 import { getRoom } from './store'
 
 export type BuilderOptions = {
@@ -27,12 +27,8 @@ async function ensurePreviewApp(): Promise<Application> {
 }
 
 const DEFAULTS: Omit<RoomConfig, 'space_id' | 'space_name' | 'created_at'> = {
-  wallpaper: 'w1',
-  floor: 'f1',
+  room: 'r1', // 방 배경 프리셋
   desk: 'd1',
-  shelf: 's1',
-  board: 'chalk-green',
-  deco: ['plant', 'string-lights'],
   desks: 'auto',
 }
 
@@ -41,12 +37,15 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
   if (!host) throw new Error('#builder 엘리먼트 없음')
 
   const state: RoomConfig = opts.initial
-    ? { ...opts.initial, shelf: opts.initial.shelf ?? 's1', deco: [...opts.initial.deco] }
+    ? {
+        ...opts.initial,
+        // 구버전 저장분 → 방 배경 프리셋으로 정규화
+        room: resolveRoomId(opts.initial.room),
+      }
     : {
         space_id: opts.floors[0]?.space_id ?? '',
         space_name: opts.floors[0]?.name ?? '',
         ...DEFAULTS,
-        deco: [...DEFAULTS.deco],
         created_at: new Date().toISOString(),
       }
 
@@ -62,12 +61,8 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
           <select id="b-space" ${opts.initial ? 'disabled' : ''}></select>
           <div id="b-space-note" class="field-note"></div>
           <div id="b-groups"></div>
-          <label class="field-label">방 크기</label>
-          <div id="b-size" class="chip-row"></div>
           <label class="field-label">책상 수</label>
           <div id="b-desks" class="chip-row"></div>
-          <label class="field-label">장식</label>
-          <div id="b-deco" class="chip-row"></div>
         </div>
         <div class="builder-preview">
           <div class="field-label">미리보기</div>
@@ -128,32 +123,10 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
     groups.append(label, row)
     row.querySelectorAll('.swatch').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.id === get()))
   }
-  // 벽·바닥은 고정 셸(shell.room)이라 선택 없음 — 추후 변형이 생기면 여기 그룹을 되살린다
+  // 방 배경 프리셋 5종 중 하나를 고른다 (벽·바닥·책장·칠판이 다 그려진 통짜 이미지).
+  addGroup('방 배경', ROOM_OPTIONS, () => resolveRoomId(state.room), (id: RoomPresetId) => (state.room = id))
+  // 그 위에 얹을 책상 종류만 선택
   addGroup('책상', DESK_OPTIONS, () => state.desk, (id: DeskChoice) => (state.desk = id))
-  addGroup('책장 (지식)', SHELF_OPTIONS, () => state.shelf ?? 's1', (id: ShelfId) => (state.shelf = id))
-  addGroup('칠판', BOARD_OPTIONS, () => state.board, (id: BoardId) => (state.board = id))
-
-  // ── 방 크기 ──
-  const sizeRow = host.querySelector<HTMLElement>('#b-size')!
-  const SIZES: { cells: number; label: string }[] = [
-    { cells: 12, label: '아담' },
-    { cells: 16, label: '보통' },
-    { cells: 20, label: '대형' },
-  ]
-  for (const { cells, label } of SIZES) {
-    const chip = document.createElement('button')
-    chip.className = 'chip'
-    chip.textContent = label
-    chip.dataset.size = String(cells)
-    chip.addEventListener('click', () => {
-      state.size = cells
-      sizeRow.querySelectorAll('.chip').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.size === String(cells)))
-      renderPreview()
-    })
-    sizeRow.appendChild(chip)
-  }
-  const currentSize = state.size ?? 16
-  sizeRow.querySelectorAll('.chip').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.size === String(currentSize)))
 
   // ── 책상 수 (자동 = 에이전트 수 따라감) ──
   const desksRow = host.querySelector<HTMLElement>('#b-desks')!
@@ -173,22 +146,7 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
   const currentDesks = state.desks ?? 'auto'
   desksRow.querySelectorAll('.chip').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.desks === String(currentDesks)))
 
-  // ── 장식 토글 ──
-  const decoRow = host.querySelector<HTMLElement>('#b-deco')!
-  for (const opt of DECO_OPTIONS) {
-    const chip = document.createElement('button')
-    chip.className = 'chip' + (state.deco.includes(opt.id as DecoId) ? ' on' : '')
-    chip.innerHTML = `<span class="swatch-dot" style="background:${opt.swatch}"></span>${opt.label}`
-    chip.addEventListener('click', () => {
-      const id = opt.id as DecoId
-      const i = state.deco.indexOf(id)
-      if (i >= 0) state.deco.splice(i, 1)
-      else state.deco.push(id)
-      chip.classList.toggle('on', i < 0)
-      renderPreview()
-    })
-    decoRow.appendChild(chip)
-  }
+  // 장식은 선택 없음 — 방을 데이터(에이전트·이슈·지식)에 집중시킨다
 
   // ── 라이브 프리뷰 (싱글턴 Pixi Application 재사용) ──
   const previewHost = host.querySelector<HTMLElement>('#b-preview-canvas')!
@@ -218,7 +176,7 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
   host.querySelector('[data-act="close"]')!.addEventListener('click', close)
   host.querySelector('[data-act="save"]')!.addEventListener('click', () => {
     if (!state.space_id) return
-    const saved = { ...state, deco: [...state.deco] }
+    const saved = { ...state }
     close()
     opts.onSaved(saved)
   })
