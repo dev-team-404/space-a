@@ -83,7 +83,7 @@ impl ToolKind {
             "Bash" => ToolKind::Execute,
             "WebSearch" => ToolKind::WebSearch,
             "WebFetch" => ToolKind::WebFetch,
-            "Task" => ToolKind::SubAgent,
+            "Task" | "Agent" => ToolKind::SubAgent,
             other => ToolKind::Other(other.to_string()),
         }
     }
@@ -96,6 +96,10 @@ pub enum EventKind {
     ToolResult { tool_use_id: String, status: ResultStatus },
     Compaction,
     UserPrompt { preview: String },
+    /// permission-mode 라인 (plan·bypassPermissions 등) — R16/R19 재료 (코칭 v3 §4.1-4)
+    PermissionMode { mode: String },
+    /// 프롬프트/명령에서 시크릿 패턴 감지 — 본문 미저장, pattern_id만 (코칭 v3 §4.2)
+    SecretFlag { pattern_id: String },
     SessionMeta { cwd: String, git_branch: Option<String> },
 }
 
@@ -145,6 +149,13 @@ mod tests {
             ToolKind::from_raw_name("SomethingNew"),
             ToolKind::Other("SomethingNew".to_string())
         );
+    }
+
+    #[test]
+    fn agent_raw_name_maps_to_sub_agent() {
+        // 신형 하네스는 서브에이전트 툴명이 Task → Agent로 바뀜 (스펙 §4.1-1)
+        assert_eq!(ToolKind::from_raw_name("Agent"), ToolKind::SubAgent);
+        assert_eq!(ToolKind::from_raw_name("Task"), ToolKind::SubAgent); // 구형 유지
     }
 
     #[test]

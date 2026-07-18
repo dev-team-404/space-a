@@ -1040,6 +1040,14 @@ fn flatten(e: &NormalizedEvent) -> FlatRow {
             "user_prompt".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
             None, None, None, None, None,
         ),
+        EventKind::PermissionMode { mode } => (
+            "permission_mode".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
+            None, None, None, Some(mode.clone()), None,
+        ),
+        EventKind::SecretFlag { pattern_id } => (
+            "secret_flag".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
+            None, None, None, Some(pattern_id.clone()), None,
+        ),
         EventKind::SessionMeta { .. } => (
             "session_meta".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
             None, None, None, None, None,
@@ -1891,5 +1899,31 @@ mod tests {
             store.get_chatter_pool("2026-07-10").unwrap(),
             Some((Vec::new(), "3|1|2|0".to_string()))
         );
+    }
+
+    #[test]
+    fn permission_mode_and_secret_flag_events_roundtrip() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |kind: EventKind, off: u64| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+            uuid: None, parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-19T10:00:00Z".into()),
+            source_file: "s1.jsonl".into(), source_offset: off, kind,
+        };
+        store.upsert_events(&[
+            mk(EventKind::PermissionMode { mode: "plan".into() }, 0),
+            mk(EventKind::SecretFlag { pattern_id: "github_token".into() }, 800),
+        ]).unwrap();
+        let (k1, t1): (String, String) = store.conn.query_row(
+            "SELECT kind, tool_target FROM events WHERE kind='permission_mode'",
+            [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!((k1.as_str(), t1.as_str()), ("permission_mode", "plan"));
+        let t2: String = store.conn.query_row(
+            "SELECT tool_target FROM events WHERE kind='secret_flag'", [], |r| r.get(0)).unwrap();
+        assert_eq!(t2, "github_token");
+        // 멱등: 같은 이벤트 재삽입 시 dedup (uuid None → source_file:offset 키)
+        let n = store.upsert_events(&[mk(EventKind::PermissionMode { mode: "plan".into() }, 0)]).unwrap();
+        assert_eq!(n, 0);
     }
 }
