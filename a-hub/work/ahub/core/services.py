@@ -6,6 +6,8 @@
 """
 
 import re
+from datetime import datetime, timezone
+from typing import Callable
 
 from . import errors
 from .models import Agent, Issue, Page, ReuseEvent, SearchResult, SkillCandidate, Space
@@ -16,9 +18,22 @@ from .ports import Store
 _USER_ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
 
 
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 class SpaceAService:
-    def __init__(self, store: Store):
+    def __init__(self, store: Store, *, now: Callable[[], str] | None = None):
         self.store = store
+        self._now = now or _utc_now  # 주입 가능한 clock (테스트 결정성)
+
+    def _touch(self, obj: Issue | Page, ts: str | None = None) -> None:
+        """상태 변경 저장 직전 updated_at을 갱신한다 (created_at은 보존).
+
+        ts를 주면 그 값을 쓴다 — 한 트랜잭션에서 여러 엔티티가 같은 시각을
+        공유해야 할 때(예: resolve_issue의 이슈+발행 페이지).
+        """
+        obj.updated_at = ts or self._now()
 
     # --- 관리 (control plane) ---
 
@@ -28,12 +43,15 @@ class SpaceAService:
         space = Space(id=space_id, name=name, purpose=purpose, guidelines=guidelines)
         self.store.add_space(space)
         if guidelines:
+            _ts = self._now()
             guide = Page(
                 id=self.store.new_id("page"),
                 space_id=space_id,
                 title="가이드",
                 body=guidelines,
                 source="authored",
+                created_at=_ts,
+                updated_at=_ts,
             )
             self.store.add_page(guide)
             space.guide_page_id = guide.id
@@ -81,11 +99,14 @@ class SpaceAService:
         agent = self._authed_agent(token)
         if space_id not in agent.spaces:
             raise errors.Forbidden(f"not a member of space '{space_id}'")
+        _ts = self._now()
         issue = Issue(
             id=self.store.new_id("iss"),
             space_id=space_id,
             title=title,
             opened_by=agent.id,
+            created_at=_ts,
+            updated_at=_ts,
         )
         self.store.add_issue(issue)
         return issue
@@ -106,7 +127,9 @@ class SpaceAService:
         if issue.space_id not in agent.spaces:
             raise errors.Forbidden("issue belongs to a space you are not a member of")
 
+        _ts = self._now()
         issue.status = "resolved"
+        self._touch(issue, _ts)
         self.store.save_issue(issue)
 
         page: Page | None = None
@@ -120,6 +143,8 @@ class SpaceAService:
                 issue_id=issue.id,
                 steps=steps or [],
                 created_by=agent.id,
+                created_at=_ts,
+                updated_at=_ts,
             )
             self.store.add_page(page)
         return issue, page
@@ -169,6 +194,7 @@ class SpaceAService:
         )
         self.store.add_reuse_event(event)
         issue.status = "knowledge_linked"
+        self._touch(issue)
         self.store.save_issue(issue)
         return event, issue
 
@@ -257,6 +283,7 @@ class SpaceAService:
                 raise errors.InvalidRequest("parent must be in the same space")
             if parent.status != "active":
                 raise errors.InvalidRequest("parent page is not active")
+        _ts = self._now()
         page = Page(
             id=self.store.new_id("page"),
             space_id=space_id,
@@ -266,6 +293,8 @@ class SpaceAService:
             parent_id=parent_id,
             visibility=visibility,
             created_by=agent.id,
+            created_at=_ts,
+            updated_at=_ts,
         )
         self.store.add_page(page)
         return page
@@ -306,6 +335,7 @@ class SpaceAService:
                 visited.add(cur.id)
                 cur = self.store.get_page(cur.parent_id) if cur.parent_id else None
         page.parent_id = new_parent_id
+        self._touch(page)
         self.store.save_page(page)
         return page
 
@@ -368,18 +398,21 @@ class SpaceAService:
             page.title = title
         if body is not None:
             page.body = body
+        self._touch(page)
         self.store.save_page(page)
         return page
 
     def set_visibility(self, token: str, page_id: str, visibility: str) -> Page:
         _, page = self._page_for_member(token, page_id)
         page.visibility = visibility
+        self._touch(page)
         self.store.save_page(page)
         return page
 
     def archive_page(self, token: str, page_id: str) -> Page:
         _, page = self._page_for_member(token, page_id)
         page.status = "archived"
+        self._touch(page)
         self.store.save_page(page)
         return page
 
@@ -394,12 +427,14 @@ class SpaceAService:
             raise errors.InvalidRequest("superseding page must be in the same space")
         page.status = "superseded"
         page.superseded_by = by_page_id
+        self._touch(page)
         self.store.save_page(page)
         return page
 
     def quarantine_page(self, token: str, page_id: str) -> Page:
         _, page = self._page_for_member(token, page_id)
         page.status = "quarantined"
+        self._touch(page)
         self.store.save_page(page)
         return page
 
@@ -411,6 +446,7 @@ class SpaceAService:
         if not self._visible(page, agent):
             raise errors.Forbidden("page is not visible to you")
         page.flags += 1
+        self._touch(page)
         self.store.save_page(page)
         return page
 

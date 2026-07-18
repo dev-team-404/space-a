@@ -225,6 +225,8 @@ def create_app(
                     "source": p.source,
                     "visibility": p.visibility,
                     "created_by": p.created_by,
+                    "created_at": p.created_at,
+                    "updated_at": p.updated_at,
                 }
                 for p in res.pages
             ],
@@ -262,6 +264,8 @@ def create_app(
             "parent_id": p.parent_id,
             "source": p.source,
             "created_by": p.created_by,
+            "created_at": p.created_at,
+            "updated_at": p.updated_at,
         }
 
     @app.get("/pages/{page_id}")
@@ -276,6 +280,8 @@ def create_app(
             "source": p.source,
             "visibility": p.visibility,
             "created_by": p.created_by,
+            "created_at": p.created_at,
+            "updated_at": p.updated_at,
         }
 
     @app.post("/pages/{page_id}/move")
@@ -333,6 +339,8 @@ def create_app(
                 "page_id": p.id,
                 "title": p.title,
                 "created_by": p.created_by,
+                "created_at": p.created_at,
+                "updated_at": p.updated_at,
                 "children": [node(c) for c in by_parent.get(p.id, [])],
             }
 
@@ -384,6 +392,8 @@ def create_app(
                     "title": i.title,
                     "status": i.status,
                     "opened_by": i.opened_by,
+                    "created_at": i.created_at,
+                    "updated_at": i.updated_at,
                 }
                 for i in issues
             ]
@@ -398,6 +408,8 @@ def create_app(
             "title": i.title,
             "status": i.status,
             "opened_by": i.opened_by,
+            "created_at": i.created_at,
+            "updated_at": i.updated_at,
         }
 
     @app.patch("/spaces/{space_id}")

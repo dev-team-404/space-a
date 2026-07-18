@@ -24,12 +24,14 @@ CREATE TABLE IF NOT EXISTS spaces (
 CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, name TEXT, spaces TEXT);
 CREATE TABLE IF NOT EXISTS tokens (token TEXT PRIMARY KEY, agent_id TEXT);
 CREATE TABLE IF NOT EXISTS issues (
-    id TEXT PRIMARY KEY, space_id TEXT, title TEXT, status TEXT, opened_by TEXT
+    id TEXT PRIMARY KEY, space_id TEXT, title TEXT, status TEXT, opened_by TEXT,
+    created_at TEXT, updated_at TEXT
 );
 CREATE TABLE IF NOT EXISTS pages (
     id TEXT PRIMARY KEY, space_id TEXT, title TEXT, body TEXT, source TEXT,
     parent_id TEXT, status TEXT, visibility TEXT, issue_id TEXT,
-    steps TEXT, superseded_by TEXT, flags INTEGER, created_by TEXT
+    steps TEXT, superseded_by TEXT, flags INTEGER, created_by TEXT,
+    created_at TEXT, updated_at TEXT
 );
 CREATE TABLE IF NOT EXISTS reuse_events (
     id TEXT PRIMARY KEY, issue_id TEXT, page_id TEXT, agent_id TEXT, cross_team INTEGER
@@ -50,9 +52,15 @@ class SqliteStore(Store):
     def _migrate(self) -> None:
         """기존 파일 하위호환: CREATE TABLE IF NOT EXISTS는 컬럼을 추가하지 못하므로,
         나중에 도입된 컬럼을 idempotent하게 채운다 (이미 있으면 무시)."""
-        cols = {r["name"] for r in self._conn.execute("PRAGMA table_info(pages)")}
-        if "created_by" not in cols:
-            self._conn.execute("ALTER TABLE pages ADD COLUMN created_by TEXT")
+        added = {
+            "pages": [("created_by", "TEXT"), ("created_at", "TEXT"), ("updated_at", "TEXT")],
+            "issues": [("created_at", "TEXT"), ("updated_at", "TEXT")],
+        }
+        for table, columns in added.items():
+            existing = {r["name"] for r in self._conn.execute(f"PRAGMA table_info({table})")}
+            for name, decl in columns:
+                if name not in existing:
+                    self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
     def _execute(self, sql: str, params: tuple = ()) -> list[sqlite3.Row]:
         with self._lock:
@@ -129,8 +137,10 @@ class SqliteStore(Store):
 
     def add_issue(self, issue: Issue) -> None:
         self._write(
-            "INSERT OR REPLACE INTO issues(id,space_id,title,status,opened_by) VALUES(?,?,?,?,?)",
-            (issue.id, issue.space_id, issue.title, issue.status, issue.opened_by),
+            "INSERT OR REPLACE INTO issues"
+            "(id,space_id,title,status,opened_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+            (issue.id, issue.space_id, issue.title, issue.status, issue.opened_by,
+             issue.created_at, issue.updated_at),
         )
 
     def get_issue(self, issue_id: str) -> Issue | None:
@@ -148,12 +158,12 @@ class SqliteStore(Store):
     def add_page(self, page: Page) -> None:
         self._write(
             "INSERT OR REPLACE INTO pages"
-            "(id,space_id,title,body,source,parent_id,status,visibility,issue_id,steps,superseded_by,flags,created_by)"
-            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "(id,space_id,title,body,source,parent_id,status,visibility,issue_id,steps,superseded_by,flags,created_by,created_at,updated_at)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 page.id, page.space_id, page.title, page.body, page.source, page.parent_id,
                 page.status, page.visibility, page.issue_id, json.dumps(page.steps),
-                page.superseded_by, page.flags, page.created_by,
+                page.superseded_by, page.flags, page.created_by, page.created_at, page.updated_at,
             ),
         )
 
@@ -201,6 +211,7 @@ class SqliteStore(Store):
         return Issue(
             id=r["id"], space_id=r["space_id"], title=r["title"],
             status=r["status"], opened_by=r["opened_by"],
+            created_at=r["created_at"], updated_at=r["updated_at"],
         )
 
     @staticmethod
@@ -211,4 +222,5 @@ class SqliteStore(Store):
             visibility=r["visibility"], issue_id=r["issue_id"],
             steps=json.loads(r["steps"]), superseded_by=r["superseded_by"], flags=r["flags"],
             created_by=r["created_by"],
+            created_at=r["created_at"], updated_at=r["updated_at"],
         )

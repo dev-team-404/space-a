@@ -27,6 +27,8 @@ class Issue:
     title: str
     status: str = "open"
     opened_by: str | None = None  # 이슈를 연 agent_id
+    created_at: str | None = None  # ISO 8601 UTC, 생성 시각
+    updated_at: str | None = None  # ISO 8601 UTC, 마지막 수정 시각
 
 
 @dataclass
@@ -50,6 +52,8 @@ class Page:
     superseded_by: str | None = None  # 대체된 경우 새 문서 id
     flags: int = 0                    # 오답 신고 누적
     created_by: str | None = None     # 작성한 agent_id (issue-derived면 resolve한 agent)
+    created_at: str | None = None     # ISO 8601 UTC, 생성 시각
+    updated_at: str | None = None     # ISO 8601 UTC, 마지막 수정 시각
 
 
 @dataclass
