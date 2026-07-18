@@ -633,6 +633,26 @@ pub fn room_move_cell(state: State<AppState>, x: i64, y: i64) -> Result<serde_js
     client.move_to(&room_id, (x, y)).map_err(|e| e.to_string())
 }
 
+#[tauri::command(async)]
+pub fn room_capabilities(state: State<AppState>) -> Result<serde_json::Value, String> {
+    let Some(client) = hub_client(&state)? else {
+        return Err("hub_not_connected".into());
+    };
+    client.capabilities().map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+pub fn room_save_design(
+    state: State<AppState>,
+    room_id: String,
+    design: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let Some(client) = hub_client(&state)? else {
+        return Err("hub_not_connected".into());
+    };
+    client.save_design(&room_id, design).map_err(|e| e.to_string())
+}
+
 /// 임의 시드의 로봇 스펙 — 방 안 다른 에이전트 렌더용.
 #[tauri::command]
 pub fn robot_spec_for_seed(seed: String) -> RobotSpec {

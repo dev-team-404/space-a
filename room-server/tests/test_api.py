@@ -17,6 +17,16 @@ def _register(client, name):
     return r.json()
 
 
+def test_capabilities_expose_orientation_contract(client):
+    assert client.get("/capabilities").json() == {
+        "room_protocol": 3,
+        "grid": {"w": 20, "h": 20},
+        "floor_min_y": 0,
+        "footprint_mask": True,
+        "wall_objects": True,
+    }
+
+
 def test_register_and_me(client):
     a = _register(client, "A")
     me = client.get("/rooms/me", headers={"Authorization": f"Bearer {a['token']}"})
@@ -35,8 +45,8 @@ def test_enter_conflict_is_409_cell_taken(client):
     b = _register(client, "B")
     hb = {"Authorization": f"Bearer {b['token']}"}
     ha = {"Authorization": f"Bearer {a['token']}"}
-    assert client.post(f"/rooms/{a['room_id']}/enter", json={"cell": [5, 5]}, headers=hb).status_code == 200
-    r = client.post(f"/rooms/{a['room_id']}/move", json={"cell": [5, 5]}, headers=ha)
+    assert client.post(f"/rooms/{a['room_id']}/enter", json={"cell": [5, 6]}, headers=hb).status_code == 200
+    r = client.post(f"/rooms/{a['room_id']}/move", json={"cell": [5, 6]}, headers=ha)
     assert r.status_code == 409
     assert r.json()["error"]["code"] == "cell_taken"
 

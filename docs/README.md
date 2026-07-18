@@ -17,6 +17,11 @@ SPACE-A 프로젝트 문서 모음입니다. (현재 설계 단계)
 | # | 결정 | 상태 |
 |---|------|------|
 | [0001](./adr/0001-record-architecture-decisions.md) | ADR을 사용해 결정을 기록한다 | 채택 |
+| [0002](./adr/0002-mcp-http-and-skill-dual-access.md) | MCP·HTTP·skill 이중 접근을 제공한다 | 채택 |
+| [0003](./adr/0003-room-placement-geometry-v2.md) | 방 배치 좌표와 footprint 의미를 통일한다 | 채택 |
+| [0004](./adr/0004-interior-asset-orientation-contract.md) | 인테리어 자산 방향·앵커 계약을 정의한다 | 채택 |
+| [0005](./adr/0005-independent-interior-assets-and-ground-metrics.md) | 테이블·의자를 분리하고 접지 메트릭을 사용한다 | 채택 |
+| [0006](./adr/0006-asset-facing-metadata-and-view-resolution.md) | 자산 실제 방향 메타데이터로 목표 뷰를 해석한다 | 채택 |
 
 ## 설계 문서
 

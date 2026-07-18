@@ -1,0 +1,167 @@
+import assetMetricsJson from './asset-metrics.json';
+
+export type FurnitureCategory = 'sofa' | 'lighting' | 'desk' | 'table' | 'chair' | 'appliance' | 'window';
+export type Rotation = 0 | 90 | 180 | 270;
+export type Direction = 'ne' | 'se' | 'sw' | 'nw';
+export type SpriteSource = 'ne' | 'sw';
+export type WallSide = 'north' | 'west';
+export type FootprintCell = [number, number];
+
+export type OrientationMode = 'directed' | 'axial' | 'invariant';
+export interface TurnaroundSpec { orientation: OrientationMode; sources: Partial<Record<SpriteSource, Direction>>; }
+export interface ResolvedSpriteView { source: SpriteSource; mirrorX: boolean; facing: Direction; }
+export interface SpriteRenderSpec { widthTiles: number; anchors: Record<Rotation, [number, number]>; mirrorX: Record<Rotation, boolean>; sources: Record<Rotation, SpriteSource>; }
+export interface FurnitureItem { id: string; category: FurnitureCategory; name: string; sprites: Record<Rotation, string>; size: [number, number]; footprint: FootprintCell[]; render: SpriteRenderSpec; turnaround?: TurnaroundSpec; }
+export interface PlacedFurniture { asset_id: string; category: FurnitureCategory | string; cell: [number, number]; size: [number, number]; footprint?: FootprintCell[]; rotation: Rotation; wall?: WallSide | null; }
+export interface InteriorTheme { id: string; name: string; wallpaper: string; floor: string; wall: string; wallSide: string; floorBase: string; floorAlt: string; grout: string; }
+
+export const ROTATIONS: Rotation[] = [0, 90, 180, 270];
+export const DIRECTIONS: Direction[] = ['ne', 'se', 'sw', 'nw'];
+export const CATEGORY_LABELS: Record<FurnitureCategory, string> = { sofa: '소파', lighting: '조명', desk: '책상', table: '테이블', chair: '의자', appliance: '가전', window: '창문' };
+export const SPRITE_DIRECTION_BY_ROTATION: Record<Rotation, Direction> = { 0: 'ne', 90: 'se', 180: 'sw', 270: 'nw' };
+export const MIRRORED_DIRECTION: Record<Direction, Direction> = { ne: 'nw', se: 'sw', sw: 'se', nw: 'ne' };
+export const OPPOSITE_DIRECTION: Record<Direction, Direction> = { ne: 'sw', se: 'nw', sw: 'ne', nw: 'se' };
+export const WINDOW_ROTATION_BY_WALL: Record<WallSide, Rotation> = { west: 90, north: 180 };
+export const wallRotation = (wall: WallSide): Rotation => WINDOW_ROTATION_BY_WALL[wall];
+
+export function resolveTurnaroundView(spec: TurnaroundSpec, target: Direction): ResolvedSpriteView {
+  const candidates = (Object.entries(spec.sources) as Array<[SpriteSource, Direction]>).flatMap(([source, facing]) => [
+    { source, mirrorX: false, facing },
+    { source, mirrorX: true, facing: MIRRORED_DIRECTION[facing] },
+  ]);
+  if (spec.orientation === 'invariant') {
+    const first = candidates.find((candidate) => !candidate.mirrorX);
+    if (first) return first;
+  }
+  const exact = candidates.find((candidate) => candidate.facing === target);
+  if (exact) return exact;
+  if (spec.orientation === 'axial') {
+    const opposite = candidates.find((candidate) => candidate.facing === OPPOSITE_DIRECTION[target]);
+    if (opposite) return opposite;
+  }
+  throw new Error(`no ${spec.orientation} sprite view can face ${target}`);
+}
+
+const spriteFiles = import.meta.glob<string>('../../assets/interior/furniture/**/*.png', { eager: true, query: '?url', import: 'default' });
+type AssetMetric = { width: number; height: number; ground: [number, number] };
+const assetMetrics = assetMetricsJson as Record<string, AssetMetric>;
+const masks: Record<string, string[]> = {
+  'sofa.mint-loveseat':['1111','1111'], 'sofa.coral-two-seat':['1111','1111'], 'sofa.lavender-sectional':['11111','11111','00111'], 'sofa.wood-frame':['1111','1111'], 'sofa.navy-modern':['1111','1111'],
+  'lighting.warm-floor':['1'], 'lighting.pastel-table':['1'], 'lighting.retro-stand':['1'], 'lighting.paper-lantern':['1'], 'lighting.modern-arc':['10','11'],
+  'desk.compact-study':['111','010'], 'desk.computer':['1111','0110'], 'desk.wood-writing':['111','010'], 'desk.pastel-vanity':['111','010'], 'desk.metal-workstation':['1111','0100'],
+  'table.round-cafe':['11','11'], 'table.square-two':['11','11'], 'table.wood-four':['1111','1111'], 'table.pastel-breakfast':['11','11'], 'table.dark-modern':['11111','11111'],
+  'chair.mint-cafe':['1'], 'chair.coral-compact':['1'], 'chair.warm-wood':['1'], 'chair.pastel-cream':['1'], 'chair.dark-modern':['1'],
+  'appliance.retro-tv':['111','111'], 'appliance.compact-fridge':['11','11'], 'appliance.washer':['11','11'], 'appliance.stereo':['111','111'], 'appliance.desktop':['111','111'],
+  'window.mint-square':['111'], 'window.cream-wood':['111'], 'window.coral-arch':['111'], 'window.lavender-bay':['11111'], 'window.navy-wide':['11111'],
+};
+const cellsFromMask = (id: string): FootprintCell[] => (masks[id] ?? ['1']).flatMap((row, y) => [...row].flatMap((value, x) => value === '1' ? [[x, y] as FootprintCell] : []));
+const spriteUrl = (category: FurnitureCategory, id: string, direction: SpriteSource) => {
+  const suffix = `/furniture/${category}/${id}/${direction}.png`;
+  const entry = Object.entries(spriteFiles).find(([path]) => path.endsWith(suffix));
+  if (!entry) throw new Error(`missing furniture sprite: ${category}/${id}/${direction}`);
+  return entry[1];
+};
+const metricFor = (category: FurnitureCategory, id: string, direction: SpriteSource): AssetMetric => {
+  const metric = assetMetrics[`${category}/${id}/${direction}`];
+  if (!metric) throw new Error(`missing furniture metric: ${category}/${id}/${direction}`);
+  return metric;
+};
+const directed = (ne: Direction, sw: Direction): TurnaroundSpec => ({ orientation: 'directed', sources: { ne, sw } });
+const axial = (source: SpriteSource, facing: Direction): TurnaroundSpec => ({ orientation: 'axial', sources: { [source]: facing } });
+const invariant = (source: SpriteSource): TurnaroundSpec => ({ orientation: 'invariant', sources: { [source]: 'ne' } });
+
+// Source slots describe files, not their visual direction. These values were calibrated
+// against the actual PNGs; the resolver derives the target view from this metadata.
+const TURNAROUND_BY_ASSET: Record<string, TurnaroundSpec> = {
+  'sofa.mint-loveseat': directed('se', 'nw'),
+  'sofa.coral-two-seat': directed('se', 'nw'),
+  'sofa.lavender-sectional': directed('se', 'nw'),
+  'sofa.wood-frame': directed('se', 'nw'),
+  'sofa.navy-modern': directed('se', 'nw'),
+
+  'lighting.warm-floor': invariant('ne'),
+  'lighting.pastel-table': invariant('ne'),
+  'lighting.retro-stand': invariant('ne'),
+  'lighting.paper-lantern': invariant('ne'),
+  'lighting.modern-arc': axial('ne', 'nw'),
+
+  'desk.compact-study': directed('se', 'ne'),
+  'desk.computer': directed('se', 'ne'),
+  'desk.wood-writing': directed('se', 'ne'),
+  'desk.pastel-vanity': directed('se', 'ne'),
+  'desk.metal-workstation': directed('se', 'ne'),
+
+  'table.round-cafe': axial('sw', 'sw'),
+  'table.square-two': axial('sw', 'sw'),
+  'table.wood-four': axial('sw', 'sw'),
+  'table.pastel-breakfast': axial('sw', 'sw'),
+  'table.dark-modern': axial('sw', 'sw'),
+
+  'chair.mint-cafe': directed('sw', 'ne'),
+  'chair.coral-compact': directed('sw', 'ne'),
+  'chair.warm-wood': directed('sw', 'ne'),
+  'chair.pastel-cream': directed('sw', 'ne'),
+  'chair.dark-modern': directed('sw', 'ne'),
+
+  'appliance.retro-tv': directed('se', 'nw'),
+  'appliance.compact-fridge': directed('se', 'nw'),
+  'appliance.washer': directed('se', 'ne'),
+  'appliance.stereo': directed('sw', 'ne'),
+  'appliance.desktop': directed('sw', 'ne'),
+};
+
+const turnaroundFor = (assetId: string, category: FurnitureCategory): TurnaroundSpec | undefined => {
+  if (category === 'window') return undefined;
+  const spec = TURNAROUND_BY_ASSET[assetId];
+  if (!spec) throw new Error(`missing turnaround metadata: ${assetId}`);
+  return spec;
+};
+const make = (category: FurnitureCategory, rows: Array<[string, string, [number, number], number?]>): FurnitureItem[] =>
+  rows.map(([id, name, size, widthTiles]) => {
+    const assetId = `${category}.${id}`;
+    const turnaround = turnaroundFor(assetId, category);
+    const viewFor = (rotation: Rotation): ResolvedSpriteView => turnaround
+      ? resolveTurnaroundView(turnaround, SPRITE_DIRECTION_BY_ROTATION[rotation])
+      : { source: 'ne', mirrorX: rotation === 90, facing: SPRITE_DIRECTION_BY_ROTATION[rotation] };
+    const anchorFor = (rotation: Rotation): [number, number] => {
+      const { source, mirrorX } = viewFor(rotation);
+      const [x, y] = metricFor(category, id, source).ground;
+      return [mirrorX ? 1 - x : x, y];
+    };
+    return {
+      id: assetId, category, name, size, footprint: cellsFromMask(assetId), turnaround,
+      sprites: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, spriteUrl(category, id, viewFor(rotation).source)])) as Record<Rotation, string>,
+      render: {
+        widthTiles: widthTiles ?? (size[0] + size[1]) / 2,
+        anchors: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, anchorFor(rotation)])) as Record<Rotation, [number, number]>,
+        mirrorX: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, viewFor(rotation).mirrorX])) as Record<Rotation, boolean>,
+        sources: Object.fromEntries(ROTATIONS.map((rotation) => [rotation, viewFor(rotation).source])) as Record<Rotation, SpriteSource>,
+      },
+    };
+  });
+
+export const FURNITURE: FurnitureItem[] = [
+  ...make('sofa', [['mint-loveseat','민트 러브시트',[4,2]],['coral-two-seat','코랄 2인 소파',[4,2]],['lavender-sectional','라벤더 코너 소파',[5,3]],['wood-frame','우드 프레임 소파',[4,2]],['navy-modern','네이비 모던 소파',[4,2]]]),
+  ...make('lighting', [['warm-floor','웜 플로어 램프',[1,1],0.82],['pastel-table','파스텔 테이블 램프',[1,1],0.72],['retro-stand','레트로 스탠드',[1,1],0.9],['paper-lantern','페이퍼 랜턴',[1,1],0.82],['modern-arc','모던 아크 램프',[2,2],1.8]]),
+  ...make('desk', [['compact-study','콤팩트 공부책상',[3,2]],['computer','컴퓨터 책상',[4,2]],['wood-writing','우드 집필책상',[3,2]],['pastel-vanity','파스텔 화장대',[3,2]],['metal-workstation','메탈 워크스테이션',[4,2]]]),
+  ...make('table', [['round-cafe','민트 원형 테이블',[2,2]],['square-two','코랄 사각 테이블',[2,2]],['wood-four','우드 다이닝 테이블',[4,2]],['pastel-breakfast','파스텔 테이블',[2,2]],['dark-modern','다크 모던 테이블',[5,2]]]),
+  ...make('chair', [['mint-cafe','민트 카페 의자',[1,1],1.05],['coral-compact','코랄 의자',[1,1],1.05],['warm-wood','우드 의자',[1,1],1.05],['pastel-cream','파스텔 의자',[1,1],1.05],['dark-modern','다크 모던 의자',[1,1],1.05]]),
+  ...make('appliance', [['retro-tv','레트로 TV',[3,2]],['compact-fridge','콤팩트 냉장고',[2,2]],['washer','세탁기',[2,2]],['stereo','오디오 장식장',[3,2]],['desktop','데스크톱 세트',[3,2]]]),
+  ...make('window', [['mint-square','민트 사각창',[3,2]],['cream-wood','크림 우드창',[3,2]],['coral-arch','코랄 아치창',[3,3]],['lavender-bay','라벤더 베이창',[5,3]],['navy-wide','네이비 와이드창',[5,2]]]),
+];
+export const FURNITURE_BY_ID = new Map(FURNITURE.map((item) => [item.id, item]));
+
+export const THEMES: InteriorTheme[] = [
+  ['lavender-dream','라벤더 드림','#e8e1f4','#d8cce9','#eadbc6','#dfc9ad','#c6ae90'],
+  ['mint-cafe','민트 카페','#dceee5','#c9e1d5','#f1e3bd','#e9d6a7','#c7b588'],
+  ['coral-sunset','코랄 선셋','#f5d2c7','#e9bfb3','#e4b0a5','#d79b91','#bd8279'],
+  ['blue-night','블루 나이트','#7182a7','#5d6e94','#596a88','#4d5d79','#394863'],
+  ['retro-pop','레트로 팝','#ffd783','#f0b962','#e9a865','#d8904d','#ba7137'],
+  ['forest-cabin','포레스트 캐빈','#cbdcbc','#b5cba5','#9b7657','#866247','#654631'],
+  ['mono-studio','모노 스튜디오','#e7e7e4','#d4d4d0','#c7c7c3','#b8b8b4','#999995'],
+  ['peach-bedroom','피치 베드룸','#f6d9ca','#eac4b2','#f1e7d7','#e4d5c1','#c9b79e'],
+  ['cyber-room','사이버 룸','#4b3e6d','#382d59','#313d56','#263148','#38b7ad'],
+  ['sky-loft','스카이 로프트','#cce9f2','#b4d8e5','#dbc69f','#ceb78c','#aa9168'],
+].map(([id,name,wall,wallSide,floorBase,floorAlt,grout]) => ({ id, name, wallpaper:id, floor:`${id}-floor`, wall, wallSide, floorBase, floorAlt, grout })) as InteriorTheme[];
+
+export function themeFor(wallpaper: string, floor: string): InteriorTheme { return THEMES.find((t) => t.wallpaper === wallpaper && t.floor === floor) ?? THEMES[0]; }

@@ -101,4 +101,16 @@ impl RoomsClient {
             .into_json()
             .map_err(Into::into)
     }
+
+    pub fn capabilities(&self) -> Result<Value> {
+        self.req("GET", "/capabilities").call().map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
+    pub fn save_design(&self, room_id: &str, design: Value) -> Result<Value> {
+        self.req("PUT", &format!("/rooms/{room_id}/design"))
+            .send_json(design)
+            .map_err(err_of)?
+            .into_json()
+            .map_err(Into::into)
+    }
 }
