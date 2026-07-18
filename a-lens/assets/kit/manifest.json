@@ -11,11 +11,6 @@
     "desk.d7": { "file": "desk-d7.png", "footprint": [2, 1] },
     "desk.d8": { "file": "desk-d8.png", "footprint": [2, 1] },
     "desk.d9": { "file": "desk-d9.png", "footprint": [2, 1] },
-    "shelf.s1": { "file": "shelf-s1.png", "footprint": [0.5, 1.4] },
-    "shelf.s7": { "file": "shelf-s7.png", "footprint": [0.5, 2.4] },
-    "shelf.s9": { "file": "shelf-s9.png", "footprint": [0.5, 1.4] },
-    "shelf.s11": { "file": "shelf-s11.png", "footprint": [0.5, 1.0] },
-    "board.chalk-green": { "file": "board-chalk-green.png", "mount": "board" },
     "shell.room": {
       "file": "shell-room.png",
       "mount": "shell-room",
