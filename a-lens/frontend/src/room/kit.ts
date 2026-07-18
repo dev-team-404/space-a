@@ -5,7 +5,7 @@
 
 import { Assets, Texture } from 'pixi.js'
 
-export type KitMount = 'floor' | 'wall-right' | 'shell-floor' | 'shell-wall' | 'shell-room' | 'board'
+export type KitMount = 'floor' | 'wall-right' | 'shell-floor' | 'shell-wall' | 'shell-room' | 'board' | 'character'
 
 /** shell-room 캘리브레이션 — 트리밍된 이미지 픽셀 좌표 기준 */
 export type KitShellCal = {

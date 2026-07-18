@@ -1,9 +1,19 @@
 // 만든 방 저장소 — 지금은 localStorage. 방 공유가 필요해지면 backend 저장으로 승격한다.
 
-import { resolveDeskId, resolveRoomId } from './room/catalog'
-import type { RoomConfig } from './room/types'
+import { resolveCharacterId, resolveDeskId, resolveRoomId } from './room/catalog'
+import type { CharacterId, RoomConfig } from './room/types'
 
 const KEY = 'a-lens.rooms.v1'
+const CHAR_KEY = 'a-lens.character.v1'
+
+/** 내 캐릭터 — 전역 설정(방과 무관). 어느 방에 들어가든 에이전트 자리를 이 스프라이트로 그린다. */
+export function loadCharacter(): CharacterId {
+  return resolveCharacterId(localStorage.getItem(CHAR_KEY) ?? undefined)
+}
+
+export function saveCharacter(id: CharacterId): void {
+  localStorage.setItem(CHAR_KEY, id)
+}
 
 export function loadRooms(): RoomConfig[] {
   try {

@@ -4,10 +4,10 @@
 
 import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js'
 import type { SpaceAgent, SpaceIssue } from '../api'
-import { DESKS, resolveDeskId, resolveRoomId } from './catalog'
+import { DESKS, resolveCharacterId, resolveDeskId, resolveRoomId } from './catalog'
 import { TILE_W, TILE_H, isoX, isoY, depth } from './iso'
 import { kitPiece, kitPieceScale } from './kit'
-import type { RoomConfig } from './types'
+import type { CharacterId, RoomConfig } from './types'
 
 export type RoomSceneCallbacks = {
   onAgentTap?: (agent: SpaceAgent) => void
@@ -21,6 +21,8 @@ export type RoomSceneData = {
   agents: SpaceAgent[]
   issues: SpaceIssue[]
   knowledgeCount: number
+  /** 내 캐릭터 — 에이전트 자리를 이 스프라이트로 그린다. 없으면 로봇 폴백. */
+  character?: CharacterId
 }
 
 /** 빌더 프리뷰용 샘플 — 실데이터 fetch 없이 방 모양만 확인 */
@@ -34,6 +36,7 @@ export const PREVIEW_DATA: RoomSceneData = {
     { issue_id: 'i2', title: '인증서 문제', status: 'resolved', opened_by: '', timeline: [] },
   ],
   knowledgeCount: 12,
+  character: 'c1',
 }
 
 const ROBOT_COLORS = [0xd9a441, 0x7fb3d5, 0xa3be8c, 0xd08770, 0xb48ead, 0x8fbcbb]
@@ -200,23 +203,38 @@ export function buildRoomScene(
     root.addChild(dg)
   })
 
-  // ── 로봇 — 책상에 배치하고, 자리가 모자라면 방 앞쪽에 서 있음 ──
+  // ── 에이전트 — 책상에 배치하고, 자리가 모자라면 방 앞쪽에 서 있음 ──
+  // 내 캐릭터(char.cN)가 선택돼 있으면 그 스프라이트로, 없으면 Graphics 로봇으로 그린다.
   const nameStyle = new TextStyle({ fill: 0xe8eaed, fontSize: 11 })
+  const charKit = data.character ? kitPiece(`char.${resolveCharacterId(data.character)}`) : undefined
+  const CHAR_SCALE = 1.0 // kitPieceScale 위에 곱하는 배수 — 책상(1.7배)과 어울리게, 의자에 앉은 크기
   const makeRobot = (agent: SpaceAgent, k: number, rgx: number, rgy: number) => {
     const robot = new Container()
     const [rx, ry] = pt(rgx, rgy)
     robot.position.set(rx, ry)
     robot.zIndex = depth(rgx, rgy)
-    const body = ROBOT_COLORS[k % ROBOT_COLORS.length]
-    const rg = new Graphics()
-    rg.ellipse(0, 2, 16, 7).fill({ color: 0x000000, alpha: 0.25 }) // 그림자
-    rg.roundRect(-13, -34, 26, 30, 9).fill(body) // 몸통
-    rg.roundRect(-10, -30, 20, 10, 5).fill(0x23262b) // 바이저
-    rg.circle(-4, -25, 2.2).fill(0x9fe8ff) // 눈
-    rg.circle(4, -25, 2.2).fill(0x9fe8ff)
-    rg.moveTo(0, -34).lineTo(0, -41).stroke({ color: shade(body, 0.7), width: 2 }) // 안테나
-    rg.circle(0, -43, 3).fill(agent.status === 'working' ? 0x9fe86a : 0x767d87)
-    robot.addChild(rg)
+    // 캐릭터 발끝이 격자 지점(원점)에 닿도록 앵커 하단 중앙. topY = 캐릭터 머리 위 y(음수).
+    let topY = -34
+    if (charKit && charKit.mount === 'character') {
+      const s = kitPieceScale() * CHAR_SCALE
+      const sp = new Sprite(charKit.texture)
+      sp.anchor.set(0.5, 1)
+      sp.scale.set(s)
+      robot.addChild(sp)
+      topY = -charKit.texture.height * s
+    } else {
+      const body = ROBOT_COLORS[k % ROBOT_COLORS.length]
+      const rg = new Graphics()
+      rg.ellipse(0, 2, 16, 7).fill({ color: 0x000000, alpha: 0.25 }) // 그림자
+      rg.roundRect(-13, -34, 26, 30, 9).fill(body) // 몸통
+      rg.roundRect(-10, -30, 20, 10, 5).fill(0x23262b) // 바이저
+      rg.circle(-4, -25, 2.2).fill(0x9fe8ff) // 눈
+      rg.circle(4, -25, 2.2).fill(0x9fe8ff)
+      rg.moveTo(0, -34).lineTo(0, -41).stroke({ color: shade(body, 0.7), width: 2 }) // 안테나
+      rg.circle(0, -43, 3).fill(agent.status === 'working' ? 0x9fe86a : 0x767d87)
+      robot.addChild(rg)
+      topY = -43
+    }
     const nameTag = new Text({ text: agent.name, style: nameStyle })
     nameTag.position.set(-nameTag.width / 2, 6)
     // 앞줄 책상 스프라이트 위에서도 읽히도록 반투명 필 배경
@@ -224,14 +242,15 @@ export function buildRoomScene(
       .roundRect(-nameTag.width / 2 - 5, 4, nameTag.width + 10, 17, 8)
       .fill({ color: 0x0d1220, alpha: 0.7 })
     robot.addChild(namePill, nameTag)
-    // 작업 중이면 말풍선 점 표시
+    // 작업 중이면 머리 위에 말풍선 점 표시
     if (agent.status === 'working') {
+      const by = topY - 6
       const bub = new Graphics()
-      bub.roundRect(12, -52, 30, 16, 8).fill(0xf0e6d2)
-      bub.poly([16, -37, 24, -37, 15, -30]).fill(0xf0e6d2)
-      bub.circle(20, -44, 1.8).fill(0x555)
-      bub.circle(27, -44, 1.8).fill(0x555)
-      bub.circle(34, -44, 1.8).fill(0x555)
+      bub.roundRect(12, by - 16, 30, 16, 8).fill(0xf0e6d2)
+      bub.poly([16, by - 1, 24, by - 1, 15, by + 6]).fill(0xf0e6d2)
+      bub.circle(20, by - 8, 1.8).fill(0x555)
+      bub.circle(27, by - 8, 1.8).fill(0x555)
+      bub.circle(34, by - 8, 1.8).fill(0x555)
       robot.addChild(bub)
     }
     robot.eventMode = 'static'
@@ -239,9 +258,12 @@ export function buildRoomScene(
     robot.on('pointertap', () => cb.onAgentTap?.(agent))
     root.addChild(robot)
   }
+  // 캐릭터는 의자에 앉은 위치(책상 쪽으로 더 붙이고 화면 오른쪽=의자 쪽으로), 로봇 폴백은 책상 앞.
+  const seatDx = charKit ? 2.3 : 1
+  const seatDy = charKit ? 0.35 : 1.6
   data.agents.forEach((agent, k) => {
     const slot = slots[k]
-    if (slot) makeRobot(agent, k, slot.gx + 1, slot.gy + 1.6) // 책상 앞에 앉음
+    if (slot) makeRobot(agent, k, slot.gx + seatDx, slot.gy + seatDy) // 책상 의자 자리
     else makeRobot(agent, k, dx + 1.5 + ((k - slots.length) % 5) * 1.7, dy + LH - 1.2) // 서 있음
   })
 

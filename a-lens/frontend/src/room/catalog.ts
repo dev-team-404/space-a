@@ -1,7 +1,23 @@
 // 부품 카탈로그 — 방 배경 프리셋 5종 + 그 위에 얹는 책상 9종.
 // 방(벽·바닥·책장·칠판)은 통짜 배경 이미지가 그리므로, 남은 선택지는 배경과 책상뿐이다.
 
-import type { DeskChoice, DeskId, RoomPresetId, VariantOption } from './types'
+import type { CharacterId, DeskChoice, DeskId, RoomPresetId, VariantOption } from './types'
+
+/** 내 캐릭터 15종 — char-cN.png. 방 안 에이전트 자리를 이 스프라이트로 그린다. */
+export const CHARACTER_IDS: CharacterId[] = [
+  'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9', 'c10', 'c11', 'c12', 'c13', 'c14', 'c15',
+]
+
+export function resolveCharacterId(v: string | undefined): CharacterId {
+  return v && CHARACTER_IDS.includes(v as CharacterId) ? (v as CharacterId) : 'c1'
+}
+
+export const CHARACTER_OPTIONS: VariantOption<CharacterId>[] = CHARACTER_IDS.map((id, i) => ({
+  id,
+  label: `캐릭터 ${i + 1}`,
+  swatch: '#3a3f46',
+  thumb: `/assets/kit/char-${id}.png`,
+}))
 
 /** 방 배경 프리셋 5종 — 통짜 이미지(벽·바닥·책장·칠판 포함). 이 위에 책상만 얹는다. */
 export const ROOM_PRESET_IDS: RoomPresetId[] = ['r1', 'r2', 'r3', 'r4', 'r5']

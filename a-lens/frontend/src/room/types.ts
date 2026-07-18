@@ -15,6 +15,11 @@ export type BoardId = 'chalk-green' | 'chalk-black' | 'glass'
 export type DecoId = 'plant' | 'water-cooler' | 'rug' | 'string-lights'
 /** 완성된 방 배경 5종 — room-preset-N.png 통짜 이미지. 벽·바닥·책장·칠판이 다 그려져 있다. */
 export type RoomPresetId = 'r1' | 'r2' | 'r3' | 'r4' | 'r5'
+/** 내 캐릭터 15종 — char-cN.png. 방 안 에이전트(로봇 자리)를 이 스프라이트로 그린다. */
+export type CharacterId =
+  | 'c1' | 'c2' | 'c3' | 'c4' | 'c5'
+  | 'c6' | 'c7' | 'c8' | 'c9' | 'c10'
+  | 'c11' | 'c12' | 'c13' | 'c14' | 'c15'
 
 /** 사용자가 방 만들기에서 고른 것 전부. localStorage에 이대로 저장된다. */
 export type RoomConfig = {
