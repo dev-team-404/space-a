@@ -2,10 +2,11 @@
 // 이미지 캘리브레이션 없음: 가구는 전부 Graphics 프리미티브 아이소 박스.
 // 스프라이트 에셋이 생기면 drawIsoBox 자리가 Sprite로 바뀌고 좌표계는 그대로 유지된다.
 
-import { Container, Graphics, Text, TextStyle } from 'pixi.js'
+import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js'
 import type { SpaceAgent, SpaceIssue } from '../api'
 import { BOARDS, DESKS, FLOORS, WALLPAPERS } from './catalog'
 import { TILE_W, TILE_H, WALL_H, isoX, isoY, depth } from './iso'
+import { kitPiece, kitPieceScale } from './kit'
 import type { RoomConfig } from './types'
 
 export type RoomSceneCallbacks = {
@@ -66,6 +67,40 @@ function drawIsoBox(
   g.poly([ax, ay, bx, by, cx, cy, dx, dyv]).fill(colors.top)
 }
 
+/**
+ * 킷 스프라이트 배치 — 있으면 Sprite를 얹고 true, 없으면 false(호출부가 Graphics 폴백).
+ * floor 부품 앵커: footprint 다이아몬드의 남쪽(앞) 꼭짓점 = 이미지 하단 중앙.
+ */
+function placeKitSprite(root: Container, key: string, gx: number, gy: number, zIndex: number): Sprite | null {
+  const piece = kitPiece(key)
+  if (!piece || piece.mount !== 'floor') return null
+  const [w, d] = piece.footprint
+  const sp = new Sprite(piece.texture)
+  sp.anchor.set(0.5, 1)
+  const s = kitPieceScale()
+  sp.scale.set(s)
+  const [x, y] = pt(gx + w, gy + d)
+  sp.position.set(x + piece.offset[0] * s, y + piece.offset[1] * s)
+  sp.zIndex = zIndex
+  root.addChild(sp)
+  return sp
+}
+
+/** wall-right 부품(칠판 등) — 오른쪽 뒷벽(gy=0 면) 원근으로 미리 그려진 에셋. 앵커: 이미지 좌측 하단. */
+function placeWallSprite(root: Container, key: string, gxStart: number, bottomPx: number, zIndex: number): Sprite | null {
+  const piece = kitPiece(key)
+  if (!piece || piece.mount !== 'wall-right') return null
+  const sp = new Sprite(piece.texture)
+  sp.anchor.set(0, 1)
+  const s = kitPieceScale()
+  sp.scale.set(s)
+  const [x, y] = pt(gxStart, 0, -bottomPx)
+  sp.position.set(x + piece.offset[0] * s, y + piece.offset[1] * s)
+  sp.zIndex = zIndex
+  root.addChild(sp)
+  return sp
+}
+
 function shade(color: number, f: number): number {
   const r = Math.min(255, Math.round(((color >> 16) & 0xff) * f))
   const g = Math.min(255, Math.round(((color >> 8) & 0xff) * f))
@@ -101,7 +136,11 @@ export function buildRoomScene(
   const desk = DESKS[config.desk]
   const board = BOARDS[config.board]
 
-  const deskCount = Math.max(1, data.agents.length)
+  // 책상 수 — 'auto'(또는 구버전 저장분)면 에이전트 수를 따라감
+  const deskCount = Math.max(
+    1,
+    config.desks == null || config.desks === 'auto' ? data.agents.length : config.desks,
+  )
   const { slots, W, H } = layoutDesks(deskCount)
 
   // ── 바닥 ──
@@ -137,20 +176,24 @@ export function buildRoomScene(
   root.addChild(wallsG)
 
   // ── 칠판 (오른쪽 뒷벽, gy=0 면) — 클릭 → 이슈 패널 ──
-  const boardG = new Graphics()
-  boardG.zIndex = -890
   const bA = 1.2 // 벽을 따라 시작 cell
   const bB = Math.min(W - 1, bA + 4.6)
   const bTop = WALL_H - 18
   const bBot = 38
-  boardG
-    .poly([...pt(bA, 0, -bTop), ...pt(bB, 0, -bTop), ...pt(bB, 0, -bBot), ...pt(bA, 0, -bBot)])
-    .fill(board.face)
-    .stroke({ color: board.frame, width: 5 })
-  boardG.eventMode = 'static'
-  boardG.cursor = 'pointer'
-  boardG.on('pointertap', () => cb.onBoardTap?.())
-  root.addChild(boardG)
+  const boardSprite = placeWallSprite(root, `board.${config.board}`, bA, bBot, -890)
+  const boardHit: Container = boardSprite ?? new Graphics()
+  if (!boardSprite) {
+    const boardG = boardHit as Graphics
+    boardG.zIndex = -890
+    boardG
+      .poly([...pt(bA, 0, -bTop), ...pt(bB, 0, -bTop), ...pt(bB, 0, -bBot), ...pt(bA, 0, -bBot)])
+      .fill(board.face)
+      .stroke({ color: board.frame, width: 5 })
+    root.addChild(boardG)
+  }
+  boardHit.eventMode = 'static'
+  boardHit.cursor = 'pointer'
+  boardHit.on('pointertap', () => cb.onBoardTap?.())
 
   // 칠판 내용 — 이슈 상위 3건 (벽면 기울기에 맞춰 skew)
   const wallSkew = Math.atan2(TILE_H / 2, TILE_W / 2)
@@ -180,27 +223,31 @@ export function buildRoomScene(
   }
 
   // ── 책장 (왼쪽 뒷벽 앞) — 클릭 → 지식 패널 ──
-  const shelfG = new Graphics()
-  const shelfDepth = 0.7
-  drawIsoBox(shelfG, 0.15, 1.2, shelfDepth, 2.4, 105, {
-    top: shade(desk.top, 0.9),
-    left: shade(desk.side, 0.95),
-    right: desk.side,
-  })
-  // 책 등 — 오른쪽(남동향) 면에 줄무늬
-  const bookColors = [0xa3be8c, 0xd08770, 0x7fb3d5, 0xd9a441, 0xb48ead]
-  for (let row = 0; row < 3; row++) {
-    for (let i = 0; i < 5; i++) {
-      const t = 0.35 + row * 0.62
-      const [sx, sy] = pt(0.15 + shelfDepth, 1.35 + i * 0.42, -(105 - 14 - row * 30))
-      shelfG.poly([sx, sy, sx + 7, sy + 3.5, sx + 7, sy + 21.5, sx, sy + 18]).fill(bookColors[(i + row + Math.floor(t)) % 5])
+  const shelfSprite = placeKitSprite(root, 'shelf.default', 0.15, 1.2, depth(1, 2))
+  const shelfHit: Container = shelfSprite ?? new Graphics()
+  if (!shelfSprite) {
+    const shelfG = shelfHit as Graphics
+    const shelfDepth = 0.7
+    drawIsoBox(shelfG, 0.15, 1.2, shelfDepth, 2.4, 105, {
+      top: shade(desk.top, 0.9),
+      left: shade(desk.side, 0.95),
+      right: desk.side,
+    })
+    // 책 등 — 오른쪽(남동향) 면에 줄무늬
+    const bookColors = [0xa3be8c, 0xd08770, 0x7fb3d5, 0xd9a441, 0xb48ead]
+    for (let row = 0; row < 3; row++) {
+      for (let i = 0; i < 5; i++) {
+        const t = 0.35 + row * 0.62
+        const [sx, sy] = pt(0.15 + shelfDepth, 1.35 + i * 0.42, -(105 - 14 - row * 30))
+        shelfG.poly([sx, sy, sx + 7, sy + 3.5, sx + 7, sy + 21.5, sx, sy + 18]).fill(bookColors[(i + row + Math.floor(t)) % 5])
+      }
     }
+    shelfG.zIndex = depth(1, 2)
+    root.addChild(shelfG)
   }
-  shelfG.zIndex = depth(1, 2)
-  shelfG.eventMode = 'static'
-  shelfG.cursor = 'pointer'
-  shelfG.on('pointertap', () => cb.onShelfTap?.())
-  root.addChild(shelfG)
+  shelfHit.eventMode = 'static'
+  shelfHit.cursor = 'pointer'
+  shelfHit.on('pointertap', () => cb.onShelfTap?.())
 
   const countStyle = new TextStyle({ fill: 0xf0e6d2, fontSize: 12, fontWeight: 'bold' })
   const shelfBadge = new Text({ text: `지식 ${data.knowledgeCount}`, style: countStyle })
@@ -209,19 +256,22 @@ export function buildRoomScene(
   shelfBadge.zIndex = depth(1, 2) + 0.1
   root.addChild(shelfBadge)
 
-  // ── 장식 ──
+  // ── 장식 (킷 스프라이트 우선, 없으면 Graphics 폴백) ──
   if (config.deco.includes('rug')) {
-    const rug = new Graphics()
-    const rc = { gx: W * 0.62, gy: H * 0.62 }
-    rug
-      .poly([...pt(rc.gx - 1.4, rc.gy - 1.4), ...pt(rc.gx + 1.4, rc.gy - 1.4), ...pt(rc.gx + 1.4, rc.gy + 1.4), ...pt(rc.gx - 1.4, rc.gy + 1.4)])
-      .fill({ color: 0xb0524a, alpha: 0.9 })
-      .stroke({ color: 0x8a3e38, width: 3 })
-    rug.zIndex = -800
-    root.addChild(rug)
+    const rc = { gx: W * 0.62 - 1.4, gy: H * 0.62 - 1.4 }
+    if (!placeKitSprite(root, 'deco.rug', rc.gx, rc.gy, -800)) {
+      const rug = new Graphics()
+      rug
+        .poly([...pt(rc.gx, rc.gy), ...pt(rc.gx + 2.8, rc.gy), ...pt(rc.gx + 2.8, rc.gy + 2.8), ...pt(rc.gx, rc.gy + 2.8)])
+        .fill({ color: 0xb0524a, alpha: 0.9 })
+        .stroke({ color: 0x8a3e38, width: 3 })
+      rug.zIndex = -800
+      root.addChild(rug)
+    }
   }
   if (config.deco.includes('plant')) {
     const plantAt = (gx: number, gy: number) => {
+      if (placeKitSprite(root, 'deco.plant', gx, gy, depth(gx, gy))) return
       const p = new Graphics()
       drawIsoBox(p, gx, gy, 0.55, 0.55, 16, { top: 0x8a5b2e, left: 0x6b4423, right: 0x7a4e28 })
       const [px, py] = pt(gx + 0.28, gy + 0.28, -16)
@@ -235,14 +285,16 @@ export function buildRoomScene(
     plantAt(0.6, H - 1.6)
   }
   if (config.deco.includes('water-cooler')) {
-    const wc = new Graphics()
     const wgx = W - 1.3
     const wgy = 1.0
-    drawIsoBox(wc, wgx, wgy, 0.6, 0.6, 46, { top: 0xc9d2d8, left: 0xa9b4bc, right: 0xb8c4cc })
-    const [wx, wy] = pt(wgx + 0.3, wgy + 0.3, -46)
-    wc.ellipse(wx, wy - 10, 10, 12).fill({ color: 0x5b9bd5, alpha: 0.9 })
-    wc.zIndex = depth(wgx, wgy)
-    root.addChild(wc)
+    if (!placeKitSprite(root, 'deco.water-cooler', wgx, wgy, depth(wgx, wgy))) {
+      const wc = new Graphics()
+      drawIsoBox(wc, wgx, wgy, 0.6, 0.6, 46, { top: 0xc9d2d8, left: 0xa9b4bc, right: 0xb8c4cc })
+      const [wx, wy] = pt(wgx + 0.3, wgy + 0.3, -46)
+      wc.ellipse(wx, wy - 10, 10, 12).fill({ color: 0x5b9bd5, alpha: 0.9 })
+      wc.zIndex = depth(wgx, wgy)
+      root.addChild(wc)
+    }
   }
   if (config.deco.includes('string-lights')) {
     const lights = new Graphics()
@@ -261,13 +313,9 @@ export function buildRoomScene(
     root.addChild(lights)
   }
 
-  // ── 책상 + 로봇 (에이전트 수만큼) ──
-  const nameStyle = new TextStyle({ fill: 0xe8eaed, fontSize: 11 })
-  data.agents.forEach((agent, k) => {
-    const slot = slots[k]
-    if (!slot) return
-    const { gx, gy } = slot
-
+  // ── 책상 (deskCount만큼 — 에이전트보다 많으면 빈 책상) ──
+  slots.forEach(({ gx, gy }) => {
+    if (placeKitSprite(root, `desk.${config.desk}`, gx, gy, depth(gx + 1, gy + 0.5))) return
     const dg = new Graphics()
     drawIsoBox(dg, gx, gy, 2, 1, 34, { top: desk.top, left: shade(desk.side, 0.9), right: desk.side })
     // 모니터
@@ -276,10 +324,11 @@ export function buildRoomScene(
     dg.poly([mx - 11, my - 26, mx + 11, my - 15, mx + 11, my - 1, mx - 11, my - 12]).fill(0x3a4550)
     dg.zIndex = depth(gx + 1, gy + 0.5)
     root.addChild(dg)
+  })
 
-    // 로봇 — 책상 앞(gy+1.6)에 앉음. 클릭 → 에이전트 패널
-    const rgx = gx + 1
-    const rgy = gy + 1.6
+  // ── 로봇 — 책상에 배치하고, 자리가 모자라면 방 앞쪽에 서 있음 ──
+  const nameStyle = new TextStyle({ fill: 0xe8eaed, fontSize: 11 })
+  const makeRobot = (agent: SpaceAgent, k: number, rgx: number, rgy: number) => {
     const robot = new Container()
     const [rx, ry] = pt(rgx, rgy)
     robot.position.set(rx, ry)
@@ -311,6 +360,11 @@ export function buildRoomScene(
     robot.cursor = 'pointer'
     robot.on('pointertap', () => cb.onAgentTap?.(agent))
     root.addChild(robot)
+  }
+  data.agents.forEach((agent, k) => {
+    const slot = slots[k]
+    if (slot) makeRobot(agent, k, slot.gx + 1, slot.gy + 1.6) // 책상 앞에 앉음
+    else makeRobot(agent, k, 1.5 + ((k - slots.length) % 5) * 1.7, H - 1.6) // 서 있음
   })
 
   return root

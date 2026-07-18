@@ -17,6 +17,8 @@ export type RoomConfig = {
   desk: DeskId
   board: BoardId
   deco: DecoId[]
+  /** 책상 수 — 'auto'면 에이전트 수를 따라감. 이전 버전 저장분에는 없을 수 있다. */
+  desks?: 'auto' | number
   created_at: string
 }
 

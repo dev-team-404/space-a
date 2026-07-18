@@ -1,0 +1,5 @@
+{
+  "_docs": "부품 PNG 등록 파일 — 제작 규격은 README.md. 등록된 부품만 Sprite로 그려지고 나머지는 Graphics 폴백.",
+  "scale": 0.25,
+  "pieces": {}
+}

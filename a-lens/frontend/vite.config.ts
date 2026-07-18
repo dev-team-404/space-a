@@ -6,6 +6,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': 'http://localhost:8600',
+      '/assets': 'http://localhost:8600', // 스프라이트 킷·배경 이미지 (backend가 a-lens/assets 서빙)
     },
   },
 })

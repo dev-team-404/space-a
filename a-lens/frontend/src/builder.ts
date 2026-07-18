@@ -27,6 +27,7 @@ const DEFAULTS: Omit<RoomConfig, 'space_id' | 'space_name' | 'created_at'> = {
   desk: 'oak',
   board: 'chalk-green',
   deco: ['plant', 'string-lights'],
+  desks: 'auto',
 }
 
 export async function openBuilder(opts: BuilderOptions): Promise<void> {
@@ -55,6 +56,8 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
           <select id="b-space" ${opts.initial ? 'disabled' : ''}></select>
           <div id="b-space-note" class="field-note"></div>
           <div id="b-groups"></div>
+          <label class="field-label">책상 수</label>
+          <div id="b-desks" class="chip-row"></div>
           <label class="field-label">장식</label>
           <div id="b-deco" class="chip-row"></div>
         </div>
@@ -119,6 +122,24 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
   addGroup('바닥', FLOOR_OPTIONS, () => state.floor, (id: FloorId) => (state.floor = id))
   addGroup('책상', DESK_OPTIONS, () => state.desk, (id: DeskId) => (state.desk = id))
   addGroup('칠판', BOARD_OPTIONS, () => state.board, (id: BoardId) => (state.board = id))
+
+  // ── 책상 수 (자동 = 에이전트 수 따라감) ──
+  const desksRow = host.querySelector<HTMLElement>('#b-desks')!
+  const deskChoices: ('auto' | number)[] = ['auto', 1, 2, 3, 4, 5, 6, 7, 8]
+  for (const choice of deskChoices) {
+    const chip = document.createElement('button')
+    chip.className = 'chip'
+    chip.textContent = choice === 'auto' ? '자동 (에이전트 수)' : String(choice)
+    chip.dataset.desks = String(choice)
+    chip.addEventListener('click', () => {
+      state.desks = choice
+      desksRow.querySelectorAll('.chip').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.desks === String(choice)))
+      renderPreview()
+    })
+    desksRow.appendChild(chip)
+  }
+  const currentDesks = state.desks ?? 'auto'
+  desksRow.querySelectorAll('.chip').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.desks === String(currentDesks)))
 
   // ── 장식 토글 ──
   const decoRow = host.querySelector<HTMLElement>('#b-deco')!

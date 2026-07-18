@@ -4,6 +4,7 @@
 import { Application, Container } from 'pixi.js'
 import { fetchLobby, fetchSpace, type LobbyFloor, type SpaceView } from './api'
 import { openBuilder } from './builder'
+import { loadKit } from './room/kit'
 import { buildRoomScene } from './room/renderer'
 import type { RoomConfig } from './room/types'
 import { deleteRoom, getRoom, loadRooms, saveRoom } from './store'
@@ -291,4 +292,5 @@ function route() {
   else void renderHome()
 }
 window.addEventListener('hashchange', route)
-route()
+// 스프라이트 킷(있으면)을 먼저 로드하고 첫 라우팅 — 없으면 Graphics 폴백
+void loadKit().then(route)
