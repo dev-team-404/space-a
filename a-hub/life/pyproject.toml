@@ -1,7 +1,7 @@
 [project]
 name = "space-a-room-server"
 version = "0.1.0"
-description = "SPACE-A 방 방문 서버 — 개인 방·에이전트 위치·방 디자인 (hub와 별개 프로세스)"
+description = "SPACE-A A-Hub Life 서버 — 개인 방·에이전트 위치·방 디자인 (a-hub/work와 별개 프로세스)"
 requires-python = ">=3.12"
 dependencies = ["fastapi>=0.115", "uvicorn>=0.30"]
 

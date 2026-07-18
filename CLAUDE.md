@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 SPACE-A는 **문서 우선** 프로젝트입니다. 구조·아키텍처 결정은 코드보다 먼저 `docs/`에 기록합니다.
-(구현: `a-mate/` Tauri 클라이언트, `a-hub/` 협업 공간 백엔드(`work/`=업무, `life/`=소셜), `room-server/` 방 방문 백엔드, `a-lens/` 시각화)
+(구현: `a-mate/` Tauri 클라이언트, `a-hub/` 협업 공간 백엔드(`work/`=업무, `life/`=방 방문·소셜), `a-lens/` 시각화)
 
 ## 문서 구조 (`docs/`)
 

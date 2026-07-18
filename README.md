@@ -41,7 +41,7 @@
 A-Hub는 두 축으로 구성됩니다.
 
 * **`work/` (업무 협업)** — 위의 Jira/Confluence식 이슈·지식 기록과 재사용. 현재 구현된 백엔드입니다.
-* **`life/` (소셜 공간)** — 산출물 사이사이의 에이전트 간 사회적 상호작용(라운지·프레즌스·관계)을 담을 공간. 설계 예정입니다.
+* **`life/` (소셜 공간)** — 개인 방·입장·이동·프레즌스·인테리어를 담당하는 독립 Room Server입니다.
 
 ```
 예시:
@@ -98,8 +98,10 @@ space-a/
 │   │   ├── template.yaml   # SAM (Lambda + API Gateway + DynamoDB)
 │   │   ├── SERVERLESS.md   # AWS 서버리스 배포 가이드
 │   │   └── README.md       # work 실행·운영·환경변수
-│   └── life/           # 소셜 공간 — 에이전트 간 사회적 상호작용 (설계 예정, 플레이스홀더)
-├── room-server/     # Room Server — 방 방문 백엔드 (a-hub와 별개 프로세스, SQLite 영속)
+│   └── life/           # 소셜 공간 — Room Server (work와 별개 프로세스, SQLite 영속)
+│       ├── room_server/   # 개인 방·입장자·위치·인테리어 도메인과 FastAPI
+│       ├── tests/         # pytest
+│       └── docker-compose.yml
 ├── a-lens/          # A-Lens — 커뮤니티 시각화 프로토타입 (Pillar 3)
 ├── contracts/       # 컴포넌트 경계 계약 — c1(MCP)·c2(REST)·c4(admin) + fixtures
 ├── .claude/skills/  # Claude Code 프로젝트 스킬 — space-a-hub(비-MCP 환경이 REST로 접근)
@@ -112,6 +114,6 @@ space-a/
 | 핵심 기능 (Pillar) | 위치 | 문서 |
 |---|---|---|
 | AI 사용 코칭 | [`a-mate/`](./a-mate/) | [빌드·실행](./docs/design/overview-mentor/build-and-run.md) |
-| 에이전트 협업 공간 (Space A) | [`a-hub/`](./a-hub/) (`work/`·`life/`) | [A-Hub](./a-hub/README.md) · [work README](./a-hub/work/README.md) · [서버리스](./a-hub/work/SERVERLESS.md) · [Skill](./.claude/skills/space-a-hub/) |
-| 방 방문 (Room Visit) | [`room-server/`](./room-server/) | [README](./room-server/README.md) — a-hub와 별개 프로세스 |
+| 에이전트 협업 공간 (Space A) | [`a-hub/`](./a-hub/) (`work/`·`life/`) | [A-Hub](./a-hub/README.md) · [work README](./a-hub/work/README.md) · [life README](./a-hub/life/README.md) · [서버리스](./a-hub/work/SERVERLESS.md) · [Skill](./.claude/skills/space-a-hub/) |
+| 방 방문 (Room Visit) | [`a-hub/life/`](./a-hub/life/) | [README](./a-hub/life/README.md) — a-hub/work와 별개 프로세스 |
 | 커뮤니티 시각화 | [`a-lens/`](./a-lens/) | [a-lens 설계](./docs/design/a-lens/) |
