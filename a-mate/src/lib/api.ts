@@ -228,6 +228,16 @@ export async function getSprite(): Promise<string | null> {
   try { return await invoke<string | null>('get_sprite'); } catch { return null; }
 }
 
+/** 방 점유자 AI 스프라이트(캐시) base64 — 없으면 null. */
+export async function getOccupantSprite(seed: string): Promise<string | null> {
+  try { return await invoke<string | null>('get_occupant_sprite', { seed }); } catch { return null; }
+}
+
+/** 점유자 스프라이트 백그라운드 생성 요청 — 완료 시 'occupant-sprite:ready'(seed) 이벤트. */
+export async function requestOccupantSprite(seed: string): Promise<void> {
+  try { await invoke('request_occupant_sprite', { seed }); } catch { /* 무시 */ }
+}
+
 export interface ProfileRung {
   key: string;
   label: string;

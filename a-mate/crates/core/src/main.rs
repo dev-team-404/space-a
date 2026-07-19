@@ -239,6 +239,19 @@ fn main() -> Result<()> {
             let q = args.get(2).map(|s| s.as_str()).unwrap_or("이번 주 깊게 봐줘");
             cmd_coach_chat(&store, q)?;
         }
+        "occ-sprite" => {
+            // 방 점유자 스프라이트 생성 검증: seed → PNG 파일
+            let seed = args.get(2).map(|s| s.as_str()).unwrap_or("demo|guest");
+            match agent_mentor::sprite::SpriteConfig::from_env() {
+                Some(cfg) => {
+                    let png = agent_mentor::sprite::sprite_for_seed(&cfg, seed)?;
+                    let name = format!("occ-{}.png", agent_mentor::sprite::seed_cache_name(seed));
+                    std::fs::write(&name, &png)?;
+                    println!("occ-sprite: seed={seed} → {name} ({} bytes)", png.len());
+                }
+                None => println!("occ-sprite: 이미지 모델 미설정 (AGENT_MENTOR_ENGINE_URL 필요)"),
+            }
+        }
         "ingest" => cmd_ingest(&store)?,
         "inventory" => cmd_inventory(&mut store)?,
         "rules" => cmd_rules(&store)?,

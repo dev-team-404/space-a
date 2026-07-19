@@ -116,6 +116,22 @@ pub fn character_description(spec: &crate::mascot::RobotSpec, identity: &str) ->
     )
 }
 
+/// 시드 → 캐시 파일명(hex 12자). 시드에 `|` 등 파일명 불가 문자가 있어 해시로 안전화.
+pub fn seed_cache_name(seed: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let d = Sha256::digest(seed.as_bytes());
+    format!("{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}", d[0], d[1], d[2], d[3], d[4], d[5])
+}
+
+/// 임의 시드(방 점유자의 mascot_seed 등)로 스프라이트 PNG를 생성.
+/// 내 스프라이트와 **완전히 동일한 로직** — robot_spec_for(seed) → character_description(spec, seed) → generate.
+/// 방문 시 다른 사람도 같은 화풍의 AI 캐릭터로 보이게 하는 용도(2026-07-19).
+pub fn sprite_for_seed(cfg: &SpriteConfig, seed: &str) -> Result<Vec<u8>> {
+    let spec = crate::mascot::robot_spec_for(seed);
+    let desc = character_description(&spec, seed);
+    generate(cfg, &desc)
+}
+
 /// 이미지 생성 — 스타일 앵커 + 인물 묘사. 반환 = PNG 바이트.
 pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
     let ref_b64 = base64::engine::general_purpose::STANDARD.encode(STYLE_REF_JPG);
@@ -179,6 +195,15 @@ mod tests {
         let a = character_description(&robot_spec_for("A|a"), "A|a");
         let b = character_description(&robot_spec_for("B|bbbb"), "B|bbbb");
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn seed_cache_name_is_stable_and_filename_safe() {
+        let a = seed_cache_name("JUNNYEONG-PC|junnyeong");
+        assert_eq!(a, seed_cache_name("JUNNYEONG-PC|junnyeong")); // 결정론
+        assert_ne!(a, seed_cache_name("OTHER|user")); // 시드마다 다름
+        assert_eq!(a.len(), 12);
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()), "파일명 안전(hex): {a}");
     }
 
     #[test]

@@ -198,55 +198,53 @@ impl ClaudeChangelogSource {
     /// 몇 개 버전 헤더까지 훑을지 — 최근 버전들이 전부 픽스뿐이어도 기능 릴리스를 찾도록.
     const SCAN_VERSIONS: usize = 12;
 
-    /// 마크다운 CHANGELOG를 관대하게 파싱: `## <version>` 헤더 + **기능 신설 bullet만**.
-    /// 픽스만 있는 버전은 아이템을 만들지 않는다.
+    /// 마크다운 CHANGELOG를 관대하게 파싱: `## <version>` 헤더 아래 **기능 신설 bullet만** 모은다.
+    /// 2026-07-19 개편: 버전마다 "X.Y.Z 새 기능" 아이템을 반복 생성하지 않고,
+    /// 최근 버전들의 기능을 **단 하나의 소식**으로 합친다(중복 노출 제거). 최신 버전이 대표.
     pub fn parse_markdown(&self, md: &str) -> Vec<ContentItem> {
-        let mut out = Vec::new();
-        let mut cur_ver: Option<String> = None;
-        let mut bullets: Vec<String> = Vec::new();
+        let mut features: Vec<String> = Vec::new(); // 최신순, 중복 제거
+        let mut latest_ver: Option<String> = None;
+        let mut in_version = false;
         let mut seen_versions = 0usize;
-
-        let flush = |ver: &Option<String>, bullets: &[String], out: &mut Vec<ContentItem>| {
-            let Some(ver) = ver else { return };
-            if bullets.is_empty() {
-                return; // 기능 소식 없음 → 침묵
-            }
-            let body = bullets.join(" · ");
-            out.push(ContentItem {
-                id: format!("cc-changelog-{ver}"),
-                kind: ItemKind::News,
-                title: format!("Claude Code {ver} — 새 기능"),
-                body,
-                source_url: Some(
-                    "https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md".into(),
-                ),
-                dimension: None,
-                trigger_tags: vec!["changelog".into(), "claude-code".into()],
-                base_priority: 10,
-            });
-        };
 
         for line in md.lines() {
             let t = line.trim();
             if let Some(rest) = t.strip_prefix("## ") {
-                // 새 버전 헤더 → 직전 블록 확정
-                flush(&cur_ver, &bullets, &mut out);
-                bullets.clear();
                 seen_versions += 1;
-                if out.len() >= self.max_items || seen_versions > Self::SCAN_VERSIONS {
-                    out.truncate(self.max_items);
-                    return out;
+                if seen_versions > Self::SCAN_VERSIONS {
+                    break;
                 }
-                cur_ver = Some(rest.trim().to_string());
+                in_version = true;
+                if latest_ver.is_none() {
+                    latest_ver = Some(rest.trim().to_string());
+                }
             } else if let Some(rest) = t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")) {
-                if cur_ver.is_some() && bullets.len() < 3 && is_feature_note(rest.trim()) {
-                    bullets.push(rest.trim().to_string());
+                let note = rest.trim();
+                if in_version && features.len() < 3 && is_feature_note(note)
+                    && !features.iter().any(|f| f == note)
+                {
+                    features.push(note.to_string());
                 }
             }
         }
-        flush(&cur_ver, &bullets, &mut out);
-        out.truncate(self.max_items);
-        out
+
+        if features.is_empty() {
+            return Vec::new(); // 기능 소식 없음 → 침묵
+        }
+        let ver = latest_ver.unwrap_or_default();
+        vec![ContentItem {
+            id: "cc-changelog-latest".into(),
+            kind: ItemKind::News,
+            // 대표 버전 하나만 표기 — "새 기능 N건"으로 반복이 아니라 한 건임을 명확히.
+            title: format!("Claude Code 새 기능 {}건 (최신 {ver})", features.len()),
+            body: features.join(" · "),
+            source_url: Some(
+                "https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md".into(),
+            ),
+            dimension: None,
+            trigger_tags: vec!["changelog".into(), "claude-code".into()],
+            base_priority: 10,
+        }]
     }
 }
 
@@ -709,6 +707,35 @@ pub fn personal_lessons(
         }
     }
 
+    // ④ 역량 사다리 → "다음 단계" 한 줄 (별도 패널 대신 오늘의 배움에 통합, 2026-07-19 사용자 요청).
+    //    실측 사건 레슨보다 아래에 오도록 base_priority를 낮춘다. 데이터가 충분하고 프론티어가
+    //    있을 때만 — 전부 숙달이면 침묵(칭찬은 다른 레슨이 담당).
+    if let Ok(prof) = crate::profile::detect_profile(store) {
+        if prof.total_events >= 200 {
+            if let Some(front) = prof.frontier() {
+                let mastered = prof
+                    .dims
+                    .iter()
+                    .filter(|d| d.mastery == crate::profile::Mastery::Mastered)
+                    .count();
+                let mut l = lesson(
+                    "lesson-frontier",
+                    &[],
+                    format!("다음에 익히면 좋은 것: {}", front.label_ko()),
+                    format!(
+                        "당신 로그: AX 역량 5개 축 중 {mastered}개를 이미 숙달했어요. 다음 단계는 \
+                         '{}' — {}",
+                        front.label_ko(),
+                        front.learn_hint_ko(),
+                    ),
+                    "https://code.claude.com/docs/en/common-workflows",
+                );
+                l.base_priority = -5; // 실측 사건(struggle·cache·model)보다 뒤로
+                out.push(l);
+            }
+        }
+    }
+
     out
 }
 
@@ -930,13 +957,14 @@ mod tests {
             ## 2.0.9\n\n- Improved permissions\n\n\
             ## 2.0.8\n\n- You can now resume agents across restarts\n";
         let items = src.parse_markdown(md);
-        // 픽스만 있는 2.1.2·2.0.9는 침묵, 기능 있는 2.1.0·2.0.8만
-        assert_eq!(items.len(), 2);
-        assert!(items[0].title.contains("2.1.0"));
+        // 2026-07-19 개편: 버전별 반복 대신 최근 기능들을 단 하나의 소식으로 합친다.
+        assert_eq!(items.len(), 1, "여러 버전이라도 소식은 한 건으로 합침");
         assert!(items[0].title.contains("새 기능"));
+        assert!(items[0].title.contains("2.1.2"), "대표(최신) 버전 표기: {}", items[0].title);
+        // 픽스만 있는 버전(2.1.2 fix·2.0.9)은 제외, 기능 라인만 body에
         assert!(items[0].body.contains("ToolSearch"));
+        assert!(items[0].body.contains("resume agents"));
         assert!(!items[0].body.contains("Fixed"), "픽스 라인 제외: {}", items[0].body);
-        assert!(items[1].body.contains("resume agents"));
         assert!(items[0].trigger_tags.contains(&"changelog".to_string()));
     }
 
@@ -1046,13 +1074,17 @@ mod tests {
     }
 
     #[test]
-    fn changelog_caps_news_at_two_even_with_many_feature_versions() {
+    fn changelog_collapses_many_versions_into_one_item_with_up_to_three_features() {
         let src = ClaudeChangelogSource::default();
         let mut md = String::from("# Changelog\n\n");
         for i in 0..6 {
             md.push_str(&format!("## 3.0.{i}\n\n- Added feature {i}\n\n"));
         }
-        assert_eq!(src.parse_markdown(&md).len(), 2, "소식은 조미료 — 최대 2건");
+        let items = src.parse_markdown(&md);
+        assert_eq!(items.len(), 1, "여러 버전 → 단 하나의 소식으로 합침");
+        // 최신 3개 기능만 (feature 0,1,2), 반복 없음
+        assert_eq!(items[0].body.matches("Added feature").count(), 3);
+        assert!(items[0].title.contains("3건"));
     }
 
     #[test]

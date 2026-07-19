@@ -1124,6 +1124,63 @@ pub fn get_sprite(app: tauri::AppHandle) -> Result<Option<String>, String> {
     }
 }
 
+/// 방 점유자 스프라이트 캐시 경로 — app_data/sprites/<hash>.png.
+fn occupant_sprite_path(app: &tauri::AppHandle, seed: &str) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager as _;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("sprites");
+    Ok(dir.join(format!("{}.png", agent_mentor::sprite::seed_cache_name(seed))))
+}
+
+/// 방 점유자의 AI 스프라이트(캐시) base64 — 없으면 None(프론트는 절차 생성 폴백).
+/// 다른 사람도 내 캐릭터와 동일 로직(seed→spec→description→이미지)으로 그려 화풍을 맞춘다.
+#[tauri::command(async)]
+pub fn get_occupant_sprite(app: tauri::AppHandle, seed: String) -> Result<Option<String>, String> {
+    use base64::Engine as _;
+    let p = occupant_sprite_path(&app, &seed)?;
+    match std::fs::read(&p) {
+        Ok(bytes) => Ok(Some(base64::engine::general_purpose::STANDARD.encode(bytes))),
+        Err(_) => Ok(None),
+    }
+}
+
+/// 점유자 스프라이트를 백그라운드로 생성 요청(즉시 반환). 이미지 모델 미설정이면 no-op(절차 유지).
+/// 완료 시 `occupant-sprite:ready`(payload=seed) 이벤트 → 프론트가 다시 불러와 교체.
+#[tauri::command(async)]
+pub fn request_occupant_sprite(app: tauri::AppHandle, seed: String) -> Result<(), String> {
+    use tauri::Emitter as _;
+    let p = occupant_sprite_path(&app, &seed)?;
+    if p.exists() {
+        return Ok(()); // 이미 있음
+    }
+    let Some(cfg) = agent_mentor::sprite::SpriteConfig::from_env() else {
+        return Ok(()); // 이미지 모델 미설정 — 절차 폴백 유지
+    };
+    // pending 마커로 동시/중복 생성 방지 (토큰 낭비 차단)
+    let pending = p.with_extension("pending");
+    if pending.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = p.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&pending, b"");
+    let app2 = app.clone();
+    std::thread::spawn(move || {
+        let res = agent_mentor::sprite::sprite_for_seed(&cfg, &seed);
+        let _ = std::fs::remove_file(&pending);
+        match res {
+            Ok(png) => {
+                if std::fs::write(&p, png).is_ok() {
+                    log::info!("점유자 AI 스프라이트 생성: {}", p.display());
+                    let _ = app2.emit("occupant-sprite:ready", seed);
+                }
+            }
+            Err(e) => log::warn!("점유자 스프라이트 생성 실패: {e}"),
+        }
+    });
+    Ok(())
+}
+
 // --- R6 반복 지시 → SKILL.md 초안 (skill_draft) ---
 // 엔진은 store 설정(engine_url…) 우선, 없으면 .env 폴백 — engine_settings_get과 같은 규칙.
 // 규율: 재료 수집(SQL)은 락 안, 초안 생성(LLM 네트워크)은 락 밖.

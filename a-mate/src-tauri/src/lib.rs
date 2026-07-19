@@ -354,6 +354,8 @@ pub fn run() {
                 commands::get_chatter_pool,
                 commands::get_mascot_seed,
                 commands::get_sprite,
+                commands::get_occupant_sprite,
+                commands::request_occupant_sprite,
                 commands::generate_skill_draft,
                 commands::save_skill_draft,
                 commands::get_settings,
