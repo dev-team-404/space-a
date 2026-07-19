@@ -120,6 +120,8 @@ mod runtime {
                 maybe_post_retros(&state.store);
                 // AI 스프라이트 — 캐시 없으면 1회 생성 (실패 무해, 절차 생성 폴백)
                 maybe_generate_sprite(app);
+                // 외부 문서 도달성 — 내부망이면 배움 카드의 외부 링크를 숨긴다 (동료 이슈)
+                maybe_probe_docs(&state.store);
             }
             Err(e) => {
                 log::error!("pipeline error: {e}");
@@ -541,6 +543,22 @@ mod runtime {
 
     /// AI 스프라이트(2026-07-19) — app_data/sprite.png 없고 이미지 모델 설정이 있으면 1회 생성.
     /// 네트워크는 락과 무관(파일·env만). 성공 시 sprite:ready emit → 프론트 즉시 교체.
+
+    /// 외부 문서(code.claude.com) 도달성 프로브 — 앱 실행당 1회. 내부망(차단)이면
+    /// docs_reachable=false 를 남겨 프론트가 "공식 가이드" 링크를 숨긴다 (동료 이슈:
+    /// "오늘의 배움 패널의 anthropic 가이드 링크는 내부망에서 연결 안 됨").
+    fn maybe_probe_docs(store_mutex: &std::sync::Mutex<SqliteStore>) {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static PROBED: AtomicBool = AtomicBool::new(false);
+        if PROBED.swap(true, Ordering::SeqCst) { return; }
+        // 락 밖 네트워크 — 3초 타임아웃 HEAD (core 헬퍼)
+        let ok = agent_mentor::ops::probe_docs_reachable();
+        if let Ok(store) = store_mutex.lock() {
+            let _ = store.set_setting("docs_reachable", if ok { "true" } else { "false" });
+        }
+        if !ok { log::info!("외부 문서 미도달(내부망?) — 배움 카드 외부 링크 숨김"); }
+    }
+
     fn maybe_generate_sprite(app: &AppHandle) {
         use agent_mentor::sprite;
         let Ok(dir) = app.path().app_data_dir() else { return };

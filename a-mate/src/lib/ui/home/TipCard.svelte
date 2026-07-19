@@ -1,11 +1,15 @@
 <script lang="ts">
   import { openUrl } from '@tauri-apps/plugin-opener';
-  import { setContentStatus, coachTip, type ContentItem } from '../../api';
+  import { getSettings, setContentStatus, coachTip, type ContentItem } from '../../api';
 
   // 공식 가이드 링크를 시스템 브라우저로 연다 (Tauri 웹뷰는 외부 <a> 네비게이션을 막음).
   async function openExternal(url: string) {
     try { await openUrl(url); } catch (e) { console.error('openUrl 실패:', url, e); }
   }
+
+  // 내부망 감지(docs_reachable=false)면 외부 가이드 링크를 숨긴다 (동료 이슈)
+  let docsOk = $state(true);
+  getSettings().then((s) => (docsOk = s.docs_reachable !== 'false')).catch(() => {});
 
   let { items, onDismissed }: {
     items: ContentItem[];
@@ -71,7 +75,7 @@
     {#if top.body && !(isBoris && (coaching || coachLoading))}
       <p class="body">{top.body}</p>
     {/if}
-    {#if top.source_url}
+    {#if top.source_url && docsOk}
       <a class="more" href={top.source_url} onclick={(e) => { e.preventDefault(); openExternal(top.source_url!); }}>공식 가이드에서 더 배우기 →</a>
     {/if}
 
@@ -80,7 +84,7 @@
         {#each rest as it (it.id)}
           <li>
             <span class="dot">·</span>
-            {#if it.source_url}
+            {#if it.source_url && docsOk}
               <a href={it.source_url} onclick={(e) => { e.preventDefault(); openExternal(it.source_url!); }}>{it.title}</a>
             {:else}
               <span>{it.title}</span>

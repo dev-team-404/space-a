@@ -206,6 +206,14 @@ pub fn run_curation(
 
 /// 피드 소스(T1 changelog 등)를 네트워크로 가져온다 — 부수효과는 가장자리. 실패는 하드
 /// 에러 아님(빈 벡터 후 계속 — 관대한 파싱 원칙). Tauri 파이프라인이 락 밖에서 호출.
+/// 외부 문서(code.claude.com) 도달성 — 내부망 감지용 3초 HEAD. (동료 이슈: 내부망 링크)
+pub fn probe_docs_reachable() -> bool {
+    ureq::head("https://code.claude.com/docs/en/overview")
+        .timeout(std::time::Duration::from_secs(3))
+        .call()
+        .is_ok()
+}
+
 pub fn fetch_feed_items(
     hub: Option<crate::content::HubKnowledgeSource>,
 ) -> Vec<crate::content::ContentItem> {
