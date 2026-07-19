@@ -35,13 +35,14 @@ export type HeadVariant =
   | { kind: 'crt'; x: number; y: number; w: number; h: number; r: number }
   | { kind: 'capsule'; cx: number; cy: number; rx: number; ry: number };
 
+// v4 미니멀: 머리는 실루엣만 다르다 (장식 금지). 얼굴은 전부 스크린이 담당.
 export const HEAD_VARIANTS: ReadonlyArray<HeadVariant> = [
-  { kind: 'round',   cx: 64, cy: 42, rx: 40, ry: 36 },
-  { kind: 'square',  x: 22, y: 8,  w: 84, h: 68, r: 30 },
-  { kind: 'helmet',  x: 20, y: 6,  w: 88, h: 70, r: 32, visorY: 34, visorH: 20 },
-  { kind: 'catear',  x: 24, y: 12, w: 80, h: 64, r: 28, earW: 16, earH: 16 },
-  { kind: 'crt',     x: 16, y: 10, w: 96, h: 66, r: 28, },
-  { kind: 'capsule', cx: 64, cy: 42, rx: 34, ry: 38 },
+  { kind: 'round',   cx: 64, cy: 44, rx: 40, ry: 38 },
+  { kind: 'square',  x: 22, y: 8,  w: 84, h: 72, r: 28 },
+  { kind: 'helmet',  x: 18, y: 12, w: 92, h: 64, r: 32, visorY: 0, visorH: 0 },
+  { kind: 'catear',  x: 24, y: 12, w: 80, h: 68, r: 26, earW: 14, earH: 14 },
+  { kind: 'crt',     x: 26, y: 6,  w: 76, h: 74, r: 24, },
+  { kind: 'capsule', cx: 64, cy: 44, rx: 36, ry: 38 },
 ];
 
 // Body variant parameters — 작은 몸통 (y 82..110)
@@ -53,13 +54,14 @@ export type BodyVariant =
   | { kind: 'pocket';  x: number; y: number; w: number; h: number; r: number; pocketX: number; pocketY: number; pocketW: number; pocketH: number }
   | { kind: 'striped'; x: number; y: number; w: number; h: number; r: number; stripeY1: number; stripeY2: number; stripeY3: number };
 
+// v4 미니멀: 몸은 작고 플랫 — 실루엣 차이 + 가슴 불빛 1개 이하.
 export const BODY_VARIANTS: ReadonlyArray<BodyVariant> = [
-  { kind: 'round',   cx: 64, cy: 96, rx: 25, ry: 15 },
-  { kind: 'box',     x: 38, y: 82, w: 52, h: 28, r: 12, ledX: 56, ledY: 90, ledW: 16, ledH: 12 },
-  { kind: 'barrel',  cx: 64, cy: 96, rx: 28, ry: 15, neckRx: 18 },
-  { kind: 'vest',    x: 36, y: 82, w: 56, h: 28, r: 12, lapelW: 8 },
-  { kind: 'pocket',  x: 36, y: 82, w: 56, h: 28, r: 12, pocketX: 46, pocketY: 92, pocketW: 14, pocketH: 10 },
-  { kind: 'striped', x: 36, y: 82, w: 56, h: 28, r: 12, stripeY1: 87, stripeY2: 94, stripeY3: 101 },
+  { kind: 'round',   cx: 64, cy: 95, rx: 22, ry: 14 },
+  { kind: 'box',     x: 44, y: 82, w: 40, h: 26, r: 12, ledX: 61, ledY: 92, ledW: 6, ledH: 6 },
+  { kind: 'barrel',  cx: 64, cy: 95, rx: 26, ry: 13, neckRx: 16 },
+  { kind: 'vest',    x: 40, y: 82, w: 48, h: 26, r: 13, lapelW: 0 },
+  { kind: 'pocket',  x: 46, y: 82, w: 36, h: 26, r: 14, pocketX: 0, pocketY: 0, pocketW: 0, pocketH: 0 },
+  { kind: 'striped', x: 42, y: 82, w: 44, h: 26, r: 12, stripeY1: 94, stripeY2: 0, stripeY3: 0 },
 ];
 
 // Antenna variant parameters — 짧고 동글 (머리 위 y 0..12)
@@ -107,11 +109,12 @@ export type ArmsVariant =
   | { kind: 'wave';    ly: number; ry: number; aw: number; ah: number }
   | { kind: 'rocket';  ly: number; ry: number; aw: number; ah: number; extW: number };
 
+// v4 미니멀: 팔은 작은 너브 — 자세만 다르다.
 export const ARMS_VARIANTS: ReadonlyArray<ArmsVariant> = [
-  { kind: 'down',   ly: 84, ry: 84, aw: 10, ah: 18 },
-  { kind: 'up',     ly: 72, ry: 72, aw: 10, ah: 18 },
-  { kind: 'pincer', ly: 84, ry: 84, aw: 10, ah: 14 },
-  { kind: 'stubby', ly: 88, ry: 88, aw: 9,  ah: 11 },
-  { kind: 'wave',   ly: 72, ry: 86, aw: 10, ah: 16 },
-  { kind: 'rocket', ly: 86, ry: 86, aw: 10, ah: 14, extW: 8 },
+  { kind: 'down',   ly: 86, ry: 86, aw: 9, ah: 15 },
+  { kind: 'up',     ly: 76, ry: 76, aw: 9, ah: 15 },
+  { kind: 'pincer', ly: 86, ry: 86, aw: 9, ah: 12 },
+  { kind: 'stubby', ly: 89, ry: 89, aw: 8, ah: 10 },
+  { kind: 'wave',   ly: 76, ry: 88, aw: 9, ah: 14 },
+  { kind: 'rocket', ly: 88, ry: 88, aw: 9, ah: 12, extW: 6 },
 ];
