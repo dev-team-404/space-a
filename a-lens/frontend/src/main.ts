@@ -4,11 +4,10 @@
 import { Application, Container } from 'pixi.js'
 import { fetchLobby, fetchSpace, type LobbyFloor, type SpaceView } from './api'
 import { openBuilder } from './builder'
-import { CHARACTER_OPTIONS, resolveCharacterId } from './room/catalog'
 import { loadKit } from './room/kit'
 import { buildRoomScene } from './room/renderer'
 import type { RoomConfig } from './room/types'
-import { deleteRoom, getRoom, loadCharacter, loadRooms, saveCharacter, saveRoom } from './store'
+import { deleteRoom, getRoom, loadRooms, saveRoom } from './store'
 
 const $ = <T extends HTMLElement>(id: string): T => {
   const el = document.getElementById(id)
@@ -129,14 +128,6 @@ async function renderHome() {
     )
     .join('')
 
-  const myChar = loadCharacter()
-  const charSwatches = CHARACTER_OPTIONS.map(
-    (o) =>
-      `<button class="char-swatch${o.id === myChar ? ' on' : ''}" data-char="${o.id}" title="${esc(o.label)}">
-         <img src="${o.thumb}" alt="${esc(o.label)}" />
-       </button>`,
-  ).join('')
-
   homeEl.innerHTML = `
     <div class="home-wrap">
       <header class="home-head">
@@ -144,22 +135,11 @@ async function renderHome() {
         <p class="home-sub">스페이스 방 관전 — 방을 만들고 a-hub 데이터를 들여다보세요</p>
         <button class="primary-btn" id="btn-new-room" ${floors.length ? '' : 'disabled'}>+ 방 만들기</button>
       </header>
-      <h3 class="home-section">내 캐릭터</h3>
-      <p class="home-sub">방 안 에이전트가 이 캐릭터로 보입니다.</p>
-      <div class="char-row" id="char-row">${charSwatches}</div>
       ${loadError ? `<div class="error-note">백엔드 연결 실패: ${esc(loadError)}</div>` : ''}
       ${rooms.length ? `<h3 class="home-section">내가 만든 방</h3><div class="card-grid">${roomCards}</div>` : ''}
       ${unbuilt.length ? `<h3 class="home-section">방이 없는 스페이스</h3><div class="card-grid">${unbuiltCards}</div>` : ''}
       ${!rooms.length && !unbuilt.length && !loadError ? '<div class="error-note">표시할 스페이스가 없습니다.</div>' : ''}
     </div>`
-
-  homeEl.querySelectorAll<HTMLElement>('#char-row .char-swatch').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const id = resolveCharacterId(btn.dataset.char)
-      saveCharacter(id)
-      homeEl.querySelectorAll('#char-row .char-swatch').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.char === id))
-    })
-  })
 
   const startBuilder = (initial?: RoomConfig, presetSpaceId?: string) => {
     void openBuilder({
@@ -279,7 +259,10 @@ async function renderRoom(spaceId: string) {
   const title = $('room-title')
   const floors = floorsCache
   const liveName = floors?.find((f) => f.space_id === spaceId)?.name
-  if (liveName) title.textContent = liveName
+  if (liveName) {
+    title.textContent = liveName
+    config.space_name = liveName // 칠판 위 간판에도 최신 이름 반영
+  }
   $('room-visits').textContent = data.visits ? `방문 TODAY ${data.visits.today} · TOTAL ${data.visits.total}` : ''
 
   if (currentScene) {
@@ -289,7 +272,7 @@ async function renderRoom(spaceId: string) {
   app.stage.removeChildren()
   currentScene = buildRoomScene(
     config,
-    { agents: data.agents, issues: data.issues, knowledgeCount: data.knowledge.length, character: loadCharacter() },
+    { agents: data.agents, issues: data.issues, knowledgeCount: data.knowledge.length },
     {
       onAgentTap: (agent) =>
         showPanel(

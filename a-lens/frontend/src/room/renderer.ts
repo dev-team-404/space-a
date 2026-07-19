@@ -4,10 +4,10 @@
 
 import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js'
 import type { SpaceAgent, SpaceIssue } from '../api'
-import { DESKS, resolveCharacterId, resolveDeskId, resolveRoomId } from './catalog'
+import { DESKS, characterForSeed, resolveDeskId, resolveRoomId } from './catalog'
 import { TILE_W, TILE_H, isoX, isoY, depth } from './iso'
 import { kitPiece, kitPieceScale } from './kit'
-import type { CharacterId, RoomConfig } from './types'
+import type { DeskId, RoomConfig } from './types'
 
 export type RoomSceneCallbacks = {
   onAgentTap?: (agent: SpaceAgent) => void
@@ -21,8 +21,6 @@ export type RoomSceneData = {
   agents: SpaceAgent[]
   issues: SpaceIssue[]
   knowledgeCount: number
-  /** 내 캐릭터 — 에이전트 자리를 이 스프라이트로 그린다. 없으면 로봇 폴백. */
-  character?: CharacterId
 }
 
 /** 빌더 프리뷰용 샘플 — 실데이터 fetch 없이 방 모양만 확인 */
@@ -36,7 +34,6 @@ export const PREVIEW_DATA: RoomSceneData = {
     { issue_id: 'i2', title: '인증서 문제', status: 'resolved', opened_by: '', timeline: [] },
   ],
   knowledgeCount: 12,
-  character: 'c1',
 }
 
 const ROBOT_COLORS = [0xd9a441, 0x7fb3d5, 0xa3be8c, 0xd08770, 0xb48ead, 0x8fbcbb]
@@ -184,6 +181,38 @@ export function buildRoomScene(
     }
     hitZone(roomCal.backWall, -800, cb.onBoardTap)
     if (roomCal.shelfArea) hitZone(roomCal.shelfArea, -800, cb.onShelfTap)
+
+    // ── 칠판 위 나무 간판에 스페이스 이름 ──
+    // 간판 안쪽 영역(signArea)은 프리셋마다 다르다(manifest cal). 배경과 같은 변환으로 얹는다.
+    const name = config.space_name?.trim()
+    if (name && roomCal.signArea) {
+      const [sax0, say0, sax1, say1] = roomCal.signArea
+      const SIGN_CX = (sax0 + sax1) / 2 // 간판 중앙 x(이미지 px)
+      const SIGN_CY = (say0 + say1) / 2 // 간판 중앙 y(이미지 px)
+      const PAD = 20 // 좌우 안쪽 패딩(이미지 px)
+      const SIGN_W = Math.max(40, sax1 - sax0 - PAD * 2) // 텍스트 안전 폭
+      const SIGN_H = Math.max(20, say1 - say0 - 8) // 텍스트 안전 높이
+      const label = new Text({
+        text: name,
+        style: new TextStyle({
+          fill: 0x241505, // 검정에 가까운 글씨
+          fontSize: 32, // 기준 크기 — 아래에서 간판에 맞게 축소만 한다
+          fontWeight: '700',
+          fontFamily: '"Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif',
+          // 흰 그림자(사방 균일 — distance 0)로 어두운 나무판 위에서도 또렷하게. 아래 치우침 없음.
+          dropShadow: { color: 0xfff6e6, alpha: 0.95, blur: 3, distance: 0, angle: 0 },
+        }),
+      })
+      label.anchor.set(0.5)
+      // 간판 안쪽 영역(폭·높이)을 넘지 않게 등비 축소. 짧으면 기준 크기 유지.
+      const maxW = SIGN_W * sx
+      const maxH = SIGN_H * sy
+      const fit = Math.min(1, maxW / label.width, maxH / label.height)
+      label.scale.set(fit)
+      label.position.set((SIGN_CX - cxI) * sx, (SIGN_CY - cyI) * sy)
+      label.zIndex = -900 // 배경(-1000) 위, 히트존/책상 아래
+      root.addChild(label)
+    }
   }
 
   // 책상 클러스터는 방 중앙에 — 단, 뒷벽 컷 안쪽으로 (gx+gy ≥ cut)
@@ -211,9 +240,15 @@ export function buildRoomScene(
   })
 
   // ── 에이전트 — 책상에 배치하고, 자리가 모자라면 방 앞쪽에 서 있음 ──
-  // 내 캐릭터(char.cN)가 선택돼 있으면 그 스프라이트로, 없으면 Graphics 로봇으로 그린다.
-  const nameStyle = new TextStyle({ fill: 0xe8eaed, fontSize: 11 })
-  const charKit = data.character ? kitPiece(`char.${resolveCharacterId(data.character)}`) : undefined
+  // 에이전트마다 15종 캐릭터를 결정적으로 랜덤 배정(agent_id 기반)해 다양하게 보인다.
+  // 킷이 못 뜨면 Graphics 로봇으로 폴백한다.
+  const nameStyle = new TextStyle({
+    fill: 0xffffff,
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: '"Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif',
+    dropShadow: { color: 0x000000, alpha: 0.8, blur: 2, distance: 0, angle: 0 },
+  })
   const CHAR_SCALE = 1.0 // kitPieceScale 위에 곱하는 배수 — 책상(1.7배)과 어울리게, 의자에 앉은 크기
   const makeRobot = (agent: SpaceAgent, k: number, rgx: number, rgy: number) => {
     const robot = new Container()
@@ -222,6 +257,7 @@ export function buildRoomScene(
     robot.zIndex = depth(rgx, rgy)
     // 캐릭터 발끝이 격자 지점(원점)에 닿도록 앵커 하단 중앙. topY = 캐릭터 머리 위 y(음수).
     let topY = -34
+    const charKit = kitPiece(`char.${characterForSeed(agent.agent_id || agent.name || String(k))}`)
     if (charKit && charKit.mount === 'character') {
       const s = kitPieceScale() * CHAR_SCALE
       const sp = new Sprite(charKit.texture)
@@ -243,11 +279,14 @@ export function buildRoomScene(
       topY = -43
     }
     const nameTag = new Text({ text: agent.name, style: nameStyle })
-    nameTag.position.set(-nameTag.width / 2, 6)
-    // 앞줄 책상 스프라이트 위에서도 읽히도록 반투명 필 배경
+    // 앞줄 책상 스프라이트·캐릭터 위에서도 또렷하게 읽히도록 짙은 필 + 테두리
+    const pillW = nameTag.width + 14
+    const pillH = 20
+    nameTag.position.set(-nameTag.width / 2, 4 + (pillH - nameTag.height) / 2)
     const namePill = new Graphics()
-      .roundRect(-nameTag.width / 2 - 5, 4, nameTag.width + 10, 17, 8)
-      .fill({ color: 0x0d1220, alpha: 0.7 })
+      .roundRect(-pillW / 2, 4, pillW, pillH, 9)
+      .fill({ color: 0x0d1220, alpha: 0.92 })
+      .stroke({ color: 0xffffff, alpha: 0.22, width: 1 })
     robot.addChild(namePill, nameTag)
     // 작업 중이면 머리 위에 말풍선 점 표시
     if (agent.status === 'working') {
@@ -265,13 +304,20 @@ export function buildRoomScene(
     robot.on('pointertap', () => cb.onAgentTap?.(agent))
     root.addChild(robot)
   }
-  // 캐릭터는 의자에 앉은 위치(책상 쪽으로 더 붙이고 화면 오른쪽=의자 쪽으로), 로봇 폴백은 책상 앞.
-  const seatDx = charKit ? 2.3 : 1
-  const seatDy = charKit ? 0.35 : 1.6
+  // 캐릭터는 의자에 앉은 위치(책상 쪽으로 더 붙이고 화면 오른쪽=의자 쪽으로).
+  const seatDx = 2.3
+  const seatDy = 0.35
+  // flip된 책상(d3·d6·d7·d9)은 의자가 반대편이라 시트를 보정: 왼쪽 2보·위 0.5보.
+  // 격자에서 왼쪽 이동 = gx-·gy+, 위 이동 = gx-·gy-. 조합해 dgx=-1.25, dgy=+1.75.
+  const SEAT_FIX: Partial<Record<DeskId, [number, number]>> = {
+    d3: [-1.1, 0.5], d6: [-1.1, 0.5], d7: [-1.1, 0.5], d9: [-1.1, 0.5],
+  }
   data.agents.forEach((agent, k) => {
     const slot = slots[k]
-    if (slot) makeRobot(agent, k, slot.gx + seatDx, slot.gy + seatDy) // 책상 의자 자리
-    else makeRobot(agent, k, dx + 1.5 + ((k - slots.length) % 5) * 1.7, dy + LH - 1.2) // 서 있음
+    if (slot) {
+      const [fx, fy] = SEAT_FIX[resolveDeskId(config.desk, k)] ?? [0, 0]
+      makeRobot(agent, k, slot.gx + seatDx + fx, slot.gy + seatDy + fy) // 책상 의자 자리
+    } else makeRobot(agent, k, dx + 1.5 + ((k - slots.length) % 5) * 1.7, dy + LH - 1.2) // 서 있음
   })
 
   return root

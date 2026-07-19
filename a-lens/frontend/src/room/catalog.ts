@@ -12,12 +12,14 @@ export function resolveCharacterId(v: string | undefined): CharacterId {
   return v && CHARACTER_IDS.includes(v as CharacterId) ? (v as CharacterId) : 'c1'
 }
 
-export const CHARACTER_OPTIONS: VariantOption<CharacterId>[] = CHARACTER_IDS.map((id, i) => ({
-  id,
-  label: `캐릭터 ${i + 1}`,
-  swatch: '#3a3f46',
-  thumb: `/assets/kit/char-${id}.png`,
-}))
+/** 에이전트별 캐릭터를 결정적으로 뽑는다 — 같은 seed는 늘 같은 캐릭터(리렌더에도 안정),
+ *  방 안에서는 15종이 골고루 섞여 다양하게 보인다. seed = agent_id 등 고유 문자열. */
+export function characterForSeed(seed: string): CharacterId {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0
+  return CHARACTER_IDS[Math.abs(h) % CHARACTER_IDS.length]
+}
+
 
 /** 방 배경 프리셋 5종 — 통짜 이미지(벽·바닥·책장·칠판 포함). 이 위에 책상만 얹는다. */
 export const ROOM_PRESET_IDS: RoomPresetId[] = ['r1', 'r2', 'r3', 'r4', 'r5']

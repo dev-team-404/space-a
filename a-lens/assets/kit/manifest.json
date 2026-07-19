@@ -40,27 +40,27 @@
     "room.r1": {
       "file": "room-preset-1.png",
       "mount": "shell-room",
-      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "slope": 0.5 }
+      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "signArea": [640, 72, 1010, 140], "slope": 0.5 }
     },
     "room.r2": {
       "file": "room-preset-2.png",
       "mount": "shell-room",
-      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "slope": 0.5 }
+      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "signArea": [655, 78, 1000, 135], "slope": 0.5 }
     },
     "room.r3": {
       "file": "room-preset-3.png",
       "mount": "shell-room",
-      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "slope": 0.5 }
+      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "signArea": [650, 70, 990, 128], "slope": 0.5 }
     },
     "room.r4": {
       "file": "room-preset-4.png",
       "mount": "shell-room",
-      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "slope": 0.5 }
+      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "signArea": [660, 82, 1010, 140], "slope": 0.5 }
     },
     "room.r5": {
       "file": "room-preset-5.png",
       "mount": "shell-room",
-      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "slope": 0.5 }
+      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "signArea": [640, 80, 985, 138], "slope": 0.5 }
     }
   }
 }

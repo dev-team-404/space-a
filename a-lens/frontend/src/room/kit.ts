@@ -18,6 +18,8 @@ export type KitShellCal = {
   backWall: [number, number, number, number]
   /** 왼벽 책장 영역 [x0, y0, x1, y1] — 있으면 클릭 → 지식 패널 */
   shelfArea?: [number, number, number, number]
+  /** 칠판 위 나무 간판 안쪽 영역 [x0, y0, x1, y1] — 스페이스 이름을 여기 그린다 */
+  signArea?: [number, number, number, number]
   /** 바닥 가장자리의 아이소 기울기 (dy/dx). 2:1이면 0.5 */
   slope?: number
 }
