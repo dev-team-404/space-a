@@ -41,6 +41,20 @@ function kstTime(iso: string | null | undefined): string {
   }).format(d)
 }
 
+// 날짜+시간 (KST) — 'YYYY-MM-DD HH:MM'. 상세 패널의 최근 활동 시간처럼 날짜가 필요할 때.
+function kstDateTime(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(d)
+  const g = (t: string) => p.find((x) => x.type === t)?.value ?? ''
+  return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}`
+}
+
 function showPanel(title: string, html: string) {
   cancelTyping()
   panel.classList.remove('panel-pixel')
@@ -118,7 +132,7 @@ function showAgentPanel(agent: SpaceAgent) {
   if (agent.status_line) lines.push({ label: '', value: agent.status_line })
   // 최근 a-hub 활동을 사람이 읽기 쉽게 풀어쓴 설명 + 그 활동을 한 시각(KST).
   if (agent.recent_activity?.detail) lines.push({ label: '최근 활동', value: agent.recent_activity.detail })
-  const lastAt = kstTime(agent.last_active_at)
+  const lastAt = kstDateTime(agent.last_active_at)
   if (lastAt) lines.push({ label: '최근 활동 시간', value: `${lastAt} (KST)` })
   typeLines(lines)
 }
