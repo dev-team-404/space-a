@@ -112,6 +112,16 @@ mod runtime {
                 maybe_generate_daily_line(app, &state.store);
                 // 잡담 풀 — 동일 규율, 이벤트 없음(프론트 타이머가 pull)
                 maybe_generate_chatter_pool(&state.store);
+                // a-hub 지식 공유 — 유의미 finding을 이슈→해결로 발행 (env 미설정 시 no-op)
+                maybe_share_findings(&state.store);
+                // 텔레메트리(#46) — 전날 파생 신호 하루 1회 발행 (env 미설정 시 no-op)
+                maybe_push_telemetry(&state.store);
+                // 세션 회고 — "고생 끝 해결" 세션을 로컬 생성 요약으로 발행 (Engine 필요)
+                maybe_post_retros(&state.store);
+                // AI 스프라이트 — 캐시 없으면 1회 생성 (실패 무해, 절차 생성 폴백)
+                maybe_generate_sprite(app);
+                // 외부 문서 도달성 — 내부망이면 배움 카드의 외부 링크를 숨긴다 (동료 이슈)
+                maybe_probe_docs(&state.store);
             }
             Err(e) => {
                 log::error!("pipeline error: {e}");
@@ -130,8 +140,16 @@ mod runtime {
     /// 노출 목록이 있으면 `content:ready`를 emit해 프론트가 즉시 반영(coach:finding 선례).
     /// 네트워크 실패는 조용히(빈 피드로 진행 — 내장 팁만으로도 코칭 성립).
     fn maybe_curate_content(app: &AppHandle, store_mutex: &std::sync::Mutex<SqliteStore>) {
+        // ⓪ 짧은 락: 팀 지식(pull) 소스 구성에 필요한 저장 토큰만 읽고 즉시 해제
+        let hub_src = agent_mentor::hub::HubConfig::from_env().and_then(|cfg| {
+            let stored = match store_mutex.lock() {
+                Ok(store) => store.get_setting("knowledge_hub_token").ok().flatten(),
+                Err(_) => None,
+            };
+            agent_mentor::hub::pull_source(&cfg, stored)
+        });
         // ① 락 밖: 피드 소스 네트워크 fetch (실패해도 빈 벡터)
-        let feed = agent_mentor::ops::fetch_feed_items();
+        let feed = agent_mentor::ops::fetch_feed_items(hub_src);
         let now = chrono::Utc::now().to_rfc3339();
 
         // ② 락: run_curation(감지→랭킹→persist) → 노출 목록 → 즉시 해제
@@ -276,6 +294,292 @@ mod runtime {
     /// 잡담 풀 — scan:done마다 fp가 stale할 때만 재생성 (스펙 §3). 엔진 없으면 no-op.
     /// 네트워크(LLM)는 daily-line과 동일하게 store 락 밖에서 호출. 이벤트는 emit하지
     /// 않는다 — 프론트 잡담 타이머가 발화 시점에 get_chatter_pool로 pull한다.
+    /// a-hub 지식 공유 — 스캔 편승. 네트워크는 전부 **락 밖**, 마크 persist는 짧은 락으로.
+    /// env(SPACE_A_HUB_URL) 미설정이면 no-op. 실패는 warn 후 다음 스캔 재시도(스펙 §6).
+    /// 스펙: docs/design/overview-mentor/specs/2026-07-18-hub-knowledge-sharing-design.md
+    fn maybe_share_findings(store_mutex: &std::sync::Mutex<SqliteStore>) {
+        use agent_mentor::hub::{self, HubClient, HubConfig};
+        let Some(cfg) = HubConfig::from_env() else { return };
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // ① 락: 토큰·재개 목록·신규 후보 조회 → 즉시 해제
+        let (token_opt, pending, picked) = match store_mutex.lock() {
+            Ok(store) => {
+                let token = cfg.token.clone().or(store.get_setting("knowledge_hub_token").ok().flatten());
+                let pending: Vec<(String, String, agent_mentor::store::FindingRow)> = store
+                    .hub_share_pending()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|(k, i)| store.find_finding(&k).ok().flatten().map(|f| (k, i, f)))
+                    .collect();
+                let findings = store.list_findings_current(false).unwrap_or_default();
+                let already = store.hub_shared_or_pending_keys().unwrap_or_default();
+                let picked: Vec<agent_mentor::store::FindingRow> =
+                    hub::select_shareable(&findings, &already, cfg.min_tokens)
+                        .into_iter()
+                        .cloned()
+                        .collect();
+                (token, pending, picked)
+            }
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        }; // guard drops here — 네트워크 전에 락 해제
+
+        // 대상이 없으면 네트워크(등록 포함) 자체를 하지 않는다
+        if pending.is_empty() && picked.is_empty() {
+            return;
+        }
+
+        // ② 락 밖: 토큰 확보 (최초 1회 자동 register → settings 보존)
+        let token = match token_opt {
+            Some(t) => t,
+            None => match HubClient::register(&cfg) {
+                Ok((agent_id, t)) => {
+                    if let Ok(store) = store_mutex.lock() {
+                        let _ = store.set_setting("knowledge_hub_agent_id", &agent_id);
+                        let _ = store.set_setting("knowledge_hub_token", &t);
+                    }
+                    t
+                }
+                Err(e) => { log::warn!("hub register 실패(다음 스캔 재시도): {e}"); return; }
+            },
+        };
+        let client = HubClient {
+            base_url: cfg.base_url.clone(),
+            api_key: cfg.api_key.clone(),
+            token,
+        };
+
+        let mut published = 0usize;
+
+        // ③ 재개: open만 되고 발행 안 된 것 resolve (중복 이슈 방지)
+        for (dedup_key, issue_id, f) in pending {
+            let Some(content) = hub::render_share(&f) else { continue };
+            match client.resolve_issue(&issue_id, &content.summary, &content.steps) {
+                Ok(Some(page_id)) => {
+                    if let Ok(store) = store_mutex.lock() {
+                        let _ = store.hub_mark_published(&dedup_key, &page_id, &now);
+                    }
+                    published += 1;
+                }
+                Ok(None) => log::warn!("hub {dedup_key}: resolve 응답에 page_id 없음"),
+                Err(e) => log::warn!("hub {dedup_key}: resolve 재개 실패: {e}"),
+            }
+        }
+
+        // ④ 신규: open_issue → 마크 → resolve(발행) → 마크
+        for f in picked {
+            let Some(content) = hub::render_share(&f) else { continue };
+            let issue_id = match client.open_issue(&cfg.space_id, &content.title) {
+                Ok(id) => id,
+                Err(e) => { log::warn!("hub {}: open_issue 실패: {e}", f.dedup_key); continue; }
+            };
+            if let Ok(store) = store_mutex.lock() {
+                let _ = store.hub_mark_issue(&f.dedup_key, &issue_id, &now);
+            }
+            match client.resolve_issue(&issue_id, &content.summary, &content.steps) {
+                Ok(Some(page_id)) => {
+                    if let Ok(store) = store_mutex.lock() {
+                        let _ = store.hub_mark_published(&f.dedup_key, &page_id, &now);
+                    }
+                    published += 1;
+                }
+                Ok(None) => log::warn!("hub {}: resolve 응답에 page_id 없음", f.dedup_key),
+                Err(e) => log::warn!("hub {}: resolve 실패(다음 스캔 재개): {e}", f.dedup_key),
+            }
+        }
+
+        if published > 0 {
+            log::info!("hub 지식 공유: {published}건 발행 (space {})", cfg.space_id);
+        }
+    }
+
+    /// 텔레메트리(#46 목표 아키텍처) — 전날치 파생 신호를 하루 1회 발행.
+    /// 락 규율: 브리프 조립(store 읽기)은 짧은 락, 네트워크는 락 밖, 마크는 짧은 락.
+    fn maybe_push_telemetry(store_mutex: &std::sync::Mutex<SqliteStore>) {
+        use agent_mentor::hub::{self, HubClient, HubConfig};
+        let Some(cfg) = HubConfig::from_env() else { return };
+        let yesterday = (chrono::Local::now() - chrono::Duration::days(1))
+            .format("%Y-%m-%d")
+            .to_string();
+        let key = hub::telemetry_state_key(&yesterday);
+
+        // ① 짧은 락: 완료 여부·토큰·브리프
+        let (already, token_opt, brief) = match store_mutex.lock() {
+            Ok(store) => {
+                let already = store
+                    .hub_shared_or_pending_keys()
+                    .map(|k| k.contains(&key))
+                    .unwrap_or(false);
+                let token = cfg.token.clone().or(store.get_setting("knowledge_hub_token").ok().flatten());
+                let brief = hub::build_telemetry_brief(&store, &yesterday, &cfg.user_id).ok();
+                (already, token, brief)
+            }
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        };
+        if already { return; }
+        let Some(brief) = brief else { return };
+        if hub::telemetry_is_empty(&brief) { return; } // 활동 없는 날은 노이즈 — 발행 생략
+        // 부트스트랩(2026-07-19): 공유할 발견이 없어도 텔레메트리는 나가야 한다 — 직접 register
+        let token = match token_opt {
+            Some(t) => t,
+            None => match HubClient::register(&cfg) {
+                Ok((agent_id, t)) => {
+                    if let Ok(store) = store_mutex.lock() {
+                        let _ = store.set_setting("knowledge_hub_agent_id", &agent_id);
+                        let _ = store.set_setting("knowledge_hub_token", &t);
+                    }
+                    t
+                }
+                Err(e) => { log::warn!("telemetry register 실패(다음 스캔 재시도): {e}"); return; }
+            },
+        };
+
+        // ② 락 밖: 발행 (공간 부트스트랩 포함)
+        let mut client = HubClient { base_url: cfg.base_url.clone(), api_key: cfg.api_key.clone(), token };
+        let space = hub::telemetry_space_id();
+        let title = format!("[telemetry] {} {}", cfg.user_id, yesterday);
+        let body = match serde_json::to_string_pretty(&brief) {
+            Ok(b) => b,
+            Err(e) => { log::warn!("telemetry 직렬화 실패: {e}"); return; }
+        };
+        let page_id = match client.create_page(&space, &title, &body) {
+            Ok(id) => id,
+            Err(_) => {
+                let _ = client.create_space(&space, "a-mate telemetry");
+                match HubClient::register_into(&cfg, &space) {
+                    Ok((agent_id, t)) => {
+                        if let Ok(store) = store_mutex.lock() {
+                            let _ = store.set_setting("knowledge_hub_agent_id", &agent_id);
+                            let _ = store.set_setting("knowledge_hub_token", &t);
+                        }
+                        client.token = t;
+                    }
+                    Err(e) => { log::warn!("telemetry 멤버십 확보 실패(다음 스캔 재시도): {e}"); return; }
+                }
+                match client.create_page(&space, &title, &body) {
+                    Ok(id) => id,
+                    Err(e) => { log::warn!("telemetry 발행 실패(다음 스캔 재시도): {e}"); return; }
+                }
+            }
+        };
+
+        // ③ 짧은 락: 완료 마크
+        let now = chrono::Utc::now().to_rfc3339();
+        if let Ok(store) = store_mutex.lock() {
+            let _ = store.hub_mark_published(&key, &page_id, &now);
+        }
+        log::info!("telemetry 발행: {yesterday} → {page_id} (space {space})");
+    }
+
+    /// 세션 회고(스펙 2026-07-19) — 고생 끝 해결 세션을 Engine 요약으로 발행.
+    /// 락 규율: 선별·토큰은 짧은 락, Engine·네트워크는 락 밖, 마크는 짧은 락.
+    fn maybe_post_retros(store_mutex: &std::sync::Mutex<SqliteStore>) {
+        use agent_mentor::diary::engine::Engine as _;
+        use agent_mentor::hub::{self, HubClient, HubConfig};
+        if !hub::retro_enabled() { return; }
+        let Some(cfg) = HubConfig::from_env() else { return };
+
+        // ① 짧은 락: 후보·토큰·엔진 해석
+        let (candidates, token_opt, engine) = match store_mutex.lock() {
+            Ok(store) => {
+                let cands = hub::select_retros(&store, chrono::Utc::now()).unwrap_or_default();
+                let token = cfg.token.clone().or(store.get_setting("knowledge_hub_token").ok().flatten());
+                let engine = crate::resolve_engine(&store);
+                (cands, token, engine)
+            }
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        };
+        if candidates.is_empty() { return; }
+        let Some(engine) = engine else { return };   // Engine 없으면 보류 (품질 > 정시성)
+        // 부트스트랩(2026-07-19): 회고도 자체 register — 공유 발견 유무와 독립
+        let token = match token_opt {
+            Some(t) => t,
+            None => match HubClient::register(&cfg) {
+                Ok((agent_id, t)) => {
+                    if let Ok(store) = store_mutex.lock() {
+                        let _ = store.set_setting("knowledge_hub_agent_id", &agent_id);
+                        let _ = store.set_setting("knowledge_hub_token", &t);
+                    }
+                    t
+                }
+                Err(e) => { log::warn!("retro register 실패(다음 스캔 재시도): {e}"); return; }
+            },
+        };
+
+        let client = HubClient { base_url: cfg.base_url.clone(), api_key: cfg.api_key.clone(), token };
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // ② 락 밖: Engine 요약 → issue→resolve
+        for (key, s) in candidates {
+            let (system, user) = hub::retro_prompt(&s);
+            let reply = match engine.generate(&system, &user) {
+                Ok(o) => o.text,
+                Err(e) => { log::warn!("retro engine 실패(보류): {e}"); continue; }
+            };
+            let Some((title, summary)) = hub::parse_retro_reply(&reply) else {
+                log::warn!("retro 응답 파싱 실패(보류)");
+                continue;
+            };
+            let issue_id = match client.open_issue(&cfg.space_id, &format!("[a-mate 회고] {title}")) {
+                Ok(id) => id,
+                Err(e) => { log::warn!("retro open_issue 실패: {e}"); continue; }
+            };
+            if let Ok(store) = store_mutex.lock() {
+                let _ = store.hub_mark_issue(&key, &issue_id, &now);
+            }
+            match client.resolve_issue(&issue_id, &summary, &hub::retro_steps(&s)) {
+                Ok(Some(page_id)) => {
+                    if let Ok(store) = store_mutex.lock() {
+                        let _ = store.hub_mark_published(&key, &page_id, &now);
+                    }
+                    log::info!("세션 회고 발행: {} → {page_id}", &s.session_id[..8.min(s.session_id.len())]);
+                }
+                Ok(None) => log::warn!("retro resolve 응답에 page_id 없음"),
+                Err(e) => log::warn!("retro resolve 실패(다음 스캔 재개): {e}"),
+            }
+        }
+    }
+
+
+    /// AI 스프라이트(2026-07-19) — app_data/sprite.png 없고 이미지 모델 설정이 있으면 1회 생성.
+    /// 네트워크는 락과 무관(파일·env만). 성공 시 sprite:ready emit → 프론트 즉시 교체.
+
+    /// 외부 문서(code.claude.com) 도달성 프로브 — 앱 실행당 1회. 내부망(차단)이면
+    /// docs_reachable=false 를 남겨 프론트가 "공식 가이드" 링크를 숨긴다 (동료 이슈:
+    /// "오늘의 배움 패널의 anthropic 가이드 링크는 내부망에서 연결 안 됨").
+    fn maybe_probe_docs(store_mutex: &std::sync::Mutex<SqliteStore>) {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static PROBED: AtomicBool = AtomicBool::new(false);
+        if PROBED.swap(true, Ordering::SeqCst) { return; }
+        // 락 밖 네트워크 — 3초 타임아웃 HEAD (core 헬퍼)
+        let ok = agent_mentor::ops::probe_docs_reachable();
+        if let Ok(store) = store_mutex.lock() {
+            let _ = store.set_setting("docs_reachable", if ok { "true" } else { "false" });
+        }
+        if !ok { log::info!("외부 문서 미도달(내부망?) — 배움 카드 외부 링크 숨김"); }
+    }
+
+    fn maybe_generate_sprite(app: &AppHandle) {
+        use agent_mentor::sprite;
+        let Ok(dir) = app.path().app_data_dir() else { return };
+        let path = dir.join("sprite.png");
+        if path.exists() { return; }
+        let Some(cfg) = sprite::SpriteConfig::from_env() else { return };
+        let identity = agent_mentor::mascot::stable_identity();
+        let spec = agent_mentor::mascot::robot_spec_for(&identity);
+        let desc = sprite::character_description(&spec, &identity);
+        match sprite::generate(&cfg, &desc) {
+            Ok(png) => {
+                let _ = std::fs::create_dir_all(&dir);
+                if std::fs::write(&path, png).is_ok() {
+                    log::info!("AI 스프라이트 생성 완료: {}", path.display());
+                    let _ = app.emit("sprite:ready", ());
+                }
+            }
+            Err(e) => log::warn!("AI 스프라이트 생성 실패(다음 스캔 재시도): {e}"),
+        }
+    }
+
     fn maybe_generate_chatter_pool(store_mutex: &std::sync::Mutex<SqliteStore>) {
         let engine = match store_mutex.lock() {
             Ok(store) => crate::resolve_engine(&store),

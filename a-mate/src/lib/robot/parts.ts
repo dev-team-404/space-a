@@ -1,115 +1,74 @@
-﻿// parts.ts -- 128x128 procedural robot parts library
-// Color indices: 0=body, 1=bodyShade, 2=accent, 3=accentShade, 4=eye, 5=outline, 6=highlight, 7=cheek
+// parts.ts -- 128x128 procedural PIXEL-ART character library
+// 2026-07-19 v5 전면 전환: 로봇 → 픽셀 치비 "사람" (스타듀밸리/쯔꾸르 감성 레퍼런스).
+// 시드 계약(Rust mascot.rs: 슬롯 6종×6 + 팔레트 8)은 유지하고 의미만 재해석한다:
+//   antenna→헤어스타일 · head→얼굴형 · eyes→눈 · body→의상 · arms→포즈 · palette→색 조합.
+// Color indices: 0=outfit, 1=outfitShade, 2=accent, 3=pants, 4=hair, 5=hairShade, 6=skin, 7=cheek, 8=white, (9=OUTLINE 상수)
 
 export const GRID = 128;
+/** 픽셀 셀 크기 — 64×64 논리 그리드 × 2px = 128 (레퍼런스 해상도) */
+export const CELL = 2;
+export const COLS = 64;
 
 export const VARIANTS = {
-  antenna: 6,
-  head: 6,
+  antenna: 6, // 헤어스타일
+  head: 6,    // 얼굴형
   eyes: 6,
-  body: 6,
-  arms: 6,
+  body: 6,    // 의상
+  arms: 6,    // 포즈
   palette: 8,
 } as const;
 
-// [body, bodyShade, accent, accentShade, eye, outline, highlight, cheek]
-export const PALETTES: ReadonlyArray<readonly [string, string, string, string, string, string, string, string]> = [
-  ['#b2e8d8', '#7fc4ac', '#5ec4a8', '#3a9880', '#ffffff', '#1a3a4a', '#e8fffc', '#ffb8c8'],
-  ['#f7c5b0', '#d4987c', '#e88a6c', '#c06848', '#ffffff', '#3a1a10', '#fff5f0', '#ffb8c8'],
-  ['#d4b8f0', '#a888d0', '#9b6fd4', '#7048b0', '#ffffff', '#2a1050', '#f8f0ff', '#ffb8c8'],
-  ['#f5e8b0', '#d4c078', '#d4b840', '#a89020', '#ffffff', '#3a2800', '#fffff0', '#ffb8c8'],
-  ['#a8d8f0', '#78b0d4', '#4898d4', '#2870b0', '#ffffff', '#0a2840', '#f0f8ff', '#ffb8c8'],
-  ['#f0b8c8', '#d088a0', '#d46888', '#b04060', '#ffffff', '#40101c', '#fff0f4', '#ffb8c8'],
-  ['#b8d4b0', '#88b080', '#688c60', '#486840', '#ffffff', '#182810', '#f0fff0', '#ffb8c8'],
-  ['#c8d0d8', '#98a8b8', '#7890a0', '#507080', '#ffffff', '#182028', '#f4f8fc', '#ffb8c8'],
+// [outfit, outfitShade, accent, pants, hair, outline, skin, cheek, white]
+export const PALETTES: ReadonlyArray<readonly [string, string, string, string, string, string, string, string, string]> = [
+  ['#3a5a94', '#2c4470', '#d43c3c', '#555a66', '#4a3628', '#33241a', '#f5c9a0', '#f0a8a0', '#f4f2ee'],
+  ['#2e6db4', '#235694', '#e8e4d8', '#3c5a8c', '#3a2e24', '#261c12', '#f5c9a0', '#f0a8a0', '#f4f2ee'],
+  ['#4a9a6a', '#3a7a54', '#f0d05a', '#5a5a62', '#2c2620', '#1a1512', '#f5c9a0', '#f0a8a0', '#f4f2ee'],
+  ['#c46a8a', '#a05070', '#fff0f4', '#705a64', '#6a4a30', '#4a3320', '#fadcb8', '#f0a8a0', '#f4f2ee'],
+  ['#8a68c4', '#6e50a0', '#e8e0f8', '#4a4454', '#2a2430', '#181420', '#f5c9a0', '#f0a8a0', '#f4f2ee'],
+  ['#d49a4a', '#b07c34', '#fff8e8', '#4c5a6a', '#8a3c2c', '#5f281d', '#fadcb8', '#f0a8a0', '#f4f2ee'],
+  ['#5ab4a4', '#429486', '#f0fffc', '#5a5a62', '#c4a05a', '#96763c', '#fadcb8', '#f0a8a0', '#f4f2ee'],
+  ['#6a7a8c', '#526070', '#d4d4d4', '#3a4450', '#56423a', '#3a2c26', '#f5c9a0', '#f0a8a0', '#f4f2ee'],
 ];
 
-// Head variant parameters
-export type HeadVariant =
-  | { kind: 'round'; cx: number; cy: number; rx: number; ry: number }
-  | { kind: 'square'; x: number; y: number; w: number; h: number; r: number }
-  | { kind: 'helmet'; x: number; y: number; w: number; h: number; r: number; visorY: number; visorH: number }
-  | { kind: 'catear'; x: number; y: number; w: number; h: number; r: number; earW: number; earH: number }
-  | { kind: 'crt'; x: number; y: number; w: number; h: number; r: number }
-  | { kind: 'capsule'; cx: number; cy: number; rx: number; ry: number };
-
-export const HEAD_VARIANTS: ReadonlyArray<HeadVariant> = [
-  { kind: 'round',   cx: 64, cy: 38, rx: 38, ry: 28 },
-  { kind: 'square',  x: 28, y: 12, w: 72, h: 56, r: 4 },
-  { kind: 'helmet',  x: 26, y: 10, w: 76, h: 58, r: 6, visorY: 30, visorH: 16 },
-  { kind: 'catear',  x: 30, y: 18, w: 68, h: 52, r: 4, earW: 14, earH: 18 },
-  { kind: 'crt',     x: 18, y: 10, w: 92, h: 56, r: 8 },
-  { kind: 'capsule', cx: 64, cy: 38, rx: 28, ry: 34 },
+// ── 얼굴형 (head 슬롯) — 셀 단위 타원 파라미터 (cx는 16 고정) ──
+export interface FaceVariant { rx: number; ry: number; cy: number }
+export const FACE_VARIANTS: ReadonlyArray<FaceVariant> = [
+  { rx: 13.0, ry: 12.0, cy: 17.0 },
+  { rx: 14.0, ry: 12.0, cy: 17.0 },
+  { rx: 12.5, ry: 12.6, cy: 17.4 },
+  { rx: 14.5, ry: 11.6, cy: 16.8 },
+  { rx: 12.0, ry: 11.8, cy: 17.2 },
+  { rx: 13.5, ry: 12.4, cy: 17.2 },
 ];
 
-// Body variant parameters
-export type BodyVariant =
-  | { kind: 'round';   cx: number; cy: number; rx: number; ry: number }
-  | { kind: 'box';     x: number; y: number; w: number; h: number; r: number; ledX: number; ledY: number; ledW: number; ledH: number }
-  | { kind: 'barrel';  cx: number; cy: number; rx: number; ry: number; neckRx: number }
-  | { kind: 'vest';    x: number; y: number; w: number; h: number; r: number; lapelW: number }
-  | { kind: 'pocket';  x: number; y: number; w: number; h: number; r: number; pocketX: number; pocketY: number; pocketW: number; pocketH: number }
-  | { kind: 'striped'; x: number; y: number; w: number; h: number; r: number; stripeY1: number; stripeY2: number; stripeY3: number };
-
-export const BODY_VARIANTS: ReadonlyArray<BodyVariant> = [
-  { kind: 'round',   cx: 64, cy: 90, rx: 28, ry: 22 },
-  { kind: 'box',     x: 32, y: 70, w: 64, h: 44, r: 4, ledX: 50, ledY: 80, ledW: 28, ledH: 16 },
-  { kind: 'barrel',  cx: 64, cy: 90, rx: 34, ry: 24, neckRx: 22 },
-  { kind: 'vest',    x: 30, y: 70, w: 68, h: 44, r: 4, lapelW: 10 },
-  { kind: 'pocket',  x: 30, y: 70, w: 68, h: 44, r: 4, pocketX: 36, pocketY: 88, pocketW: 20, pocketH: 14 },
-  { kind: 'striped', x: 30, y: 70, w: 68, h: 44, r: 4, stripeY1: 78, stripeY2: 88, stripeY3: 98 },
+// ── 헤어스타일 (antenna 슬롯) ──
+//   bang: 이마를 덮는 앞머리 깊이(셀) · fringe: 컬럼별 들쭉 패턴 · ear: 옆머리가 내려오는 깊이
+//   spikes: 정수리 위 삐친 머리 셀 오프셋 · strands: 어깨까지 내려오는 옆머리(장발)
+export interface HairVariant {
+  bang: number;
+  fringe: ReadonlyArray<number>;
+  ear: number;
+  spikes: ReadonlyArray<readonly [number, number]>;
+  strands: boolean;
+  slant: number; // 옆가르마: 컬럼당 기울기
+}
+export const HAIR_VARIANTS: ReadonlyArray<HairVariant> = [
+  { bang: 7.5, fringe: [0, 1.2, 0.3, 1.4, 0.2, 1.0], ear: 5.5, spikes: [], strands: false, slant: 0 },
+  { bang: 8.5, fringe: [0.5, 2.6, 1.0, 3.2, 0.6, 2.2, 1.2], ear: 4.5, spikes: [[-5, -1.6], [1, -2.2], [7, -1.2]], strands: false, slant: 0 },
+  { bang: 6.0, fringe: [0, 0.8, 0.2, 1.0], ear: 4.8, spikes: [[5, -1.8]], strands: false, slant: 0.35 },
+  { bang: 7.0, fringe: [1.8, 0, 1.8, 0, 1.8, 0], ear: 6.0, spikes: [[-8, -1.0], [0, -1.8], [8, -1.0]], strands: false, slant: 0 },
+  { bang: 7.5, fringe: [0, 1.2, 0.4, 1.2], ear: 5.5, spikes: [], strands: true, slant: 0 },
+  { bang: 4.5, fringe: [0, 0.6, 0.1, 0.6], ear: 3.0, spikes: [], strands: false, slant: 0 },
 ];
 
-// Antenna variant parameters
-export type AntennaVariant =
-  | { kind: 'rod';       stemX: number; stemY1: number; stemY2: number; ballCx: number; ballCy: number; ballR: number }
-  | { kind: 'feelers';   lx: number; rx: number; baseY: number; tipY: number; tipR: number }
-  | { kind: 'dish';      dishX: number; dishY: number; dishW: number; dishH: number; stemX: number; stemY1: number; stemY2: number }
-  | { kind: 'ring';      ringCx: number; ringCy: number; ringRx: number; ringRy: number; stemX: number; stemY1: number; stemY2: number }
-  | { kind: 'lightning'; points: ReadonlyArray<readonly [number, number]> }
-  | { kind: 'flapear';   lx: number; rx: number; earY: number; earRx: number; earRy: number };
+// ── 눈 (eyes 슬롯) — 픽셀 위 소형 벡터 (레퍼런스의 매끈-타원 눈) ──
+export type EyeStyle = 'oval' | 'round' | 'calm' | 'sparkle' | 'droopy' | 'happy';
+export const EYE_VARIANTS: ReadonlyArray<EyeStyle> = ['oval', 'round', 'calm', 'sparkle', 'droopy', 'happy'];
 
-export const ANTENNA_VARIANTS: ReadonlyArray<AntennaVariant> = [
-  { kind: 'rod',       stemX: 64, stemY1: 0, stemY2: 14, ballCx: 64, ballCy: 0, ballR: 7 },
-  { kind: 'feelers',   lx: 44, rx: 84, baseY: 12, tipY: 0, tipR: 6 },
-  { kind: 'dish',      dishX: 32, dishY: 0, dishW: 64, dishH: 10, stemX: 64, stemY1: 10, stemY2: 14 },
-  { kind: 'ring',      ringCx: 64, ringCy: 4, ringRx: 18, ringRy: 8, stemX: 64, stemY1: 10, stemY2: 14 },
-  { kind: 'lightning', points: [[64,0],[72,4],[60,8],[68,12],[56,14]] as const },
-  { kind: 'flapear',   lx: 26, rx: 102, earY: 15, earRx: 10, earRy: 14 },
-];
+// ── 의상 (body 슬롯) ──
+export type OutfitKind = 'hoodie' | 'blazer' | 'tshirt' | 'sweater' | 'shirt' | 'overalls';
+export const OUTFIT_VARIANTS: ReadonlyArray<OutfitKind> = ['hoodie', 'blazer', 'tshirt', 'sweater', 'shirt', 'overalls'];
 
-// Eyes variant parameters
-export type EyesVariant =
-  | { kind: 'round';   lx: number; rx: number; ey: number; er: number }
-  | { kind: 'led';     lx: number; rx: number; ey: number; ew: number; eh: number }
-  | { kind: 'star';    lx: number; rx: number; ey: number; sr: number }
-  | { kind: 'heart';   lx: number; rx: number; ey: number }
-  | { kind: 'drowsy';  lx: number; rx: number; ey: number; ew: number; eh: number }
-  | { kind: 'scanner'; ey: number; x1: number; x2: number };
-
-export const EYES_VARIANTS: ReadonlyArray<EyesVariant> = [
-  { kind: 'round',   lx: 48, rx: 80, ey: 36, er: 7 },
-  { kind: 'led',     lx: 48, rx: 80, ey: 36, ew: 14, eh: 6 },
-  { kind: 'star',    lx: 48, rx: 80, ey: 36, sr: 7 },
-  { kind: 'heart',   lx: 48, rx: 80, ey: 36 },
-  { kind: 'drowsy',  lx: 48, rx: 80, ey: 36, ew: 14, eh: 4 },
-  { kind: 'scanner', ey: 36, x1: 28, x2: 100 },
-];
-
-// Arms variant parameters
-export type ArmsVariant =
-  | { kind: 'down';    ly: number; ry: number; aw: number; ah: number }
-  | { kind: 'up';      ly: number; ry: number; aw: number; ah: number }
-  | { kind: 'pincer';  ly: number; ry: number; aw: number; ah: number }
-  | { kind: 'stubby';  ly: number; ry: number; aw: number; ah: number }
-  | { kind: 'wave';    ly: number; ry: number; aw: number; ah: number }
-  | { kind: 'rocket';  ly: number; ry: number; aw: number; ah: number; extW: number };
-
-export const ARMS_VARIANTS: ReadonlyArray<ArmsVariant> = [
-  { kind: 'down',   ly: 76, ry: 76, aw: 14, ah: 28 },
-  { kind: 'up',     ly: 58, ry: 58, aw: 14, ah: 28 },
-  { kind: 'pincer', ly: 76, ry: 76, aw: 14, ah: 24 },
-  { kind: 'stubby', ly: 80, ry: 80, aw: 10, ah: 14 },
-  { kind: 'wave',   ly: 60, ry: 78, aw: 14, ah: 24 },
-  { kind: 'rocket', ly: 78, ry: 78, aw: 14, ah: 20, extW: 10 },
-];
+// ── 포즈 (arms 슬롯) ──
+export type PoseKind = 'down' | 'pockets' | 'wave' | 'front' | 'bag' | 'behind';
+export const POSE_VARIANTS: ReadonlyArray<PoseKind> = ['down', 'pockets', 'wave', 'front', 'bag', 'behind'];

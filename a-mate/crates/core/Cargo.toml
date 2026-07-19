@@ -21,7 +21,10 @@ chrono = "0.4"
 ureq = { version = "2", features = ["json", "native-certs"] }
 anyhow = "1"
 sys-locale = "0.3"
+base64 = "0.22"
 sha2 = "0.10"
+# Boris 팁 사이트(howborisusesclaudecode.com) HTML 파싱 — 중첩 태그 때문에 정식 파서 필요.
+scraper = "0.20"
 
 [dev-dependencies]
 tempfile = "3"

@@ -17,10 +17,10 @@ describe('VARIANTS', () => {
 });
 
 describe('PALETTES', () => {
-  it('8팔레트 × 8색 hex', () => {
+  it('8팔레트 × 9색 hex (v5: outfit/shade/accent/pants/hair/outline/skin/cheek/white)', () => {
     expect(PALETTES).toHaveLength(8);
     for (const p of PALETTES) {
-      expect(p).toHaveLength(8);
+      expect(p).toHaveLength(9);
       for (const c of p) expect(c).toMatch(/^#[0-9a-f]{6}$/i);
     }
   });
@@ -56,19 +56,19 @@ describe('buildRobotShapes', () => {
     }
   });
 
-  it('color 인덱스가 0..7 범위', () => {
+  it('color 인덱스가 0..9 범위 (9=실루엣 아웃라인 상수)', () => {
     for (const s of buildRobotShapes(baseSpec, baseFrame)) {
       expect(s.color).toBeGreaterThanOrEqual(0);
-      expect(s.color).toBeLessThan(8);
+      expect(s.color).toBeLessThan(10);
     }
   });
 
-  it('밀도 게이트 — shapes >= 25개', () => {
+  it('밀도 게이트 — shapes >= 22개 (미니미 개편으로 눈 단순화: 반짝 1개)', () => {
     const shapes = buildRobotShapes(baseSpec, baseFrame);
-    expect(shapes.length).toBeGreaterThanOrEqual(25);
+    expect(shapes.length).toBeGreaterThanOrEqual(22);
   });
 
-  it('cheek(7)과 highlight(6)이 각각 1개 이상', () => {
+  it('cheek(7)과 skin(6)이 각각 1개 이상', () => {
     const shapes = buildRobotShapes(baseSpec, baseFrame);
     expect(shapes.some(s => s.color === 7)).toBe(true);
     expect(shapes.some(s => s.color === 6)).toBe(true);

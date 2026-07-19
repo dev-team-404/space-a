@@ -59,7 +59,13 @@ fn cmd_curate(store: &SqliteStore) -> Result<()> {
             n
         }
         Err(_) => {
-            let n = ops::fetch_feed_items();
+            // 팀 지식(pull)은 허브 설정+토큰(env 또는 settings 보존분)이 있을 때만
+            let hub_src = agent_mentor::hub::HubConfig::from_env()
+                .and_then(|cfg| {
+                    let stored = store.get_setting("knowledge_hub_token").ok().flatten();
+                    agent_mentor::hub::pull_source(&cfg, stored)
+                });
+            let n = ops::fetch_feed_items(hub_src);
             eprintln!("feed: 네트워크에서 {}건", n.len());
             n
         }
@@ -99,6 +105,69 @@ fn cmd_diary(store: &SqliteStore, date: Option<String>) -> Result<()> {
     Ok(())
 }
 
+/// a-hub 지식 공유 — 유의미 finding을 이슈→해결로 발행 (SPACE_A_HUB_URL 미설정 시 no-op).
+fn cmd_hub_share(store: &SqliteStore) -> Result<()> {
+    let Some(cfg) = agent_mentor::hub::HubConfig::from_env() else {
+        println!("hub-share: SPACE_A_HUB_URL 미설정 (또는 SPACE_A_SHARE=off) — 건너뜀");
+        return Ok(());
+    };
+    let report = agent_mentor::hub::run_share(store, &cfg)?;
+    for w in &report.warnings {
+        eprintln!("warn: {w}");
+    }
+    for (key, page) in &report.published {
+        println!("published: {key} → page {page}");
+    }
+    println!(
+        "hub-share: {}건 발행({}건 재개), {}건 보류/비대상",
+        report.published.len(),
+        report.resumed,
+        report.skipped
+    );
+    Ok(())
+}
+
+/// 텔레메트리(#46) — 지정 날짜(기본: 어제)의 파생 신호를 허브 전용 공간에 발행.
+fn cmd_telemetry(store: &SqliteStore, date: Option<String>) -> Result<()> {
+    let Some(cfg) = agent_mentor::hub::HubConfig::from_env() else {
+        println!("telemetry: SPACE_A_HUB_URL 미설정 — 건너뜀");
+        return Ok(());
+    };
+    let date = date.unwrap_or_else(|| {
+        (chrono::Local::now() - chrono::Duration::days(1)).format("%Y-%m-%d").to_string()
+    });
+    match agent_mentor::hub::run_telemetry_push(store, &cfg, &date)? {
+        agent_mentor::hub::TelemetryOutcome::Published { date, page_id } => {
+            println!("telemetry published: {date} → page {page_id}");
+        }
+        agent_mentor::hub::TelemetryOutcome::AlreadySent => {
+            println!("telemetry: {date} 이미 발행됨 (하루 1회)");
+        }
+        agent_mentor::hub::TelemetryOutcome::Skipped(why) => {
+            println!("telemetry skipped: {why}");
+        }
+    }
+    Ok(())
+}
+
+/// 세션 회고(스펙 2026-07-19) — "고생 끝 해결" 세션을 로컬 생성 요약으로 발행. Engine 필수.
+fn cmd_retro(store: &SqliteStore) -> Result<()> {
+    let Some(cfg) = agent_mentor::hub::HubConfig::from_env() else {
+        println!("retro: SPACE_A_HUB_URL 미설정 — 건너뜀");
+        return Ok(());
+    };
+    let Some(engine) = OpenAiCompatEngine::from_env() else {
+        println!("retro: 엔진 미설정 — 발행 보류 (품질 > 정시성)");
+        return Ok(());
+    };
+    let published = agent_mentor::hub::run_retro_push(store, &cfg, &engine)?;
+    for (sess, page) in &published {
+        println!("retro published: {} → page {page}", &sess[..8.min(sess.len())]);
+    }
+    println!("retro: {}건 발행", published.len());
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let cmd = args.get(1).map(|s| s.as_str()).unwrap_or("all");
@@ -109,6 +178,9 @@ fn main() -> Result<()> {
         "rules" => cmd_rules(&store)?,
         "curate" => cmd_curate(&store)?,
         "diary" => cmd_diary(&store, args.get(2).cloned())?,
+        "hub-share" => cmd_hub_share(&store)?,
+        "telemetry" => cmd_telemetry(&store, args.get(2).cloned())?,
+        "retro" => cmd_retro(&store)?,
         "all" => {
             cmd_ingest(&store)?;
             cmd_inventory(&mut store)?;
@@ -118,7 +190,7 @@ fn main() -> Result<()> {
         }
         other => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: agent-mentor [ingest|inventory|rules|curate|diary [date]|all]");
+            eprintln!("usage: agent-mentor [ingest|inventory|rules|curate|diary [date]|hub-share|telemetry [date]|all]");
         }
     }
     Ok(())

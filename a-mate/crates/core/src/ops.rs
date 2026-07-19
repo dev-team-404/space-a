@@ -165,6 +165,8 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     store.delete_findings_by_rule_and_scope("R9", "session")?;
     store.delete_findings_by_rule_and_scope("R12", "project")?;
     let engine = RuleEngine::new(vec![
+        // R6(반복 지시 → 스킬/커맨드화)은 v3 은퇴 대상 아님 — 킥오프 차별점 신규 등록
+        Box::new(crate::rules::r6_repeated_prompts::R6RepeatedPrompts::default()),
         Box::new(R7OpusTrivial::default()),
         Box::new(R10AutomationBurst::default()),
         Box::new(R11PermissionFriction::default()),
@@ -190,6 +192,12 @@ pub fn run_curation(
     use crate::content::{rank, BuiltinTipsSource, ContentSource, CONTENT_COOLDOWN_DAYS};
     let profile = crate::profile::detect_profile(store)?;
     let mut items = BuiltinTipsSource.fetch()?;
+    // 개인 실전 레슨 — 내 로그의 최근 사건에서 (조건 미충족이면 빈 벡터, 억지 레슨 없음)
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let yesterday = (chrono::Local::now() - chrono::Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    items.extend(crate::content::personal_lessons(store, &today, &yesterday));
     items.extend(feed_items);
     let ranked = rank(items, &profile);
     store.replace_content_items(&ranked, now_ts)?;
@@ -198,15 +206,36 @@ pub fn run_curation(
 
 /// 피드 소스(T1 changelog 등)를 네트워크로 가져온다 — 부수효과는 가장자리. 실패는 하드
 /// 에러 아님(빈 벡터 후 계속 — 관대한 파싱 원칙). Tauri 파이프라인이 락 밖에서 호출.
-pub fn fetch_feed_items() -> Vec<crate::content::ContentItem> {
-    use crate::content::{ClaudeChangelogSource, ContentSource};
+/// 외부 문서(code.claude.com) 도달성 — 내부망 감지용 3초 HEAD. (동료 이슈: 내부망 링크)
+pub fn probe_docs_reachable() -> bool {
+    ureq::head("https://code.claude.com/docs/en/overview")
+        .timeout(std::time::Duration::from_secs(3))
+        .call()
+        .is_ok()
+}
+
+pub fn fetch_feed_items(
+    hub: Option<crate::content::HubKnowledgeSource>,
+) -> Vec<crate::content::ContentItem> {
+    use crate::content::{BorisTipsSource, ClaudeChangelogSource, ContentSource};
+    // 여러 소스를 각각 관대하게 fetch — 하나가 실패해도 나머지는 계속.
+    let mut items = Vec::new();
     match ClaudeChangelogSource::default().fetch() {
-        Ok(items) => items,
-        Err(e) => {
-            eprintln!("[curation] 피드 fetch 실패(계속): {e}");
-            Vec::new()
+        Ok(mut v) => items.append(&mut v),
+        Err(e) => eprintln!("[curation] changelog 피드 fetch 실패(계속): {e}"),
+    }
+    match BorisTipsSource::default().fetch() {
+        Ok(mut v) => items.append(&mut v),
+        Err(e) => eprintln!("[curation] boris 피드 fetch 실패(계속): {e}"),
+    }
+    // 팀 지식(pull) — 허브 설정+토큰이 있을 때만 (hub::pull_source)
+    if let Some(src) = hub {
+        match src.fetch() {
+            Ok(mut v) => items.append(&mut v),
+            Err(e) => eprintln!("[curation] 팀 지식 피드 fetch 실패(계속): {e}"),
         }
     }
+    items
 }
 
 #[cfg(test)]

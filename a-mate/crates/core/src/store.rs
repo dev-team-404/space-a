@@ -83,6 +83,12 @@ CREATE TABLE IF NOT EXISTS personal_skill_inventory (
 CREATE TABLE IF NOT EXISTS host_settings (
   host TEXT PRIMARY KEY, default_model TEXT, effort_level TEXT, scanned_at TEXT
 );
+CREATE TABLE IF NOT EXISTS hub_share_state (
+  dedup_key TEXT PRIMARY KEY,
+  issue_id  TEXT,
+  page_id   TEXT,
+  shared_at TEXT
+);
 "#;
 
 pub struct SqliteStore {
@@ -680,6 +686,16 @@ impl SqliteStore {
                         item.source_url, tags, score, now_ts],
             )?;
         }
+        // 피드에서 사라진 아이템 프룬(2026-07-19): 소식·외부 팁은 일시적 — 랭킹에 없으면
+        // 낡은 점수로 상단을 점령한다. 단, 사용자가 닫은(dismissed 등) 행은 쿨다운 기록이라 보존.
+        if !ranked.is_empty() {
+            let placeholders = vec!["?"; ranked.len()].join(",");
+            let sql = format!(
+                "DELETE FROM content_items WHERE status='new' AND id NOT IN ({placeholders})"
+            );
+            let ids: Vec<&str> = ranked.iter().map(|(i, _)| i.id.as_str()).collect();
+            self.conn.execute(&sql, rusqlite::params_from_iter(ids))?;
+        }
         tx.commit()?;
         Ok(())
     }
@@ -935,6 +951,226 @@ impl SqliteStore {
         Ok(())
     }
 
+    // ── a-hub 지식 공유 상태 (hub.rs — 스펙 2026-07-18-hub-knowledge-sharing §7) ──
+
+    /// 이슈를 열었거나 발행까지 끝난 dedup_key 전부 — "다시 열지 않을" 집합.
+    pub fn hub_shared_or_pending_keys(&self) -> Result<std::collections::HashSet<String>> {
+        let mut stmt = self.conn.prepare("SELECT dedup_key FROM hub_share_state")?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        let mut out = std::collections::HashSet::new();
+        for k in rows {
+            out.insert(k?);
+        }
+        Ok(out)
+    }
+
+    /// open은 됐는데 resolve(발행)가 안 된 것 — 다음 스캔이 재개한다 (중복 이슈 방지).
+    pub fn hub_share_pending(&self) -> Result<Vec<(String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT dedup_key, issue_id FROM hub_share_state
+             WHERE issue_id IS NOT NULL AND page_id IS NULL",
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    pub fn hub_mark_issue(&self, dedup_key: &str, issue_id: &str, now_ts: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO hub_share_state (dedup_key, issue_id, shared_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(dedup_key) DO UPDATE SET issue_id=?2, shared_at=?3",
+            params![dedup_key, issue_id, now_ts],
+        )?;
+        Ok(())
+    }
+
+    pub fn hub_mark_published(&self, dedup_key: &str, page_id: &str, now_ts: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO hub_share_state (dedup_key, page_id, shared_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(dedup_key) DO UPDATE SET page_id=?2, shared_at=?3",
+            params![dedup_key, page_id, now_ts],
+        )?;
+        Ok(())
+    }
+
+    /// 콘텐츠 아이템 존재 여부 (레슨 칭찬 루프 — "이 레슨을 보여준 적 있나").
+    pub fn content_item_exists(&self, id: &str) -> Result<bool> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM content_items WHERE id=?1",
+            params![id],
+            |r| r.get(0),
+        )?;
+        Ok(n > 0)
+    }
+
+    /// 특정 로컬 날짜의 도구 오류(error+denied) 수 — 레슨 칭찬 루프용.
+    pub fn errors_on_local_date(&self, date: &str) -> Result<u64> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM events
+             WHERE date(ts,'localtime')=?1 AND result_status IN ('error','denied')",
+            params![date],
+            |r| r.get(0),
+        )?;
+        Ok(n as u64)
+    }
+
+    /// 날짜 구간 합계 (주간 리포트용) — (세션수, 입력, 출력, 캐시읽기).
+    pub fn range_totals(&self, from: &str, to: &str) -> Result<(u64, u64, u64, u64)> {
+        self.conn
+            .query_row(
+                "SELECT COALESCE(SUM(session_count),0), COALESCE(SUM(tok_input),0),
+                        COALESCE(SUM(tok_output),0), COALESCE(SUM(tok_cache_read),0)
+                 FROM daily_rollup WHERE date >= ?1 AND date <= ?2",
+                params![from, to],
+                |r| Ok((
+                    r.get::<_, i64>(0)? as u64, r.get::<_, i64>(1)? as u64,
+                    r.get::<_, i64>(2)? as u64, r.get::<_, i64>(3)? as u64,
+                )),
+            )
+            .map_err(Into::into)
+    }
+
+    /// 텔레메트리(#46 목표 아키텍처): 특정 로컬 날짜의 MCP 서버별 호출 수 — 파생 카운트만.
+    pub fn mcp_call_counts_for_date(&self, date: &str) -> Result<Vec<(String, u64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT tool_server, COUNT(*) AS n FROM events
+             WHERE date(ts, 'localtime') = ?1 AND tool_server IS NOT NULL
+             GROUP BY tool_server ORDER BY n DESC",
+        )?;
+        let rows = stmt.query_map(params![date], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// 텔레메트리: 코칭 findings 상태별 개수 (채택·해결 흐름의 파생 신호).
+    pub fn findings_status_counts(&self) -> Result<Vec<(String, u64)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT status, COUNT(*) FROM findings GROUP BY status")?;
+        let rows = stmt.query_map([], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// 세션 회고(스펙 2026-07-19): "고생 끝 해결" 후보 세션.
+    /// 조건: 종료(last_ts < settled_before) ∧ 오류(error+denied) ≥ min_errors ∧ 규모 ≥ min_events.
+    /// 회복 여부(last_result_ok)는 호출자가 필터 — 실패로 끝난 세션은 지식이 아니라 백로그감.
+    pub fn struggle_sessions(
+        &self,
+        min_errors: u64,
+        min_events: u64,
+        settled_before: &str,
+    ) -> Result<Vec<StruggleSession>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT s.session_id, s.host, s.project_id, s.first_prompt_preview, s.first_ts, s.last_ts,
+                    (SELECT COUNT(*) FROM events e WHERE e.session_id=s.session_id
+                       AND e.result_status IN ('error','denied')) AS errs,
+                    (SELECT COUNT(*) FROM events e WHERE e.session_id=s.session_id) AS total,
+                    (SELECT e.result_status FROM events e WHERE e.session_id=s.session_id
+                       AND e.kind='tool_result' ORDER BY e.id DESC LIMIT 1) AS last_status
+             FROM sessions s
+             WHERE s.last_ts IS NOT NULL AND s.last_ts < ?3
+               AND (SELECT COUNT(*) FROM events e WHERE e.session_id=s.session_id
+                      AND e.result_status IN ('error','denied')) >= ?1
+               AND (SELECT COUNT(*) FROM events e WHERE e.session_id=s.session_id) >= ?2
+             ORDER BY s.last_ts DESC",
+        )?;
+        let rows = stmt.query_map(params![min_errors as i64, min_events as i64, settled_before], |r| {
+            Ok((
+                r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?, r.get::<_, Option<String>>(2)?,
+                r.get::<_, Option<String>>(3)?, r.get::<_, Option<String>>(4)?, r.get::<_, Option<String>>(5)?,
+                r.get::<_, i64>(6)?, r.get::<_, i64>(7)?, r.get::<_, Option<String>>(8)?,
+            ))
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (session_id, host, project_id, preview, first_ts, last_ts, errs, total, last_status) = row?;
+            // 오류가 난 도구들 (call↔result 조인, 결정론 식별)
+            let mut tstmt = self.conn.prepare(
+                "SELECT COALESCE(c.raw_name, c.tool_kind, '?') AS t, COUNT(*) AS n
+                 FROM events r
+                 LEFT JOIN events c ON c.tool_use_id = r.tool_use_id AND c.kind='tool_call'
+                   AND c.session_id = r.session_id
+                 WHERE r.session_id=?1 AND r.kind='tool_result'
+                   AND r.result_status IN ('error','denied')
+                 GROUP BY t ORDER BY n DESC",
+            )?;
+            let tools = tstmt
+                .query_map(params![session_id], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            out.push(StruggleSession {
+                session_id,
+                host: host.unwrap_or_default(),
+                project_id: project_id.unwrap_or_default(),
+                first_prompt_preview: preview,
+                first_ts,
+                last_ts,
+                error_count: errs as u64,
+                total_events: total as u64,
+                error_tools: tools,
+                last_result_ok: last_status.as_deref() == Some("ok"),
+            });
+        }
+        Ok(out)
+    }
+
+    /// hub_share_state에서 특정 접두사 키가 특정 날짜(shared_at 접두사)에 몇 건인지 — 일일 상한용.
+    pub fn hub_share_count_on(&self, key_prefix: &str, date_prefix: &str) -> Result<u64> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM hub_share_state
+             WHERE dedup_key LIKE ?1 || '%' AND shared_at LIKE ?2 || '%'",
+            params![key_prefix, date_prefix],
+            |r| r.get(0),
+        )?;
+        Ok(n as u64)
+    }
+
+    /// dedup_key로 단건 조회 (hub 재개 경로용).
+    pub fn find_finding(&self, dedup_key: &str) -> Result<Option<FindingRow>> {
+        let row = self
+            .conn
+            .query_row(
+                "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
+                        evidence_json, est_tokens_saved, prescription_json, dedup_key,
+                        last_seen, occurrences, status
+                 FROM findings WHERE dedup_key=?1",
+                params![dedup_key],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?, r.get::<_, String>(1)?,
+                        r.get::<_, Option<String>>(2)?, r.get::<_, Option<String>>(3)?,
+                        r.get::<_, String>(4)?, r.get::<_, String>(5)?,
+                        r.get::<_, String>(6)?, r.get::<_, i64>(7)?,
+                        r.get::<_, Option<String>>(8)?, r.get::<_, String>(9)?,
+                        r.get::<_, Option<String>>(10)?, r.get::<_, i64>(11)?,
+                        r.get::<_, String>(12)?,
+                    ))
+                },
+            )
+            .optional()?;
+        Ok(row.map(
+            |(rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
+              evidence_json, est, prescription_json, dedup_key, last_seen, occ, status)| {
+                FindingRow {
+                    rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
+                    evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
+                    est_tokens_saved: est as u64,
+                    prescription: prescription_json.and_then(|s| serde_json::from_str(&s).ok()),
+                    dedup_key, last_seen,
+                    occurrences: occ as u64,
+                    status,
+                }
+            },
+        ))
+    }
+
     pub fn all_settings(&self) -> Result<Vec<(String, String)>> {
         let mut stmt = self.conn.prepare("SELECT key, value FROM settings ORDER BY key")?;
         let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
@@ -1025,6 +1261,23 @@ pub struct ContentRow {
     /// "당신 로그: …" — 사용자 실측 데이터로 접지한 근거 줄. list_content read 시점 계산.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub personal: Option<String>,
+}
+
+/// "고생 끝 해결" 후보 세션 (세션 회고 스펙 2026-07-19).
+#[derive(Debug, Clone)]
+pub struct StruggleSession {
+    pub session_id: String,
+    pub host: String,
+    pub project_id: String,
+    /// 원문 프로즈 — Engine(로컬 생성 요약)까지만 간다. 허브 본문 직행 금지.
+    pub first_prompt_preview: Option<String>,
+    pub first_ts: Option<String>,
+    pub last_ts: Option<String>,
+    pub error_count: u64,
+    pub total_events: u64,
+    /// (도구명, 오류 횟수) — 결정론 식별
+    pub error_tools: Vec<(String, u64)>,
+    pub last_result_ok: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

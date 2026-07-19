@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { getMascotSeed } from '../api';
+  import { listen } from '@tauri-apps/api/event';
+  import { getMascotSeed, getSprite } from '../api';
   import { drawRobot, type RobotSpec } from '../robot/render';
   import { frameAt, type MascotState } from '../robot/anim';
 
@@ -7,6 +8,13 @@
 
   let canvas = $state<HTMLCanvasElement | null>(null);
   let spec = $state<RobotSpec | null>(null);
+  let sprite = $state<string | null>(null);
+  $effect(() => {
+    let un: (() => void) | null = null;
+    getSprite().then((v) => (sprite = v));
+    listen('sprite:ready', () => getSprite().then((v) => (sprite = v))).then((u) => (un = u));
+    return () => un?.();
+  });
   let mode = $state<MascotState>('idle');
   let line = $state('오늘도 화이팅이에요, 주인!');
 
@@ -55,7 +63,11 @@
   <div class="plant">🪴</div>
   <div class="bubble">{line}</div>
   <button class="robot" onclick={poke} aria-label="로봇 쓰다듬기">
-    <canvas bind:this={canvas} width="128" height="128"></canvas>
+    {#if sprite}
+      <img class="spr" class:happy={mode === 'happy'} src={'data:image/png;base64,' + sprite} alt="마스코트" draggable="false" />
+    {:else}
+      <canvas bind:this={canvas} width="128" height="128"></canvas>
+    {/if}
   </button>
   <div class="rug"></div>
   <div class="floor"></div>
@@ -87,6 +99,10 @@
     border: none; background: none; padding: 0; cursor: pointer; z-index: 2;
   }
   canvas { width: 112px; height: 112px; image-rendering: pixelated; display: block; }
+  .spr { width: 112px; height: 112px; object-fit: contain; display: block; animation: mr-bounce 2.6s ease-in-out infinite; }
+  .spr.happy { animation: mr-hop 0.5s ease-in-out 3; }
+  @keyframes mr-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+  @keyframes mr-hop { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-8px) scale(1.04); } }
   .bubble {
     position: absolute; left: 50%; top: 12px; transform: translateX(-50%);
     max-width: 65%; z-index: 3;

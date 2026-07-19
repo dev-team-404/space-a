@@ -222,3 +222,8 @@ export const onSettingsChanged = (cb: () => void): Promise<UnlistenFn> =>
   listen('settings:changed', () => cb());
 export const onContentReady = (cb: (rows: ContentItem[]) => void): Promise<UnlistenFn> =>
   listen<ContentItem[]>('content:ready', (e) => cb(e.payload));
+
+/** AI 스프라이트(캐시) base64 — 없으면 null (절차 생성 폴백). */
+export async function getSprite(): Promise<string | null> {
+  try { return await invoke<string | null>('get_sprite'); } catch { return null; }
+}
