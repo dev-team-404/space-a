@@ -547,8 +547,9 @@ mod runtime {
         let path = dir.join("sprite.png");
         if path.exists() { return; }
         let Some(cfg) = sprite::SpriteConfig::from_env() else { return };
-        let spec = agent_mentor::mascot::robot_spec_for(&agent_mentor::mascot::stable_identity());
-        let desc = sprite::character_description(&spec);
+        let identity = agent_mentor::mascot::stable_identity();
+        let spec = agent_mentor::mascot::robot_spec_for(&identity);
+        let desc = sprite::character_description(&spec, &identity);
         match sprite::generate(&cfg, &desc) {
             Ok(png) => {
                 let _ = std::fs::create_dir_all(&dir);

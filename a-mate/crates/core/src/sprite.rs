@@ -33,8 +33,35 @@ impl SpriteConfig {
     }
 }
 
-/// 시드 스펙 → 인물 묘사 (v6 슬롯 의미와 동일한 매핑 — 결정론).
-pub fn character_description(spec: &crate::mascot::RobotSpec) -> String {
+/// 확장 특성 — 시드 해시의 미사용 바이트(6·7·8)로 성별 표현·피부톤·액세서리를 추가.
+/// (mascot::RobotSpec 계약은 d[0..5]만 사용 — 여기서 더 다양해진다)
+pub fn extended_traits(identity: &str) -> (&'static str, &'static str, &'static str) {
+    use sha2::{Digest, Sha256};
+    let d = Sha256::digest(identity.as_bytes());
+    const GENDER: [&str; 3] = ["boy", "girl", "person"];
+    const SKIN: [&str; 4] = [
+        "fair skin",
+        "light tan skin",
+        "warm tan skin",
+        "deep brown skin",
+    ];
+    const ACC: [&str; 6] = [
+        "",
+        "wearing small round glasses",
+        "wearing a baseball cap",
+        "with headphones around the neck",
+        "with a tiny hairpin",
+        "with light freckles",
+    ];
+    (
+        GENDER[(d[6] as usize) % 3],
+        SKIN[(d[7] as usize) % 4],
+        ACC[(d[8] as usize) % 6],
+    )
+}
+
+/// 시드 스펙 + 정체성 → 인물 묘사 (v6 슬롯 의미와 동일한 매핑 — 결정론).
+pub fn character_description(spec: &crate::mascot::RobotSpec, identity: &str) -> String {
     const HAIR: [&str; 6] = [
         "neat bowl-cut hair with straight bangs",
         "messy tousled hair with a few spiky strands",
@@ -71,6 +98,7 @@ pub fn character_description(spec: &crate::mascot::RobotSpec) -> String {
         "hands behind the back",
     ];
     let (oc, pc, hc) = COLORS[(spec.palette as usize) % 8];
+    let (gender, skin, acc) = extended_traits(identity);
     let outfit = match (spec.body as usize) % 6 {
         0 => format!("a {oc} zip-up hoodie with white drawstrings"),
         1 => format!("a {oc} school blazer over a white shirt with a red tie"),
@@ -79,8 +107,9 @@ pub fn character_description(spec: &crate::mascot::RobotSpec) -> String {
         4 => format!("a white button-up shirt with {oc} collar and {oc} buttons"),
         _ => format!("{pc} overalls over a white shirt"),
     };
+    let acc_part = if acc.is_empty() { String::new() } else { format!(", {acc}") };
     format!(
-        "a chibi pixel-art person: {hc} {hair}, {eyes}, small smile, wearing {outfit}, {pc} pants, white sneakers, {pose}",
+        "a chibi pixel-art {gender} with {skin}: {hc} {hair}, {eyes}, small smile{acc_part},          wearing {outfit}, {pc} pants, white sneakers, {pose}",
         hair = HAIR[(spec.antenna as usize) % 6],
         eyes = EYES[(spec.eyes as usize) % 6],
         pose = POSE[(spec.arms as usize) % 6],
@@ -135,20 +164,36 @@ mod tests {
 
     #[test]
     fn description_is_deterministic_and_covers_slots() {
-        let spec = robot_spec_for("DESKTOP-X|user");
-        let d1 = character_description(&spec);
-        let d2 = character_description(&spec);
+        let id = "DESKTOP-X|user";
+        let spec = robot_spec_for(id);
+        let d1 = character_description(&spec, id);
+        let d2 = character_description(&spec, id);
         assert_eq!(d1, d2);
-        assert!(d1.contains("chibi pixel-art person"));
+        assert!(d1.contains("chibi pixel-art"));
+        assert!(d1.contains("skin"));
         assert!(d1.contains("pants"));
     }
 
     #[test]
     fn different_seeds_can_differ() {
-        let a = character_description(&robot_spec_for("A|a"));
-        let b = character_description(&robot_spec_for("B|bbbb"));
-        // 시드가 다르면 대부분 묘사가 달라진다 (같을 수도 있으나 이 두 시드는 다름을 고정)
+        let a = character_description(&robot_spec_for("A|a"), "A|a");
+        let b = character_description(&robot_spec_for("B|bbbb"), "B|bbbb");
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn extended_traits_add_gender_skin_accessory_axes() {
+        // 서로 다른 정체성에서 성별/피부/액세서리 축이 실제로 갈리는지 표본 확인
+        let mut genders = std::collections::HashSet::new();
+        let mut skins = std::collections::HashSet::new();
+        for i in 0..40 {
+            let id = format!("HOST-{i}|user{i}");
+            let (g, sk, _a) = extended_traits(&id);
+            genders.insert(g);
+            skins.insert(sk);
+        }
+        assert!(genders.len() >= 3, "성별 표현 3종 모두 등장");
+        assert!(skins.len() >= 3, "피부톤 다양성");
     }
 
     #[test]
