@@ -138,10 +138,18 @@ pub fn finding_advice(
         "R7" => {
             let ratio = evidence.get("ratio_pct").and_then(|v| v.as_u64()).unwrap_or(0);
             let n = evidence.get("total_sessions").and_then(|v| v.as_u64()).unwrap_or(0);
-            (
-                format!("이 프로젝트 세션의 {ratio}%({n}건)가 Opus로 처리한 가벼운 잔심부름이었어요 (~{est_tokens_saved}토큰 비용-등가)"),
-                "다음엔 `claude --model sonnet`으로 시작하거나 settings.json에서 기본 모델을 낮춰보세요".to_string(),
-            )
+            let mut detail = format!(
+                "이 프로젝트 세션의 {ratio}%({n}건)가 Opus로 처리한 가벼운 잔심부름이었어요 (~{est_tokens_saved}토큰 비용-등가)"
+            );
+            if let Some(m) = evidence.get("default_model").and_then(|v| v.as_str()) {
+                detail.push_str(&format!(" · 기본 모델 {m}"));
+            }
+            let mut action =
+                "다음엔 `claude --model sonnet`으로 시작하거나 settings.json에서 기본 모델을 낮춰보세요".to_string();
+            if let Some(e) = evidence.get("effort_level").and_then(|v| v.as_str()) {
+                action.push_str(&format!(" — effort({e})도 작업 난이도에 맞게 낮출 수 있어요"));
+            }
+            (detail, action)
         }
         "R9" => {
             let total = evidence.get("total_requests").and_then(|v| v.as_u64()).unwrap_or(0);
@@ -170,17 +178,16 @@ pub fn finding_advice(
             let opus_part =
                 if opus_n == n { "전부".to_string() } else { format!("그중 {opus_n}건이") };
             let mut detail = format!(
-                "초단기 세션 {n}건이 짧은 간격으로 반복됐고 {opus_part} Opus 전용이었어요 (~{est_tokens_saved}토큰 비용-등가)"
+                "자동화로 보이는 초단기 세션 {n}건이 짧은 간격으로 반복됐고 {opus_part} Opus 전용이었어요"
             );
             if temp > 0 {
                 detail.push_str(&format!(" · temp 경로 흔적 {temp}%"));
             }
-            // §7.1 진짜 작업 경로(정규화 키 아님)
             if let Some(cwd) = evidence.get("rep_cwd").and_then(|v| v.as_str()) {
                 detail.push_str(&format!(" · 경로 `{cwd}`"));
             }
-            let mut action = "자동화 스크립트가 만든 패턴으로 보여요 — 이 프로젝트 경로에서 `claude`를 실행하는 스크립트를 찾아 `--model haiku`를 지정하세요. `--model` 없이 실행된 자동화는 기본 모델을 그대로 상속받아요".to_string();
-            // §7.2 첫 요청 한 줄 — 세션 상세 없이 자동화 도구 정체 즉시 식별
+            // v3 §3.2: 관찰만 — 수정 지시 없음. 자동화 소유 여부는 사용자가 판단.
+            let mut action = "직접 만든 자동화라면 그 도구의 모델 설정을 낮출 수 있어요 — 아니라면 참고만 하세요".to_string();
             if let Some(p) = evidence.get("rep_first_prompt").and_then(|v| v.as_str()) {
                 action.push_str(&format!("\n💬 이런 요청으로 시작해요: '{p}'"));
             }
@@ -1580,6 +1587,18 @@ mod tests {
     }
 
     #[test]
+    fn finding_advice_r7_mentions_default_model_and_effort_when_present() {
+        let (detail, action) = super::finding_advice(
+            "R7",
+            &serde_json::json!({"ratio_pct": 75, "total_sessions": 3,
+                "default_model": "claude-fable-5[1m]", "effort_level": "xhigh"}),
+            48320,
+        );
+        assert!(detail.contains("claude-fable-5[1m]"));
+        assert!(action.contains("effort(xhigh)"));
+    }
+
+    #[test]
     fn finding_advice_r10_burst() {
         let (detail, action) = super::finding_advice(
             "R10",
@@ -1592,9 +1611,9 @@ mod tests {
         assert!(detail.contains("81"));
         assert!(detail.contains("전부")); // opus_n == n이면 "그중 81건이" 대신 "전부"
         assert!(detail.contains("temp")); // 가산 신호 서사 인용
-        assert!(action.contains("--model haiku")); // 조치 메커니즘 명시 (플래그 미지정 → 기본 모델 상속)
-        assert!(action.contains("상속"));
-        assert!(action.contains("보여요")); // 가설 표현 — 단정 금지
+        assert!(action.contains("직접 만든 자동화라면"));
+        assert!(action.contains("참고만"));
+        assert!(!action.contains("지정하세요"), "수정 지시 문구 금지 (v3 §3.2)");
     }
 
     #[test]

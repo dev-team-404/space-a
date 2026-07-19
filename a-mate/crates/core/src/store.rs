@@ -8,7 +8,7 @@ const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS sessions (
   session_id TEXT PRIMARY KEY, host TEXT, project_id TEXT, agent TEXT,
   first_ts TEXT, last_ts TEXT, git_branch TEXT,
-  cwd TEXT, first_prompt_preview TEXT, first_prompt_source_file TEXT, first_prompt_offset INTEGER
+  cwd TEXT, first_prompt_preview TEXT, first_prompt_source_file TEXT, first_prompt_offset INTEGER, subagent_files INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,6 +75,14 @@ CREATE TABLE IF NOT EXISTS content_items (
   score INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'new',
   first_seen TEXT, last_seen TEXT
 );
+CREATE TABLE IF NOT EXISTS personal_skill_inventory (
+  host TEXT NOT NULL, scope TEXT NOT NULL, name TEXT NOT NULL,
+  path TEXT NOT NULL, body_chars INTEGER DEFAULT 0,
+  PRIMARY KEY (host, path)
+);
+CREATE TABLE IF NOT EXISTS host_settings (
+  host TEXT PRIMARY KEY, default_model TEXT, effort_level TEXT, scanned_at TEXT
+);
 "#;
 
 pub struct SqliteStore {
@@ -108,6 +116,17 @@ fn migrate(conn: &Connection) -> Result<()> {
              ALTER TABLE sessions ADD COLUMN first_prompt_preview TEXT;
              ALTER TABLE sessions ADD COLUMN first_prompt_source_file TEXT;
              ALTER TABLE sessions ADD COLUMN first_prompt_offset INTEGER;
+             DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;",
+        )?;
+    }
+    // v3 수집 마이그레이션 — subagent_files 부재 시 컬럼 추가 + 전체 재수집.
+    // (Agent 툴 매핑·permission-mode·secret_flag·first_prompt 오염 수정이 라인 재해석을 요구 — 스펙 §4.4)
+    let has_subagent_files = conn
+        .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name='subagent_files'")?
+        .exists([])?;
+    if !has_subagent_files {
+        conn.execute_batch(
+            "ALTER TABLE sessions ADD COLUMN subagent_files INTEGER NOT NULL DEFAULT 0;
              DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;",
         )?;
     }
@@ -301,7 +320,9 @@ impl SqliteStore {
                 last_seen = ?11,
                 occurrences = occurrences + 1,
                 est_tokens_saved = ?9,
-                evidence_json = ?8",
+                evidence_json = ?8,
+                severity = ?3,
+                prescription_json = ?10",
             params![
                 f.dedup_key, f.rule_id, f.severity.as_str(), f.scope_host, f.scope_project,
                 f.scope_kind, f.scope_ref, evidence, f.est_tokens_saved as i64, presc, now_ts
@@ -378,6 +399,52 @@ impl SqliteStore {
         }
         tx.commit()?;
         Ok(())
+    }
+
+    /// 개인 스킬 인벤토리 전체 교체 (host 단위) — 코칭 v3 §4.2
+    pub fn replace_personal_skills(
+        &mut self,
+        host: &str,
+        skills: &[crate::inventory::PersonalSkill],
+    ) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM personal_skill_inventory WHERE host=?1", params![host])?;
+        for s in skills {
+            tx.execute(
+                "INSERT OR REPLACE INTO personal_skill_inventory (host, scope, name, path, body_chars)
+                 VALUES (?1,?2,?3,?4,?5)",
+                params![host, s.scope, s.name, s.path, s.body_chars as i64],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// 호스트 설정 스냅숏 (기본 모델·effort) — R7 확장·R13 OutdatedModel 재료 (코칭 v3 §4.2)
+    pub fn replace_host_settings(
+        &self,
+        host: &str,
+        default_model: Option<&str>,
+        effort_level: Option<&str>,
+        now_ts: &str,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO host_settings (host, default_model, effort_level, scanned_at)
+             VALUES (?1,?2,?3,?4)
+             ON CONFLICT(host) DO UPDATE SET
+               default_model=?2, effort_level=?3, scanned_at=?4",
+            params![host, default_model, effort_level, now_ts],
+        )?;
+        Ok(())
+    }
+
+    /// host의 distinct 세션 cwd 목록 (NULL 제외) — 프로젝트 스코프 개인 스킬 스캔용
+    pub fn session_cwds(&self, host: &str) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT cwd FROM sessions WHERE host=?1 AND cwd IS NOT NULL ORDER BY cwd",
+        )?;
+        let rows = stmt.query_map(params![host], |r| r.get(0))?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
     }
 
     pub fn upsert_diary_index(
@@ -993,7 +1060,27 @@ pub fn ingest_file(
         all.extend(evs);
     }
     let inserted = store.upsert_events(&all)?;
-    store.set_offset(&file_key, new_offset)?;
+
+    // 파일이 실제로 자란 경우에만 subagents 스캔·offset 기록을 수행한다 — 무변경 파일에
+    // 매 수집 주기마다 read_dir + DB 쓰기가 반복되는 것 방지(Gemini medium).
+    if new_offset > from {
+        // 서브에이전트 하위 트랜스크립트 수 — <세션id>/subagents/*.jsonl 존재 카운트만 (전문 파싱은 후속, 코칭 v3 §4.1-3)
+        // 이 카운트는 subagents/ 아래 모든 *.jsonl을 포함한다 — 스펙 §4.1-3의 agent-*.jsonl보다 넓은 상위집합(의도).
+        let sub_dir = file.with_extension("").join("subagents");
+        if let Ok(entries) = std::fs::read_dir(&sub_dir) {
+            let n = entries
+                .flatten()
+                .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jsonl"))
+                .count() as i64;
+            if let Some(sid) = file.file_stem().and_then(|s| s.to_str()) {
+                store.conn.execute(
+                    "UPDATE sessions SET subagent_files=?2 WHERE session_id=?1",
+                    rusqlite::params![sid, n],
+                )?;
+            }
+        }
+        store.set_offset(&file_key, new_offset)?;
+    }
     Ok(inserted)
 }
 
@@ -1039,6 +1126,14 @@ fn flatten(e: &NormalizedEvent) -> FlatRow {
         EventKind::UserPrompt { .. } => (
             "user_prompt".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
             None, None, None, None, None,
+        ),
+        EventKind::PermissionMode { mode } => (
+            "permission_mode".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
+            None, None, None, Some(mode.clone()), None,
+        ),
+        EventKind::SecretFlag { pattern_id } => (
+            "secret_flag".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
+            None, None, None, Some(pattern_id.clone()), None,
         ),
         EventKind::SessionMeta { .. } => (
             "session_meta".into(), None, None, None, 0, 0, 0, 0, 0, 0, 0,
@@ -1158,6 +1253,44 @@ mod tests {
         assert_eq!(store.count_events().unwrap(), 3);
         // idempotent re-insert
         assert_eq!(store.upsert_events(&evs).unwrap(), 0);
+    }
+
+    #[test]
+    fn bash_secret_never_persists_to_any_text_column() {
+        // 계약: Bash 명령 내 시크릿은 pattern_id만 저장되고 원문은 어떤 텍스트 컬럼에도 남지 않는다.
+        use crate::adapter::SourceAdapter;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let adapter = crate::adapter::ClaudeCodeAdapter {
+            root: std::path::PathBuf::from("."),
+            host: "Windows".into(),
+        };
+        let secret = "sk-ant-api03-AbCdEfGh123456";
+        let line = format!(
+            r#"{{"type":"assistant","sessionId":"s1","uuid":"u1","message":{{"model":"claude-opus-4-8","usage":{{"input_tokens":1,"output_tokens":1}},"content":[{{"type":"tool_use","id":"t1","name":"Bash","input":{{"command":"export ANTHROPIC_API_KEY={secret}"}}}}]}}}}"#
+        );
+        let evs = adapter.map(&line, "s1.jsonl", 0);
+        store.upsert_events(&evs).unwrap();
+
+        for col in [
+            "tool_target", "raw_name", "model_raw", "tool_kind", "tool_server",
+            "tool_tool", "session_id", "project_id", "source_file", "dedup_key",
+        ] {
+            let hits: i64 = store
+                .conn
+                .query_row(
+                    &format!("SELECT COUNT(*) FROM events WHERE {col} LIKE ?1"),
+                    params![format!("%{secret}%")],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(hits, 0, "raw secret leaked into events.{col}");
+        }
+        // pattern_id 플래그는 정상 방출
+        let flags: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM events WHERE kind='secret_flag'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(flags, 1);
     }
 
     #[test]
@@ -1481,6 +1614,45 @@ mod tests {
 
         // 절약가능 합계는 active만
         assert_eq!(store.sum_est_tokens_saved().unwrap(), 100);
+    }
+
+    #[test]
+    fn upsert_finding_refreshes_severity_and_prescription_but_keeps_status() {
+        // R10 강등(Warn→Info, prescription 제거)이 기존 DB에도 upsert로 반영돼야 한다 (스펙 §3.2).
+        // status(사용자 처분)는 upsert가 건드리지 않아야 한다.
+        let store = SqliteStore::open_in_memory().unwrap();
+        let f = Finding {
+            rule_id: "R10".into(),
+            severity: Severity::Warn,
+            scope_host: Some("Windows".into()),
+            scope_project: Some("p".into()),
+            scope_kind: "project".into(),
+            scope_ref: "p".into(),
+            evidence: serde_json::json!({"n": 1}),
+            est_tokens_saved: 500,
+            prescription: Some(Prescription {
+                kind: "automation_model_config".into(),
+                payload: serde_json::json!({}),
+            }),
+            dedup_key: "R10|W|p".into(),
+        };
+        store.upsert_finding(&f, "2026-07-01T10:00:00Z").unwrap();
+        assert!(store.set_finding_status("R10|W|p", "dismissed").unwrap());
+
+        let f2 = Finding { severity: Severity::Info, prescription: None, ..f };
+        store.upsert_finding(&f2, "2026-07-02T10:00:00Z").unwrap();
+
+        let (severity, prescription_json, status): (String, Option<String>, String) = store
+            .conn
+            .query_row(
+                "SELECT severity, prescription_json, status FROM findings WHERE dedup_key='R10|W|p'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(severity, "info");
+        assert!(prescription_json.is_none());
+        assert_eq!(status, "dismissed");
     }
 
     #[test]
@@ -1891,5 +2063,181 @@ mod tests {
             store.get_chatter_pool("2026-07-10").unwrap(),
             Some((Vec::new(), "3|1|2|0".to_string()))
         );
+    }
+
+    #[test]
+    fn permission_mode_and_secret_flag_events_roundtrip() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |kind: EventKind, off: u64| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+            uuid: None, parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-19T10:00:00Z".into()),
+            source_file: "s1.jsonl".into(), source_offset: off, kind,
+        };
+        store.upsert_events(&[
+            mk(EventKind::PermissionMode { mode: "plan".into() }, 0),
+            mk(EventKind::SecretFlag { pattern_id: "github_token".into() }, 800),
+        ]).unwrap();
+        let (k1, t1): (String, String) = store.conn.query_row(
+            "SELECT kind, tool_target FROM events WHERE kind='permission_mode'",
+            [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!((k1.as_str(), t1.as_str()), ("permission_mode", "plan"));
+        let t2: String = store.conn.query_row(
+            "SELECT tool_target FROM events WHERE kind='secret_flag'", [], |r| r.get(0)).unwrap();
+        assert_eq!(t2, "github_token");
+        // 멱등: 같은 이벤트 재삽입 시 dedup (uuid None → source_file:offset 키)
+        let n = store.upsert_events(&[mk(EventKind::PermissionMode { mode: "plan".into() }, 0)]).unwrap();
+        assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn migrate_v3_adds_subagent_files_and_forces_recollect() {
+        use crate::finding::{Finding, Severity};
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("m3.db");
+        // v3 마이그레이션 전 스키마(subagent_files 없음)로 DB 선생성
+        let v3_old_schema = SCHEMA.replace(
+            ", subagent_files INTEGER NOT NULL DEFAULT 0",
+            "",
+        );
+        assert!(v3_old_schema.len() < SCHEMA.len(), "v3 subagent_files 컬럼 치환 실패");
+
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(&v3_old_schema).unwrap();
+            conn.execute_batch(
+                "INSERT INTO events (dedup_key, session_id, host, project_id, source_offset, kind)
+                   VALUES ('old:0','s1','Windows','p',0,'assistant_turn');
+                 INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, git_branch)
+                   VALUES ('s1','Windows','p','claude-code','2026-07-05T00:00:00Z','2026-07-05T00:00:00Z',NULL);
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 123);
+                 INSERT INTO daily_rollup (host, project_id, date, session_count)
+                   VALUES ('Windows','p','2026-07-05',1);
+                 INSERT INTO diary_index (date, scope, path, tokens_used, engine)
+                   VALUES ('2026-07-05','Windows','/diary.md',100,'claude-code');",
+            ).unwrap();
+        }
+        // 마이그레이션 전 findings 심어서 보존 검증
+        {
+            let conn = Connection::open(&db).unwrap();
+            let store = SqliteStore { conn };
+            store.upsert_finding(&Finding {
+                rule_id: "R1".into(), severity: Severity::Warn,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "host".into(), scope_ref: "srv".into(),
+                evidence: serde_json::json!({}), est_tokens_saved: 10,
+                prescription: None, dedup_key: "keepv3".into(),
+            }, "2026-07-05T00:00:00Z").unwrap();
+            store.set_finding_status("keepv3", "dismissed").unwrap();
+        }
+
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v3 분기 발화
+
+        // v3 컬럼이 실제로 생겼는지 확인
+        let has_subagent_files = store.conn
+            .prepare("SELECT 1 FROM pragma_table_info('sessions') WHERE name='subagent_files'").unwrap()
+            .exists([]).unwrap();
+        assert!(has_subagent_files, "sessions.subagent_files 컬럼이 추가돼야 함");
+
+        // 전체 재수집 유도 — events/sessions/ingest_state/daily_rollup 모두 비워짐
+        for table in ["events", "sessions", "ingest_state", "daily_rollup"] {
+            let n: i64 = store.conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap();
+            assert_eq!(n, 0, "{table} 은(는) v3 마이그레이션 후 비워져야 함");
+        }
+
+        // diary_index는 보존
+        let diary_rows: i64 = store.conn
+            .query_row("SELECT COUNT(*) FROM diary_index", [], |r| r.get(0)).unwrap();
+        assert_eq!(diary_rows, 1, "diary_index 는 v3 마이그레이션 후에도 보존돼야 함");
+
+        // findings·status는 보존
+        let rows = store.list_findings_current(true).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].dedup_key, "keepv3");
+        assert_eq!(rows[0].status, "dismissed");
+    }
+
+    #[test]
+    fn replace_personal_skills_and_host_settings_roundtrip() {
+        use crate::inventory::PersonalSkill;
+        let mut store = SqliteStore::open_in_memory().unwrap();
+        store.replace_personal_skills("Windows", &[
+            PersonalSkill { name: "gh-commit".into(), path: "C:\\u\\.claude\\skills\\gh-commit\\SKILL.md".into(),
+                            body_chars: 300, scope: "user".into() },
+        ]).unwrap();
+        // replace: 다시 부르면 이전 행 대체
+        store.replace_personal_skills("Windows", &[
+            PersonalSkill { name: "deploy".into(), path: "D:\\proj\\.claude\\skills\\deploy\\SKILL.md".into(),
+                            body_chars: 2400, scope: "project".into() },
+        ]).unwrap();
+        let (name, scope, chars): (String, String, i64) = store.conn.query_row(
+            "SELECT name, scope, body_chars FROM personal_skill_inventory WHERE host='Windows'",
+            [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap();
+        assert_eq!((name.as_str(), scope.as_str(), chars), ("deploy", "project", 2400));
+
+        store.replace_host_settings("Windows", Some("claude-fable-5[1m]"), Some("xhigh"), "2026-07-19T10:00:00Z").unwrap();
+        store.replace_host_settings("Windows", Some("claude-sonnet-5"), None, "2026-07-19T11:00:00Z").unwrap(); // upsert
+        let (m, e): (String, Option<String>) = store.conn.query_row(
+            "SELECT default_model, effort_level FROM host_settings WHERE host='Windows'",
+            [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!(m, "claude-sonnet-5");
+        assert_eq!(e, None);
+    }
+
+    #[test]
+    fn session_cwds_returns_distinct_local_host_cwds() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.conn.execute_batch(
+            "INSERT INTO sessions (session_id, host, project_id, cwd) VALUES
+             ('s1','Windows','p','D:\\proj'), ('s2','Windows','p','D:\\proj'),
+             ('s3','wsl:U','p','/home/x/proj'), ('s4','Windows','p',NULL);").unwrap();
+        let cwds = store.session_cwds("Windows").unwrap();
+        assert_eq!(cwds, vec!["D:\\proj".to_string()]); // distinct + host 필터 + NULL 제외
+    }
+
+    #[test]
+    fn ingest_file_counts_subagent_transcripts() {
+        use crate::adapter::ClaudeCodeAdapter;
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let proj = dir.path().join("C--Users-jibin");
+        std::fs::create_dir_all(proj.join("abc").join("subagents")).unwrap();
+        // 세션 jsonl + 서브에이전트 파일 2개 (+ jsonl 아닌 파일 1개는 미집계)
+        let file = proj.join("abc.jsonl");
+        let mut f = std::fs::File::create(&file).unwrap();
+        writeln!(f, r#"{{"type":"assistant","sessionId":"abc","uuid":"u1","timestamp":"2026-07-19T10:00:00Z","message":{{"model":"claude-opus-4-8","usage":{{"input_tokens":1,"output_tokens":1}}}}}}"#).unwrap();
+        for name in ["agent-a.jsonl", "agent-b.jsonl"] {
+            std::fs::File::create(proj.join("abc").join("subagents").join(name)).unwrap();
+        }
+        std::fs::File::create(proj.join("abc").join("subagents").join("note.txt")).unwrap();
+
+        let store = SqliteStore::open_in_memory().unwrap();
+        let adapter = ClaudeCodeAdapter { root: dir.path().into(), host: "Windows".into() };
+        ingest_file(&store, &adapter, &file).unwrap();
+
+        let n: i64 = store.conn.query_row(
+            "SELECT subagent_files FROM sessions WHERE session_id='abc'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 2);
+    }
+
+    #[test]
+    fn ingest_file_without_subagent_dir_keeps_zero() {
+        use crate::adapter::ClaudeCodeAdapter;
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let proj = dir.path().join("C--Users-jibin");
+        std::fs::create_dir_all(&proj).unwrap();
+        let file = proj.join("solo.jsonl");
+        let mut f = std::fs::File::create(&file).unwrap();
+        writeln!(f, r#"{{"type":"assistant","sessionId":"solo","uuid":"u1","timestamp":"2026-07-19T10:00:00Z","message":{{"model":"claude-opus-4-8","usage":{{"input_tokens":1,"output_tokens":1}}}}}}"#).unwrap();
+
+        let store = SqliteStore::open_in_memory().unwrap();
+        let adapter = ClaudeCodeAdapter { root: dir.path().into(), host: "Windows".into() };
+        ingest_file(&store, &adapter, &file).unwrap();
+        let n: i64 = store.conn.query_row(
+            "SELECT subagent_files FROM sessions WHERE session_id='solo'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
     }
 }

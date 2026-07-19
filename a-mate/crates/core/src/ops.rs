@@ -3,13 +3,9 @@ use crate::adapter::SourceAdapter;
 use crate::finding::Finding;
 use crate::hosts::enumerate_hosts;
 use crate::inventory::{collect_host_inventory, scan_plugin_inventory};
-use crate::rules::r1_unused_mcp::R1UnusedMcp;
-use crate::rules::r2_unused_plugins::R2UnusedPluginSkills;
 use crate::rules::r7_opus_trivial::R7OpusTrivial;
-use crate::rules::r9_web_overuse::R9WebOveruse;
 use crate::rules::r10_automation_burst::R10AutomationBurst;
 use crate::rules::r11_permission_friction::R11PermissionFriction;
-use crate::rules::r12_unused_skills::R12UnusedSkills;
 use crate::rules::RuleEngine;
 use crate::store::{ingest_file, SqliteStore};
 use anyhow::Result;
@@ -109,16 +105,46 @@ pub fn run_inventory(store: &mut SqliteStore) -> Result<Vec<String>> {
         };
         let cache = hs.claude_root.join("plugins").join("cache");
         let inv = collect_host_inventory(&claude_json, &settings, &cache);
-        if !inv.complete {
-            warnings.push(format!("host {} 중첩 .mcp.json 읽기 실패 — reconcile 스킵", hs.host));
-            continue;
+        // MCP 인벤토리는 completeness 게이트를 둔다: 중첩 .mcp.json 하나라도 못 읽으면 저장을
+        // 건너뛴다(미완 인벤토리로 R1이 서버를 미사용으로 오탐하는 것 방지). 단, 이 게이트는 MCP
+        // 인벤토리에만 적용하고 아래 독립 수집(플러그인·호스트 설정·개인 스킬)은 계속 진행한다 —
+        // 하나의 .mcp.json 실패가 R7·R13 재료(모델/effort·인벤토리)까지 막지 않도록.
+        if inv.complete {
+            store.replace_host_inventory(&hs.host, &inv.entries)?;
+        } else {
+            warnings.push(format!("host {} 중첩 .mcp.json 읽기 실패 — MCP 인벤토리 스킵", hs.host));
         }
-        store.replace_host_inventory(&hs.host, &inv.entries)?;
         let (plugins, plugins_complete) = scan_plugin_inventory(&settings, &cache);
         if !plugins_complete {
             warnings.push(format!("host {} 플러그인 스킬 스캔 실패 — R2 스킵", hs.host));
         } else {
             store.replace_plugin_inventory(&hs.host, &plugins)?;
+        }
+        // v3: 호스트 설정 스냅숏 — R7 확장·R13 OutdatedModel 재료 (코칭 v3 §4.2)
+        let default_model = settings.get("model").and_then(|v| v.as_str());
+        let effort = settings.get("effortLevel").and_then(|v| v.as_str());
+        if let Err(e) = store.replace_host_settings(
+            &hs.host, default_model, effort, &chrono::Utc::now().to_rfc3339(),
+        ) {
+            warnings.push(format!("host {} 설정 스냅숏 실패: {e}", hs.host));
+        }
+        // v3: 개인 스킬 인벤토리 — 사용자 스코프 + 프로젝트 스코프(.claude/skills, 로컬 존재 cwd만)
+        let mut personal =
+            crate::inventory::scan_personal_skills(&hs.claude_root.join("skills"), "user");
+        let cwds = match store.session_cwds(&hs.host) {
+            Ok(c) => c,
+            Err(e) => {
+                warnings.push(format!("host {} 세션 cwd 조회 실패 — 프로젝트 스킬 스캔 스킵: {e}", hs.host));
+                Vec::new()
+            }
+        };
+        for cwd in cwds {
+            // WSL 세션 cwd(/home/...)는 Windows에서 못 여니 distro UNC로 변환해서 스캔.
+            let p = hs.resolve_cwd(&cwd).join(".claude").join("skills");
+            personal.extend(crate::inventory::scan_personal_skills(&p, "project"));
+        }
+        if let Err(e) = store.replace_personal_skills(&hs.host, &personal) {
+            warnings.push(format!("host {} 개인 스킬 스캔 실패: {e}", hs.host));
         }
     }
     Ok(warnings)
@@ -131,14 +157,17 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     // 사용자가 행동할 레버가 없음 — 등록 해제·전 스코프 카드 정리, 룰 코드·테스트는 보존.
     store.delete_findings_by_rule_and_scope("R5", "session")?;
     store.delete_findings_by_rule_and_scope("R5", "project")?;
+    // 코칭 v3 처분(스펙 §3.1): R1·R2·R9·R12 은퇴 — 잔소리 단독 카드 폐지,
+    // 탐지 신호는 R13(환경 큐레이션, PR③)이 흡수. 룰 코드·테스트는 보존.
+    store.delete_findings_by_rule_and_scope("R1", "host")?;
+    store.delete_findings_by_rule_and_scope("R1", "project")?;
+    store.delete_findings_by_rule_and_scope("R2", "host")?;
+    store.delete_findings_by_rule_and_scope("R9", "session")?;
+    store.delete_findings_by_rule_and_scope("R12", "project")?;
     let engine = RuleEngine::new(vec![
-        Box::new(R1UnusedMcp::default()),
-        Box::new(R2UnusedPluginSkills::default()),
         Box::new(R7OpusTrivial::default()),
-        Box::new(R9WebOveruse::default()),
         Box::new(R10AutomationBurst::default()),
         Box::new(R11PermissionFriction::default()),
-        Box::new(R12UnusedSkills::default()),
     ]);
     let findings = engine.run(store)?;
     let now = chrono::Utc::now().to_rfc3339();
@@ -262,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn run_rules_purges_deprecated_session_findings() {
+    fn run_rules_purges_retired_rule_findings() {
         use crate::finding::{Finding, Severity};
         let store = SqliteStore::open_in_memory().unwrap();
         let mk = |rule: &str, kind: &str, key: &str| Finding {
@@ -272,14 +301,19 @@ mod tests {
             evidence: serde_json::json!({}), est_tokens_saved: 0,
             prescription: None, dedup_key: key.into(),
         };
-        // 폐기 카드 3종(R7 session·R5 session·R5 project=발화 보류) + 유지될 R1 host 1종
+        // v2 폐기분(R7 session·R5 전 스코프) + v3 은퇴분(R1·R2·R9·R12) + 생존 R11
         store.upsert_finding(&mk("R7", "session", "R7|s1"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R5", "session", "R5|s1|a.md"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R5", "project", "R5|W|proj|cross_session_claude_md"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R1", "host", "R1|W|ctx"), "2026-07-06T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R1", "project", "R1|W|proj|pw"), "2026-07-06T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R2", "host", "R2|W|superpowers@mp"), "2026-07-06T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R9", "session", "R9|s9"), "2026-07-06T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R12", "project", "R12|W|proj"), "2026-07-06T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R11", "project", "R11|W|proj"), "2026-07-06T00:00:00Z").unwrap();
 
         run_rules(&store).unwrap();
-        assert_eq!(store.count_findings().unwrap(), 1); // R1만 생존(R7 세션·R5 전 스코프 삭제)
+        assert_eq!(store.count_findings().unwrap(), 1, "R11만 생존해야 함");
     }
 
     #[test]

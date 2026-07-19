@@ -2,22 +2,15 @@
 //! 보수 판별은 session_stats::detect_bursts가 단일 공급원.
 //! 버스트 과반이 Opus 전용일 때만 발화 — 이미 저렴한 모델로 도는 자동화는 침묵.
 
-use crate::finding::{Finding, Prescription, Severity};
+use crate::finding::{Finding, Severity};
 use crate::rules::session_stats::{collect_session_stats, detect_bursts, SessionStat};
 use crate::rules::Rule;
 use crate::store::SqliteStore;
 use anyhow::Result;
 use std::collections::BTreeMap;
 
-pub struct R10AutomationBurst {
-    pub savings_fraction_pct: u64,
-}
-
-impl Default for R10AutomationBurst {
-    fn default() -> Self {
-        R10AutomationBurst { savings_fraction_pct: 80 }
-    }
-}
+#[derive(Default)]
+pub struct R10AutomationBurst {}
 
 fn median_u64(mut v: Vec<u64>) -> u64 {
     if v.is_empty() {
@@ -72,9 +65,6 @@ impl Rule for R10AutomationBurst {
             raws.dedup();
             let dominant: Option<&str> = if raws.len() == 1 { Some(raws[0]) } else { None };
 
-            let billable: u64 = sessions.iter().filter(|s| is_opus_only(s)).map(|s| s.billable).sum();
-            let est = (billable * self.savings_fraction_pct + 50) / 100;
-
             let span_from = sessions.first().and_then(|s| s.first_ts.clone());
             let span_to = sessions.last().and_then(|s| s.last_ts.clone());
             let total = sessions.len();
@@ -87,7 +77,7 @@ impl Rule for R10AutomationBurst {
 
             out.push(Finding {
                 rule_id: "R10".into(),
-                severity: Severity::Warn,
+                severity: Severity::Info,
                 scope_host: Some(host.clone()),
                 scope_project: Some(project.clone()),
                 scope_kind: "project".into(),
@@ -101,15 +91,11 @@ impl Rule for R10AutomationBurst {
                     "median_turns": median_u64(turns),
                     "temp_hit_ratio_pct": temp_ratio_pct,
                     "dominant_model_raw": dominant,
-                    "note": "비용-등가 추정(Opus↔Haiku 5:1 가격비)",
                     "rep_cwd": rep_cwd,
                     "rep_first_prompt": rep_first_prompt
                 }),
-                est_tokens_saved: est,
-                prescription: Some(Prescription {
-                    kind: "automation_model_config".into(),
-                    payload: serde_json::json!({ "to": "haiku" }),
-                }),
+                est_tokens_saved: 0,
+                prescription: None,
                 dedup_key: format!("R10|{host}|{project}"),
             });
         }
@@ -177,8 +163,10 @@ mod tests {
         assert_eq!(f.evidence["session_ids"].as_array().unwrap().len(), 5);
         assert_eq!(f.evidence["dominant_model_raw"], "claude-opus-4-8");
         assert!(f.evidence["temp_hit_ratio_pct"].as_u64().unwrap() > 0);
-        assert!(f.est_tokens_saved > 0);
-        assert_eq!(f.prescription.as_ref().unwrap().kind, "automation_model_config");
+        // v3 §3.2 — 관찰 카드:
+        assert_eq!(f.severity, crate::finding::Severity::Info);
+        assert_eq!(f.est_tokens_saved, 0);
+        assert!(f.prescription.is_none(), "R10은 처방 없는 관찰 카드");
     }
 
     #[test]

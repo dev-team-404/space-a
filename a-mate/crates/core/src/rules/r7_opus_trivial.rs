@@ -69,6 +69,16 @@ impl Rule for R7OpusTrivial {
             let est = (billable * self.savings_fraction_pct + 50) / 100;
             let ids: Vec<&str> = light.iter().take(100).map(|s| s.session_id.as_str()).collect();
 
+            // v3 확장: 호스트 기본 설정을 서사 재료로 동봉 (코칭 v3 §3.3 — 판정에는 미사용)
+            let (default_model, effort_level): (Option<String>, Option<String>) = store
+                .conn
+                .query_row(
+                    "SELECT default_model, effort_level FROM host_settings WHERE host=?1",
+                    rusqlite::params![host],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap_or((None, None));
+
             out.push(Finding {
                 rule_id: "R7".into(),
                 severity: Severity::Suggest,
@@ -82,6 +92,8 @@ impl Rule for R7OpusTrivial {
                     "project_session_count": denom,
                     "ratio_pct": ratio_pct,
                     "sum_billable": billable,
+                    "default_model": default_model,
+                    "effort_level": effort_level,
                     "note": "비용-등가 추정(Opus↔Haiku 5:1 가격비) · 버스트 세션 제외 집계"
                 }),
                 est_tokens_saved: est,
@@ -216,5 +228,33 @@ mod tests {
         for f in R7OpusTrivial::default().evaluate(&store).unwrap() {
             assert_eq!(f.scope_kind, "project");
         }
+    }
+
+    #[test]
+    fn r7v2_evidence_carries_host_settings_when_present() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.replace_host_settings("Windows", Some("claude-fable-5[1m]"), Some("xhigh"), "2026-07-19T00:00:00Z").unwrap();
+        let mut evs = Vec::new();
+        evs.extend(light_opus_session("l1", "2026-07-06T09:00:00Z"));
+        evs.extend(light_opus_session("l2", "2026-07-06T11:00:00Z"));
+        evs.extend(light_opus_session("l3", "2026-07-06T13:00:00Z"));
+        store.upsert_events(&evs).unwrap();
+
+        let findings = R7OpusTrivial::default().evaluate(&store).unwrap();
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].evidence["default_model"], "claude-fable-5[1m]");
+        assert_eq!(findings[0].evidence["effort_level"], "xhigh");
+    }
+
+    #[test]
+    fn r7v2_evidence_settings_null_when_absent() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mut evs = Vec::new();
+        evs.extend(light_opus_session("l1", "2026-07-06T09:00:00Z"));
+        evs.extend(light_opus_session("l2", "2026-07-06T11:00:00Z"));
+        evs.extend(light_opus_session("l3", "2026-07-06T13:00:00Z"));
+        store.upsert_events(&evs).unwrap();
+        let findings = R7OpusTrivial::default().evaluate(&store).unwrap();
+        assert!(findings[0].evidence["default_model"].is_null());
     }
 }

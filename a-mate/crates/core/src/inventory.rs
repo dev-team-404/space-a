@@ -8,6 +8,15 @@ pub struct McpServer {
     pub source: String, // "project" | "mcpjson" | "plugin"
 }
 
+/// 개인(비플러그인) 스킬 1건 — ~/.claude/skills 또는 프로젝트 .claude/skills (코칭 v3 §4.2)
+#[derive(Debug, Clone, PartialEq)]
+pub struct PersonalSkill {
+    pub name: String,
+    pub path: String,     // SKILL.md 절대 경로 (PK 성분)
+    pub body_chars: u64,  // SKILL.md 전문 글자수 — R13 PersonalSkillHygiene 판정 재료
+    pub scope: String,    // "user" | "project"
+}
+
 /// enabled 플러그인 하나의 스캔 결과(스킬·MCP 서버). R2 대상은 skill_count>=1.
 #[derive(Debug, Clone)]
 pub struct PluginRecord {
@@ -178,6 +187,31 @@ fn scan_skills_dir(skills_dir: &Path) -> (Vec<String>, u64, bool) {
     }
     names.sort();
     (names, resident, complete)
+}
+
+/// 개인 스킬 스캔 — <dir>/*/SKILL.md (코칭 v3 §4.2). 부재/접근 불가는 빈 목록(관대).
+/// name은 frontmatter 우선, 없으면 디렉터리명 폴백. body_chars는 SKILL.md 전문 글자수.
+pub fn scan_personal_skills(dir: &Path, scope: &str) -> Vec<PersonalSkill> {
+    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
+    let mut out = Vec::new();
+    for v in entries.flatten() {
+        let md = v.path().join("SKILL.md");
+        if !md.is_file() {
+            continue;
+        }
+        let Ok(raw) = std::fs::read_to_string(&md) else { continue };
+        let name = parse_skill_frontmatter(&raw)
+            .map(|(n, _)| n)
+            .unwrap_or_else(|| v.file_name().to_string_lossy().to_string());
+        out.push(PersonalSkill {
+            name,
+            path: md.to_string_lossy().to_string(),
+            body_chars: raw.chars().count() as u64,
+            scope: scope.to_string(),
+        });
+    }
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    out
 }
 
 /// 플러그인 dir의 활성 버전 dir(mtime 최신). (dir, complete).
@@ -770,5 +804,31 @@ mod tests {
         assert!(complete);
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].skills, vec!["new_skill"], "활성(최신 mtime) 버전만");
+    }
+
+    #[test]
+    fn scan_personal_skills_reads_name_and_body_chars() {
+        let dir = tempfile::tempdir().unwrap();
+        let sk = dir.path().join("gh-commit");
+        std::fs::create_dir_all(&sk).unwrap();
+        std::fs::write(sk.join("SKILL.md"),
+            "---\nname: gh-commit\ndescription: commit helper\n---\ngh commit wrapper body").unwrap();
+        // frontmatter 없는 스킬 → 디렉터리명 폴백
+        let raw = dir.path().join("raw-skill");
+        std::fs::create_dir_all(&raw).unwrap();
+        std::fs::write(raw.join("SKILL.md"), "no frontmatter body").unwrap();
+
+        let skills = scan_personal_skills(dir.path(), "user");
+        assert_eq!(skills.len(), 2);
+        let gh = skills.iter().find(|s| s.name == "gh-commit").unwrap();
+        assert_eq!(gh.scope, "user");
+        assert!(gh.body_chars > 40);
+        assert!(gh.path.ends_with("SKILL.md"));
+        assert!(skills.iter().any(|s| s.name == "raw-skill")); // 폴백 이름
+    }
+
+    #[test]
+    fn scan_personal_skills_missing_dir_is_empty() {
+        assert!(scan_personal_skills(std::path::Path::new("/nonexistent/skills"), "user").is_empty());
     }
 }

@@ -10,6 +10,9 @@ pub trait SourceAdapter {
     fn map(&self, line: &str, source_file: &str, source_offset: u64) -> Vec<NormalizedEvent>;
 }
 
+/// 시크릿을 담은 Bash 명령 target 대체 문자열 — 원문 대신 저장(본문 미저장 계약).
+pub const SECRET_REDACTED: &str = "<redacted: secret>";
+
 pub struct ClaudeCodeAdapter {
     pub root: PathBuf,
     pub host: String,
@@ -80,20 +83,33 @@ fn tool_result_content_string(content: Option<&Value>) -> String {
     }
 }
 
+/// user content(문자열 또는 블록 배열)의 텍스트 전문을 평탄화. 시크릿 스캔·미리보기 공용.
+fn content_text(content: Option<&Value>) -> Option<String> {
+    match content {
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(Value::Array(arr)) => Some(
+            arr.iter()
+                .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+                .collect::<Vec<_>>()
+                .join(" "),
+        ),
+        _ => None,
+    }
+}
+
 /// user 프롬프트 미리보기(첫 줄 ≤120자). content가 문자열이면 그대로, 블록 배열이면 text 연결.
 /// tool_result 라인이나 빈 내용은 None. command 마커로 시작하면 None.
 fn extract_prompt_preview(content: Option<&Value>) -> Option<String> {
-    let raw = match content {
-        Some(Value::String(s)) => s.clone(),
-        Some(Value::Array(arr)) => arr
-            .iter()
-            .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
-            .collect::<Vec<_>>()
-            .join(" "),
-        _ => return None,
-    };
+    let raw = content_text(content)?;
     let first_line = raw.lines().next().unwrap_or("").trim();
-    if first_line.is_empty() || first_line.starts_with("<command") {
+    if first_line.is_empty()
+        || first_line.starts_with("<command")
+        || first_line.starts_with("<local-command")
+    {
+        return None;
+    }
+    // 시크릿 포함 첫 줄은 미리보기로 저장하지 않는다 (본문 미저장 원칙 — 코칭 v3 §4.2; SecretFlag는 별도 방출됨)
+    if !crate::curation::find_secret_patterns(first_line).is_empty() {
         return None;
     }
     Some(first_line.chars().take(120).collect())
@@ -188,9 +204,19 @@ impl SourceAdapter for ClaudeCodeAdapter {
             let git_branch = v.get("gitBranch").and_then(|x| x.as_str()).map(String::from);
             out.push(mk(EventKind::SessionMeta { cwd: cwd.to_string(), git_branch }, 900));
         }
-        // compaction 경계
-        if v.get("isCompactSummary").and_then(|x| x.as_bool()).unwrap_or(false) {
+        // compaction 경계 — 구형(isCompactSummary) + 신형(system/compact_boundary) 모두 인지.
+        // trigger(auto/manual) 구분은 Windows 실데이터 핀 후 후속 (코칭 v3 §4.1-5, fail-safe: 미인식=침묵)
+        let compact_boundary = ltype == "system"
+            && v.get("subtype").and_then(|x| x.as_str()) == Some("compact_boundary");
+        if v.get("isCompactSummary").and_then(|x| x.as_bool()).unwrap_or(false) || compact_boundary {
             out.push(mk(EventKind::Compaction, 0));
+            return out;
+        }
+        // permission-mode 라인 → 이벤트 (plan=R16, bypassPermissions=R19 재료 — 코칭 v3 §4.1-4)
+        if ltype == "permission-mode" {
+            if let Some(mode) = v.get("permissionMode").and_then(|x| x.as_str()) {
+                out.push(mk(EventKind::PermissionMode { mode: mode.to_string() }, 0));
+            }
             return out;
         }
 
@@ -244,10 +270,26 @@ impl SourceAdapter for ClaudeCodeAdapter {
                                 .map(String::from);
                             (ToolKind::from_raw_name(&raw_name), t)
                         };
+                        // Bash command 인자 시크릿 스캔 (코칭 v3 §4.2). 시크릿이 있으면 명령 원문이
+                        // target(→events.tool_target)에 저장되지 않도록 마스킹한다 — pattern_id만 저장 계약.
+                        let cmd_secrets = input
+                            .get("command")
+                            .and_then(|x| x.as_str())
+                            .map(crate::curation::find_secret_patterns)
+                            .unwrap_or_default();
+                        let target =
+                            if cmd_secrets.is_empty() { target } else { Some(SECRET_REDACTED.into()) };
                         out.push(mk(
                             EventKind::ToolCall { kind, raw_name, target, tool_use_id },
                             (i + 1) as u64,
                         ));
+                        // off_bump 800대 — 블록별 8칸.
+                        for (j, pid) in cmd_secrets.iter().enumerate() {
+                            out.push(mk(
+                                EventKind::SecretFlag { pattern_id: pid.to_string() },
+                                800 + (i as u64) * 8 + j as u64,
+                            ));
+                        }
                     }
                 }
             }
@@ -272,6 +314,14 @@ impl SourceAdapter for ClaudeCodeAdapter {
             if !had_tool_result {
                 if let Some(preview) = extract_prompt_preview(content) {
                     out.push(mk(EventKind::UserPrompt { preview }, 0)); // off_bump 0 = 라인 시작(deref 포인터)
+                }
+                // 시크릿 스캔은 프롬프트 전문 대상 (미리보기 스킵과 독립 — 코칭 v3 §4.2)
+                // SecretFlag의 source_offset(off_bump 800대)은 dedup 전용이며 deref 포인터가 아니다
+                // (전문 확인은 세션 상세 경유 — PR② R20 참고).
+                if let Some(text) = content_text(content) {
+                    for (i, pid) in crate::curation::find_secret_patterns(&text).iter().enumerate() {
+                        out.push(mk(EventKind::SecretFlag { pattern_id: pid.to_string() }, 800 + i as u64));
+                    }
                 }
             }
         }
@@ -440,5 +490,132 @@ mod tests {
         // 같은 오프셋에서 다시 읽으면 새 완결 라인 없음
         let (lines2, _) = adapter().read_incremental(&path, new_off).unwrap();
         assert!(lines2.is_empty());
+    }
+
+    #[test]
+    fn map_permission_mode_line_yields_event() {
+        use crate::model::EventKind;
+        // 실측 형태 (mac jsonl): {"type":"permission-mode","permissionMode":"plan","sessionId":"..."}
+        let line = r#"{"type":"permission-mode","permissionMode":"plan","sessionId":"s1"}"#;
+        let evs = adapter().map(line, "s1.jsonl", 42);
+        assert_eq!(evs.len(), 1);
+        match &evs[0].kind {
+            EventKind::PermissionMode { mode } => assert_eq!(mode, "plan"),
+            k => panic!("expected PermissionMode, got {k:?}"),
+        }
+        // permissionMode 키 부재 → 침묵 (fail-safe)
+        let none = adapter().map(r#"{"type":"permission-mode","sessionId":"s1"}"#, "s1.jsonl", 0);
+        assert!(none.is_empty());
+    }
+
+    #[test]
+    fn map_system_compact_boundary_yields_compaction() {
+        use crate::model::EventKind;
+        // 신형 auto-compact 경계 (공식 문서 형태). trigger 구분은 Windows 실데이터 핀 후 후속 (스펙 §4.1-5)
+        let line = r#"{"type":"system","subtype":"compact_boundary","sessionId":"s1",
+            "compactMetadata":{"trigger":"auto","preCompactTokens":155000}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        assert!(evs.iter().any(|e| matches!(e.kind, EventKind::Compaction)));
+        // 다른 system subtype은 침묵 (fail-safe)
+        let none = adapter().map(r#"{"type":"system","subtype":"turn_duration","sessionId":"s1"}"#, "s1.jsonl", 0);
+        assert!(none.is_empty());
+    }
+
+    #[test]
+    fn map_local_command_stdout_is_not_prompt() {
+        // 실측: 세션 첫 user 라인이 "<local-command-stdout>Set model to ..." 로 오염됨 (스펙 §4.1-2)
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u9",
+            "message":{"role":"user","content":"<local-command-stdout>Set model to Fable 5</local-command-stdout>"}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        assert!(!evs.iter().any(|e| matches!(e.kind, crate::model::EventKind::UserPrompt { .. })));
+    }
+
+    #[test]
+    fn map_user_prompt_with_secret_emits_flag_without_body() {
+        use crate::model::EventKind;
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u1",
+            "message":{"role":"user","content":"이 키로 배포해줘\nghp_AbCdEf0123456789"}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 100);
+        let sf = evs.iter().find(|e| matches!(e.kind, EventKind::SecretFlag { .. })).unwrap();
+        match &sf.kind {
+            EventKind::SecretFlag { pattern_id } => assert_eq!(pattern_id, "github_token"),
+            k => panic!("expected SecretFlag, got {k:?}"),
+        }
+        // 첫 줄이 평문이므로 UserPrompt도 함께 생성됨 (기능 독립)
+        assert!(evs.iter().any(|e| matches!(e.kind, EventKind::UserPrompt { .. })));
+    }
+
+    #[test]
+    fn map_bash_command_with_secret_emits_flag() {
+        use crate::model::EventKind;
+        let line = r#"{"type":"assistant","sessionId":"s1","uuid":"u2",
+            "message":{"model":"claude-opus-4-8","usage":{"input_tokens":1,"output_tokens":1},
+            "content":[{"type":"tool_use","id":"t1","name":"Bash",
+                        "input":{"command":"export ANTHROPIC_API_KEY=sk-ant-api03-AbCdEfGh123456"}}]}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        let flags: Vec<_> = evs.iter().filter(|e| matches!(e.kind, EventKind::SecretFlag { .. })).collect();
+        assert_eq!(flags.len(), 1);
+        match &flags[0].kind {
+            EventKind::SecretFlag { pattern_id } => assert_eq!(pattern_id, "anthropic_api_key"),
+            k => panic!("expected SecretFlag, got {k:?}"),
+        }
+        // ToolCall(Bash)은 생성되되 target에 명령 원문(시크릿)이 남지 않고 마스킹된다.
+        let tc = evs.iter().find(|e| matches!(e.kind, EventKind::ToolCall { .. })).unwrap();
+        match &tc.kind {
+            EventKind::ToolCall { target, .. } => {
+                assert_eq!(target.as_deref(), Some(SECRET_REDACTED));
+                assert!(!target.as_deref().unwrap().contains("sk-ant-"));
+            }
+            k => panic!("expected ToolCall, got {k:?}"),
+        }
+    }
+
+    #[test]
+    fn map_bash_command_without_secret_keeps_target() {
+        use crate::model::EventKind;
+        // 시크릿이 없으면 명령 원문 target은 그대로 보존.
+        let line = r#"{"type":"assistant","sessionId":"s1","uuid":"u2",
+            "message":{"model":"claude-opus-4-8","usage":{"input_tokens":1,"output_tokens":1},
+            "content":[{"type":"tool_use","id":"t1","name":"Bash",
+                        "input":{"command":"cargo test --all"}}]}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        let tc = evs.iter().find(|e| matches!(e.kind, EventKind::ToolCall { .. })).unwrap();
+        match &tc.kind {
+            EventKind::ToolCall { target, .. } => assert_eq!(target.as_deref(), Some("cargo test --all")),
+            k => panic!("expected ToolCall, got {k:?}"),
+        }
+    }
+
+    #[test]
+    fn map_clean_lines_emit_no_secret_flag() {
+        let clean_user = r#"{"type":"user","sessionId":"s1","uuid":"u3",
+            "message":{"role":"user","content":"토큰 없이 평범한 요청"}}"#;
+        assert!(!adapter().map(clean_user, "s.jsonl", 0).iter()
+            .any(|e| matches!(e.kind, crate::model::EventKind::SecretFlag { .. })));
+    }
+
+    #[test]
+    fn map_user_prompt_first_line_secret_suppresses_preview_but_still_flags() {
+        use crate::model::EventKind;
+        // 첫 줄 자체에 시크릿이 있으면 미리보기(첫 줄 저장)는 침묵하되, SecretFlag는 그대로 방출.
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u12",
+            "message":{"role":"user","content":"배포 토큰은 ghp_AbCdEf0123456789 입니다"}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        assert!(!evs.iter().any(|e| matches!(e.kind, EventKind::UserPrompt { .. })));
+        assert!(evs.iter().any(|e| matches!(&e.kind,
+            EventKind::SecretFlag { pattern_id } if pattern_id == "github_token")));
+    }
+
+    #[test]
+    fn map_tool_result_content_with_secret_does_not_flag() {
+        use crate::model::EventKind;
+        // tool_result 본문은 에이전트(도구) 측 산출물 — !had_tool_result 가드로 시크릿 스캔 대상에서 제외.
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u13",
+            "message":{"role":"user","content":[
+              {"type":"tool_result","tool_use_id":"t1","is_error":false,
+               "content":"... ghp_AbCdEf0123456789 ..."}]}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        assert!(!evs.iter().any(|e| matches!(e.kind, EventKind::SecretFlag { .. })));
+        assert!(evs.iter().any(|e| matches!(e.kind, EventKind::ToolResult { .. })));
     }
 }
