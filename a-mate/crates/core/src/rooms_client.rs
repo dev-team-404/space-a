@@ -8,6 +8,8 @@ use serde_json::{json, Value};
 pub struct RoomsClient {
     pub base_url: String,
     pub token: String,
+    /// 관문(ROOM_SERVER_API_KEY)이 켜진 서버용 x-api-key. 비우면 미첨부 (하위호환).
+    pub api_key: Option<String>,
 }
 
 fn err_of(e: ureq::Error) -> anyhow::Error {
@@ -34,21 +36,38 @@ fn base(url: &str) -> String {
     url.trim_end_matches('/').to_string()
 }
 
+/// 관문(ROOM_SERVER_API_KEY)이 켜진 서버는 x-api-key 헤더를 요구한다. 키가 비어 있으면
+/// (관문 없는 서버) None을 돌려주어 헤더를 붙이지 않는다 — 하위호환. 공백만 있는 값도 무시.
+fn api_key_header(api_key: Option<&str>) -> Option<&str> {
+    api_key.map(str::trim).filter(|k| !k.is_empty())
+}
+
+/// 요청에 x-api-key를 조건부로 첨부한다 (자유 함수·메서드 공용).
+fn with_api_key(req: ureq::Request, api_key: Option<&str>) -> ureq::Request {
+    match api_key_header(api_key) {
+        Some(key) => req.set("x-api-key", key),
+        None => req,
+    }
+}
+
 /// 등록은 토큰이 없는 상태에서 호출된다. mascot_seed = 이 클라이언트의 로봇 시드
 /// (어느 방에서든 내 데스크톱 마스코트와 같은 모습으로 보이게).
-pub fn register(base_url: &str, name: &str, mascot_seed: &str) -> Result<Value> {
-    ureq::post(&format!("{}/rooms/register", base(base_url)))
-        .timeout(std::time::Duration::from_secs(10))
+/// api_key는 관문이 켜진 서버용 — 비우면 미첨부.
+pub fn register(base_url: &str, api_key: Option<&str>, name: &str, mascot_seed: &str) -> Result<Value> {
+    let req = ureq::post(&format!("{}/rooms/register", base(base_url)))
+        .timeout(std::time::Duration::from_secs(10));
+    with_api_key(req, api_key)
         .send_json(json!({ "name": name, "mascot_seed": mascot_seed }))
         .map_err(err_of)?
         .into_json()
         .map_err(Into::into)
 }
 
-/// 방 목록은 공개 — 토큰 불필요.
-pub fn list_rooms(base_url: &str) -> Result<Value> {
-    ureq::get(&format!("{}/rooms", base(base_url)))
-        .timeout(std::time::Duration::from_secs(10))
+/// 방 목록은 공개 — 토큰 불필요. 단, 관문이 켜진 서버는 x-api-key를 요구한다.
+pub fn list_rooms(base_url: &str, api_key: Option<&str>) -> Result<Value> {
+    let req = ureq::get(&format!("{}/rooms", base(base_url)))
+        .timeout(std::time::Duration::from_secs(10));
+    with_api_key(req, api_key)
         .call()
         .map_err(err_of)?
         .into_json()
@@ -57,9 +76,10 @@ pub fn list_rooms(base_url: &str) -> Result<Value> {
 
 impl RoomsClient {
     fn req(&self, method: &str, path: &str) -> ureq::Request {
-        ureq::request(method, &format!("{}{}", base(&self.base_url), path))
+        let req = ureq::request(method, &format!("{}{}", base(&self.base_url), path))
             .timeout(std::time::Duration::from_secs(10))
-            .set("Authorization", &format!("Bearer {}", self.token))
+            .set("Authorization", &format!("Bearer {}", self.token));
+        with_api_key(req, self.api_key.as_deref())
     }
 
     pub fn me(&self) -> Result<Value> {
@@ -112,5 +132,33 @@ impl RoomsClient {
             .map_err(err_of)?
             .into_json()
             .map_err(Into::into)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn api_key_header_present_when_set() {
+        assert_eq!(api_key_header(Some("secret")), Some("secret"));
+    }
+
+    #[test]
+    fn api_key_header_absent_when_none() {
+        // 관문 없는 서버 — 키 미설정이면 헤더를 붙이지 않는다 (하위호환)
+        assert_eq!(api_key_header(None), None);
+    }
+
+    #[test]
+    fn api_key_header_absent_when_blank() {
+        // 빈/공백 값은 미설정과 동일하게 취급
+        assert_eq!(api_key_header(Some("")), None);
+        assert_eq!(api_key_header(Some("   ")), None);
+    }
+
+    #[test]
+    fn api_key_header_trims_surrounding_whitespace() {
+        assert_eq!(api_key_header(Some("  secret  ")), Some("secret"));
     }
 }
