@@ -1,6 +1,6 @@
 <script lang="ts">
   import { listen } from '@tauri-apps/api/event';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   import './lib/theme.css';
   import {
     emitOccasionToday, getChatterPool, getMascotSeed, getSettings, getSummary, getTodayOccasions,
@@ -169,28 +169,61 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
     return () => { clearInterval(t); window.removeEventListener('blur', onBlur); };
   });
 
-  // 클릭 vs 드래그 (스펙 §6): drag-region 대신 수동 판별 — 클릭이면 홈피 열기
-  let downAt: { x: number; y: number } | null = null;
+  // 클릭 vs 드래그 (스펙 §6): drag-region 대신 수동 판별 — 클릭이면 홈피 열기.
+  //
+  // win.startDragging()은 이 창(transparent·decorations:false·WebView2 자식 HWND)에서
+  // Windows 상 무동작이다 — Promise는 resolve되지만 tao의 caption-drag(WM_NCLBUTTONDOWN)가
+  // 부모 창에 도달할 때 버튼-다운 상태를 자식 웹뷰가 쥐고 있어 move-loop가 즉시 종료된다.
+  // 그래서 OS 드래그에 의존하지 않고 포인터 델타로 창을 직접 옮긴다(setPosition).
+  // scaleFactor를 곱하는 이유: e.screenX/Y는 논리 px, 창 위치는 물리 px이다.
+  let downAt: { x: number; y: number } | null = null; // 시작 스크린 좌표(논리 px)
+  let dragOrigin: { winX: number; winY: number; scale: number } | null = null; // 시작 창 위치(물리 px)
+  let dragging = false;
+  let dragId = 0; // 드래그 세션 식별자 — 늦게 resolve된 outerPosition이 다음 세션을 덮어쓰지 않게 가드
+  // 드래그 종료 정리 — pointerup 뿐 아니라 pointermove에서 버튼이 떼진 게 뒤늦게 감지되는
+  // 비정상 종료 경로에서도 반드시 불러, expanded 상태가 남아 클릭을 막는 누수를 막는다.
+  function endDrag() {
+    const wasDragging = dragging;
+    dragId++; // 진행 중이던 비동기 outerPosition 결과 무효화
+    downAt = null;
+    dragging = false;
+    dragOrigin = null;
+    if (wasDragging) mascotSetExpanded(false).catch(() => {}); // 폴러 고정 해제
+    return wasDragging;
+  }
   function onPointerDown(e: PointerEvent) {
     if (e.button === 2) return; // 우클릭은 contextmenu 핸들러가 처리
     // 캡처 없이는 빠른 드래그가 로봇 영역(128px)을 벗어난 뒤 move 이벤트가 끊겨
-    // startDragging이 영영 호출되지 않는다 — 캡처로 창 밖까지 move를 계속 받는다
+    // 이동이 끊긴다 — 캡처로 창 밖까지 move를 계속 받는다.
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     downAt = { x: e.screenX, y: e.screenY };
+    dragging = false;
+    dragOrigin = null;
+    const id = ++dragId;
+    // 시작 시점의 창 위치·스케일을 비동기로 확보 (드래그 판정 전에 준비되어 있으면 좋음).
+    // 늦게 resolve돼 다른 세션(또는 종료 후)을 덮어쓰지 않도록 dragId로 가드한다.
+    Promise.all([win.outerPosition(), win.scaleFactor()])
+      .then(([p, s]) => { if (id === dragId) dragOrigin = { winX: p.x, winY: p.y, scale: s }; })
+      .catch(() => { if (id === dragId) dragOrigin = null; });
   }
   function onPointerMove(e: PointerEvent) {
-    if (e.buttons === 0) { downAt = null; return; }
+    if (e.buttons === 0) { endDrag(); return; } // 버튼 떼짐이 뒤늦게 감지된 비정상 종료 — 정리 포함
     if (!downAt) return;
-    if (isDrag(downAt.x, downAt.y, e.screenX, e.screenY)) {
-      downAt = null;
-      win.startDragging(); // 이후는 OS가 이동을 소유
+    if (!dragging && !isDrag(downAt.x, downAt.y, e.screenX, e.screenY)) return;
+    if (!dragging) {
+      dragging = true;
+      // 드래그 동안 ignore_cursor_events 폴러가 창을 커서-투명으로 바꾸면 캡처된 포인터
+      // 이벤트마저 끊긴다 — expanded=true로 폴러를 상호작용 모드에 고정한다(끝나면 원복).
+      mascotSetExpanded(true).catch(() => {});
     }
+    if (!dragOrigin) return; // 창 위치 미확보(비동기 지연) — 다음 move에서 반영
+    const scale = dragOrigin.scale;
+    const nx = Math.round(dragOrigin.winX + (e.screenX - downAt.x) * scale);
+    const ny = Math.round(dragOrigin.winY + (e.screenY - downAt.y) * scale);
+    win.setPosition(new PhysicalPosition(nx, ny)).catch(() => { /* 일시 실패 — 다음 move에서 재시도 */ });
   }
   function onPointerUp() {
-    if (downAt) {
-      downAt = null;
-      openChatTab('home');
-    }
+    if (!endDrag()) openChatTab('home'); // 움직이지 않았으면 클릭 = 홈피 열기
   }
 
   // AI 스프라이트 — 있으면 캔버스 루프 대신 이미지 (CSS 바운스)
