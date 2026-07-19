@@ -347,6 +347,6 @@ auto-compact에만 의존하는 사용자에게, **진행 중 세션**이 컨텍
 | ③ 큐레이션·프로세스 룰 | R13(카탈로그 동봉) · R15 · R16 · R18 | R13 카탈로그 JSON 작성 포함 |
 | ④ 실시간 표면 | R17 (nudge_log·활성 세션 감지·notices/말풍선) | compact 회고 서브타입은 Windows 마커 핀 후 |
 
-- 빌드 환경(Windows): `docs/design/a-mate/plans/2026-07-05-minihompy-restyle-pr1-handoff.md`의 mingw 레시피.
+- 빌드 환경(Windows): `docs/archive/design/a-mate/plans/2026-07-05-minihompy-restyle-pr1-handoff.md`의 mingw 레시피.
 - 진행 관례: 이 스펙 승인 → writing-plans → SDD(태스크별 서브에이전트+리뷰) → PR → 사용자 E2E.
 - compact 마커·(선택) bypassPermissions 라인 표기는 Windows 실데이터로 핀 — v2.1 §10 전례.
