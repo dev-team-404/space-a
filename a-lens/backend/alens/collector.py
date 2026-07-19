@@ -83,16 +83,19 @@ def _parse_ts(ts: str | None) -> datetime | None:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def _bump_activity(activity: dict[str, datetime], agent_id: str | None, ts: str | None) -> None:
-    """agent_id의 최근 활동 시각을 갱신 — 더 최신 write면 덮어쓴다."""
+def _bump_activity(
+    activity: dict[str, dict], agent_id: str | None, ts: str | None, kind: str, title: str
+) -> None:
+    """agent_id의 최근 활동을 갱신 — 더 최신 write면 항목(시각·종류·제목)을 통째로 덮어쓴다.
+    kind: 'knowledge'(page 작성) | 'issue'(이슈 열기). 사람이 읽을 문장 합성의 재료."""
     if not agent_id:
         return
     dt = _parse_ts(ts)
     if dt is None:
         return
     prev = activity.get(agent_id)
-    if prev is None or dt > prev:
-        activity[agent_id] = dt
+    if prev is None or dt > prev["at"]:
+        activity[agent_id] = {"at": dt, "kind": kind, "title": title}
 
 
 def _flatten_tree(nodes: list[dict]) -> list[dict]:
@@ -108,6 +111,23 @@ def _flatten_tree(nodes: list[dict]) -> list[dict]:
 # (SpaceIssue.timeline)을 채우기 위해 현재 상태 1스텝을 합성한다 — 실제 단계별 이력은
 # 허브가 이슈 이벤트를 제공하면 대체한다.
 _ISSUE_STEP_LABEL = {"open": "이슈 발생", "knowledge_linked": "지식 연결", "resolved": "해결 완료"}
+
+
+# 최근 활동 → 사람이 읽는 문장. 지금은 규칙(제목+종류) 기반. 추후 이 함수 안에서 LLM으로
+# body를 요약/번역해 더 자연스러운 문장을 만들 수 있다 (교체 지점 — 시그니처 유지).
+def _humanize_activity(item: dict | None) -> dict | None:
+    if not item:
+        return None
+    title = (item.get("title") or "").strip() or "이름 없는 문서"
+    # 말풍선(brief)은 제목 없이 행동만 짧게 — "지식 공유중" / "이슈 해결중".
+    # 상세(detail)는 제목까지 풀어쓴다.
+    if item.get("kind") == "issue":
+        brief = "이슈 해결중"
+        detail = f"최근에 ‘{title}’ 문제를 이슈로 등록했어요. 팀이 함께 살펴보는 중이에요."
+    else:  # knowledge
+        brief = "지식 공유중"
+        detail = f"최근에 ‘{title}’ 내용을 정리해 팀에 공유했어요. 다른 사람이 참고해 재사용할 수 있어요."
+    return {"brief": brief, "detail": detail}
 
 
 def _issue_vm(issue: dict, member_name: dict[str, str]) -> dict:
@@ -170,11 +190,17 @@ def _hub_snapshot() -> dict:
 
             # 프레즌스: 이 방 사람들의 최근 write(page·issue) 시각을 집계 → online 판정 재료.
             # (life room-server 프레즌스 대체 — a-lens는 사람이 보는 view라 '사람의 활동'으로 읽는다.)
-            last_write: dict[str, datetime] = {}
+            last_write: dict[str, dict] = {}
             for p in pages:
-                _bump_activity(last_write, p.get("created_by"), p.get("updated_at") or p.get("created_at"))
+                _bump_activity(
+                    last_write, p.get("created_by"), p.get("updated_at") or p.get("created_at"),
+                    "knowledge", p.get("title", ""),
+                )
             for it in issues:
-                _bump_activity(last_write, it.get("opened_by"), it.get("updated_at") or it.get("created_at"))
+                _bump_activity(
+                    last_write, it.get("opened_by"), it.get("updated_at") or it.get("created_at"),
+                    "issue", it.get("title", ""),
+                )
 
             resolved = sum(1 for it in issues if it.get("status") == "resolved")
             knowledge = len(pages)
@@ -213,12 +239,14 @@ def _hub_snapshot() -> dict:
 
             def _agent(m: dict) -> dict:
                 seen = last_write.get(m["agent_id"])
-                online = seen is not None and seen.timestamp() >= online_cutoff
+                online = seen is not None and seen["at"].timestamp() >= online_cutoff
                 return {
                     "agent_id": m["agent_id"],
                     "name": m.get("name", m["agent_id"]),
                     "status": "working" if online else "idle",
-                    "last_active_at": seen.isoformat() if seen else None,
+                    "last_active_at": seen["at"].isoformat() if seen else None,
+                    # 사람이 읽을 최근 활동 문장 (말풍선=brief, 상세=detail). 번역은 _humanize_activity.
+                    "recent_activity": _humanize_activity(seen) if seen else None,
                 }
 
             member_name = {m["agent_id"]: m.get("name", m["agent_id"]) for m in members}

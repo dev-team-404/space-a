@@ -288,16 +288,47 @@ export function buildRoomScene(
       .fill({ color: 0x0d1220, alpha: 0.92 })
       .stroke({ color: 0xffffff, alpha: 0.22, width: 1 })
     robot.addChild(namePill, nameTag)
-    // 작업 중이면 머리 위에 말풍선 점 표시
+    // 작업 중이면 머리 위에 말풍선 — 최근 활동 요약(brief)이 있으면 그 문구를, 없으면 '...'
     if (agent.status === 'working') {
-      const by = topY - 6
-      const bub = new Graphics()
-      bub.roundRect(12, by - 16, 30, 16, 8).fill(0xf0e6d2)
-      bub.poly([16, by - 1, 24, by - 1, 15, by + 6]).fill(0xf0e6d2)
-      bub.circle(20, by - 8, 1.8).fill(0x555)
-      bub.circle(27, by - 8, 1.8).fill(0x555)
-      bub.circle(34, by - 8, 1.8).fill(0x555)
-      robot.addChild(bub)
+      const brief = agent.recent_activity?.brief
+      const by = topY - 8
+      if (brief) {
+        // 말풍선은 한 줄만 — 넘치면 '…'로 자른다 (Pixi Text엔 CSS ellipsis가 없어 직접 계산).
+        const bubbleStyle = new TextStyle({
+          fill: 0x3a2f1a,
+          fontSize: 11,
+          fontWeight: '600',
+          fontFamily: '"Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif',
+        })
+        const MAX_W = 150
+        const txt = new Text({ text: brief, style: bubbleStyle })
+        if (txt.width > MAX_W) {
+          let s = brief
+          while (s.length > 1 && txt.width > MAX_W) {
+            s = s.slice(0, -1)
+            txt.text = s + '…'
+          }
+        }
+        txt.anchor.set(0.5, 1)
+        const padX = 8
+        const padY = 5
+        const bw = txt.width + padX * 2
+        const bh = txt.height + padY * 2
+        const cx = 0 // 캐릭터 머리 중앙 위
+        const bub = new Graphics()
+        bub.roundRect(cx - bw / 2, by - bh, bw, bh, 8).fill(0xf0e6d2)
+        bub.poly([cx - 5, by - 1, cx + 5, by - 1, cx, by + 6]).fill(0xf0e6d2) // 꼬리
+        txt.position.set(cx, by - padY)
+        robot.addChild(bub, txt)
+      } else {
+        const bub = new Graphics()
+        bub.roundRect(12, by - 14, 30, 16, 8).fill(0xf0e6d2)
+        bub.poly([16, by + 1, 24, by + 1, 15, by + 8]).fill(0xf0e6d2)
+        bub.circle(20, by - 6, 1.8).fill(0x555)
+        bub.circle(27, by - 6, 1.8).fill(0x555)
+        bub.circle(34, by - 6, 1.8).fill(0x555)
+        robot.addChild(bub)
+      }
     }
     robot.eventMode = 'static'
     robot.cursor = 'pointer'

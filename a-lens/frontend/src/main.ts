@@ -118,6 +118,8 @@ function showAgentPanel(agent: SpaceAgent) {
   const lastAt = kstTime(agent.last_active_at)
   if (agent.status !== 'working' && lastAt) lines.push({ label: '마지막 활동', value: `${lastAt} (KST)` })
   if (agent.status_line) lines.push({ label: '', value: agent.status_line })
+  // 최근 a-hub 활동을 사람이 읽기 쉽게 풀어쓴 설명 (백엔드 recent_activity.detail)
+  if (agent.recent_activity?.detail) lines.push({ label: '최근 활동', value: agent.recent_activity.detail })
   typeLines(lines)
 }
 
