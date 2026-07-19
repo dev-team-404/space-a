@@ -163,7 +163,8 @@ pub fn run() {
                                         .unwrap_or_default();
                                     let scale = w.scale_factor().unwrap_or(1.0);
                                     let (pw, ph) = ((MASCOT_W * scale) as i32, (MASCOT_H * scale) as i32);
-                                    if geometry::sanitize_pos(x, y, pw, ph, &monitors) {
+                                    let robot = (ROBOT_SIDE * scale) as i32;
+                                    if geometry::sanitize_pos(x, y, pw, ph, robot, &monitors) {
                                         let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
                                         restored = true;
                                     }
