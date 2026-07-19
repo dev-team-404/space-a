@@ -484,6 +484,114 @@ impl ContentSource for HubKnowledgeSource {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// 개인 실전 레슨 (2026-07-19) — "정말 내 얘기"가 최상단에 오게. A-Mate의 본분:
+// 일반 커리큘럼이 아니라 **내 로그의 사건**에서 나온 교훈 + 구체적 다음 행동.
+// 전부 결정론(수치는 store 실측만), id 고정(레슨 종류별) → 닫으면 계속 조용.
+// ─────────────────────────────────────────────────────────────────────────
+
+fn lesson(id: &str, tags: &[&str], title: String, body: String, url: &str) -> ContentItem {
+    let mut trigger_tags = vec!["personal".to_string()];
+    trigger_tags.extend(tags.iter().map(|s| s.to_string()));
+    ContentItem {
+        id: id.into(),
+        kind: ItemKind::Tip,
+        title,
+        body,
+        source_url: Some(url.into()),
+        dimension: None, // 마스터 억제 대상 아님 — 실측 사건은 항상 배울 가치
+        trigger_tags,
+        base_priority: 0,
+    }
+}
+
+/// 최근(오늘·어제) 로그에서 실전 레슨 생성. 조건 미충족이면 침묵 — 억지 레슨 금지.
+pub fn personal_lessons(
+    store: &crate::store::SqliteStore,
+    today: &str,
+    yesterday: &str,
+) -> Vec<ContentItem> {
+    let mut out = Vec::new();
+
+    // ① 시행착오 세션 — 오류 반복 후 회복한 최근 세션 (hub 회고와 같은 신호, 코칭 프레임)
+    if let Ok(sessions) = store.struggle_sessions(3, 20, "9999-12-31T00:00:00Z") {
+        if let Some(s) = sessions
+            .iter()
+            .find(|s| {
+                s.last_result_ok
+                    && s.last_ts
+                        .as_deref()
+                        .map(|t| t.starts_with(today) || t.starts_with(yesterday))
+                        .unwrap_or(false)
+            })
+        {
+            let tools = s
+                .error_tools
+                .iter()
+                .take(2)
+                .map(|(t, n)| format!("{t} {n}회"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push(lesson(
+                "lesson-struggle",
+                &["plan"],
+                format!("최근 세션에서 도구 오류 {}회 — 시행착오 줄이는 법", s.error_count),
+                format!(
+                    "당신 로그: 최근 세션에서 {tools} 오류 후 회복했어요. 복잡한 작업은 \
+                     Plan Mode(shift+tab)로 계획을 먼저 합의하고, 같은 명령이 2번 실패하면 \
+                     접근을 바꾸도록 요청해 보세요. 시행착오 토큰이 눈에 띄게 줄어요."
+                ),
+                "https://code.claude.com/docs/en/common-workflows",
+            ));
+        }
+    }
+
+    // ② 캐시 재읽기 과다 — 컨텍스트가 눈덩이처럼 굴러가는 중
+    if let Ok(day) = store.summary_for_date(yesterday) {
+        if day.tok_cache_read > 50_000_000 && day.tok_cache_read > day.tok_input.saturating_mul(5_000) {
+            let eok = day.tok_cache_read / 100_000_000;
+            let label = if eok > 0 { format!("약 {eok}억") } else { format!("{}", day.tok_cache_read) };
+            out.push(lesson(
+                "lesson-cache",
+                &["context", "subagent"],
+                "긴 세션 하나에 몰아치는 중 — 컨텍스트를 나눠보세요".into(),
+                format!(
+                    "당신 로그: 어제 캐시 재읽기가 {label} 토큰 — 같은 컨텍스트를 계속 다시 \
+                     읽고 있어요. 독립적인 작업은 새 세션에서 시작하고, 긴 조사·구현은 \
+                     서브에이전트에 위임하면 재읽기 비용이 크게 줄어요."
+                ),
+                "https://code.claude.com/docs/en/sub-agents",
+            ));
+        }
+    }
+
+    // ③ 상위 모델 단일화 — 잔심부름까지 비싼 모델로
+    if let Ok(mix) = store.model_mix_for_range(Some(yesterday), today) {
+        let total: u64 = mix.iter().map(|(_, t)| t).sum();
+        let high: u64 = mix
+            .iter()
+            .filter(|(m, _)| crate::model::NormModel::from_raw_id(m).tier == crate::model::ModelTier::High)
+            .map(|(_, t)| t)
+            .sum();
+        if total > 100_000 && high * 10 >= total * 9 {
+            let pct = high * 100 / total;
+            out.push(lesson(
+                "lesson-model",
+                &["model"],
+                "잔심부름까지 최상위 모델을 쓰고 있어요".into(),
+                format!(
+                    "당신 로그: 어제·오늘 토큰의 {pct}%가 최상위 모델이에요. 파일 정리·단순 \
+                     수정 같은 작업은 /model 로 haiku·sonnet에 맡겨 보세요 — 품질 차이 없이 \
+                     비용이 크게 줄어드는 대표 구간이에요."
+                ),
+                "https://code.claude.com/docs/en/model-config",
+            ));
+        }
+    }
+
+    out
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // 스코어링 — 프론티어 부스트 + 마스터 억제 + 태그 게이트 (결정론).
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -496,9 +604,15 @@ pub const SCORE_TAG_MATCH: i64 = 300;
 pub const SCORE_TAG_MISS: i64 = -600;
 /// changelog 소식 기본 점수 — 어떤 팁(비프론티어 ~40 포함)보다도 낮게 (2026-07-19 품질 개편).
 pub const SCORE_NEWS: i64 = 25;
+/// 개인 실전 레슨 — 내 로그의 사건이 일반 커리큘럼(프론티어 500)보다 먼저다.
+pub const SCORE_PERSONAL: i64 = 550;
 
 /// 이 아이템을 지금 이 사용자에게 보여줄 가치. 클수록 상단. 0 미만은 숨김 후보.
 pub fn score(item: &ContentItem, profile: &CompetencyProfile) -> i64 {
+    // 개인 실전 레슨 — 내 로그의 사건은 항상 최우선 (마스터 억제·태그 게이트 미적용)
+    if item.trigger_tags.iter().any(|t| t == "personal") {
+        return SCORE_PERSONAL + item.base_priority;
+    }
     match item.dimension {
         // 사다리 팁: 프론티어 정렬
         Some(dim) => {
@@ -703,6 +817,36 @@ mod tests {
         assert!(!items[0].body.contains("Fixed"), "픽스 라인 제외: {}", items[0].body);
         assert!(items[1].body.contains("resume agents"));
         assert!(items[0].trigger_tags.contains(&"changelog".to_string()));
+    }
+
+    // ── 개인 실전 레슨 ──
+
+    #[test]
+    fn personal_lessons_fire_on_real_signals_and_stay_silent_without() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        // 데이터 없음 → 억지 레슨 금지
+        assert!(personal_lessons(&store, "2026-07-19", "2026-07-18").is_empty());
+
+        // 캐시 재읽기 과다 시드 (어제): cache_read 2.1억, input 1천
+        store.conn.execute(
+            "INSERT INTO daily_rollup (host, project_id, date, tok_input, tok_output, tok_cache_read, tok_cache_create, session_count)
+             VALUES ('Windows','p','2026-07-18', 1000, 50000, 210000000, 100, 3)",
+            [],
+        ).unwrap();
+        let lessons = personal_lessons(&store, "2026-07-19", "2026-07-18");
+        assert_eq!(lessons.len(), 1);
+        assert_eq!(lessons[0].id, "lesson-cache");
+        assert!(lessons[0].body.contains("2억"), "실측 수치 인용: {}", lessons[0].body);
+        assert!(lessons[0].trigger_tags.contains(&"personal".to_string()));
+    }
+
+    #[test]
+    fn personal_lesson_outranks_frontier_tip() {
+        let l = lesson("lesson-x", &["model"], "t".into(), "b".into(), "https://x");
+        // 전 축 마스터 프로필이어도 (마스터 억제 미적용) 최상위
+        let p = profile_with(&[], &[]);
+        assert_eq!(score(&l, &p), SCORE_PERSONAL);
+        assert!(score(&l, &p) > SCORE_FRONTIER_BOOST);
     }
 
     #[test]

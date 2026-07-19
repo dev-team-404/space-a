@@ -190,6 +190,12 @@ pub fn run_curation(
     use crate::content::{rank, BuiltinTipsSource, ContentSource, CONTENT_COOLDOWN_DAYS};
     let profile = crate::profile::detect_profile(store)?;
     let mut items = BuiltinTipsSource.fetch()?;
+    // 개인 실전 레슨 — 내 로그의 최근 사건에서 (조건 미충족이면 빈 벡터, 억지 레슨 없음)
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let yesterday = (chrono::Local::now() - chrono::Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    items.extend(crate::content::personal_lessons(store, &today, &yesterday));
     items.extend(feed_items);
     let ranked = rank(items, &profile);
     store.replace_content_items(&ranked, now_ts)?;

@@ -21,7 +21,9 @@
     orchestration: '작업 위임',
   };
   const badge = (it: ContentItem) =>
-    it.dimension ? (DIM_LABEL[it.dimension] ?? it.dimension) : '새 소식';
+    it.trigger_tags?.includes('personal')
+      ? '내 로그 맞춤'
+      : it.dimension ? (DIM_LABEL[it.dimension] ?? it.dimension) : '새 소식';
 
   // 최상위 팁(프론티어) 1건을 크게, 나머지는 접힌 목록으로
   const top = $derived(items[0] ?? null);
