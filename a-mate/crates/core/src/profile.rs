@@ -67,6 +67,22 @@ impl Dimension {
             Dimension::Orchestration => "큰 작업을 서브에이전트에 위임해 병렬로 처리",
         }
     }
+
+    /// 지금 당장 해볼 **구체적 첫걸음**(예시 포함). 오늘의 배움/코칭이 "어떻게"를 담도록.
+    pub fn first_step_ko(&self) -> &'static str {
+        match self {
+            Dimension::ModelLiteracy =>
+                "파일 정리·간단 수정 같은 잔심부름은 대화 중 `/model` 로 sonnet·haiku로 바꿔서 시켜보세요. 품질 차이 없이 비용만 줄어요.",
+            Dimension::ContextHygiene =>
+                "매번 반복해서 설명하는 규칙(코딩 스타일·폴더 규칙 등)을 프로젝트 루트의 `CLAUDE.md`에 한 번 적어두면, 이후엔 Claude가 알아서 지켜요.",
+            Dimension::SkillReuse =>
+                "자주 똑같이 시키는 작업 흐름을 `.claude/skills`의 SKILL.md 하나로 묶어두면 다음부턴 다시 설명 안 해도 돼요. (코치 탭 '스킬 초안 만들기'가 초안을 대신 써줘요.)",
+            Dimension::Automation =>
+                "자주 치는 지시를 슬래시 커맨드로 저장하세요 — 예: '테스트 돌리고 실패만 요약해줘'를 커맨드로 만들면 다음부턴 한 번에 불러요. 포맷·린트는 hooks로 저장 때 자동 실행되게 걸 수 있어요.",
+            Dimension::Orchestration =>
+                "큰 조사·구현은 '이 폴더 전체를 조사해서 핵심만 요약해줘'처럼 통째로 맡겨보세요. Claude가 별도 창(서브에이전트)에서 처리하고 요약만 가져와, 내 대화창은 안 불어나요.",
+        }
+    }
 }
 
 /// 한 축에서의 숙련 상태.

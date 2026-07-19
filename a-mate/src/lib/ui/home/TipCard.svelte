@@ -83,13 +83,17 @@
       <ul class="rest">
         {#each rest as it (it.id)}
           <li>
-            <span class="dot">·</span>
-            {#if it.source_url && docsOk}
-              <a href={it.source_url} onclick={(e) => { e.preventDefault(); openExternal(it.source_url!); }}>{it.title}</a>
-            {:else}
-              <span>{it.title}</span>
+            <div class="rest-head">
+              <span class="dot">·</span>
+              <span class="rest-title">{it.title}</span>
+              <span class="minibadge">{badge(it)}</span>
+            </div>
+            {#if it.body}
+              <p class="rest-body">{it.body}</p>
             {/if}
-            <span class="minibadge">{badge(it)}</span>
+            {#if it.source_url && docsOk}
+              <a class="rest-more" href={it.source_url} onclick={(e) => { e.preventDefault(); openExternal(it.source_url!); }}>공식 가이드 →</a>
+            {/if}
           </li>
         {/each}
       </ul>
@@ -115,7 +119,7 @@
   }
   .x:hover { color: var(--accent); }
   h3 { margin: 0; font-size: 15px; color: var(--ink); font-weight: 700; line-height: 1.4; }
-  .body { margin: 0; font-size: 12px; color: var(--ink-soft); line-height: 1.65; }
+  .body { margin: 0; font-size: 12px; color: var(--ink-soft); line-height: 1.7; white-space: pre-line; }
   .personal {
     margin: 0; font-size: 12px; color: var(--ink); line-height: 1.6; font-weight: 500;
     background: var(--mint-tint); border: 1px solid var(--mint-tint-b);
@@ -127,11 +131,15 @@
   .more:hover { text-decoration: underline; }
   .rest {
     list-style: none; margin: 4px 0 0; padding: 9px 0 0; border-top: 1px dashed var(--line);
-    display: flex; flex-direction: column; gap: 7px; font-size: 12px;
+    display: flex; flex-direction: column; gap: 12px; font-size: 12px;
   }
-  .rest li { display: flex; align-items: baseline; gap: 6px; }
+  .rest li { display: flex; flex-direction: column; gap: 3px; }
+  .rest-head { display: flex; align-items: baseline; gap: 6px; }
   .rest .dot { color: var(--accent); flex: none; }
-  .rest a { color: var(--ink); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .rest-title { color: var(--ink); font-weight: 600; min-width: 0; }
+  .rest-body { margin: 0 0 0 12px; font-size: 11.5px; color: var(--ink-soft); line-height: 1.65; white-space: pre-line; }
+  .rest-more { margin-left: 12px; font-size: 11px; color: var(--accent); text-decoration: none; font-weight: 600; width: fit-content; }
+  .rest-more:hover { text-decoration: underline; }
   .rest a:hover { color: var(--accent); text-decoration: underline; }
   .minibadge {
     margin-left: auto; font-size: 10px; color: var(--ink-soft); white-space: nowrap; flex: none;
