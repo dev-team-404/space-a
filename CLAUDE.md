@@ -1,21 +1,33 @@
 # CLAUDE.md
 
 SPACE-A는 **문서 우선** 프로젝트입니다. 구조·아키텍처 결정은 코드보다 먼저 `docs/`에 기록합니다.
-(구현: `a-mate/` Tauri 클라이언트, `a-hub/` 협업 공간 백엔드(`work/`=업무, `life/`=방 방문·소셜), `a-lens/` 시각화)
+
+## 저장소 구조
+
+| 위치 | 내용 |
+|------|------|
+| [a-mate/](./a-mate/) | Pillar 1 — AI 사용 코칭 데스크톱 앱 (Agent Mentor). 제약: [a-mate/CLAUDE.md](./a-mate/CLAUDE.md) |
+| [a-hub/](./a-hub/) | Pillar 2 — 협업 공간 백엔드 (`work/`=업무, `life/`=방 방문·소셜). 제약: [a-hub/CLAUDE.md](./a-hub/CLAUDE.md) |
+| [a-lens/](./a-lens/) | Pillar 3 — 커뮤니티 시각화 웹 UI. 제약: [a-lens/CLAUDE.md](./a-lens/CLAUDE.md) |
+| [contracts/](./contracts/) | 컴포넌트 간 **경계 계약** (C1 MCP / C2 REST / C4 admin 스키마 + fixtures) |
 
 ## 문서 구조 (`docs/`)
 
 | 위치 | 내용 |
 |------|------|
 | [docs/README.md](./docs/README.md) | 문서 인덱스 + 작성 규칙 |
+| [docs/highlevel/](./docs/highlevel/) | 사람이 읽는 레벨 문서 (개요→기능→상세, 시작점 `level-0.md`) |
 | [docs/design/](./docs/design/) | 팀원별 컴포넌트 설계 안 (설계 단계 작업물) |
 | [docs/adr/](./docs/adr/) | Architecture Decision Records (확정된 주요 결정 기록) |
+| [docs/archive/](./docs/archive/) | 완료·폐기 작업 문서 미러 (**기본 탐색 제외**) |
 
 ## 문서 작성 규칙
 
 - **문서 우선.** 구조·아키텍처 관련 결정은 코드보다 먼저 `docs/`에 기록한다.
 - **중요한 결정은 ADR로.** 되돌리기 어려운 결정(레포 구성, 스택, 스키마 등)은
   `docs/adr/`에 `NNNN-title.md` 형식으로 남긴다. 채택된 ADR은 수정하지 않고 새 ADR로 대체한다.
+- **경계 계약은 `contracts/`가 정답.** 컴포넌트 간 계약(C1/C2/C4)이 바뀌면 `contracts/`의
+  스키마·픽스처를 먼저 갱신한다. 문서와 어긋나면 파일을 따른다.
 - **설계 안은 `docs/design/`에.** 컴포넌트별 설계 안을 자유롭게 작성한다.
 - **작업 문서 위치.** spec/plan/kickoff 문서는 해당 컴포넌트의
   `docs/design/<component>/{specs,plans,brainstorming}`에 저장한다 (superpowers 등
@@ -46,23 +58,6 @@ fix(agent): handle empty claude log directory
 docs(design): draft frontend visualization spec
 chore: set up gitignore and base structure
 ```
-
-## Tauri 클라이언트 (`a-mate/`) 개발 제약
-
-`a-mate/`(Cargo workspace: `crates/core`, `src-tauri`, `src/`)를 만질 때 적용:
-
-- 폴더명 `a-mate`는 README의 Pillar 1 축 이름(**A-Mate**)과 맞춘 것이다.
-  단, 앱의 제품명·코드 식별자는 그대로 **Agent Mentor** / `agent-mentor`(Cargo 크레이트,
-  tauri productName, DB·로그 파일명 등)를 유지한다 — 폴더 이름만 축과 정렬했을 뿐,
-  식별자 리네이밍은 아니다.
-- 제품명: Agent Mentor. 식별자 `agent-mentor`. Claude 외 타 에이전트 확장을 염두에 둔 이름이므로,
-  에이전트별 로직은 하드코딩하지 말고 SourceAdapter / Engine 인터페이스 뒤로 추상화할 것.
-- 스택: Tauri v2 + Rust 백엔드. v1 API(SystemTray, tauri::updater, WindowBuilder 등) 금지.
-- 상주/업데이트/자동시작은 반드시 v2 공식 플러그인(tray-icon, updater, autostart)으로.
-- 플랫폼: Windows 전용. macOS/Linux 분기 불필요.
-- 프라이버시: 트랜스크립트는 기본 로컬 처리. 외부 전송은 Engine 선택(사내 on-prem 기본)으로만.
-- 무거운 데이터 처리(JSONL 파싱/집계/감시)는 Rust 백엔드에서.
-- 설계 스펙·구현 계획: [docs/design/a-mate/](./docs/design/a-mate/) 아래 `specs/`, `plans/`.
 
 ## 참고
 
