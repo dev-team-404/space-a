@@ -1,0 +1,402 @@
+<title>a-mate 아키텍처</title>
+<style>
+  :root {
+    --ground: #f6f4fb;
+    --panel: #ffffff;
+    --panel-2: #f0ecf8;
+    --ink: #211c2c;
+    --ink-soft: #6a6280;
+    --line: #e4ddf0;
+    --line-strong: #d3c8ea;
+    --accent: #7c5fd0;      /* a-mate 라벤더 — 내부 코어 */
+    --accent-soft: #ece5fa;
+    --mint: #2f9f7e;        /* 구현됨/정상 */
+    --mint-soft: #dcf1ea;
+    --coral: #d0567f;       /* 외부 egress/주의 */
+    --coral-soft: #fbe4ec;
+    --amber: #b9822b;       /* 파생 신호 */
+    --shadow: 0 1px 2px rgba(40,30,64,.05), 0 6px 20px rgba(40,30,64,.06);
+    --radius: 14px;
+    --mono: ui-monospace, "Cascadia Code", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+    --sans: "Segoe UI", system-ui, -apple-system, "Malgun Gothic", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #16121f; --panel: #201a2c; --panel-2: #191423;
+      --ink: #ece8f6; --ink-soft: #9a92b2; --line: #322a44; --line-strong: #453a5e;
+      --accent: #a488ea; --accent-soft: #2a2140;
+      --mint: #5cc7a4; --mint-soft: #17322a; --coral: #e88aab; --coral-soft: #3a1f2c;
+      --amber: #d6a860;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.34);
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #f6f4fb; --panel: #ffffff; --panel-2: #f0ecf8; --ink: #211c2c; --ink-soft: #6a6280;
+    --line: #e4ddf0; --line-strong: #d3c8ea; --accent: #7c5fd0; --accent-soft: #ece5fa;
+    --mint: #2f9f7e; --mint-soft: #dcf1ea; --coral: #d0567f; --coral-soft: #fbe4ec; --amber: #b9822b;
+    --shadow: 0 1px 2px rgba(40,30,64,.05), 0 6px 20px rgba(40,30,64,.06);
+  }
+  :root[data-theme="dark"] {
+    --ground: #16121f; --panel: #201a2c; --panel-2: #191423; --ink: #ece8f6; --ink-soft: #9a92b2;
+    --line: #322a44; --line-strong: #453a5e; --accent: #a488ea; --accent-soft: #2a2140;
+    --mint: #5cc7a4; --mint-soft: #17322a; --coral: #e88aab; --coral-soft: #3a1f2c; --amber: #d6a860;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.34);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .wrap {
+    font-family: var(--sans); color: var(--ink); background: var(--ground);
+    min-height: 100vh; padding: clamp(20px, 4vw, 56px);
+    background-image: radial-gradient(circle at 12% -10%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 42%);
+  }
+  .page { max-width: 1120px; margin: 0 auto; }
+
+  header.masthead { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 18px 28px; margin-bottom: 30px; }
+  .eyebrow { font: 600 12px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.02; letter-spacing: -.02em; margin: 8px 0 0; text-wrap: balance; }
+  h1 .dim { color: var(--ink-soft); font-weight: 500; }
+  .lede { color: var(--ink-soft); max-width: 56ch; margin: 10px 0 0; line-height: 1.6; font-size: 15px; }
+  .stamp { margin-left: auto; text-align: right; font: 500 12px/1.5 var(--mono); color: var(--ink-soft); }
+  .stamp b { color: var(--mint); }
+
+  .rail { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 34px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+  .stat .n { font: 700 26px/1 var(--sans); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .stat .l { font-size: 12px; color: var(--ink-soft); margin-top: 5px; }
+
+  .board { display: grid; grid-template-columns: 1fr 300px; gap: 18px; align-items: start; }
+  @media (max-width: 860px) { .board { grid-template-columns: 1fr; } .rail { grid-template-columns: repeat(2,1fr); } }
+
+  section.stack { display: flex; flex-direction: column; gap: 0; }
+  .layer {
+    position: relative; background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px;
+  }
+  .layer + .layer { margin-top: 26px; }
+  /* 층 사이 흐름 화살표 */
+  .layer + .layer::before {
+    content: ""; position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
+    width: 2px; height: 22px; background: var(--line-strong);
+  }
+  .layer + .layer::after {
+    content: ""; position: absolute; top: -8px; left: 50%; transform: translateX(-50%) rotate(45deg);
+    width: 7px; height: 7px; border-right: 2px solid var(--line-strong); border-bottom: 2px solid var(--line-strong);
+  }
+  .layer .lhead { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+  .layer .lhead h2 { font-size: 15px; margin: 0; letter-spacing: -.01em; }
+  .layer .lhead .path { font: 500 11.5px/1 var(--mono); color: var(--ink-soft); }
+  .layer .lhead .kicker { margin-left: auto; font: 600 10.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+
+  .mods { display: flex; flex-wrap: wrap; gap: 7px; }
+  .mod {
+    font: 500 12px/1 var(--sans); padding: 7px 10px; border-radius: 9px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--ink);
+    display: inline-flex; align-items: center; gap: 7px;
+  }
+  .mod code { font: 600 11px/1 var(--mono); color: var(--accent); }
+  .mod.hot { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+
+  /* 스캔 파이프라인 — 실제 순서(번호가 정보) */
+  .pipe { border-left: 3px solid var(--accent); }
+  .steps { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .step {
+    display: inline-flex; align-items: center; gap: 8px; padding: 8px 11px 8px 8px;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px;
+  }
+  .step .i { width: 19px; height: 19px; border-radius: 50%; background: var(--accent); color: #fff; font: 700 11px/19px var(--mono); text-align: center; }
+  .step small { color: var(--ink-soft); font-size: 11px; }
+  .arrow { color: var(--line-strong); align-self: center; font-size: 13px; }
+
+  .datasrc { border-style: dashed; background: var(--panel-2); }
+  .datasrc .mod { background: var(--panel); }
+
+  /* 외부 연결 컬럼 */
+  aside.ext { display: flex; flex-direction: column; gap: 12px; }
+  .ext-title { font: 600 11px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); padding: 0 2px; }
+  .conn {
+    position: relative; background: var(--panel); border: 1px solid var(--line);
+    border-left: 3px solid var(--c, var(--accent)); border-radius: var(--radius); padding: 13px 14px; box-shadow: var(--shadow);
+  }
+  .conn h3 { margin: 0; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .conn .dir { font: 600 10px/1 var(--mono); letter-spacing: .08em; padding: 3px 6px; border-radius: 6px; background: var(--panel-2); color: var(--ink-soft); }
+  .conn p { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-soft); line-height: 1.55; }
+  .conn .proto { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .tag { font: 600 10.5px/1 var(--mono); padding: 4px 7px; border-radius: 6px; background: color-mix(in srgb, var(--c) 12%, transparent); color: var(--c); }
+  .conn.engine { --c: var(--accent); }
+  .conn.hub { --c: var(--mint); }
+  .conn.room { --c: var(--amber); }
+  .conn.web { --c: var(--coral); }
+
+  /* 상세 밴드 — 허브 글쓰기 타임라인 + 웹 큐레이션 */
+  .detail { margin-top: 34px; display: grid; grid-template-columns: 1.15fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 860px) { .detail { grid-template-columns: 1fr; } }
+  .band { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 18px; }
+  .band > h2 { font-size: 15px; margin: 0 0 3px; letter-spacing: -.01em; }
+  .band > .sub { font-size: 12px; color: var(--ink-soft); margin: 0 0 14px; }
+
+  /* 허브 글쓰기: 트리거(언제) → 무엇 → 빈도 */
+  .fires { display: flex; flex-direction: column; gap: 10px; }
+  .fire { display: grid; grid-template-columns: 128px 1fr; gap: 12px; align-items: start; }
+  .fire .when {
+    font: 600 11.5px/1.35 var(--mono); color: var(--c, var(--mint)); padding: 8px 9px;
+    background: color-mix(in srgb, var(--c, var(--mint)) 10%, transparent);
+    border-left: 3px solid var(--c, var(--mint)); border-radius: 8px;
+  }
+  .fire .what b { font-size: 13px; }
+  .fire .what p { margin: 3px 0 0; font-size: 12px; color: var(--ink-soft); line-height: 1.5; }
+  .fire .what .cap { display: inline-block; margin-top: 6px; font: 600 10.5px/1 var(--mono); color: var(--ink-soft); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 4px 7px; }
+  .fire.share { --c: var(--mint); }
+  .fire.tele { --c: var(--accent); }
+  .fire.retro { --c: var(--amber); }
+  .privacy-note { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line); font-size: 11.5px; color: var(--ink-soft); line-height: 1.5; }
+  .privacy-note b { color: var(--coral); }
+
+  /* 웹 큐레이션 흐름 */
+  .flow { display: flex; flex-direction: column; gap: 9px; }
+  .fstep { display: flex; gap: 11px; align-items: flex-start; }
+  .fstep .num { flex: none; width: 22px; height: 22px; border-radius: 7px; background: var(--coral-soft); color: var(--coral); font: 700 12px/22px var(--mono); text-align: center; }
+  .fstep .body b { font-size: 12.5px; }
+  .fstep .body p { margin: 2px 0 0; font-size: 11.5px; color: var(--ink-soft); line-height: 1.5; }
+  .srcs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+  .src { font: 600 10.5px/1 var(--mono); padding: 5px 8px; border-radius: 7px; background: var(--panel-2); border: 1px solid var(--line); color: var(--ink); }
+  .src em { color: var(--coral); font-style: normal; }
+
+  .principles { margin-top: 18px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  @media (max-width: 700px) { .principles { grid-template-columns: 1fr; } }
+  .pr { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 15px 16px; box-shadow: var(--shadow); }
+  .pr .t { font-size: 13.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .pr .t .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .pr.ok .t .dot { background: var(--mint); }
+  .pr.warn .t .dot { background: var(--coral); }
+  .pr p { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-soft); line-height: 1.6; }
+
+  footer { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 12px; color: var(--ink-soft); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 11px; height: 11px; border-radius: 3px; }
+  .foot-note { margin-left: auto; font-family: var(--mono); }
+</style>
+
+<div class="wrap">
+<div class="page">
+
+  <header class="masthead">
+    <div>
+      <div class="eyebrow">Agent Mentor · Pillar 1</div>
+      <h1>a-mate <span class="dim">아키텍처</span></h1>
+      <p class="lede">Windows·WSL의 Claude Code 사용 기록을 <b>로컬에서</b> 분석해 토큰 낭비 없이 코칭하는 상주형 데스크톱 앱. 원문은 로컬에 남고, 밖으로 나가는 건 파생 신호뿐입니다.</p>
+    </div>
+    <div class="stamp">Tauri v2 + Rust + Svelte 5<br>현재 구현 · <b>테스트 416 통과</b></div>
+  </header>
+
+  <div class="rail">
+    <div class="stat"><div class="n">3</div><div class="l">내부 계층 (프론트·셸·코어)</div></div>
+    <div class="stat"><div class="n">4</div><div class="l">외부 연결 (엔진·허브·룸·웹)</div></div>
+    <div class="stat"><div class="n">6→1</div><div class="l">스캔 파이프라인 단계</div></div>
+    <div class="stat"><div class="n">100%</div><div class="l">대화 원문 로컬 처리</div></div>
+  </div>
+
+  <div class="board">
+
+    <!-- 내부 스택 -->
+    <section class="stack">
+
+      <div class="layer">
+        <div class="lhead"><h2>미니홈피 프론트엔드</h2><span class="path">src/ · Svelte 5</span><span class="kicker">사용자 표면</span></div>
+        <div class="mods">
+          <span class="mod">채팅 창 <code>홈·코칭·다이어리·채팅</code></span>
+          <span class="mod">마스코트 창 <code>AI 스프라이트</code></span>
+          <span class="mod">방·마이룸</span>
+          <span class="mod">설정 창</span>
+          <span class="mod">오늘의 배움 카드</span>
+        </div>
+      </div>
+
+      <div class="layer">
+        <div class="lhead"><h2>Tauri 셸 · 백그라운드 파이프라인</h2><span class="path">src-tauri/</span><span class="kicker">런타임</span></div>
+        <div class="mods" style="margin-bottom:12px">
+          <span class="mod">notify 파일 감시 <code>60s 디바운스</code></span>
+          <span class="mod">커맨드 ~20</span>
+          <span class="mod">이벤트 emit</span>
+          <span class="mod">트레이 · 자동시작</span>
+        </div>
+        <div class="pipe" style="padding:12px 0 2px">
+          <div class="steps">
+            <span class="step"><span class="i">1</span>수집<small>증분 파싱</small></span><span class="arrow">→</span>
+            <span class="step"><span class="i">2</span>인벤토리<small>MCP·플러그인</small></span><span class="arrow">→</span>
+            <span class="step"><span class="i">3</span>규칙<small>발견 탐지</small></span><span class="arrow">→</span>
+            <span class="step"><span class="i">4</span>큐레이션<small>오늘의 배움</small></span><span class="arrow">→</span>
+            <span class="step"><span class="i">5</span>다이어리<small>LLM 서사</small></span><span class="arrow">→</span>
+            <span class="step"><span class="i">6</span>허브 발행<small>공유·텔레·회고</small></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="layer">
+        <div class="lhead"><h2>Rust 코어 — 순수 로직</h2><span class="path">crates/core · Tauri 무의존</span><span class="kicker">두뇌</span></div>
+        <div class="mods">
+          <span class="mod hot">규칙엔진 <code>R6·R7·R10·R11</code></span>
+          <span class="mod">역량 프로필</span>
+          <span class="mod hot">큐레이션 <code>개인 레슨·팁·팀지식</code></span>
+          <span class="mod">다이어리 <code>정밀도의 선</code></span>
+          <span class="mod hot">마스코트+스프라이트 <code>시드</code></span>
+          <span class="mod hot">허브 <code>공유·텔레메트리·회고</code></span>
+          <span class="mod">rooms_client</span>
+          <span class="mod">SQLite 스토어</span>
+        </div>
+      </div>
+
+      <div class="layer datasrc">
+        <div class="lhead"><h2>로컬 데이터 소스</h2><span class="path">읽기 전용 · 절대 유출 안 함</span></div>
+        <div class="mods">
+          <span class="mod">Windows <code>%USERPROFILE%\.claude</code></span>
+          <span class="mod">WSL 전 distro <code>\\wsl.localhost</code></span>
+          <span class="mod">*.jsonl 트랜스크립트</span>
+          <span class="mod">settings · mcp · plugins</span>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- 외부 연결 -->
+    <aside class="ext">
+      <div class="ext-title">외부 연결 — 파생 신호만</div>
+
+      <div class="conn engine">
+        <h3>LLM 엔진 <span class="dir" style="margin-left:auto">→ 호출</span></h3>
+        <p>다이어리 서사 · 레슨 코칭 · 회고 요약 · <b>AI 스프라이트 생성</b>. 결정론 브리프만 전달, 원문 통째 전송 금지.</p>
+        <div class="proto"><span class="tag">OpenRouter</span><span class="tag">사내 on-prem</span></div>
+      </div>
+
+      <div class="conn hub">
+        <h3>a-hub · Space A <span class="dir" style="margin-left:auto">↔ 양방향</span></h3>
+        <p><b>push</b> 코칭 지식·텔레메트리·세션 회고 → <b>pull</b> 팀 지식을 배움 피드로. 경로·프롬프트 스크럽.</p>
+        <div class="proto"><span class="tag">c2 REST</span><span class="tag">x-api-key</span><span class="tag">Bearer</span></div>
+      </div>
+
+      <div class="conn room">
+        <h3>room-server <span class="dir" style="margin-left:auto">→ 방·위치</span></h3>
+        <p>개인 방 등록 · 자리 이동 · 프레즌스. 내 캐릭터가 방·초상에 동일 인물로. 게이트 서버엔 x-api-key.</p>
+        <div class="proto"><span class="tag">/rooms/*</span><span class="tag">x-api-key</span></div>
+      </div>
+
+      <div class="conn web">
+        <h3>웹 큐레이션 <span class="dir" style="margin-left:auto">→ fetch</span></h3>
+        <p>Claude 공식 문서 · changelog · 창시자(Boris) 팁을 관대하게 fetch. 내부망 미도달 시 링크 자동 숨김.</p>
+        <div class="proto"><span class="tag">HTTPS</span><span class="tag">도달성 프로브</span></div>
+      </div>
+    </aside>
+
+  </div>
+
+  <div class="detail">
+
+    <!-- a-hub 글쓰기: 언제 무엇을 -->
+    <div class="band">
+      <h2>a-hub에 언제 글을 쓰나</h2>
+      <p class="sub">모두 스캔 파이프라인 끝에 편승 · 실패해도 앱 무해(다음 스캔 재시도)</p>
+      <div class="fires">
+
+        <div class="fire share">
+          <div class="when">스캔 직후<br>유의미 발견 시</div>
+          <div class="what">
+            <b>① 코칭 지식</b> — 팀에도 통하는 발견(R1·R2·R10·R11·R12)을 이슈→해결로 발행
+            <p>문턱: 절약 ≥1,000토큰 또는 반복 3회 확인. 처방·명령까지 결정론 본문.</p>
+            <span class="cap">건당 평생 1회 · 스캔당 최대 3건</span>
+          </div>
+        </div>
+
+        <div class="fire tele">
+          <div class="when">하루 1회<br>자정 후 첫 스캔</div>
+          <div class="what">
+            <b>② 텔레메트리</b> — 전날치 파생 집계 JSON (a-lens 대시보드 원료)
+            <p>세션 수 · 토큰 합계 · 모델 비율 · 코칭 상태 · MCP 호출 수 — 숫자만.</p>
+            <span class="cap">활동 0인 날은 침묵</span>
+          </div>
+        </div>
+
+        <div class="fire retro">
+          <div class="when">세션 종료<br>30분 뒤</div>
+          <div class="what">
+            <b>③ 세션 회고</b> — "고생 끝 해결" 세션을 LLM 요약 경험담으로
+            <p>조건: 도구 오류 ≥3회 겪고 마지막이 정상(회복)인 세션만. 엔진 없으면 보류.</p>
+            <span class="cap">하루 최대 2건 · 세션당 1회</span>
+          </div>
+        </div>
+
+      </div>
+      <p class="privacy-note"><b>나가지 않는 것:</b> 대화 원문 · 파일 경로 · 세션 ID · cwd. 회고의 "작업 한 줄"은 내가 고른 엔진까지만 가고, 허브엔 요약 텍스트만 도착한다.</p>
+    </div>
+
+    <!-- 웹 큐레이션: 언제 어떻게 -->
+    <div class="band">
+      <h2>웹 큐레이션은 언제·어떻게</h2>
+      <p class="sub">"오늘의 배움"의 외부 재료 — <b>매 스캔에 편승</b>, store 락 밖에서 fetch</p>
+      <div class="flow">
+
+        <div class="fstep">
+          <div class="num">1</div>
+          <div class="body"><b>스캔마다 fetch</b>
+            <p>15초 타임아웃 · 관대한 파싱(한 소스 실패해도 나머지는 계속). 내부망 미도달이면 링크 자동 숨김.</p>
+            <div class="srcs">
+              <span class="src">Claude <em>changelog</em> · 기능만 ≤2</span>
+              <span class="src">Boris 팁 · <em>howborisusesclaudecode.com</em> ≤8</span>
+              <span class="src">내장 커리큘럼 팁</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="fstep">
+          <div class="num">2</div>
+          <div class="body"><b>팀 지식도 함께 pull</b>
+            <p>a-hub에서 다른 팀원이 발행한 지식 최신 5건 (내 발행분 제외).</p>
+          </div>
+        </div>
+
+        <div class="fstep">
+          <div class="num">3</div>
+          <div class="body"><b>내 프로필로 스코어링</b>
+            <p>내 로그 기반 개인 레슨 &gt; 다음 단계 커리큘럼 팁 &gt; 팀 지식 &gt; 기능 소식 순. 패치노트는 팁을 못 밀어낸다.</p>
+          </div>
+        </div>
+
+        <div class="fstep">
+          <div class="num">4</div>
+          <div class="body"><b>홈 "오늘의 배움" 카드</b>
+            <p>최상단 1건 크게(근거+코칭) + 나머지 접힌 목록. 닫으면 그 축은 14일 쿨다운.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <div class="principles">
+    <div class="pr ok">
+      <div class="t"><span class="dot"></span>프라이버시 = 로컬 기본</div>
+      <p>트랜스크립트는 DB에도 안 남고 포인터만. egress 경계는 엔진·허브 <b>설정을 켤 때만</b> 열린다.</p>
+    </div>
+    <div class="pr">
+      <div class="t"><span class="dot"></span>정밀도의 선</div>
+      <p>처방(행동)=결정론 규칙, 서사(칭찬·회고)=LLM. 수치는 브리프에 담긴 것만 인용, 환각 불가.</p>
+    </div>
+    <div class="pr warn">
+      <div class="t"><span class="dot"></span>나깅 방지</div>
+      <p>발견은 평생 1회·상한. 조언을 따르면 규칙이 침묵하고 <b>칭찬</b>으로 전환된다.</p>
+    </div>
+  </div>
+
+  <footer>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--accent)"></span>내부 코어</span>
+      <span><span class="sw" style="background:var(--mint)"></span>구현·정상</span>
+      <span><span class="sw" style="background:var(--amber)"></span>파생 신호</span>
+      <span><span class="sw" style="background:var(--coral)"></span>외부 egress</span>
+    </div>
+    <span class="foot-note">seed → 사람마다 다른 픽셀 캐릭터 · ~75만 조합</span>
+  </footer>
+
+</div>
+</div>
