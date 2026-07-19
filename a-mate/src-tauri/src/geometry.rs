@@ -13,9 +13,12 @@ pub fn sanitize_pos(
     robot_side: i32,
     monitors: &[(i32, i32, i32, i32)],
 ) -> bool {
-    let (rx, ry) = (x + w - robot_side, y + h - robot_side); // 로봇 정사각 좌상단
+    // 저장 좌표(DB)·시스템 값이 극단적(예: i32::MAX)이어도 오버플로 패닉이 없도록 i64로 계산.
+    let side = robot_side as i64;
+    let (rx, ry) = (x as i64 + w as i64 - side, y as i64 + h as i64 - side); // 로봇 정사각 좌상단
     monitors.iter().any(|&(mx, my, mw, mh)| {
-        rx >= mx && ry >= my && rx + robot_side <= mx + mw && ry + robot_side <= my + mh
+        let (mx, my, mw, mh) = (mx as i64, my as i64, mw as i64, mh as i64);
+        rx >= mx && ry >= my && rx + side <= mx + mw && ry + side <= my + mh
     })
 }
 
@@ -52,5 +55,12 @@ mod tests {
     #[test]
     fn secondary_monitor_still_ok() {
         assert!(sanitize_pos(2200, 300, W, H, R, &[(0, 0, 1920, 1080), (1920, 0, 1920, 1080)]));
+    }
+
+    #[test]
+    fn extreme_coords_do_not_overflow_panic() {
+        // 손상된 저장 좌표(i32 극단값)에도 패닉 없이 거부해야 한다 — sanitize는 방어 함수다.
+        assert!(!sanitize_pos(i32::MAX, i32::MAX, W, H, R, &[(0, 0, 3440, 1440)]));
+        assert!(!sanitize_pos(i32::MIN, i32::MIN, W, H, R, &[(0, 0, 3440, 1440)]));
     }
 }
