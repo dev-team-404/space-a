@@ -342,8 +342,8 @@ type IssueStatusFilter = 'all' | 'open' | 'knowledge_linked' | 'resolved'
 let issueStatusFilter: IssueStatusFilter = 'all'
 let issuePersonFilter = '' // '' = 전체
 
-const issueAt = (i: SpaceIssue) => i.timeline[i.timeline.length - 1]?.at ?? ''
-const issueActor = (i: SpaceIssue) => i.timeline[0]?.actor || i.opened_by || '(알 수 없음)'
+const issueAt = (i: SpaceIssue) => i.timeline?.[i.timeline.length - 1]?.at ?? ''
+const issueActor = (i: SpaceIssue) => i.timeline?.[0]?.actor || i.opened_by || '(알 수 없음)'
 const byRecent = (a: SpaceIssue, b: SpaceIssue) => issueAt(b).localeCompare(issueAt(a))
 
 // KST 기준 날짜 키 — 시간 버킷(오늘/어제) 판정용
