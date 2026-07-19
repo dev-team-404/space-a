@@ -44,7 +44,12 @@ function kstTime(iso: string | null | undefined): string {
 function showPanel(title: string, html: string) {
   panelTitle.textContent = title
   panelBody.innerHTML = html
+  positionPanel()
   panel.hidden = false
+}
+// Hub가 접혀 있으면 패널을 화면 오른쪽 위(right:16px)로, 펼쳐져 있으면 사이드바 왼쪽으로.
+function positionPanel() {
+  panel.classList.toggle('hub-collapsed', hubCollapsed)
 }
 $('panel-close').addEventListener('click', () => (panel.hidden = true))
 
@@ -311,6 +316,7 @@ function toggleHub(collapsed: boolean) {
   hubCollapsed = collapsed
   localStorage.setItem('a-lens.hub.collapsed', collapsed ? '1' : '0')
   applyHubCollapsed(true)
+  if (!panel.hidden) positionPanel() // 열린 상세 패널도 새 위치로 따라오게
 }
 $('hub-collapse').addEventListener('click', () => toggleHub(true))
 hubOpen.addEventListener('click', () => toggleHub(false))

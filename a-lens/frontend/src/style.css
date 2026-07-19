@@ -87,7 +87,7 @@ button { font: inherit; cursor: pointer; }
 #panel {
   position: fixed;
   top: 64px;
-  right: 356px; /* Hub(340px) 왼쪽에 배치 — 겹침 방지 */
+  right: 356px; /* Hub(340px) 왼쪽에 배치 — 겹침 방지 (Hub 펼침 기본) */
   width: 320px;
   max-height: calc(100vh - 96px);
   overflow-y: auto;
@@ -96,6 +96,8 @@ button { font: inherit; cursor: pointer; }
   border-radius: 10px;
   padding: 16px;
 }
+/* Hub 접힘 상태 — 사이드바 자리가 비므로 패널을 화면 오른쪽 위에 붙인다 */
+#panel.hub-collapsed { right: 16px; }
 #panel h2 { font-size: 15px; margin-bottom: 10px; padding-right: 24px; }
 #panel-body { font-size: 13px; line-height: 1.6; color: #aab2bd; }
 .panel-close { position: absolute; top: 8px; right: 8px; }
