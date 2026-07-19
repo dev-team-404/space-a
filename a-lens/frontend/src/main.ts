@@ -308,13 +308,17 @@ async function renderHome() {
 }
 
 // ── 방 안 화면 ──
+// 이슈 상태 → 라벨·색 (배지, 행 왼쪽 색 바, 필터 칩이 공유)
+const ISSUE_STATUS_META: Record<string, [string, string]> = {
+  open: ['열림', '#d08770'],
+  knowledge_linked: ['지식 연결', '#7fb3d5'],
+  resolved: ['해결', '#a3be8c'],
+}
+function statusMeta(status: string): [string, string] {
+  return ISSUE_STATUS_META[status] ?? [status, '#888']
+}
 function statusBadge(status: string): string {
-  const map: Record<string, [string, string]> = {
-    open: ['열림', '#d08770'],
-    knowledge_linked: ['지식 연결', '#7fb3d5'],
-    resolved: ['해결', '#a3be8c'],
-  }
-  const [label, color] = map[status] ?? [status, '#888']
+  const [label, color] = statusMeta(status)
   return `<span class="badge" style="border-color:${color};color:${color}">${esc(label)}</span>`
 }
 
@@ -331,71 +335,97 @@ const HUB_TABS: { id: HubTab; label: string; icon: string }[] = [
 ]
 let hubTab: HubTab = 'issues'
 
-// ── 이슈 흐름 탭 — 시간순/상태별/사람별 보기 ──
-type IssueView = 'time' | 'status' | 'person'
-let issueView: IssueView = 'time'
-const ISSUE_VIEWS: { id: IssueView; label: string }[] = [
-  { id: 'time', label: '시간순' },
-  { id: 'status', label: '상태별' },
-  { id: 'person', label: '사람별' },
-]
+// ── 이슈 흐름 탭 — 최신순 고정 + 상태 필터 칩 + 사람 필터 + 시간 버킷 ──
+// 보기 "모드"는 화면을 통째로 재배열해 위치 감각을 잃게 한다 — 상태·사람은 필터로,
+// 정렬은 항상 최신순으로 고정해 멘탈 모델을 유지한다 (2026-07-19 가독성 개선).
+type IssueStatusFilter = 'all' | 'open' | 'knowledge_linked' | 'resolved'
+let issueStatusFilter: IssueStatusFilter = 'all'
+let issuePersonFilter = '' // '' = 전체
 
 const issueAt = (i: SpaceIssue) => i.timeline[i.timeline.length - 1]?.at ?? ''
 const issueActor = (i: SpaceIssue) => i.timeline[0]?.actor || i.opened_by || '(알 수 없음)'
 const byRecent = (a: SpaceIssue, b: SpaceIssue) => issueAt(b).localeCompare(issueAt(a))
 
-function issueCardHTML(i: SpaceIssue): string {
+// KST 기준 날짜 키 — 시간 버킷(오늘/어제) 판정용
+function kstDayKey(d: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(d)
+}
+
+function timeBucket(iso: string): string {
+  if (!iso) return '이전'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '이전'
+  const key = kstDayKey(d)
+  if (key === kstDayKey(new Date())) return '오늘'
+  if (key === kstDayKey(new Date(Date.now() - 864e5))) return '어제'
+  if (d.getTime() >= Date.now() - 7 * 864e5) return '이번 주'
+  return '이전'
+}
+
+/** 메타 줄의 시각 — 오늘은 HH:MM, 그 외엔 MM-DD HH:MM */
+function issueTimeLabel(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return kstDayKey(d) === kstDayKey(new Date()) ? kstTime(iso) : kstDateTime(iso).slice(5)
+}
+
+// 컴팩트 행: 왼쪽 상태 색 바 + 제목(최대 2줄) + 흐린 메타 한 줄. 해결은 dim.
+function issueRowHTML(i: SpaceIssue): string {
+  const [, color] = statusMeta(i.status)
   return `
-    <div class="feed-card" data-issue="${esc(i.issue_id)}">
-      <div class="fc-title">${statusBadge(i.status)} ${esc(i.title)}</div>
-      <div class="timeline">
-        ${i.timeline
-          .map((t) => {
-            const at = kstTime(t.at)
-            return `<div class="tl-step"><b>${esc(t.label)}</b><span class="tl-actor">${esc(t.actor)}</span>${at ? `<span class="tl-at">${at}</span>` : ''}</div>`
-          })
-          .join('')}
-      </div>
+    <div class="issue-row ${i.status === 'resolved' ? 'done' : ''}" data-issue="${esc(i.issue_id)}" style="border-left-color:${color}">
+      <div class="issue-row-title">${esc(i.title)}</div>
+      <div class="issue-row-meta"><span>👤 ${esc(issueActor(i))} · ${issueTimeLabel(issueAt(i))}</span>${statusBadge(i.status)}</div>
     </div>`
 }
 
-function issueGroupHTML(head: string, list: SpaceIssue[]): string {
-  if (!list.length) return ''
-  return `<div class="issue-group">
-    <div class="issue-group-head">${head} <span class="muted small">${list.length}건</span></div>
-    ${list.map(issueCardHTML).join('')}</div>`
-}
-
 function hubIssuesHTML(data: SpaceView): string {
-  const subtabs = `<div class="activity-subtabs">${ISSUE_VIEWS.map(
-    (v) => `<button class="sub-tab ${v.id === issueView ? 'on' : ''}" data-iview="${v.id}">${v.label}</button>`,
-  ).join('')}</div>`
+  const issues = [...data.issues].sort(byRecent)
 
-  const issues = [...data.issues]
-  let content: string
-  if (!issues.length) {
-    content = '<p class="muted small">표시할 항목이 없어요</p>'
-  } else if (issueView === 'time') {
-    content = issues.sort(byRecent).map(issueCardHTML).join('')
-  } else if (issueView === 'status') {
-    // 열림 → 지식 연결 → 해결 순으로 그룹핑. 그 외 상태는 뒤에 그대로 붙인다.
-    const order = ['open', 'knowledge_linked', 'resolved']
-    const rest = [...new Set(issues.map((i) => i.status).filter((s) => !order.includes(s)))]
-    content = [...order, ...rest]
-      .map((s) => issueGroupHTML(statusBadge(s), issues.filter((i) => i.status === s).sort(byRecent)))
-      .join('')
-  } else {
-    const by = new Map<string, SpaceIssue[]>()
-    for (const i of issues) {
-      const k = issueActor(i)
-      by.set(k, [...(by.get(k) ?? []), i])
+  // 상태 필터 칩 (개수 포함) — 정렬이 아니라 필터라서 전환해도 배치가 안 바뀐다
+  const chipDefs: { id: IssueStatusFilter; label: string }[] = [
+    { id: 'all', label: '전체' },
+    { id: 'open', label: statusMeta('open')[0] },
+    { id: 'knowledge_linked', label: statusMeta('knowledge_linked')[0] },
+    { id: 'resolved', label: statusMeta('resolved')[0] },
+  ]
+  const chips = `<div class="issue-chips">${chipDefs
+    .map((c) => {
+      const n = c.id === 'all' ? issues.length : issues.filter((i) => i.status === c.id).length
+      return `<button class="issue-chip ${issueStatusFilter === c.id ? 'on' : ''}" data-ifilter="${c.id}">${c.label} <b>${n}</b></button>`
+    })
+    .join('')}</div>`
+
+  // 사람 필터 — 별도 "사람별 보기" 대신 드롭다운 하나로
+  const people = [...new Set(issues.map(issueActor))].sort((a, b) => a.localeCompare(b, 'ko'))
+  if (issuePersonFilter && !people.includes(issuePersonFilter)) issuePersonFilter = ''
+  const personSel = `<div class="issue-person-row"><label class="muted small">사람</label>
+    <select id="issue-person" class="issue-person">
+      <option value="">전체</option>
+      ${people.map((p) => `<option value="${esc(p)}" ${p === issuePersonFilter ? 'selected' : ''}>${esc(p)}</option>`).join('')}
+    </select></div>`
+
+  const list = issues
+    .filter((i) => issueStatusFilter === 'all' || i.status === issueStatusFilter)
+    .filter((i) => !issuePersonFilter || issueActor(i) === issuePersonFilter)
+
+  // 시간 버킷 헤더 — 최신순 리스트를 오늘/어제/이번 주/이전 구간으로 나눈다
+  let content = ''
+  let bucket = ''
+  for (const i of list) {
+    const b = timeBucket(issueAt(i))
+    if (b !== bucket) {
+      bucket = b
+      content += `<div class="bucket-head">${b}</div>`
     }
-    content = [...by.entries()]
-      .sort((a, b) => b[1].length - a[1].length)
-      .map(([name, list]) => issueGroupHTML(`👤 <b>${esc(name)}</b>`, list.sort(byRecent)))
-      .join('')
+    content += issueRowHTML(i)
   }
-  return hubSection('이슈 흐름', 'Issue Flow', subtabs + content)
+  if (!list.length) content = '<p class="muted small">표시할 항목이 없어요</p>'
+
+  return hubSection('이슈 흐름', 'Issue Flow', chips + personSel + content)
 }
 
 // ── 지식 재사용 탭 — 재사용 이벤트 피드 + 재사용하면 좋을 지식(책장) ──
@@ -525,12 +555,16 @@ function renderHub(data: SpaceView) {
 
   // 위 2/3: 선택 탭 내용. 아래 1/3: 팀 활동 상시 (온라인/오프라인 서브탭).
   hubBody.innerHTML = hubTab === 'issues' ? hubIssuesHTML(data) : hubReuseHTML(data)
-  // 이슈 흐름 보기 모드(시간순/상태별/사람별) 전환
-  hubBody.querySelectorAll<HTMLElement>('[data-iview]').forEach((btn) => {
+  // 이슈 흐름 필터 — 상태 칩 + 사람 드롭다운
+  hubBody.querySelectorAll<HTMLElement>('[data-ifilter]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      issueView = btn.dataset.iview as IssueView
+      issueStatusFilter = btn.dataset.ifilter as IssueStatusFilter
       renderHub(data)
     })
+  })
+  hubBody.querySelector<HTMLSelectElement>('#issue-person')?.addEventListener('change', (e) => {
+    issuePersonFilter = (e.target as HTMLSelectElement).value
+    renderHub(data)
   })
   // 지식 재사용 탭의 책장 문서 → 원문 모달
   hubBody.querySelectorAll<HTMLElement>('.doc-item').forEach((el) => {
@@ -643,6 +677,9 @@ async function renderRoom(spaceId: string) {
           flashRelated(`[data-reuse-doc="${h.doc_id}"], [data-docid="${h.doc_id}"]`)
         } else if (h?.kind === 'issue' && h.issue_id) {
           hubTab = 'issues'
+          // 필터에 가려 강조 대상이 안 보이는 일이 없게 필터를 초기화하고 연다
+          issueStatusFilter = 'all'
+          issuePersonFilter = ''
           renderHub(data)
           flashRelated(`[data-issue="${h.issue_id}"]`)
         } else {
