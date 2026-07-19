@@ -25,6 +25,7 @@ const modal = $('modal')
 const hub = $('hub')
 const hubTabs = $('hub-tabs')
 const hubBody = $('hub-body')
+const hubActivity = $('hub-activity')
 const hubOpen = $('hub-open')
 
 function esc(s: string): string {
@@ -318,16 +319,15 @@ function openKnowledgePanel(data: SpaceView) {
   })
 }
 
-// ── 오른쪽 Collaboration Hub (상시 사이드바 + 탭) ──
+// ── 오른쪽 Collaboration Hub (상시 사이드바) ──
 // a-lens는 사람이 보는 view — 캐릭터·Activity는 '사람'이다. 라벨도 사람/팀 관점.
-type HubTab = 'all' | 'issues' | 'reuse' | 'activity'
+// 위 2/3 = 탭(이슈 공유 / 지식 재사용) 내용, 아래 1/3 = 팀 활동 상시 표시.
+type HubTab = 'issues' | 'reuse'
 const HUB_TABS: { id: HubTab; label: string; icon: string }[] = [
-  { id: 'all', label: '팀 방', icon: '🏠' },
   { id: 'issues', label: '이슈 공유', icon: '🔗' },
   { id: 'reuse', label: '지식 재사용', icon: '📄' },
-  { id: 'activity', label: '팀 활동', icon: '👥' },
 ]
-let hubTab: HubTab = 'all'
+let hubTab: HubTab = 'issues'
 
 function hubIssuesHTML(data: SpaceView): string {
   const items = data.issues.length
@@ -357,25 +357,34 @@ function hubReuseHTML(_data: SpaceView): string {
   return hubSection('지식 재사용', 'Knowledge Reuse', '<p class="muted small">표시할 항목이 없어요</p>')
 }
 
+type ActivityTab = 'online' | 'offline'
+let activityTab: ActivityTab = 'online'
+
+function agentRowHTML(a: SpaceAgent): string {
+  const at = kstTime(a.last_active_at)
+  const status = a.status_line || (a.status === 'working' ? '활동 중' : at ? `마지막 활동 ${at}` : '자리 비움')
+  return `
+    <div class="agent-row ${a.status === 'working' ? '' : 'off'}">
+      <span class="agent-dot ${a.status === 'working' ? 'on' : ''}"></span>
+      <span class="agent-name">${esc(a.name)}</span>
+      <span class="agent-status">${esc(status)}</span>
+    </div>`
+}
+
 function hubActivityHTML(data: SpaceView): string {
-  const online = data.agents.filter((a) => a.status === 'working').length
-  const items = data.agents.length
-    ? data.agents
-        .map(
-          (a) => {
-            const at = kstTime(a.last_active_at)
-            const status = a.status_line || (a.status === 'working' ? '활동 중' : at ? `마지막 활동 ${at}` : '자리 비움')
-            return `
-        <div class="agent-row ${a.status === 'working' ? '' : 'off'}">
-          <span class="agent-dot ${a.status === 'working' ? 'on' : ''}"></span>
-          <span class="agent-name">${esc(a.name)}</span>
-          <span class="agent-status">${esc(status)}</span>
-        </div>`
-          },
-        )
-        .join('')
-    : '<p class="muted small">표시할 항목이 없어요</p>'
-  return hubSection('팀 활동', `${online} Online`, items)
+  const online = data.agents.filter((a) => a.status === 'working')
+  const offline = data.agents.filter((a) => a.status !== 'working')
+  const list = activityTab === 'online' ? online : offline
+  const items = list.length ? list.map(agentRowHTML).join('') : '<p class="muted small">표시할 항목이 없어요</p>'
+  return `
+    <section class="feed activity-feed">
+      <div class="feed-head"><h3>팀 활동</h3></div>
+      <div class="activity-subtabs">
+        <button class="sub-tab ${activityTab === 'online' ? 'on' : ''}" data-atab="online">온라인 ${online.length}</button>
+        <button class="sub-tab ${activityTab === 'offline' ? 'on' : ''}" data-atab="offline">오프라인 ${offline.length}</button>
+      </div>
+      <div class="activity-list">${items}</div>
+    </section>`
 }
 
 function hubSection(title: string, sub: string, items: string): string {
@@ -417,14 +426,20 @@ function renderHub(data: SpaceView) {
     })
   })
 
-  const sections: Record<HubTab, () => string> = {
-    all: () => hubIssuesHTML(data) + hubReuseHTML(data) + hubActivityHTML(data),
-    issues: () => hubIssuesHTML(data),
-    reuse: () => hubReuseHTML(data),
-    activity: () => hubActivityHTML(data),
-  }
-  hubBody.innerHTML = sections[hubTab]()
+  // 위 2/3: 선택 탭 내용. 아래 1/3: 팀 활동 상시 (온라인/오프라인 서브탭).
+  hubBody.innerHTML = hubTab === 'issues' ? hubIssuesHTML(data) : hubReuseHTML(data)
+  renderHubActivity(data)
   applyHubCollapsed(true)
+}
+
+function renderHubActivity(data: SpaceView) {
+  hubActivity.innerHTML = hubActivityHTML(data)
+  hubActivity.querySelectorAll<HTMLElement>('.sub-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      activityTab = btn.dataset.atab as ActivityTab
+      renderHubActivity(data) // 활동 영역만 다시 — 위 탭 내용·스크롤 유지
+    })
+  })
 }
 
 async function renderRoom(spaceId: string) {
@@ -495,7 +510,7 @@ async function renderRoom(spaceId: string) {
   app.stage.addChild(currentScene)
 
   // 오른쪽 Collaboration Hub — 내용 채우고, 접힘 상태에 맞춰 표시 + 씬 폭 재조정(fitScene).
-  hubTab = 'all'
+  hubTab = 'issues'
   renderHub(data)
 }
 
