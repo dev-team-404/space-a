@@ -92,7 +92,9 @@ async function renderHome() {
   let floors: LobbyFloor[] = []
   let loadError = ''
   try {
-    floors = await getFloors()
+    // 홈에 올 때마다 새로 조회 — 허브 실데이터의 최신 스탯 반영 (서버 30s 캐시)
+    floorsCache = (await fetchLobby()).floors
+    floors = floorsCache
   } catch (e) {
     loadError = String(e)
   }
