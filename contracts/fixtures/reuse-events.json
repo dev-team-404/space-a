@@ -7,14 +7,14 @@
       "doc_id": "doc_cert",
       "source_space": "sw-innov",
       "consumer_space": "data-platform",
-      "consumer_agent": "Agent_Yoon",
+      "consumer_agent": "윤성호",
       "issue_id": "iss_dp_cert",
       "issue_title": "수집 서버 인증서 오류",
       "at": "2026-07-12T10:19:00Z",
       "chain": [
-        { "label": "유사 이슈 발견", "actor": "Agent_Yoon", "at": "2026-07-12T10:18:00Z" },
-        { "label": "기존 해결 방법 링크 공유", "actor": "Agent_Yoon", "at": "2026-07-12T10:18:30Z" },
-        { "label": "재사용하여 해결", "actor": "Agent_Oh", "at": "2026-07-12T10:19:00Z" }
+        { "label": "유사 이슈 발견", "actor": "윤성호", "at": "2026-07-12T10:18:00Z" },
+        { "label": "기존 해결 방법 링크 공유", "actor": "윤성호", "at": "2026-07-12T10:18:30Z" },
+        { "label": "재사용하여 해결", "actor": "오세진", "at": "2026-07-12T10:19:00Z" }
       ],
       "est_saved_tokens": 18400,
       "est_saved_minutes": 55
@@ -24,14 +24,14 @@
       "doc_id": "doc_pipeline",
       "source_space": "data-platform",
       "consumer_space": "sw-innov",
-      "consumer_agent": "Agent_Kim",
+      "consumer_agent": "김도현",
       "issue_id": "iss_batch",
       "issue_title": "리포트 생성 배치 지연",
       "at": "2026-07-12T08:05:00Z",
       "chain": [
-        { "label": "유사 이슈 발견", "actor": "Agent_Kim", "at": "2026-07-12T08:02:00Z" },
-        { "label": "캐시 전략 문서 인용", "actor": "Agent_Kim", "at": "2026-07-12T08:03:00Z" },
-        { "label": "재사용하여 해결", "actor": "Agent_Kim", "at": "2026-07-12T08:05:00Z" }
+        { "label": "유사 이슈 발견", "actor": "김도현", "at": "2026-07-12T08:02:00Z" },
+        { "label": "캐시 전략 문서 인용", "actor": "김도현", "at": "2026-07-12T08:03:00Z" },
+        { "label": "재사용하여 해결", "actor": "김도현", "at": "2026-07-12T08:05:00Z" }
       ],
       "est_saved_tokens": 9200,
       "est_saved_minutes": 30
@@ -41,13 +41,13 @@
       "doc_id": "doc_cert",
       "source_space": "sw-innov",
       "consumer_space": "ai-sec-tf",
-      "consumer_agent": "Agent_Han",
+      "consumer_agent": "한지우",
       "issue_id": "iss_scanner",
       "issue_title": "스캐너 TLS 오류",
       "at": "2026-07-11T14:30:00Z",
       "chain": [
-        { "label": "유사 이슈 발견", "actor": "Agent_Han", "at": "2026-07-11T14:28:00Z" },
-        { "label": "재사용하여 해결", "actor": "Agent_Han", "at": "2026-07-11T14:30:00Z" }
+        { "label": "유사 이슈 발견", "actor": "한지우", "at": "2026-07-11T14:28:00Z" },
+        { "label": "재사용하여 해결", "actor": "한지우", "at": "2026-07-11T14:30:00Z" }
       ],
       "est_saved_tokens": 15100,
       "est_saved_minutes": 45

@@ -7,27 +7,27 @@
   "agents": [
     {
       "agent_id": "agt_park",
-      "name": "Agent_Park",
+      "name": "박준호",
       "role": "빌드/배포",
-      "owner": "박OO",
+      "owner": "박준호",
       "status": "working",
       "status_line": "인증서 검증 실패로 파이프라인이 멈춰서 원인을 찾는 중입니다",
       "last_active_at": "2026-07-12T10:15:00Z"
     },
     {
       "agent_id": "agt_sec",
-      "name": "Agent_Sec",
+      "name": "최서연",
       "role": "보안",
-      "owner": "최OO",
+      "owner": "최서연",
       "status": "working",
       "status_line": "DS 인증서 변경 공지와 대조해 기존 해결 사례를 찾았습니다",
       "last_active_at": "2026-07-12T10:16:00Z"
     },
     {
       "agent_id": "agt_min",
-      "name": "Agent_Min",
+      "name": "민재현",
       "role": "백엔드",
-      "owner": "민OO",
+      "owner": "민재현",
       "status": "idle",
       "status_line": "새 인증서로 교체 후 재빌드에 성공했습니다",
       "last_active_at": "2026-07-12T10:17:00Z"
@@ -44,21 +44,21 @@
         {
           "step": "open",
           "label": "이슈 발생",
-          "actor": "Agent_Park",
+          "actor": "박준호",
           "at": "2026-07-12T10:15:00Z",
           "note": "빌드 서명 단계에서 인증서 검증 실패. 파이프라인 중단."
         },
         {
           "step": "knowledge_linked",
           "label": "지식 연결",
-          "actor": "Agent_Sec",
+          "actor": "최서연",
           "at": "2026-07-12T10:16:00Z",
           "note": "최근 DS 인증서 변경 공지와 대조 — 기존 해결 사례 링크 공유."
         },
         {
           "step": "resolved",
           "label": "해결 완료",
-          "actor": "Agent_Min",
+          "actor": "민재현",
           "at": "2026-07-12T10:17:00Z",
           "note": "새 인증서로 교체 후 재빌드 성공. 확인 후 자동 적용 완료."
         }
@@ -73,14 +73,14 @@
         {
           "step": "open",
           "label": "이슈 발생",
-          "actor": "Agent_Min",
+          "actor": "민재현",
           "at": "2026-07-12T09:42:00Z",
           "note": "18:52~19:05 사이 5xx 342건. 외부 API 응답 지연 의심."
         },
         {
           "step": "knowledge_linked",
           "label": "지식 연결",
-          "actor": "Agent_Sec",
+          "actor": "최서연",
           "at": "2026-07-12T09:50:00Z",
           "note": "배포 로그 진단 절차 문서 연결. 원인 분석 진행 중."
         }
@@ -92,7 +92,7 @@
     {
       "doc_id": "doc_cert",
       "title": "DS 인증서 변경 대응 가이드",
-      "author_agent": "Agent_Sec",
+      "author_agent": "최서연",
       "visibility": "org",
       "summary": "사내 DS 인증서 교체 후 발생하는 서명·TLS 오류의 공통 해결 절차",
       "body": {

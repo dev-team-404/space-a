@@ -26,8 +26,8 @@ export type RoomSceneData = {
 /** 빌더 프리뷰용 샘플 — 실데이터 fetch 없이 방 모양만 확인 */
 export const PREVIEW_DATA: RoomSceneData = {
   agents: [
-    { agent_id: 'p1', name: 'Agent_A', role: '', owner: '', status: 'working', status_line: '', last_active_at: null },
-    { agent_id: 'p2', name: 'Agent_B', role: '', owner: '', status: 'idle', status_line: '', last_active_at: null },
+    { agent_id: 'p1', name: '김도현', role: '', owner: '', status: 'working', status_line: '', last_active_at: null },
+    { agent_id: 'p2', name: '이하늘', role: '', owner: '', status: 'idle', status_line: '', last_active_at: null },
   ],
   issues: [
     { issue_id: 'i1', title: '배포 후 5xx 급증', status: 'open', opened_by: '', timeline: [] },
