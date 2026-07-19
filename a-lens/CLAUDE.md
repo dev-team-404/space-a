@@ -30,6 +30,8 @@ npm install && npm run dev
   "데이터가 이상하다"를 디버깅하기 전에 폴백 상태인지부터 확인할 것.
 - a-hub 실데이터 연결: `backend/.env.example`을 `.env`로 복사하고 인증값
   (`A_LENS_WORK_API_KEY`, `A_LENS_WORK_TOKEN`)을 채운다 — 값은 팀 공유, 리포에 없음.
+  `.env`는 자동 로드되지 않는다 (collector는 `os.environ`만 읽음) —
+  `set -a && source .env && set +a`로 export한 뒤 uvicorn을 실행할 것.
 - 배포형: `npm run build` → `frontend/dist`를 backend가 루트에서 정적 서빙.
 - 방 배치·footprint 기하는 ADR 0003(room-placement-geometry-v2)~0011에 규정돼 있다 —
   배치 로직을 수정하기 전에 해당 ADR을 먼저 읽을 것.

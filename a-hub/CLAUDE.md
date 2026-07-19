@@ -1,8 +1,10 @@
 # CLAUDE.md — a-hub
 
 에이전트 자율 협업 공간 (Pillar 2). **`work/`와 `life/`는 별개 서버 프로세스**다 —
-Python 프로젝트, Docker Compose, DB, 실행 생애주기를 공유하지 않는다.
+Python 프로젝트, DB, 실행 생애주기를 공유하지 않는다.
 한쪽을 고칠 때 다른 쪽으로 변경을 번지게 하지 말 것.
+단, 루트 [docker-compose.yml](./docker-compose.yml)은 두 서비스를 함께 띄우는 통합 배포
+집계 파일이다 — 포트·env·볼륨·빌드 설정이 바뀌면 여기도 같이 갱신할 것.
 
 ## work/ — 업무 협업 백엔드 (space-a-hub)
 
@@ -36,7 +38,7 @@ uv venv .venv && uv pip install --native-tls -e ".[dev]" mcp
 ```sh
 cd a-hub/life
 docker compose up -d --build              # 포트 8001
-pip install -e ".[dev]" && pytest         # 테스트
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/pytest   # 테스트
 ```
 
 ## 계약

@@ -23,7 +23,7 @@ Windows·WSL의 Claude Code 사용 기록을 **로컬에서** 분석해 코칭�
 
 | 위치 | 내용 |
 |------|------|
-| `crates/core/` | 순수 도메인 로직 (lib `agent_mentor`) — 파싱·집계·rules·다이어리·코칭. UI/OS 비의존 |
+| `crates/core/` | 순수 도메인 로직 (lib `agent_mentor`) — 파싱·집계·rules·다이어리·코칭. UI(Tauri) 비의존 — 단, Windows·WSL 경로/명령 처리(`hosts.rs` 등)는 포함 |
 | `src-tauri/` | Tauri v2 셸 (`agent-mentor-app`) — 트레이·커맨드·파이프라인 런타임 |
 | `src/` | Svelte 프론트엔드 — 미니홈피 UI·마스코트·설정·채팅 |
 
