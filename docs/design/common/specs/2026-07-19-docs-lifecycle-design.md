@@ -2,7 +2,7 @@
 
 - **날짜**: 2026-07-19
 - **범위**: 레포 공통 (docs/ 전체의 작업 문서 수명주기)
-- **관련**: [docs/README.md](../../README.md) 문서 작성 규칙, ADR 0013(본 설계로 신설 예정)
+- **관련**: [docs/README.md](../../../README.md) 문서 작성 규칙, ADR 0013(본 설계로 신설 예정)
 
 ## 배경 (Why)
 
@@ -40,7 +40,7 @@
 | 기존 문서 처리 | 첫 스윕으로 후보 제안 → 사용자 승인 후 일괄 이동 |
 | 스킬 구성 | 스킬 2개: `/docs-archive`, `/docs-sweep` |
 | 오타 디렉터리 | 첫 일괄 아카이브 **이전에** rename (아카이브에 오타 박제 방지) |
-| superpowers 저장 경로 | CLAUDE.md 선호 지침으로 컴포넌트 디렉터리로 오버라이드 |
+| superpowers 저장 경로 | CLAUDE.md 선호 지침으로 오버라이드 — 컴포넌트 디렉터리, 레포 공통은 `docs/design/common/` |
 
 ## 컨벤션 (What)
 
@@ -71,8 +71,10 @@ archived: 2026-07-19
 - spec / plan / kickoff는 해당 컴포넌트의
   `docs/design/<component>/{specs,plans,brainstorming}`에 저장한다.
   (superpowers 스킬의 기본 경로 `docs/superpowers/`를 오버라이드하는 선호 지침)
-- 컴포넌트가 애매한 레포 공통 작업은 `docs/superpowers/{specs,plans}`를 허용한다.
-- 기존 `docs/superpowers/` 문서는 옮기지 않는다 — 신규 유입만 컴포넌트 디렉터리로 유도.
+- 컴포넌트가 애매한 레포 공통 작업은 `docs/design/common/{specs,plans}`에 저장한다.
+  (본 설계 문서가 첫 사례)
+- 기존 `docs/superpowers/`는 동결한다 — 신규 유입 없음. 기존 문서는 이전하지 않되,
+  완료분은 스윕·아카이브를 통해 `docs/archive/superpowers/` 미러로 빠져나간다.
 
 ## `/docs-archive` 스킬
 
@@ -133,5 +135,5 @@ archived: 2026-07-19
 
 1. 활성 루트에는 진행 중 문서만, 완료 문서는 `docs/archive/` 미러 아래에 위치.
 2. 이동된 문서의 옛 경로를 참조하는 곳이 레포 전체에 0건.
-3. 신규 작업 문서가 컴포넌트 디렉터리에 생성됨 (이후 세션에서 관찰).
+3. 신규 작업 문서가 컴포넌트 디렉터리(레포 공통은 `docs/design/common/`)에 생성됨 (이후 세션에서 관찰).
 4. 작업자 추가 부담 없음 — 완료 PR에 파일 이동 커밋이 따라붙는 것 외에 새 수동 절차 없음.
