@@ -22,6 +22,9 @@ const panel = $('panel')
 const panelTitle = $('panel-title')
 const panelBody = $('panel-body')
 const modal = $('modal')
+const hub = $('hub')
+const hubTabs = $('hub-tabs')
+const hubBody = $('hub-body')
 
 function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
@@ -58,17 +61,20 @@ async function ensureApp() {
   window.addEventListener('resize', () => fitScene())
 }
 
+const HUB_W = 340 // #hub 사이드바 폭 — 씬 가용 영역에서 제외
 function fitScene() {
   if (!currentScene || !appReady) return
   const b = currentScene.getLocalBounds()
   const margin = 80
+  // Hub가 열려 있으면 오른쪽 340px를 뺀 왼쪽 영역에만 씬을 맞추고 그 중앙에 배치한다.
+  const avail = app.screen.width - (hub.hidden ? 0 : HUB_W)
   const s = Math.min(
-    (app.screen.width - margin) / b.width,
+    (avail - margin) / b.width,
     (app.screen.height - margin - 60) / b.height,
   )
   currentScene.scale.set(s)
   currentScene.position.set(
-    (app.screen.width - b.width * s) / 2 - b.x * s,
+    (avail - b.width * s) / 2 - b.x * s,
     (app.screen.height - b.height * s) / 2 - b.y * s + 24,
   )
 }
@@ -86,6 +92,7 @@ async function renderHome() {
   headerEl.hidden = true
   panel.hidden = true
   modal.hidden = true
+  hub.hidden = true
   sceneHost.style.display = 'none'
 
   let floors: LobbyFloor[] = []
@@ -178,43 +185,117 @@ function statusBadge(status: string): string {
   return `<span class="badge" style="border-color:${color};color:${color}">${esc(label)}</span>`
 }
 
-function openIssuesPanel(data: SpaceView) {
-  const html = data.issues.length
-    ? data.issues
-        .map(
-          (i) => `
-        <div class="issue-item">
-          <div>${statusBadge(i.status)} <b>${esc(i.title)}</b></div>
-          <ul class="timeline">
-            ${i.timeline.map((t) => `<li><b>${esc(t.label)}</b> — ${esc(t.actor)}<br/><span class="muted">${esc(t.note)}</span></li>`).join('')}
-          </ul>
-        </div>`,
-        )
-        .join('')
-    : '<div class="muted">이슈가 없습니다.</div>'
-  showPanel('칠판 — 이슈', html)
-}
-
+// 서랍장(책장) = "재사용하면 좋을 주요 지식". 지금은 조직 공개(org) 지식을 앞으로 모아
+// 전량 노출한다. TODO: 파트 공용에 도움되는 지식(예: 공용 서버 변경) 분류는 추후 a-lens
+// 백엔드에서 허브 데이터를 분석해 산출한다 (재사용 추천 점수). 그 전까지 visibility로 근사.
 function openKnowledgePanel(data: SpaceView) {
-  const html = data.knowledge.length
-    ? data.knowledge
+  const docs = data.knowledge
+    .map((d, i) => ({ d, i }))
+    .sort((a, b) => (a.d.visibility === 'org' ? 0 : 1) - (b.d.visibility === 'org' ? 0 : 1))
+  const html = docs.length
+    ? docs
         .map(
-          (d, i) => `
+          ({ d, i }) => `
         <div class="doc-item" data-doc="${i}">
           <b>${esc(d.title)}</b>
-          <div class="muted">${esc(d.author_agent)} · 재사용 ${d.reuse_count}</div>
+          <div class="muted">${esc(d.author_agent)}${d.visibility === 'org' ? ' · 조직 공개' : ''} · 재사용 ${d.reuse_count}</div>
           <div class="doc-summary">${esc(d.summary)}</div>
         </div>`,
         )
         .join('')
     : '<div class="muted">등록된 지식이 없습니다.</div>'
-  showPanel('책장 — 지식', html)
+  showPanel('책장 — 재사용하면 좋을 지식', html)
   panelBody.querySelectorAll<HTMLElement>('.doc-item').forEach((el) => {
     el.addEventListener('click', () => {
       const doc = data.knowledge[Number(el.dataset.doc)]
       if (doc) showModal(doc.title, `<pre class="doc-body">${esc(doc.body)}</pre>`)
     })
   })
+}
+
+// ── 오른쪽 Collaboration Hub (상시 사이드바 + 탭) ──
+// a-lens는 사람이 보는 view — 캐릭터·Activity는 '사람'이다. 라벨도 사람/팀 관점.
+type HubTab = 'all' | 'issues' | 'reuse' | 'activity'
+const HUB_TABS: { id: HubTab; label: string; icon: string }[] = [
+  { id: 'all', label: '팀 방', icon: '🏠' },
+  { id: 'issues', label: '이슈 공유', icon: '🔗' },
+  { id: 'reuse', label: '지식 재사용', icon: '📄' },
+  { id: 'activity', label: '팀 활동', icon: '👥' },
+]
+let hubTab: HubTab = 'all'
+
+function hubIssuesHTML(data: SpaceView): string {
+  const items = data.issues.length
+    ? data.issues
+        .map(
+          (i) => `
+        <div class="feed-card">
+          <div class="fc-title">${statusBadge(i.status)} ${esc(i.title)}</div>
+          <div class="timeline">
+            ${i.timeline
+              .map(
+                (t) => `<div class="tl-step"><b>${esc(t.label)}</b><span class="tl-actor">${esc(t.actor)}</span></div>`,
+              )
+              .join('')}
+          </div>
+        </div>`,
+        )
+        .join('')
+    : '<p class="muted small">표시할 항목이 없어요</p>'
+  return hubSection('이슈 흐름', 'Issue Flow', items)
+}
+
+function hubReuseHTML(_data: SpaceView): string {
+  // 재사용 이벤트 조회 API가 허브에 아직 없다 (collector reuse_events: []). 데이터가 붙기
+  // 전까지 정직하게 빈 상태로 둔다. TODO: a-lens 백엔드에서 재사용 피드 산출 후 연결.
+  return hubSection('지식 재사용', 'Knowledge Reuse', '<p class="muted small">표시할 항목이 없어요</p>')
+}
+
+function hubActivityHTML(data: SpaceView): string {
+  const online = data.agents.filter((a) => a.status === 'working').length
+  const items = data.agents.length
+    ? data.agents
+        .map(
+          (a) => `
+        <div class="agent-row ${a.status === 'working' ? '' : 'off'}">
+          <span class="agent-dot ${a.status === 'working' ? 'on' : ''}"></span>
+          <span class="agent-name">${esc(a.name)}</span>
+          <span class="agent-status">${esc(a.status_line || (a.status === 'working' ? '활동 중' : '자리 비움'))}</span>
+        </div>`,
+        )
+        .join('')
+    : '<p class="muted small">표시할 항목이 없어요</p>'
+  return hubSection('팀 활동', `${online} Online`, items)
+}
+
+function hubSection(title: string, sub: string, items: string): string {
+  return `
+    <section class="feed">
+      <div class="feed-head"><h3>${esc(title)}</h3><span class="feed-sub">${esc(sub)}</span></div>
+      ${items}
+    </section>`
+}
+
+function renderHub(data: SpaceView) {
+  hubTabs.innerHTML = HUB_TABS.map(
+    (t) => `<button class="hub-tab ${t.id === hubTab ? 'on' : ''}" data-tab="${t.id}">
+      <span class="hub-tab-ico">${t.icon}</span><span>${t.label}</span></button>`,
+  ).join('')
+  hubTabs.querySelectorAll<HTMLElement>('.hub-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      hubTab = btn.dataset.tab as HubTab
+      renderHub(data)
+    })
+  })
+
+  const sections: Record<HubTab, () => string> = {
+    all: () => hubIssuesHTML(data) + hubReuseHTML(data) + hubActivityHTML(data),
+    issues: () => hubIssuesHTML(data),
+    reuse: () => hubReuseHTML(data),
+    activity: () => hubActivityHTML(data),
+  }
+  hubBody.innerHTML = sections[hubTab]()
+  hub.hidden = false
 }
 
 async function renderRoom(spaceId: string) {
@@ -285,12 +366,16 @@ async function renderRoom(spaceId: string) {
            <div><b>상태</b> ${agent.status === 'working' ? '🟢 일하는 중' : '⚪ 자리 비움'}</div>
            <div class="doc-summary">${esc(agent.status_line || '')}</div>`,
         ),
-      onBoardTap: () => openIssuesPanel(data),
+      // 칠판(이슈)은 오른쪽 Hub "이슈 흐름"으로 흡수 — 클릭 팝업 제거 (2026-07-19).
       onShelfTap: () => openKnowledgePanel(data),
     },
   )
   app.stage.addChild(currentScene)
   fitScene()
+
+  // 오른쪽 Collaboration Hub 상시 표시
+  hubTab = 'all'
+  renderHub(data)
 }
 
 // ── 해시 라우팅 ──
