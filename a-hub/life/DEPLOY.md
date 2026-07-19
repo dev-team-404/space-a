@@ -96,7 +96,7 @@ OCI는 **클라우드 방화벽(Security List/NSG)** 과 **VM 안 iptables** 를
 
 ```bash
 ssh msalt-spacea '
-  sudo iptables -I INPUT 5 -p tcp --dport 8001 -j ACCEPT   # REJECT 규칙 앞에 삽입
+  sudo iptables -I INPUT -p tcp --dport 8001 -j ACCEPT   # 체인 맨 앞에 삽입 → REJECT보다 먼저 적용
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
   sudo netfilter-persistent save'
 ```

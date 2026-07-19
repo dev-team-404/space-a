@@ -5,6 +5,7 @@ hub(Space/Page)와 별개의 프로세스. 엔드포인트 계약: docs/design/r
 """
 
 import os
+import secrets
 
 from fastapi import FastAPI, Header, Request
 from fastapi.responses import JSONResponse
@@ -22,8 +23,9 @@ _STATUS = {
     errors.CellTaken: 409,
 }
 
-# x-api-key 관문을 면제할 경로 (로드밸런서·모니터링용). hub의 API_KEY_EXEMPT_PATHS와 동일 패턴.
-_API_KEY_EXEMPT_PATHS = {"/healthz", "/readyz"}
+# x-api-key 관문을 면제할 경로. healthz/readyz는 로드밸런서·모니터링용, docs/openapi.json은
+# 브라우저로 API 문서를 열람할 수 있게(관문을 켜면 헤더를 못 실으므로) 면제한다.
+_API_KEY_EXEMPT_PATHS = {"/healthz", "/readyz", "/docs", "/openapi.json"}
 
 
 def _api_key_ok(path: str, provided: str | None) -> bool:
@@ -31,13 +33,14 @@ def _api_key_ok(path: str, provided: str | None) -> bool:
 
     ROOM_SERVER_API_KEY 환경변수가 없으면(미설정) 검사를 건너뛴다 — 로컬·테스트 편의.
     설정된 배포에서는 면제 경로를 제외한 모든 요청에서 키 일치를 요구한다.
+    타이밍 공격을 피해 secrets.compare_digest로 상수 시간 비교한다.
     """
     expected = os.environ.get("ROOM_SERVER_API_KEY")
     if not expected:
         return True
     if path in _API_KEY_EXEMPT_PATHS:
         return True
-    return provided == expected
+    return provided is not None and secrets.compare_digest(provided, expected)
 
 
 class RoomRegisterBody(BaseModel):

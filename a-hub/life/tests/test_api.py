@@ -91,6 +91,20 @@ def test_api_key_gate_exempts_health(monkeypatch):
     assert c.get("/readyz").status_code == 200
 
 
+def test_api_key_gate_exempts_docs(monkeypatch):
+    # 관문을 켜도 브라우저로 API 문서를 열 수 있어야 한다 (헤더를 못 실으므로)
+    monkeypatch.setenv("ROOM_SERVER_API_KEY", "secret")
+    c = TestClient(create_app())
+    assert c.get("/docs").status_code == 200
+    assert c.get("/openapi.json").status_code == 200
+
+
+def test_api_key_gate_rejects_wrong_key(monkeypatch):
+    monkeypatch.setenv("ROOM_SERVER_API_KEY", "secret")
+    c = TestClient(create_app())
+    assert c.get("/capabilities", headers={"x-api-key": "wrong"}).status_code == 401
+
+
 def test_api_key_gate_off_when_unset(client):
     # ROOM_SERVER_API_KEY 미설정이면 x-api-key 없이도 통과 (로컬·테스트 기본)
     assert client.get("/capabilities").status_code == 200
