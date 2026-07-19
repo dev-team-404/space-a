@@ -2,7 +2,7 @@
 // 로비(사옥) 화면은 보류 — 이슈 #44 순서 조정. 데이터는 백엔드 뷰모델만 사용 (ADR 0003).
 
 import { Application, Container } from 'pixi.js'
-import { fetchLobby, fetchSpace, type LobbyFloor, type SpaceAgent, type SpaceView } from './api'
+import { fetchLobby, fetchSpace, type LobbyFloor, type SpaceAgent, type SpaceIssue, type SpaceView } from './api'
 import { openBuilder } from './builder'
 import { loadKit } from './room/kit'
 import { buildRoomScene } from './room/renderer'
@@ -193,6 +193,14 @@ async function getFloors(): Promise<LobbyFloor[]> {
 }
 
 // ── 홈 화면: 만든 방 목록 + 방 만들기 ──
+// FAKE(더미) 스페이스 표시 여부 — 상단 토글, 새로고침에도 유지되게 localStorage에 기억.
+let showFake = true
+try {
+  showFake = localStorage.getItem('a-lens.show-fake') !== '0'
+} catch (e) {
+  console.warn('localStorage 읽기 실패 — FAKE 표시 기본값 사용', e)
+}
+
 async function renderHome() {
   homeEl.hidden = false
   headerEl.hidden = true
@@ -213,14 +221,19 @@ async function renderHome() {
     loadError = String(e)
   }
 
-  const rooms = loadRooms()
+  // FAKE 숨김이면 더미 스페이스(카드·방 목록 모두)를 화면에서 제외
+  const visibleFloors = showFake ? floors : floors.filter((f) => !f.demo)
+  const rooms = loadRooms().filter((r) => {
+    const f = floors.find((f) => f.space_id === r.space_id)
+    return showFake || !f?.demo
+  })
   const roomCards = rooms
     .map((r) => {
       const f = floors.find((f) => f.space_id === r.space_id)
       const stats = f ? `지식 ${f.stats.knowledge ?? 0} · 재사용 ${f.stats.reuse ?? 0} · 해결 ${f.stats.resolved ?? 0}` : ''
       return `
       <div class="room-card" data-room="${esc(r.space_id)}">
-        <div class="room-card-name">${esc(f?.name ?? r.space_name)}</div>
+        <div class="room-card-name">${esc(f?.name ?? r.space_name)}${f?.demo ? ' <span class="demo-badge">FAKE</span>' : ''}</div>
         <div class="room-card-stats">${stats}</div>
         <div class="room-card-actions">
           <button class="primary-btn sm" data-act="enter">입장</button>
@@ -231,12 +244,12 @@ async function renderHome() {
     })
     .join('')
 
-  const unbuilt = floors.filter((f) => !getRoom(f.space_id))
+  const unbuilt = visibleFloors.filter((f) => !getRoom(f.space_id))
   const unbuiltCards = unbuilt
     .map(
       (f) => `
       <div class="room-card dim" data-space="${esc(f.space_id)}">
-        <div class="room-card-name">${esc(f.name)}</div>
+        <div class="room-card-name">${esc(f.name)}${f.demo ? ' <span class="demo-badge">FAKE</span>' : ''}</div>
         <div class="room-card-stats">아직 방 없음</div>
         <div class="room-card-actions"><button class="ghost-btn sm" data-act="build">이 스페이스로 방 만들기</button></div>
       </div>`,
@@ -248,7 +261,8 @@ async function renderHome() {
       <header class="home-head">
         <h1>A-Lens</h1>
         <p class="home-sub">스페이스 방 관전 — 방을 만들고 a-hub 데이터를 들여다보세요</p>
-        <button class="primary-btn" id="btn-new-room" ${floors.length ? '' : 'disabled'}>+ 방 만들기</button>
+        <button class="primary-btn" id="btn-new-room" ${visibleFloors.length ? '' : 'disabled'}>+ 방 만들기</button>
+        ${floors.some((f) => f.demo) ? `<button class="ghost-btn sm fake-toggle ${showFake ? 'on' : ''}" id="btn-toggle-fake">${showFake ? 'FAKE 숨기기' : 'FAKE 보이기'}</button>` : ''}
       </header>
       ${loadError ? `<div class="error-note">백엔드 연결 실패: ${esc(loadError)}</div>` : ''}
       ${rooms.length ? `<h3 class="home-section">내가 만든 방</h3><div class="card-grid">${roomCards}</div>` : ''}
@@ -258,7 +272,9 @@ async function renderHome() {
 
   const startBuilder = (initial?: RoomConfig, presetSpaceId?: string) => {
     void openBuilder({
-      floors: presetSpaceId ? floors.filter((f) => f.space_id === presetSpaceId).concat(floors.filter((f) => f.space_id !== presetSpaceId)) : floors,
+      floors: presetSpaceId
+        ? visibleFloors.filter((f) => f.space_id === presetSpaceId).concat(visibleFloors.filter((f) => f.space_id !== presetSpaceId))
+        : visibleFloors,
       initial,
       onSaved: (config) => {
         saveRoom(config)
@@ -268,6 +284,15 @@ async function renderHome() {
   }
 
   homeEl.querySelector('#btn-new-room')?.addEventListener('click', () => startBuilder())
+  homeEl.querySelector('#btn-toggle-fake')?.addEventListener('click', () => {
+    showFake = !showFake
+    try {
+      localStorage.setItem('a-lens.show-fake', showFake ? '1' : '0')
+    } catch (e) {
+      console.warn('localStorage 쓰기 실패 — FAKE 표시 상태 저장 생략', e)
+    }
+    void renderHome()
+  })
   homeEl.querySelectorAll<HTMLElement>('.room-card[data-room]').forEach((card) => {
     const id = card.dataset.room!
     card.querySelector('[data-act="enter"]')?.addEventListener('click', () => (location.hash = `#room/${id}`))
@@ -293,33 +318,8 @@ function statusBadge(status: string): string {
   return `<span class="badge" style="border-color:${color};color:${color}">${esc(label)}</span>`
 }
 
-// 서랍장(책장) = "재사용하면 좋을 주요 지식". 지금은 조직 공개(org) 지식을 앞으로 모아
-// 전량 노출한다. TODO: 파트 공용에 도움되는 지식(예: 공용 서버 변경) 분류는 추후 a-lens
-// 백엔드에서 허브 데이터를 분석해 산출한다 (재사용 추천 점수). 그 전까지 visibility로 근사.
-function openKnowledgePanel(data: SpaceView) {
-  const docs = data.knowledge
-    .map((d, i) => ({ d, i }))
-    .sort((a, b) => (a.d.visibility === 'org' ? 0 : 1) - (b.d.visibility === 'org' ? 0 : 1))
-  const html = docs.length
-    ? docs
-        .map(
-          ({ d, i }) => `
-        <div class="doc-item" data-doc="${i}">
-          <b>${esc(d.title)}</b>
-          <div class="muted">${esc(d.author_agent)}${d.visibility === 'org' ? ' · 조직 공개' : ''} · 재사용 ${d.reuse_count}</div>
-          <div class="doc-summary">${esc(d.summary)}</div>
-        </div>`,
-        )
-        .join('')
-    : '<div class="muted">등록된 지식이 없습니다.</div>'
-  showPanel('책장 — 재사용하면 좋을 지식', html)
-  panelBody.querySelectorAll<HTMLElement>('.doc-item').forEach((el) => {
-    el.addEventListener('click', () => {
-      const doc = data.knowledge[Number(el.dataset.doc)]
-      if (doc) showModal(doc.title, `<pre class="doc-body">${esc(doc.body)}</pre>`)
-    })
-  })
-}
+// 서랍장(책장) 클릭 → Hub '지식 재사용' 탭으로 전환 (2026-07-19). 탭 안에서
+// 재사용 이벤트 피드 + 재사용하면 좋을 지식 목록(클릭 시 원문 모달)을 함께 보여준다.
 
 // ── 오른쪽 Collaboration Hub (상시 사이드바) ──
 // a-lens는 사람이 보는 view — 캐릭터·Activity는 '사람'이다. 라벨도 사람/팀 관점.
@@ -331,32 +331,117 @@ const HUB_TABS: { id: HubTab; label: string; icon: string }[] = [
 ]
 let hubTab: HubTab = 'issues'
 
+// ── 이슈 흐름 탭 — 시간순/상태별/사람별 보기 ──
+type IssueView = 'time' | 'status' | 'person'
+let issueView: IssueView = 'time'
+const ISSUE_VIEWS: { id: IssueView; label: string }[] = [
+  { id: 'time', label: '시간순' },
+  { id: 'status', label: '상태별' },
+  { id: 'person', label: '사람별' },
+]
+
+const issueAt = (i: SpaceIssue) => i.timeline[i.timeline.length - 1]?.at ?? ''
+const issueActor = (i: SpaceIssue) => i.timeline[0]?.actor || i.opened_by || '(알 수 없음)'
+const byRecent = (a: SpaceIssue, b: SpaceIssue) => issueAt(b).localeCompare(issueAt(a))
+
+function issueCardHTML(i: SpaceIssue): string {
+  return `
+    <div class="feed-card">
+      <div class="fc-title">${statusBadge(i.status)} ${esc(i.title)}</div>
+      <div class="timeline">
+        ${i.timeline
+          .map((t) => {
+            const at = kstTime(t.at)
+            return `<div class="tl-step"><b>${esc(t.label)}</b><span class="tl-actor">${esc(t.actor)}</span>${at ? `<span class="tl-at">${at}</span>` : ''}</div>`
+          })
+          .join('')}
+      </div>
+    </div>`
+}
+
+function issueGroupHTML(head: string, list: SpaceIssue[]): string {
+  if (!list.length) return ''
+  return `<div class="issue-group">
+    <div class="issue-group-head">${head} <span class="muted small">${list.length}건</span></div>
+    ${list.map(issueCardHTML).join('')}</div>`
+}
+
 function hubIssuesHTML(data: SpaceView): string {
-  const items = data.issues.length
-    ? data.issues
-        .map(
-          (i) => `
+  const subtabs = `<div class="activity-subtabs">${ISSUE_VIEWS.map(
+    (v) => `<button class="sub-tab ${v.id === issueView ? 'on' : ''}" data-iview="${v.id}">${v.label}</button>`,
+  ).join('')}</div>`
+
+  const issues = [...data.issues]
+  let content: string
+  if (!issues.length) {
+    content = '<p class="muted small">표시할 항목이 없어요</p>'
+  } else if (issueView === 'time') {
+    content = issues.sort(byRecent).map(issueCardHTML).join('')
+  } else if (issueView === 'status') {
+    // 열림 → 지식 연결 → 해결 순으로 그룹핑. 그 외 상태는 뒤에 그대로 붙인다.
+    const order = ['open', 'knowledge_linked', 'resolved']
+    const rest = [...new Set(issues.map((i) => i.status).filter((s) => !order.includes(s)))]
+    content = [...order, ...rest]
+      .map((s) => issueGroupHTML(statusBadge(s), issues.filter((i) => i.status === s).sort(byRecent)))
+      .join('')
+  } else {
+    const by = new Map<string, SpaceIssue[]>()
+    for (const i of issues) {
+      const k = issueActor(i)
+      by.set(k, [...(by.get(k) ?? []), i])
+    }
+    content = [...by.entries()]
+      .sort((a, b) => b[1].length - a[1].length)
+      .map(([name, list]) => issueGroupHTML(`👤 <b>${esc(name)}</b>`, list.sort(byRecent)))
+      .join('')
+  }
+  return hubSection('이슈 흐름', 'Issue Flow', subtabs + content)
+}
+
+// ── 지식 재사용 탭 — 재사용 이벤트 피드 + 재사용하면 좋을 지식(책장) ──
+function hubReuseHTML(data: SpaceView): string {
+  const events = [...(data.reuse_events ?? [])].sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''))
+  const eventItems = events.length
+    ? events
+        .slice(0, 30)
+        .map((e) => {
+          const dir = e.source_space === data.space_id ? '이 방의 지식이 재사용됨' : '타팀 지식을 재사용'
+          const at = kstTime(e.at)
+          return `
         <div class="feed-card">
-          <div class="fc-title">${statusBadge(i.status)} ${esc(i.title)}</div>
-          <div class="timeline">
-            ${i.timeline
-              .map((t) => {
-                const at = kstTime(t.at)
-                return `<div class="tl-step"><b>${esc(t.label)}</b><span class="tl-actor">${esc(t.actor)}</span>${at ? `<span class="tl-at">${at}</span>` : ''}</div>`
-              })
-              .join('')}
-          </div>
+          <div class="fc-title">🔄 ${dir}${at ? ` <span class="tl-at">${at}</span>` : ''}</div>
+          <div class="doc-summary">${esc(e.summary)}</div>
+        </div>`
+        })
+        .join('')
+    : '<p class="muted small">표시할 항목이 없어요</p>'
+
+  // 책장 = "재사용하면 좋을 지식" — 재사용 많은 순, 조직 공개 우선. 클릭 시 원문 모달.
+  const docs = data.knowledge
+    .map((d, i) => ({ d, i }))
+    .sort(
+      (a, b) =>
+        (a.d.visibility === 'org' ? 0 : 1) - (b.d.visibility === 'org' ? 0 : 1) ||
+        b.d.reuse_count - a.d.reuse_count,
+    )
+    .slice(0, 20)
+  const docItems = docs.length
+    ? docs
+        .map(
+          ({ d, i }) => `
+        <div class="doc-item" data-doc="${i}">
+          <b>${esc(d.title)}</b>
+          <div class="muted">${esc(d.author_agent)}${d.visibility === 'org' ? ' · 조직 공개' : ''} · 재사용 ${d.reuse_count}</div>
+          <div class="doc-summary">${esc(d.summary)}</div>
         </div>`,
         )
         .join('')
-    : '<p class="muted small">표시할 항목이 없어요</p>'
-  return hubSection('이슈 흐름', 'Issue Flow', items)
-}
+    : '<div class="muted small">등록된 지식이 없습니다.</div>'
 
-function hubReuseHTML(_data: SpaceView): string {
-  // 재사용 이벤트 조회 API가 허브에 아직 없다 (collector reuse_events: []). 데이터가 붙기
-  // 전까지 정직하게 빈 상태로 둔다. TODO: a-lens 백엔드에서 재사용 피드 산출 후 연결.
-  return hubSection('지식 재사용', 'Knowledge Reuse', '<p class="muted small">표시할 항목이 없어요</p>')
+  return (
+    hubSection('지식 재사용', 'Knowledge Reuse', eventItems) +
+    hubSection('책장 — 재사용하면 좋을 지식', 'Bookshelf', docItems)
+  )
 }
 
 type ActivityTab = 'online' | 'offline'
@@ -440,6 +525,20 @@ function renderHub(data: SpaceView) {
 
   // 위 2/3: 선택 탭 내용. 아래 1/3: 팀 활동 상시 (온라인/오프라인 서브탭).
   hubBody.innerHTML = hubTab === 'issues' ? hubIssuesHTML(data) : hubReuseHTML(data)
+  // 이슈 흐름 보기 모드(시간순/상태별/사람별) 전환
+  hubBody.querySelectorAll<HTMLElement>('[data-iview]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      issueView = btn.dataset.iview as IssueView
+      renderHub(data)
+    })
+  })
+  // 지식 재사용 탭의 책장 문서 → 원문 모달
+  hubBody.querySelectorAll<HTMLElement>('.doc-item').forEach((el) => {
+    el.addEventListener('click', () => {
+      const doc = data.knowledge[Number(el.dataset.doc)]
+      if (doc) showModal(doc.title, `<pre class="doc-body">${esc(doc.body)}</pre>`)
+    })
+  })
   renderHubActivity(data)
   applyHubCollapsed(true)
 }
@@ -469,6 +568,7 @@ async function renderRoom(spaceId: string) {
   headerEl.innerHTML = `
     <button class="ghost-btn sm" id="btn-back">← 목록</button>
     <b id="room-title">${esc(config.space_name)}</b>
+    <span class="demo-badge" id="room-demo" hidden>FAKE</span>
     <span class="muted" id="room-visits"></span>
     <span class="spacer"></span>
     <button class="ghost-btn sm" id="btn-edit-room">꾸미기</button>`
@@ -504,19 +604,35 @@ async function renderRoom(spaceId: string) {
     config.space_name = liveName // 칠판 위 간판에도 최신 이름 반영
   }
   $('room-visits').textContent = data.visits ? `방문 TODAY ${data.visits.today} · TOTAL ${data.visits.total}` : ''
+  $('room-demo').hidden = !data.demo // 더미(fake) 스페이스 구분 배지
 
   if (currentScene) {
     currentScene.destroy({ children: true })
     currentScene = null
   }
   app.stage.removeChildren()
+  // 씬 과밀 방지 — 캐릭터(책상)는 온라인 우선·최근 활동순 상위 N명만.
+  // Hub '팀 활동' 목록(renderHubActivity)은 전원 표시하므로 정보 손실은 없다.
+  const SCENE_MAX_AGENTS = 24
+  const sceneAgents = [...data.agents]
+    .sort(
+      (a, b) =>
+        (a.status === 'working' ? 0 : 1) - (b.status === 'working' ? 0 : 1) ||
+        (b.last_active_at ?? '').localeCompare(a.last_active_at ?? ''),
+    )
+    .slice(0, SCENE_MAX_AGENTS)
   currentScene = buildRoomScene(
     config,
-    { agents: data.agents, issues: data.issues, knowledgeCount: data.knowledge.length },
+    { agents: sceneAgents, issues: data.issues, knowledgeCount: data.knowledge.length },
     {
       onAgentTap: (agent) => showAgentPanel(agent),
       // 칠판(이슈)은 오른쪽 Hub "이슈 흐름"으로 흡수 — 클릭 팝업 제거 (2026-07-19).
-      onShelfTap: () => openKnowledgePanel(data),
+      // 책장 클릭 → Hub '지식 재사용' 탭 열기 (접혀 있으면 펼침).
+      onShelfTap: () => {
+        if (hubCollapsed) toggleHub(false)
+        hubTab = 'reuse'
+        renderHub(data)
+      },
     },
   )
   app.stage.addChild(currentScene)

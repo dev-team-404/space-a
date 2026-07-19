@@ -351,3 +351,28 @@ button { font: inherit; cursor: pointer; }
   line-height: 1.7;
   color: #c8cfd8;
 }
+/* 더미(fake) 데이터 구분 배지 — 실데이터와 섞여 표시될 때 오해 방지 */
+.demo-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #d9a441;
+  border: 1px solid #d9a441;
+  border-radius: 4px;
+  padding: 1px 5px;
+  vertical-align: 2px;
+}
+/* 이슈 흐름 그룹 헤더 (상태별/사람별 보기) */
+.issue-group { margin-bottom: 10px; }
+.issue-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 6px;
+  font-size: 12px;
+  color: #c8cfd8;
+}
+/* 홈 상단 FAKE 표시/숨김 토글 */
+.fake-toggle { margin-left: 8px; }
+.fake-toggle.on { border-color: #d9a441; color: #d9a441; }
