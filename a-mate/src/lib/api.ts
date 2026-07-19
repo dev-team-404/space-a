@@ -227,3 +227,40 @@ export const onContentReady = (cb: (rows: ContentItem[]) => void): Promise<Unlis
 export async function getSprite(): Promise<string | null> {
   try { return await invoke<string | null>('get_sprite'); } catch { return null; }
 }
+
+export interface ProfileRung {
+  key: string;
+  label: string;
+  ladder_index: number;
+  mastery: 'not_started' | 'in_progress' | 'mastered';
+  evidence: string;
+  learn_hint: string;
+  is_frontier: boolean;
+}
+export interface ProfileView {
+  rungs: ProfileRung[];
+  frontier_key: string | null;
+  total_events: number;
+}
+
+/** AX 역량 사다리 — 각 축의 숙련도 + 지금 배울 것(frontier). */
+export async function getProfile(): Promise<ProfileView> {
+  return invoke<ProfileView>('get_profile');
+}
+
+export interface SkillDraft {
+  markdown: string;
+  slug: string;
+  llm_generated: boolean;
+  session_count: number;
+}
+
+/** R6 반복 지시(host + 대표 프롬프트) → SKILL.md 초안 생성. */
+export async function generateSkillDraft(host: string, representative: string): Promise<SkillDraft> {
+  return invoke<SkillDraft>('generate_skill_draft', { host, representative });
+}
+
+/** 초안을 ~/.claude/skills/<slug>/SKILL.md 로 저장. 저장된 절대 경로 반환. */
+export async function saveSkillDraft(slug: string, markdown: string): Promise<string> {
+  return invoke<string>('save_skill_draft', { slug, markdown });
+}

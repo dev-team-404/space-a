@@ -213,6 +213,26 @@ pub fn finding_advice(
                 "settings.json 허용목록에 그 도구를 추가하면 매번 뜨는 승인 프롬프트와 거부→재시도 낭비가 사라져요".to_string(),
             )
         }
+        "R6" => {
+            let prompt = evidence.get("repeated_prompt").and_then(|v| v.as_str()).unwrap_or("?");
+            let n = evidence.get("session_count").and_then(|v| v.as_u64()).unwrap_or(0);
+            (
+                format!("같은 지시로 세션을 {n}번 열었어요 — \"{prompt}\""),
+                "이 반복을 스킬(SKILL.md)로 묶으면 매번 다시 설명할 필요가 없어요. 코치 탭의 '스킬 초안 만들기'로 바로 만들 수 있어요".to_string(),
+            )
+        }
+        "R8" => {
+            let server = evidence.get("server").and_then(|v| v.as_str()).unwrap_or("?");
+            let n = evidence.get("large_result_count").and_then(|v| v.as_u64()).unwrap_or(0);
+            let avg_tok = evidence.get("approx_tokens_avg").and_then(|v| v.as_u64()).unwrap_or(0);
+            let total_tok = evidence.get("approx_tokens_total").and_then(|v| v.as_u64()).unwrap_or(0);
+            (
+                format!(
+                    "MCP 서버 `{server}`가 큰 결과를 {n}번 돌려줬어요 (평균 ~{avg_tok} 토큰, 누적 ~{total_tok} 토큰). 이 결과는 대개 곧 압축돼 사라져요"
+                ),
+                "필요한 필드만 요청하거나 결과 범위를 좁혀보세요 — 페이지네이션·요약·필터 옵션이 있으면 매 호출 컨텍스트 소모가 크게 줄어요".to_string(),
+            )
+        }
         "R12" => {
             let n = evidence.get("total_sessions").and_then(|v| v.as_u64()).unwrap_or(0);
             let skills = evidence
@@ -1596,6 +1616,36 @@ mod tests {
         );
         assert!(detail.contains("claude-fable-5[1m]"));
         assert!(action.contains("effort(xhigh)"));
+    }
+
+    #[test]
+    fn finding_advice_r6_reads_prompt_and_count() {
+        let (detail, action) = super::finding_advice(
+            "R6",
+            &serde_json::json!({ "repeated_prompt": "매일 아침 배포 리포트 뽑아줘", "session_count": 3 }),
+            0,
+        );
+        assert!(detail.contains("3번"));
+        assert!(detail.contains("매일 아침 배포 리포트"));
+        assert!(!detail.contains("repeated_prompt")); // 원본 JSON 노출 금지
+        assert!(action.contains("스킬"));
+    }
+
+    #[test]
+    fn finding_advice_r8_cites_server_and_measured_tokens() {
+        let (detail, action) = super::finding_advice(
+            "R8",
+            &serde_json::json!({
+                "server": "context7", "large_result_count": 3,
+                "approx_tokens_avg": 3000, "approx_tokens_total": 9000
+            }),
+            0,
+        );
+        assert!(detail.contains("context7"));
+        assert!(detail.contains("3번"));
+        assert!(detail.contains("3000")); // 측정된 평균 토큰 인용
+        assert!(detail.contains("9000")); // 누적
+        assert!(action.contains("필요한 필드만") || action.contains("좁혀"));
     }
 
     #[test]

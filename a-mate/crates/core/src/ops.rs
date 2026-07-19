@@ -168,6 +168,8 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
         // R6(반복 지시 → 스킬/커맨드화)은 v3 은퇴 대상 아님 — 킥오프 차별점 신규 등록
         Box::new(crate::rules::r6_repeated_prompts::R6RepeatedPrompts::default()),
         Box::new(R7OpusTrivial::default()),
+        // R8(MCP 대형 결과) — result_len 수집 승격, 2026-07-19
+        Box::new(crate::rules::r8_mcp_large_result::R8McpLargeResult::default()),
         Box::new(R10AutomationBurst::default()),
         Box::new(R11PermissionFriction::default()),
     ]);

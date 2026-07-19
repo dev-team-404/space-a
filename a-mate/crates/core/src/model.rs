@@ -93,7 +93,8 @@ impl ToolKind {
 pub enum EventKind {
     AssistantTurn { model: NormModel, usage: TokenUsage, web_search: u32, web_fetch: u32 },
     ToolCall { kind: ToolKind, raw_name: String, target: Option<String>, tool_use_id: Option<String> },
-    ToolResult { tool_use_id: String, status: ResultStatus },
+    /// result_len = 결과 content의 문자 수 (R8 대형 결과 탐지 재료 — 본문은 미저장).
+    ToolResult { tool_use_id: String, status: ResultStatus, result_len: u64 },
     Compaction,
     UserPrompt { preview: String },
     /// permission-mode 라인 (plan·bypassPermissions 등) — R16/R19 재료 (코칭 v3 §4.1-4)

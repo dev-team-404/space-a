@@ -47,6 +47,26 @@ impl Dimension {
             Dimension::Orchestration => "orchestration",
         }
     }
+    /// UI용 한글 라벨 (역량 사다리 표시).
+    pub fn label_ko(&self) -> &'static str {
+        match self {
+            Dimension::ModelLiteracy => "모델 리터러시",
+            Dimension::ContextHygiene => "컨텍스트 위생",
+            Dimension::SkillReuse => "스킬 재사용",
+            Dimension::Automation => "자동화",
+            Dimension::Orchestration => "오케스트레이션",
+        }
+    }
+    /// "지금 배울 것" — 이 축을 밟을 때 무엇을 하면 되는지 한 줄.
+    pub fn learn_hint_ko(&self) -> &'static str {
+        match self {
+            Dimension::ModelLiteracy => "작업 난이도에 맞춰 모델 티어를 고르기 — 잔심부름은 sonnet/haiku로",
+            Dimension::ContextHygiene => "안 쓰는 MCP·플러그인 정리, 반복 지시는 CLAUDE.md에 기재",
+            Dimension::SkillReuse => "반복하는 작업 흐름을 스킬(SKILL.md)로 묶어 재사용",
+            Dimension::Automation => "커스텀 커맨드·hooks·권한 사전허용으로 마찰 제거",
+            Dimension::Orchestration => "큰 작업을 서브에이전트에 위임해 병렬로 처리",
+        }
+    }
 }
 
 /// 한 축에서의 숙련 상태.
@@ -55,6 +75,17 @@ pub enum Mastery {
     NotStarted, // 아직 이 습관이 없음 (코칭 프론티어 후보)
     InProgress, // 배우는 중
     Mastered,   // 이미 잘 함 → 침묵
+}
+
+impl Mastery {
+    /// 프론트 직렬화용 안정 키.
+    pub fn key(&self) -> &'static str {
+        match self {
+            Mastery::NotStarted => "not_started",
+            Mastery::InProgress => "in_progress",
+            Mastery::Mastered => "mastered",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

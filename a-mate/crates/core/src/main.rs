@@ -168,16 +168,83 @@ fn cmd_retro(store: &SqliteStore) -> Result<()> {
     Ok(())
 }
 
+/// R6 반복 지시 → SKILL.md 초안 (킥오프 3대 차별점). R6 finding마다 초안을 출력.
+/// 엔진(AGENT_MENTOR_ENGINE_URL) 설정 시 LLM 생성, 아니면 결정론 골격.
+fn cmd_skill_draft(store: &SqliteStore) -> Result<()> {
+    use agent_mentor::rules::r6_repeated_prompts::R6RepeatedPrompts;
+    use agent_mentor::rules::Rule;
+    let findings = R6RepeatedPrompts::default().evaluate(store)?;
+    if findings.is_empty() {
+        println!("R6 반복 지시 패턴 없음 (같은 첫 프롬프트로 ≥3 세션, 최근 14일). 초안 대상 없음.");
+        return Ok(());
+    }
+    let engine = OpenAiCompatEngine::from_env();
+    if engine.is_some() {
+        println!("engine: {}\n", engine.as_ref().unwrap().name());
+    } else {
+        println!("engine: (미설정) — 결정론 골격으로 생성\n");
+    }
+    for f in &findings {
+        let host = f.scope_host.clone().unwrap_or_default();
+        let rep = f.evidence["repeated_prompt"].as_str().unwrap_or_default();
+        let ctx = agent_mentor::skill_draft::gather_context(store, &host, rep)?;
+        let draft = agent_mentor::skill_draft::build_draft(
+            &ctx,
+            engine.as_ref().map(|e| e as &dyn Engine),
+        );
+        println!("═══ 반복 지시: \"{}\" ({}개 세션) → skills/{}/SKILL.md ═══",
+            rep, ctx.session_count, draft.slug);
+        println!("{}\n", draft.markdown);
+    }
+    Ok(())
+}
+
+/// Tier 2 질적 코칭(채팅) — 질문 의도 분류 → 코칭 브리프 → 엔진 답변. 검증용.
+fn cmd_coach_chat(store: &SqliteStore, question: &str) -> Result<()> {
+    use agent_mentor::chat::{
+        assemble_coaching_brief, build_coaching_system_prompt, classify_intent, ChatIntent,
+    };
+    use agent_mentor::diary::engine::ChatMessage;
+    let intent = classify_intent(question);
+    println!("질문: \"{question}\"");
+    println!("→ 분류된 의도(티어): {}\n", intent.key());
+    match intent {
+        ChatIntent::Coaching => {
+            let brief = assemble_coaching_brief(store)?;
+            let system = build_coaching_system_prompt(&brief);
+            println!("─── Tier 2 코칭 브리프(시스템 프롬프트) ───\n{system}\n");
+            match OpenAiCompatEngine::from_env() {
+                Some(eng) => {
+                    println!("engine: {}", eng.name());
+                    let out = eng.chat(
+                        &system,
+                        &[ChatMessage { role: "user".into(), content: question.into() }],
+                    )?;
+                    println!("\n─── 튜터 답변 ───\n{}", out.text);
+                }
+                None => println!("(엔진 미설정 — 브리프까지만 확인)"),
+            }
+        }
+        _ => println!("(이 데모는 코칭 티어 전용 — '깊게 봐줘/약점/개선' 류 질문을 넣어보세요)"),
+    }
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let cmd = args.get(1).map(|s| s.as_str()).unwrap_or("all");
     let mut store = db()?;
     match cmd {
+        "coach-chat" => {
+            let q = args.get(2).map(|s| s.as_str()).unwrap_or("이번 주 깊게 봐줘");
+            cmd_coach_chat(&store, q)?;
+        }
         "ingest" => cmd_ingest(&store)?,
         "inventory" => cmd_inventory(&mut store)?,
         "rules" => cmd_rules(&store)?,
         "curate" => cmd_curate(&store)?,
         "diary" => cmd_diary(&store, args.get(2).cloned())?,
+        "skill-draft" => cmd_skill_draft(&store)?,
         "hub-share" => cmd_hub_share(&store)?,
         "telemetry" => cmd_telemetry(&store, args.get(2).cloned())?,
         "retro" => cmd_retro(&store)?,
@@ -190,7 +257,7 @@ fn main() -> Result<()> {
         }
         other => {
             eprintln!("unknown command: {other}");
-            eprintln!("usage: agent-mentor [ingest|inventory|rules|curate|diary [date]|hub-share|telemetry [date]|all]");
+            eprintln!("usage: agent-mentor [ingest|inventory|rules|curate|diary [date]|skill-draft|coach-chat <질문>|hub-share|telemetry [date]|all]");
         }
     }
     Ok(())

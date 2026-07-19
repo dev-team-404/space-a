@@ -10,6 +10,7 @@
   import SaveTop3 from './home/SaveTop3.svelte';
   import NoticeLog from './home/NoticeLog.svelte';
   import TipCard from './home/TipCard.svelte';
+  import AxLadder from './home/AxLadder.svelte';
   import MiniRoom from './MiniRoom.svelte';
   import RoomView from './RoomView.svelte';
   import { hubSettingsGet } from '../api';
@@ -28,6 +29,7 @@
   let findings = $state<CoachFinding[]>([]);
   let notices = $state<Notice[]>([]);
   let tips = $state<ContentItem[]>([]);
+  let scanTick = $state(0); // 스캔 완료 시 증가 → 역량 사다리 재조회 트리거
   const topAdvice = $derived(findings.length > 0 ? findings[0].suggested_action : null);
   // 방 서버 연결 시 격자 방(RoomView), 미연결 시 기존 장식 방(MiniRoom) — 원기능 보존
   // 설정 창에서 연결하는 순간 바뀌도록 settings:changed와 창 포커스에 반응한다
@@ -49,7 +51,7 @@
   $effect(() => {
     const subs = [
       onScanProgress((p) => { scanning = true; progress = p; }),
-      onScanDone(() => { scanning = false; progress = null; load(); }),
+      onScanDone(() => { scanning = false; progress = null; scanTick++; load(); }),
       onContentReady((rows) => { tips = rows; }),
       onSettingsChanged(() => checkHub()),
     ];
@@ -94,6 +96,10 @@
   </div>
 
   <TipCard items={tips} onDismissed={onTipDismissed} />
+
+  {#key scanTick}
+    <AxLadder />
+  {/key}
 
   <div class="grid">
     <WeekTrend {days} />

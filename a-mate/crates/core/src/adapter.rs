@@ -307,7 +307,11 @@ impl SourceAdapter for ClaudeCodeAdapter {
                         let is_error = block.get("is_error").and_then(|x| x.as_bool()).unwrap_or(false);
                         let cstr = tool_result_content_string(block.get("content"));
                         let status = classify_tool_result(is_error, &cstr);
-                        out.push(mk(EventKind::ToolResult { tool_use_id: tuid, status }, (i + 1) as u64));
+                        let result_len = cstr.chars().count() as u64;
+                        out.push(mk(
+                            EventKind::ToolResult { tool_use_id: tuid, status, result_len },
+                            (i + 1) as u64,
+                        ));
                     }
                 }
             }
@@ -418,7 +422,7 @@ mod tests {
         // SessionMeta(cwd) + ToolResult
         let tr = evs.iter().find(|e| matches!(e.kind, EventKind::ToolResult { .. })).unwrap();
         match &tr.kind {
-            EventKind::ToolResult { tool_use_id, status } => {
+            EventKind::ToolResult { tool_use_id, status, .. } => {
                 assert_eq!(tool_use_id, "toolu_1");
                 assert_eq!(*status, ResultStatus::Denied);
             }
