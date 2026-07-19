@@ -331,7 +331,7 @@ fn classify_keywords(text: &str) -> (Option<Dimension>, Vec<String>) {
         dim = dim.or(Some(ContextHygiene));
         tags.push("claudemd".into());
     }
-    if has("plan mode") || has(" model") || has("opus") || has("thinking") {
+    if has("plan mode") || has("model") || has("opus") || has("thinking") {
         dim = dim.or(Some(ModelLiteracy));
         tags.push("model".into());
     }
@@ -347,21 +347,29 @@ impl BorisTipsSource {
     pub fn parse_html(&self, html: &str) -> Vec<ContentItem> {
         use sha2::{Digest, Sha256};
         let doc = scraper::Html::parse_document(html);
-        let (t_sel, b_sel) = match (
-            scraper::Selector::parse(".step-title"),
-            scraper::Selector::parse(".step-body"),
-        ) {
-            (Ok(t), Ok(b)) => (t, b),
-            _ => return vec![],
+        // gemini 리뷰(#30) 반영: 전역 title/body 리스트 zip은 한 요소만 빠져도 이후 전체가
+        // 어긋난다. 문서 순서로 순회하며 "제목 → 다음에 오는 본문"을 짝짓는다 —
+        // 고아 제목(본문 없이 다음 제목 등장)은 자연 폐기되어 어긋남이 전파되지 않는다.
+        let Ok(pair_sel) = scraper::Selector::parse(".step-title, .step-body") else {
+            return vec![];
         };
-        let text_of = |sel: &scraper::Selector| -> Vec<String> {
-            doc.select(sel)
-                .map(|e| e.text().collect::<String>().split_whitespace().collect::<Vec<_>>().join(" "))
-                .collect()
+        let is_title = |e: &scraper::ElementRef| {
+            e.value().classes().any(|c| c == "step-title")
         };
-        text_of(&t_sel)
+        let text_of = |e: &scraper::ElementRef| -> String {
+            e.text().collect::<String>().split_whitespace().collect::<Vec<_>>().join(" ")
+        };
+        let mut pairs: Vec<(String, String)> = Vec::new();
+        let mut pending: Option<String> = None;
+        for el in doc.select(&pair_sel) {
+            if is_title(&el) {
+                pending = Some(text_of(&el)); // 이전 고아 제목은 덮어써 폐기
+            } else if let Some(t) = pending.take() {
+                pairs.push((t, text_of(&el)));
+            }
+        }
+        pairs
             .into_iter()
-            .zip(text_of(&b_sel))
             .filter(|(t, b)| !t.trim().is_empty() && !b.trim().is_empty())
             .take(self.max_items)
             .map(|(t, b)| {
@@ -1100,6 +1108,21 @@ mod tests {
         assert_eq!(items[1].title, "Update your CLAUDE.md");
         assert_eq!(items[1].dimension, Some(Dimension::ContextHygiene));
         assert!(items[1].trigger_tags.iter().any(|t| t == "claudemd"));
+    }
+
+    #[test]
+    fn boris_orphan_title_does_not_misalign_following_pairs() {
+        // gemini 리뷰(#30) 회귀 테스트: 본문 없는 고아 제목이 있어도 이후 짝이 어긋나지 않는다
+        let html = r#"
+          <div class="step-title">Orphan Title Without Body</div>
+          <div class="step-title">Real Tip</div>
+          <div class="step-body">Real body.</div>
+        "#;
+        let items = BorisTipsSource::default().parse_html(html);
+        assert_eq!(items.len(), 1);
+        assert!(items[0].title.contains("Real Tip") || items[0].title == "Real Tip",
+            "고아 제목 폐기, 진짜 짝만: {}", items[0].title);
+        assert!(items[0].body.contains("Real body"));
     }
 
     #[test]
