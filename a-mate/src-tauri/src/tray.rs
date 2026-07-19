@@ -17,6 +17,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             .unwrap_or(true)
     };
     let mascot = CheckMenuItem::with_id(app, "mascot", "마스코트 표시", true, mascot_on, None::<&str>)?;
+    let reset_mascot = MenuItem::with_id(app, "reset_mascot", "마스코트 위치 초기화", true, None::<&str>)?;
     let realtime_on = {
         let state = app.state::<AppState>();
         let guard = state.store.lock().ok();
@@ -58,7 +59,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let auto_on = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart = CheckMenuItem::with_id(app, "autostart", "시작 시 실행", true, auto_on, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &mascot, &realtime, &protect, &chatter_menu, &scan, &settings, &autostart, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &mascot, &reset_mascot, &realtime, &protect, &chatter_menu, &scan, &settings, &autostart, &quit])?;
 
     let autostart_item = autostart.clone();
     let mascot_item = mascot.clone();
@@ -82,11 +83,24 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 use tauri::Manager;
                 if let Some(w) = app.get_webview_window("mascot") {
                     let was_visible = w.is_visible().unwrap_or(false);
-                    let _ = if was_visible { w.hide() } else { w.show() };
+                    if was_visible {
+                        if let Err(error) = w.hide() {
+                            log::error!("마스코트 창 숨김 실패: {error}");
+                        }
+                    } else {
+                        crate::show_mascot(app, false);
+                    }
                     let _ = mascot_item.set_checked(!was_visible);
                     if let Ok(store) = app.state::<AppState>().store.lock() {
                         let _ = store.set_setting("mascot_visible", if was_visible { "false" } else { "true" });
                     }
+                }
+            }
+            "reset_mascot" => {
+                crate::show_mascot(app, true);
+                let _ = mascot_item.set_checked(true);
+                if let Ok(store) = app.state::<AppState>().store.lock() {
+                    let _ = store.set_setting("mascot_visible", "true");
                 }
             }
             "realtime" => {

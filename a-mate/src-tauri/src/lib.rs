@@ -26,6 +26,113 @@ pub(crate) const MASCOT_H: f64 = 230.0;
 /// 로봇 상호작용 영역(우하단, 논리 px) — 이 밖의 투명 여백은 접힘 상태에서 클릭 통과
 pub(crate) const ROBOT_SIDE: f64 = 160.0;
 
+fn parse_mascot_pos(value: &str) -> Option<(i32, i32)> {
+    let (x, y) = value.split_once(',')?;
+    Some((x.parse().ok()?, y.parse().ok()?))
+}
+
+/// 저장 좌표를 현재 디스플레이 구성에 맞게 검증하고 필요하면 주 모니터로 복구한다.
+/// 복구 결과와 디스플레이 지문은 즉시 저장해 다음 실행도 같은 위치를 사용한다.
+pub(crate) fn place_mascot(app: &tauri::AppHandle, force_default: bool) -> anyhow::Result<()> {
+    use tauri::Manager;
+
+    let window = app
+        .get_webview_window("mascot")
+        .ok_or_else(|| anyhow::anyhow!("mascot window not found"))?;
+    let monitors = window.available_monitors()?;
+    let bounds: Vec<(i32, i32, i32, i32)> = monitors
+        .iter()
+        .map(|monitor| {
+            let pos = monitor.position();
+            let size = monitor.size();
+            (pos.x, pos.y, size.width as i32, size.height as i32)
+        })
+        .collect();
+    let layout = geometry::display_layout_signature(
+        &monitors
+            .iter()
+            .map(|monitor| {
+                let pos = monitor.position();
+                let size = monitor.size();
+                (
+                    pos.x,
+                    pos.y,
+                    size.width as i32,
+                    size.height as i32,
+                    (monitor.scale_factor() * 1000.0).round() as u32,
+                )
+            })
+            .collect::<Vec<_>>(),
+    );
+    let (saved_pos, saved_layout) = {
+        let state = app.state::<AppState>();
+        let store = state
+            .store
+            .lock()
+            .map_err(|_| anyhow::anyhow!("store lock"))?;
+        (
+            store.get_setting("mascot_pos")?,
+            store.get_setting("mascot_display_layout")?,
+        )
+    };
+
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let (width, height) = ((MASCOT_W * scale) as i32, (MASCOT_H * scale) as i32);
+    let robot = (ROBOT_SIDE * scale) as i32;
+    let restored = (!force_default)
+        .then(|| {
+            let pos = parse_mascot_pos(saved_pos.as_deref()?)?;
+            (saved_layout.as_deref() == Some(layout.as_str())
+                && geometry::sanitize_pos(pos.0, pos.1, width, height, robot, &bounds))
+            .then_some(pos)
+        })
+        .flatten();
+    let position = if let Some(pos) = restored {
+        pos
+    } else {
+        let primary = window
+            .primary_monitor()?
+            .ok_or_else(|| anyhow::anyhow!("primary monitor not found"))?;
+        let size = primary.size();
+        let origin = primary.position();
+        let primary_scale = primary.scale_factor();
+        (
+            origin.x + size.width as i32
+                - (MASCOT_W * primary_scale) as i32
+                - (16.0 * primary_scale) as i32,
+            origin.y + size.height as i32
+                - (MASCOT_H * primary_scale) as i32
+                - (64.0 * primary_scale) as i32,
+        )
+    };
+
+    window.set_position(tauri::PhysicalPosition::new(position.0, position.1))?;
+    let state = app.state::<AppState>();
+    let store = state
+        .store
+        .lock()
+        .map_err(|_| anyhow::anyhow!("store lock"))?;
+    store.set_setting("mascot_pos", &format!("{},{}", position.0, position.1))?;
+    store.set_setting("mascot_display_layout", &layout)?;
+    Ok(())
+}
+
+pub(crate) fn show_mascot(app: &tauri::AppHandle, force_default: bool) {
+    use tauri::Manager;
+
+    if let Err(error) = place_mascot(app, force_default) {
+        log::error!("마스코트 위치 복구 실패: {error}");
+    }
+    match app.get_webview_window("mascot") {
+        Some(window) => {
+            if let Err(error) = window.show() {
+                log::error!("마스코트 창 표시 실패: {error}");
+            }
+        }
+        None => log::error!("마스코트 창 표시 실패: window not found"),
+    }
+}
+
 /// 엔진 해석 우선순위: 설정 UI(store) → .env — 설정 창에서 지정한 값이 있으면 그것을 쓰고,
 /// 없으면 기존 AGENT_MENTOR_ENGINE_* 환경변수로 폴백한다 (지빈의 .env 워크플로 보존).
 /// 호출자는 락을 짧게 잡고(네트워크 전 해제 규율) 이 함수에 &SqliteStore만 넘긴다.
@@ -37,7 +144,11 @@ pub(crate) fn resolve_engine(store: &SqliteStore) -> Option<OpenAiCompatEngine> 
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
     if let Some(base_url) = url {
-        let api_key = store.get_setting("engine_key").ok().flatten().unwrap_or_default();
+        let api_key = store
+            .get_setting("engine_key")
+            .ok()
+            .flatten()
+            .unwrap_or_default();
         let model = store
             .get_setting("engine_model")
             .ok()
@@ -45,7 +156,11 @@ pub(crate) fn resolve_engine(store: &SqliteStore) -> Option<OpenAiCompatEngine> 
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| "gpt-4o-mini".to_string());
-        return Some(OpenAiCompatEngine { base_url, api_key, model });
+        return Some(OpenAiCompatEngine {
+            base_url,
+            api_key,
+            model,
+        });
     }
     OpenAiCompatEngine::from_env()
 }
@@ -92,7 +207,6 @@ pub fn run() {
                 None,
             ))
             .plugin(tauri_plugin_opener::init()) // 공식 가이드 링크를 시스템 브라우저로 열기
-
             .on_window_event(|window, event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     // 상주: destroy 대신 hide (스펙 §3). settings도 동일 — destroy되면 트레이에서 재오픈 불가
@@ -125,16 +239,29 @@ pub fn run() {
                     let state = app.state::<AppState>();
                     let cfg = state.store.lock().ok().map(|s| {
                         let get = |k: &str| s.get_setting(k).ok().flatten().unwrap_or_default();
-                        (get("hub_url"), get("hub_token"), get("hub_room_id"), get("hub_api_key"))
+                        (
+                            get("hub_url"),
+                            get("hub_token"),
+                            get("hub_room_id"),
+                            get("hub_api_key"),
+                        )
                     });
                     if let Some((url, token, room_id, api_key)) = cfg {
                         if !url.trim().is_empty() && !token.is_empty() && !room_id.is_empty() {
                             let api_key = {
                                 let k = api_key.trim();
-                                if k.is_empty() { None } else { Some(k.to_string()) }
+                                if k.is_empty() {
+                                    None
+                                } else {
+                                    Some(k.to_string())
+                                }
                             };
                             std::thread::spawn(move || {
-                                let client = agent_mentor::rooms_client::RoomsClient { base_url: url, token, api_key };
+                                let client = agent_mentor::rooms_client::RoomsClient {
+                                    base_url: url,
+                                    token,
+                                    api_key,
+                                };
                                 if let Err(e) = client.enter(&room_id, None) {
                                     log::warn!("시작 시 내 방 입장 실패(무시): {e}");
                                 }
@@ -142,52 +269,20 @@ pub fn run() {
                         }
                     }
                 }
-                // mascot 창: 설정 보고 표시 + 위치 복원
+                // mascot 창: 설정을 보고 현재 디스플레이 구성에 맞게 위치 복원
                 {
-                    let state = app.state::<AppState>();
-                    let (visible, pos) = {
-                        let store = state.store.lock().map_err(|_| anyhow::anyhow!("store lock"))?;
-                        (
-                            store.get_setting("mascot_visible")?.map(|v| v == "true").unwrap_or(true),
-                            store.get_setting("mascot_pos")?,
-                        )
-                    };
-                    if let Some(w) = app.get_webview_window("mascot") {
-                        let mut restored = false;
-                        if let Some(p) = pos {
-                            if let Some((x, y)) = p.split_once(',') {
-                                if let (Ok(x), Ok(y)) = (x.parse::<i32>(), y.parse::<i32>()) {
-                                    let monitors: Vec<(i32, i32, i32, i32)> = w
-                                        .available_monitors()
-                                        .map(|ms| ms.iter().map(|m| {
-                                            let p = m.position();
-                                            let s = m.size();
-                                            (p.x, p.y, s.width as i32, s.height as i32)
-                                        }).collect())
-                                        .unwrap_or_default();
-                                    let scale = w.scale_factor().unwrap_or(1.0);
-                                    let (pw, ph) = ((MASCOT_W * scale) as i32, (MASCOT_H * scale) as i32);
-                                    let robot = (ROBOT_SIDE * scale) as i32;
-                                    if geometry::sanitize_pos(x, y, pw, ph, robot, &monitors) {
-                                        let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
-                                        restored = true;
-                                    }
-                                }
-                            }
-                        }
-                        if !restored {
-                            if let Ok(Some(mon)) = w.primary_monitor() {
-                                let size = mon.size();
-                                let mpos = mon.position();
-                                // 로봇(창 우하단)이 화면 우하단 + 여백 16px, 작업표시줄 위에 오도록 (스펙 §1)
-                                let x = mpos.x + size.width as i32 - MASCOT_W as i32 - 16;
-                                let y = mpos.y + size.height as i32 - MASCOT_H as i32 - 64;
-                                let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
-                            }
-                        }
-                        if visible {
-                            let _ = w.show();
-                        }
+                    let visible = app
+                        .state::<AppState>()
+                        .store
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("store lock"))?
+                        .get_setting("mascot_visible")?
+                        .map(|value| value == "true")
+                        .unwrap_or(true);
+                    if visible {
+                        show_mascot(app.handle(), false);
+                    } else if let Err(error) = place_mascot(app.handle(), false) {
+                        log::error!("마스코트 시작 위치 복구 실패: {error}");
                     }
                 }
                 // 마스코트 클릭 통과 폴러 — 창은 상시 확장 크기라 접힘 상태의 투명 여백이
@@ -199,7 +294,9 @@ pub fn run() {
                         let mut ignoring: Option<bool> = None;
                         loop {
                             std::thread::sleep(std::time::Duration::from_millis(80));
-                            let Some(w) = handle.get_webview_window("mascot") else { continue };
+                            let Some(w) = handle.get_webview_window("mascot") else {
+                                continue;
+                            };
                             if !w.is_visible().unwrap_or(false) {
                                 continue;
                             }
@@ -208,7 +305,11 @@ pub fn run() {
                                 .mascot_expanded
                                 .load(std::sync::atomic::Ordering::Relaxed);
                             let interactive = expanded
-                                || match (handle.cursor_position(), w.outer_position(), w.scale_factor()) {
+                                || match (
+                                    handle.cursor_position(),
+                                    w.outer_position(),
+                                    w.scale_factor(),
+                                ) {
                                     (Ok(c), Ok(p), Ok(s)) => {
                                         let side = ROBOT_SIDE * s;
                                         let rx = p.x as f64 + MASCOT_W * s - side;
