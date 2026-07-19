@@ -30,6 +30,16 @@ function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 }
 
+// 시각은 서버가 UTC(ISO)로 준다. 화면에는 KST(+9)로 HH:MM 표시 — 한국 사용자 기준.
+function kstTime(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(d)
+}
+
 function showPanel(title: string, html: string) {
   panelTitle.textContent = title
   panelBody.innerHTML = html
@@ -233,9 +243,10 @@ function hubIssuesHTML(data: SpaceView): string {
           <div class="fc-title">${statusBadge(i.status)} ${esc(i.title)}</div>
           <div class="timeline">
             ${i.timeline
-              .map(
-                (t) => `<div class="tl-step"><b>${esc(t.label)}</b><span class="tl-actor">${esc(t.actor)}</span></div>`,
-              )
+              .map((t) => {
+                const at = kstTime(t.at)
+                return `<div class="tl-step"><b>${esc(t.label)}</b><span class="tl-actor">${esc(t.actor)}</span>${at ? `<span class="tl-at">${at}</span>` : ''}</div>`
+              })
               .join('')}
           </div>
         </div>`,
@@ -256,12 +267,16 @@ function hubActivityHTML(data: SpaceView): string {
   const items = data.agents.length
     ? data.agents
         .map(
-          (a) => `
+          (a) => {
+            const at = kstTime(a.last_active_at)
+            const status = a.status_line || (a.status === 'working' ? '활동 중' : at ? `마지막 활동 ${at}` : '자리 비움')
+            return `
         <div class="agent-row ${a.status === 'working' ? '' : 'off'}">
           <span class="agent-dot ${a.status === 'working' ? 'on' : ''}"></span>
           <span class="agent-name">${esc(a.name)}</span>
-          <span class="agent-status">${esc(a.status_line || (a.status === 'working' ? '활동 중' : '자리 비움'))}</span>
-        </div>`,
+          <span class="agent-status">${esc(status)}</span>
+        </div>`
+          },
         )
         .join('')
     : '<p class="muted small">표시할 항목이 없어요</p>'

@@ -179,6 +179,7 @@ button { font: inherit; cursor: pointer; }
 .feed-card .timeline { margin: 0; padding-left: 8px; border-left: 2px solid #2b3345; display: grid; gap: 5px; }
 .tl-step { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: #c8cfd8; }
 .tl-actor { color: #767d87; font-size: 11px; }
+.tl-at { margin-left: auto; color: #6b727d; font-size: 11px; font-variant-numeric: tabular-nums; }
 .small { font-size: 12px; }
 
 .agent-row {
