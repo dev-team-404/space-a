@@ -255,6 +255,9 @@ async function renderRoom(spaceId: string) {
     showPanel('연결 오류', `스페이스 데이터를 불러오지 못했습니다.<br/>${esc(String(e))}`)
     data = { space_id: spaceId, viewer_tier: 'member', agents: [], issues: [], knowledge: [], visits: null }
   }
+  if (location.hash !== `#room/${spaceId}` && location.hash !== `#room/${encodeURIComponent(spaceId)}`) {
+    return
+  }
 
   const title = $('room-title')
   const floors = floorsCache
