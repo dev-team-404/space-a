@@ -5,7 +5,7 @@
   ① 일기가 매일 같은 내용(전부 context7 빼라는 얘기), 이전 며칠 일기를 참조하면 좋겠다,
   ② 이모지가 없다(넣기로 했는데), ③ 배경(파스텔 꾸미기)이 안 보인다,
   ④ 홈 "절약 실천 top3"가 길어지면 가로 스크롤 + 위 주간 사용량이 늘어진다.
-- 선행: 킥오프·진단 문서 `docs/brainstroming/2026-07-10-diary-variety-ui-fixes-kickoff.md`
+- 선행: 킥오프·진단 문서 `docs/brainstorming/2026-07-10-diary-variety-ui-fixes-kickoff.md`
 - 다음 단계: writing-plans → **인라인 실행**(소규모 backend+front) → push+PR(base=main) → 앱DB 재생성 육안
 
 ## 1. 진단 (조사 완료 — 재조사 불필요)

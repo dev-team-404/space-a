@@ -27,10 +27,10 @@
 
 ### Task 0: 문서 (스펙·플랜·킥오프)
 
-- [ ] 스펙 `docs/specs/2026-07-10-diary-variety-ui-fixes-design.md`, 플랜(본 파일), 킥오프 `docs/brainstroming/2026-07-10-diary-variety-ui-fixes-kickoff.md` 커밋.
+- [ ] 스펙 `docs/specs/2026-07-10-diary-variety-ui-fixes-design.md`, 플랜(본 파일), 킥오프 `docs/brainstorming/2026-07-10-diary-variety-ui-fixes-kickoff.md` 커밋.
 
 ```bash
-git add docs/specs/2026-07-10-diary-variety-ui-fixes-design.md docs/plans/2026-07-10-diary-variety-ui-fixes.md docs/brainstroming/2026-07-10-diary-variety-ui-fixes-kickoff.md
+git add docs/specs/2026-07-10-diary-variety-ui-fixes-design.md docs/plans/2026-07-10-diary-variety-ui-fixes.md docs/brainstorming/2026-07-10-diary-variety-ui-fixes-kickoff.md
 git commit -m "docs(diary): 다양성+UI 픽스 4건 스펙·플랜·킥오프"
 ```
 

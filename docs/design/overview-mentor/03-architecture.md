@@ -17,7 +17,7 @@ agent-mentor/
 │  ├─ chat.html → App.svelte       # 미니홈피 창
 │  ├─ mascot.html → Mascot.svelte  # 마스코트 창
 │  └─ lib/                  #   api.ts(브리지) / ui/(탭) / robot/(절차 렌더)
-└─ docs/                    # brainstroming(킥오프) / specs(설계) / plans(구현 플랜) / overview(이 문서)
+└─ docs/                    # brainstorming(킥오프) / specs(설계) / plans(구현 플랜) / overview(이 문서)
 ```
 
 **의존 방향은 단방향**: `src/`(프론트) → `src-tauri`(셸) → `crates/core`(로직).

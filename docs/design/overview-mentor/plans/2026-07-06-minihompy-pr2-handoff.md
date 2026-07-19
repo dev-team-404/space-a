@@ -60,4 +60,4 @@ export RUSTUP_TOOLCHAIN=stable-x86_64-pc-windows-gnu
 ## E2E 후
 
 - 사용자 E2E 통과 → superpowers:finishing-a-development-branch → PR 생성.
-- PR② 머지로 3단계(미니홈피 대개편) 완료. 다음 후보: 코칭 v2.1(`docs/brainstroming/2026-07-06-coaching-v2.1-kickoff.md` — R5 재설계·R11 승격·ToolResult/UserPrompt 수집).
+- PR② 머지로 3단계(미니홈피 대개편) 완료. 다음 후보: 코칭 v2.1(`docs/brainstorming/2026-07-06-coaching-v2.1-kickoff.md` — R5 재설계·R11 승격·ToolResult/UserPrompt 수집).

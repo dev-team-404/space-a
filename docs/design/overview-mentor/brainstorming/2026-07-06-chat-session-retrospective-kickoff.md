@@ -1,7 +1,7 @@
 # 채팅 세션 회고 — 킥오프 시드 (브레인스토밍 전 메모)
 
 > **상태**: 사용자 아이디어 접수(2026-07-06). 브레인스토밍 미진행 — 새 세션에서 superpowers:brainstorming부터.
-> **선행**: PR②(채팅 탭) 머지 후. 코칭 v2.1의 UserPrompt 수집(`docs/brainstroming/2026-07-06-coaching-v2.1-kickoff.md`)과 시너지 큼.
+> **선행**: PR②(채팅 탭) 머지 후. 코칭 v2.1의 UserPrompt 수집(`docs/brainstorming/2026-07-06-coaching-v2.1-kickoff.md`)과 시너지 큼.
 
 ## 사용자 요구 (원문 요지)
 

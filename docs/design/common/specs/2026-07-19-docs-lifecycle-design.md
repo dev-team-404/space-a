@@ -11,7 +11,7 @@
 
 | 현재 작업 문서 루트 | 비고 |
 |---|---|
-| `docs/design/overview-mentor/{brainstroming,specs,plans}` | `brainstroming`은 오타 디렉터리 |
+| `docs/design/overview-mentor/{brainstorming,specs,plans}` | brainstorming은 설계 당시 r·o가 뒤바뀐 오타 철자였음 (실행 순서 ②에서 교정) |
 | `docs/superpowers/{specs,plans}` | superpowers 스킬 기본 경로 |
 | `docs/design/overview-mentor/superpowers/plans` | 드리프트 사례 |
 
@@ -21,7 +21,7 @@
    낡은 계획을 현재 상태로 오인할 수 있다.
 2. **사람 가독성 저하** — 사람용 문서(`docs/highlevel/`, `docs/adr/`)와 달리 작업
    문서는 정제되지 않는데, 활성 목록에 수십 개가 쌓여 탐색이 어렵다.
-3. **경로 드리프트 실재** — Rust 주석이 `docs/brainstroming/...`, plan이
+3. **경로 드리프트 실재** — Rust 주석이 `docs/brainstorming/...`, plan이
    `docs/specs/...` 등 실제와 다른 경로를 참조하는 사례가 이미 존재한다.
 
 ## 설계 원칙 (피로도 최소화)
@@ -117,7 +117,7 @@ archived: 2026-07-19
 | 단계 | 내용 | 검증 |
 |---|---|---|
 | ① 구축 | 스킬 2개 작성(`.claude/skills/`), CLAUDE.md·docs/README.md 규칙 추가, ADR 작성 | 스킬 문서 리뷰, 규칙 문구 확인 |
-| ② rename | `brainstroming` → `brainstorming` `git mv` + 참조 파일 18개 갱신 (문서 15 + Rust 주석 3) | `brainstroming` 문자열 잔존 0건 |
+| ② rename | 오타 철자 디렉터리를 `brainstorming`으로 `git mv` + 참조 파일 18개 갱신 (문서 15 + Rust 주석 3) | 오타 철자 문자열 잔존 0건 |
 | ③ 첫 스윕 | `/docs-sweep` 실행 → 완료 추정 후보 목록 제시 | 스킬 동작 검증 겸임 |
 | ④ 일괄 아카이브 | 사용자 승인분만 `/docs-archive`로 이동 | 옛 경로 참조 0건, 미러 구조 일치 |
 

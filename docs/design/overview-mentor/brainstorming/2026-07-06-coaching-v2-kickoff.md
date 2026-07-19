@@ -10,7 +10,7 @@
 ## 시작 프롬프트 (새 세션에 그대로 붙여넣기)
 
 ```
-코칭 v2 시작. docs/brainstroming/2026-07-06-coaching-v2-kickoff.md 읽고 브레인스토밍부터.
+코칭 v2 시작. docs/brainstorming/2026-07-06-coaching-v2-kickoff.md 읽고 브레인스토밍부터.
 관례: 스펙은 docs/specs/, 플랜은 docs/plans/, 브레인스토밍 중엔 코드 금지.
 카탈로그 우선순위·집계 finding 데이터 모델·자동화 판별 오탐선은 질문으로 구체화할 것.
 구현 단계 빌드 환경은 docs/plans/2026-07-05-minihompy-restyle-pr1-handoff.md 참조 (Windows면 mingw 레시피 필수).

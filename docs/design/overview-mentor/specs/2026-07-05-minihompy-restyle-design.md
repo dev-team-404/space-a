@@ -3,7 +3,7 @@
 > **상태**: 브레인스토밍 합의 완료 (2026-07-05)
 > **범위**: chat 창의 미니홈피 레이아웃 전환 + 파스텔 모던 스킨, 홈/코칭/다이어리/채팅 탭 완성,
 > 마이룸, 마스코트 클릭·말풍선 정책 개편, triage 백로그. **updater는 제외**(서명 인프라 미확정).
-> **선행**: 비전 스펙 `2026-07-03-frontend-vision-design.md`, 킥오프 시드 `docs/brainstroming/2026-07-05-minihompy-restyle-kickoff.md`.
+> **선행**: 비전 스펙 `2026-07-03-frontend-vision-design.md`, 킥오프 시드 `docs/brainstorming/2026-07-05-minihompy-restyle-kickoff.md`.
 > **제약**: Tauri v2 전용, Windows 전용, 외부 전송은 Engine 옵트인뿐(기존 경계 유지).
 
 ---

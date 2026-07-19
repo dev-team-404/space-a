@@ -38,7 +38,7 @@ export RUSTUP_TOOLCHAIN=stable-x86_64-pc-windows-gnu
 
 ## 리포 관례 (메모리 이관)
 
-- **경로**: 설계 스펙 `docs/specs/YYYY-MM-DD-<topic>-design.md`, 플랜 `docs/plans/`, 브레인스토밍 시드 `docs/brainstroming/`.
+- **경로**: 설계 스펙 `docs/specs/YYYY-MM-DD-<topic>-design.md`, 플랜 `docs/plans/`, 브레인스토밍 시드 `docs/brainstorming/`.
 - **SDD 관례**: 태스크별 fresh 서브에이전트 구현 + 리뷰 → 원장(`.superpowers/sdd/progress.md`)에 태스크별 상태·게이트 수치 기록 → **최종 whole-branch 리뷰는 상위 모델(fable급) 1회** — PR #8·#9 모두 이 단계에서 Critical을 잡았음. 구현 서브에이전트는 sonnet, 컨트롤러는 opus면 충분(플랜에 코드가 verbatim으로 있음).
 - **PR 관례**: 푸시 → PR 생성 → 봇 리뷰(gemini/Codex)는 **코드 대조 검증 → 픽스 → 인라인 답글** → 사용자 수동 E2E가 최종 게이트.
 - **핵심 기술 학습**(재발 방지):

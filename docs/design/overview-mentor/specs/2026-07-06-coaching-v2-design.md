@@ -1,6 +1,6 @@
 # 코칭 v2 설계 스펙 — "실제 조치 가능한 것만 코칭한다"
 
-- 작성: 2026-07-06 (브레인스토밍 산출물, 킥오프: `docs/brainstroming/2026-07-06-coaching-v2-kickoff.md`)
+- 작성: 2026-07-06 (브레인스토밍 산출물, 킥오프: `docs/brainstorming/2026-07-06-coaching-v2-kickoff.md`)
 - 기준 커밋: main `194db90`+ (PR #10 포함 — 코칭 카드/세션 상세 UI, model_raw, transcript 파서 존재)
 - 다음 단계: writing-plans → `docs/plans/` → SDD → PR → 사용자 E2E
 
@@ -37,7 +37,7 @@ PR① E2E에서 R7("가벼운 작업에 Opus는 과해요" + `/model haiku`)이 
 - **기존 R5(반복 Read) — 발화 보류 + 기존 카드 삭제 (2026-07-06 E2E, 사용자 결정)**: 반복 읽기는
   에이전트/컨텍스트 압축 동작이라 조치 주체가 없고(v2 원칙 위반), 세션 단위 dedup이라 카드 스팸이 재발함.
   ops.rs 등록 해제 + 스캔 시 `rule_id='R5' AND scope_kind='session'` 일괄 삭제(§3 이행과 동일 방식).
-  크로스세션 반복 파일 → CLAUDE.md 레버로 v2.1 재설계 — `docs/brainstroming/2026-07-06-coaching-v2.1-kickoff.md`
+  크로스세션 반복 파일 → CLAUDE.md 레버로 v2.1 재설계 — `docs/brainstorming/2026-07-06-coaching-v2.1-kickoff.md`
 
 ## 3. 데이터 모델
 
@@ -152,7 +152,7 @@ R7 v2는 이 결과에 포함된 세션을 집계에서 **제외**한다(이중 
 > **발화 보류 (2026-07-06, 사용자 결정)**: ToolResult 미수집 상태에서는 연속 호출의 원인(권한 거부 vs
 > 편집 실패 vs 정상 반복)을 판별할 수 없어 오탐 다발 위험이 큼. 룰 코드·테스트는 유지하되
 > `ops.rs` 등록에서 제외. ToolResult 수집(§2 유예 R3/R4/R8과 동일 선행 과제) 후 결정론 판정으로
-> 승격 — 후속: `docs/brainstroming/2026-07-06-coaching-v2.1-kickoff.md`
+> 승격 — 후속: `docs/brainstorming/2026-07-06-coaching-v2.1-kickoff.md`
 
 ### 4.5 R12 — 설치 스킬 미활용 (신규, 킥오프 6①)
 

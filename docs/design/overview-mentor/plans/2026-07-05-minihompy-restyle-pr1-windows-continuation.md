@@ -206,7 +206,7 @@ npm run tauri dev
 
 **E2E 최종 판정 (2026-07-06, 사용자)**: §4 체크 완료·통과. §5.1 잔여 2건(a11y 억제 유지, expand 레이스 —
 드리프트 미관측)은 tracked debt로 수용. 코칭 규칙 품질은 별도 라운드로 —
-`docs/brainstroming/2026-07-06-coaching-v2-kickoff.md`. **머지 진행.**
+`docs/brainstorming/2026-07-06-coaching-v2-kickoff.md`. **머지 진행.**
 
 ## 8. 마무리 & 다음 (PR②)
 

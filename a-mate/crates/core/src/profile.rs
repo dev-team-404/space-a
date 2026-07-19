@@ -1,5 +1,5 @@
 //! 역량 프로필 감지 — 사용자의 현재 AX 사다리 위치를 로그에서 결정론적으로 추정한다.
-//! (콘텐츠 큐레이션 킥오프 `docs/brainstroming/2026-07-14-content-curation-kickoff.md` §What)
+//! (콘텐츠 큐레이션 킥오프 `docs/brainstorming/2026-07-14-content-curation-kickoff.md` §What)
 //!
 //! 순수 읽기 함수: store를 조회해 CompetencyProfile을 만든다. 부수효과·네트워크 없음.
 //! 신호는 전부 기존 수집 데이터(events·findings·inventory)에서만 온다 — 새 수집 없음.
