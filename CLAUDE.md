@@ -17,6 +17,13 @@ SPACE-A는 **문서 우선** 프로젝트입니다. 구조·아키텍처 결정�
 - **중요한 결정은 ADR로.** 되돌리기 어려운 결정(레포 구성, 스택, 스키마 등)은
   `docs/adr/`에 `NNNN-title.md` 형식으로 남긴다. 채택된 ADR은 수정하지 않고 새 ADR로 대체한다.
 - **설계 안은 `docs/design/`에.** 컴포넌트별 설계 안을 자유롭게 작성한다.
+- **작업 문서 위치.** spec/plan/kickoff 문서는 해당 컴포넌트의
+  `docs/design/<component>/{specs,plans,brainstorming}`에 저장한다 (superpowers 등
+  스킬의 기본 저장 경로보다 이 규칙이 우선). 컴포넌트가 애매한 레포 공통 작업은
+  `docs/design/common/{specs,plans}`에. `docs/superpowers/`는 동결 — 신규 생성 금지.
+- **완료 시 아카이브 (DoD).** 구현 plan이 완료되면 같은 PR에서 `docs-archive` 스킬을
+  실행해 관련 작업 문서를 `docs/archive/` 미러로 옮긴다. 규칙 상세: [ADR 0013](./docs/adr/0013-docs-lifecycle-and-archive.md)
+- **`docs/archive/`는 기본 탐색에서 제외.** 과거 이력 조사가 목적일 때만 명시적으로 읽는다.
 - **문서 형식.** 한국어 기준, 표·다이어그램을 적극 활용해 읽기 쉽게 쓴다.
 
 ## 커밋 메시지 규칙
@@ -55,9 +62,9 @@ chore: set up gitignore and base structure
 - 플랫폼: Windows 전용. macOS/Linux 분기 불필요.
 - 프라이버시: 트랜스크립트는 기본 로컬 처리. 외부 전송은 Engine 선택(사내 on-prem 기본)으로만.
 - 무거운 데이터 처리(JSONL 파싱/집계/감시)는 Rust 백엔드에서.
-- 설계 스펙·구현 계획: [docs/design/overview-mentor/](./docs/design/overview-mentor/) 아래 `specs/`, `plans/`.
+- 설계 스펙·구현 계획: [docs/design/a-mate/](./docs/design/a-mate/) 아래 `specs/`, `plans/`.
 
 ## 참고
 
 - 프로젝트 개요: [`README.md`](./README.md)
-- 멘토 앱 빌드·실행: [`docs/design/overview-mentor/build-and-run.md`](./docs/design/overview-mentor/build-and-run.md)
+- 멘토 앱 빌드·실행: [`docs/design/a-mate/build-and-run.md`](./docs/design/a-mate/build-and-run.md)

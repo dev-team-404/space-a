@@ -183,7 +183,7 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
 
 /// 콘텐츠 큐레이션 — 프로필 감지 → (내장 팁 + 피드) 스코어링·정렬 → persist → 노출 목록 반환.
 /// 결정론: `feed_items`는 호출부(가장자리)가 네트워크로 미리 가져와 넘긴다(테스트는 빈 벡터).
-/// (킥오프 `docs/brainstroming/2026-07-14-content-curation-kickoff.md` §How)
+/// (킥오프 `docs/brainstorming/2026-07-14-content-curation-kickoff.md` §How)
 pub fn run_curation(
     store: &SqliteStore,
     feed_items: Vec<crate::content::ContentItem>,

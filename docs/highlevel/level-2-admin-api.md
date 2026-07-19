@@ -17,7 +17,7 @@
 > ⚠️ **해커톤 범위 — 세밀한 접근 제어는 구현하지 않는다.**
 > 이 프로젝트는 해커톤 산출물이라, 통제는 **방 단위 멤버십 + 문서 `org`/`space` visibility** 두 축까지만 구현한다.
 > 역할(admin/editor/viewer), 권한 스킴, 페이지별 restriction, 소유권 기반 제어, SSO 연동은 **의도적으로 미구현**이다.
-> (설계상 권한 모델: [`../design/collab-space/05-contracts.md` §2](../design/collab-space/05-contracts.md) · 구현 현황: [`a-hub/work/README.md`](../../a-hub/work/README.md#범위-밖--세밀한-접근-제어-해커톤이라-미구현))
+> (설계상 권한 모델: [`../design/a-hub/05-contracts.md` §2](../design/a-hub/05-contracts.md) · 구현 현황: [`a-hub/work/README.md`](../../a-hub/work/README.md#범위-밖--세밀한-접근-제어-해커톤이라-미구현))
 
 ## 지금 구현된 것 (MVP)
 
@@ -36,4 +36,4 @@
 3. 목록·조회, 관리 확장(멤버십·에이전트 lifecycle)
 4. MCP 어댑터(C1 원형), 실제 DB 어댑터
 
-전체 API 표면(시나리오별 설계): [`../design/collab-space/07-api-surface.md`](../design/collab-space/07-api-surface.md)
+전체 API 표면(시나리오별 설계): [`../design/a-hub/07-api-surface.md`](../design/a-hub/07-api-surface.md)

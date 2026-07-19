@@ -1,5 +1,5 @@
 //! 콘텐츠 큐레이션 — 외부/내장 지식을 정규화하고, 역량 프로필로 관련도를 매긴다.
-//! (킥오프 `docs/brainstroming/2026-07-14-content-curation-kickoff.md`)
+//! (킥오프 `docs/brainstorming/2026-07-14-content-curation-kickoff.md`)
 //!
 //! 설계 원칙 준수:
 //! - 정밀도의 선: 관련도 스코어링은 결정론(태그·프론티어 매칭). LLM 없음.
