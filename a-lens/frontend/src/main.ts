@@ -109,17 +109,17 @@ function showAgentPanel(agent: SpaceAgent) {
   panelTitle.textContent = `🙂 ${agent.name}`
   positionPanel()
   panel.hidden = false
-  // 허브 실데이터엔 이름·상태·마지막 활동만 있다. 역할/소유자는 (있으면=데모) 조건부로만.
+  // 허브 실데이터엔 이름·상태·최근 활동(내용+시각)만 있다. 역할/소유자는 (있으면=데모) 조건부로만.
   const lines = [
     { label: '상태', value: agent.status === 'working' ? '🟢 활동 중' : '⚪ 자리 비움' },
   ]
   if (agent.role) lines.unshift({ label: '역할', value: agent.role })
   if (agent.owner) lines.unshift({ label: '소유자', value: agent.owner })
-  const lastAt = kstTime(agent.last_active_at)
-  if (agent.status !== 'working' && lastAt) lines.push({ label: '마지막 활동', value: `${lastAt} (KST)` })
   if (agent.status_line) lines.push({ label: '', value: agent.status_line })
-  // 최근 a-hub 활동을 사람이 읽기 쉽게 풀어쓴 설명 (백엔드 recent_activity.detail)
+  // 최근 a-hub 활동을 사람이 읽기 쉽게 풀어쓴 설명 + 그 활동을 한 시각(KST).
   if (agent.recent_activity?.detail) lines.push({ label: '최근 활동', value: agent.recent_activity.detail })
+  const lastAt = kstTime(agent.last_active_at)
+  if (lastAt) lines.push({ label: '최근 활동 시간', value: `${lastAt} (KST)` })
   typeLines(lines)
 }
 
