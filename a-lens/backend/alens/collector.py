@@ -104,6 +104,32 @@ def _flatten_tree(nodes: list[dict]) -> list[dict]:
     return flat
 
 
+# 허브 이슈는 상태 전이 이력(timeline)을 아직 내려주지 않는다 (#40 대기). 프론트 뷰모델
+# (SpaceIssue.timeline)을 채우기 위해 현재 상태 1스텝을 합성한다 — 실제 단계별 이력은
+# 허브가 이슈 이벤트를 제공하면 대체한다.
+_ISSUE_STEP_LABEL = {"open": "이슈 발생", "knowledge_linked": "지식 연결", "resolved": "해결 완료"}
+
+
+def _issue_vm(issue: dict, member_name: dict[str, str]) -> dict:
+    status = issue.get("status", "open")
+    opener = issue.get("opened_by")
+    return {
+        "issue_id": issue.get("issue_id", ""),
+        "title": issue.get("title", ""),
+        "status": status,
+        "opened_by": opener,
+        "timeline": [
+            {
+                "step": status,
+                "label": _ISSUE_STEP_LABEL.get(status, status),
+                "actor": member_name.get(opener, opener or ""),
+                "at": issue.get("updated_at") or issue.get("created_at"),
+                "note": "",
+            }
+        ],
+    }
+
+
 # ── 허브 스냅숏 ──────────────────────────────────────────────
 
 
@@ -195,10 +221,12 @@ def _hub_snapshot() -> dict:
                     "last_active_at": seen.isoformat() if seen else None,
                 }
 
+            member_name = {m["agent_id"]: m.get("name", m["agent_id"]) for m in members}
+
             details[sid] = {
                 "space_id": sid,
                 "agents": [_agent(m) for m in members],
-                "issues": issues,
+                "issues": [_issue_vm(it, member_name) for it in issues],
                 "knowledge": knowledge_docs,
             }
             for p in pages:
