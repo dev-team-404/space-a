@@ -105,11 +105,15 @@ pub fn run_inventory(store: &mut SqliteStore) -> Result<Vec<String>> {
         };
         let cache = hs.claude_root.join("plugins").join("cache");
         let inv = collect_host_inventory(&claude_json, &settings, &cache);
-        if !inv.complete {
-            warnings.push(format!("host {} 중첩 .mcp.json 읽기 실패 — reconcile 스킵", hs.host));
-            continue;
+        // MCP 인벤토리는 completeness 게이트를 둔다: 중첩 .mcp.json 하나라도 못 읽으면 저장을
+        // 건너뛴다(미완 인벤토리로 R1이 서버를 미사용으로 오탐하는 것 방지). 단, 이 게이트는 MCP
+        // 인벤토리에만 적용하고 아래 독립 수집(플러그인·호스트 설정·개인 스킬)은 계속 진행한다 —
+        // 하나의 .mcp.json 실패가 R7·R13 재료(모델/effort·인벤토리)까지 막지 않도록.
+        if inv.complete {
+            store.replace_host_inventory(&hs.host, &inv.entries)?;
+        } else {
+            warnings.push(format!("host {} 중첩 .mcp.json 읽기 실패 — MCP 인벤토리 스킵", hs.host));
         }
-        store.replace_host_inventory(&hs.host, &inv.entries)?;
         let (plugins, plugins_complete) = scan_plugin_inventory(&settings, &cache);
         if !plugins_complete {
             warnings.push(format!("host {} 플러그인 스킬 스캔 실패 — R2 스킵", hs.host));
@@ -135,7 +139,8 @@ pub fn run_inventory(store: &mut SqliteStore) -> Result<Vec<String>> {
             }
         };
         for cwd in cwds {
-            let p = std::path::Path::new(&cwd).join(".claude").join("skills");
+            // WSL 세션 cwd(/home/...)는 Windows에서 못 여니 distro UNC로 변환해서 스캔.
+            let p = hs.resolve_cwd(&cwd).join(".claude").join("skills");
             personal.extend(crate::inventory::scan_personal_skills(&p, "project"));
         }
         if let Err(e) = store.replace_personal_skills(&hs.host, &personal) {

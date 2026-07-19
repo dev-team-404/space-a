@@ -1061,23 +1061,26 @@ pub fn ingest_file(
     }
     let inserted = store.upsert_events(&all)?;
 
-    // 서브에이전트 하위 트랜스크립트 수 — <세션id>/subagents/*.jsonl 존재 카운트만 (전문 파싱은 후속, 코칭 v3 §4.1-3)
-    // 이 카운트는 subagents/ 아래 모든 *.jsonl을 포함한다 — 스펙 §4.1-3의 agent-*.jsonl보다 넓은 상위집합(의도).
-    let sub_dir = file.with_extension("").join("subagents");
-    if let Ok(entries) = std::fs::read_dir(&sub_dir) {
-        let n = entries
-            .flatten()
-            .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jsonl"))
-            .count() as i64;
-        if let Some(sid) = file.file_stem().and_then(|s| s.to_str()) {
-            store.conn.execute(
-                "UPDATE sessions SET subagent_files=?2 WHERE session_id=?1",
-                rusqlite::params![sid, n],
-            )?;
+    // 파일이 실제로 자란 경우에만 subagents 스캔·offset 기록을 수행한다 — 무변경 파일에
+    // 매 수집 주기마다 read_dir + DB 쓰기가 반복되는 것 방지(Gemini medium).
+    if new_offset > from {
+        // 서브에이전트 하위 트랜스크립트 수 — <세션id>/subagents/*.jsonl 존재 카운트만 (전문 파싱은 후속, 코칭 v3 §4.1-3)
+        // 이 카운트는 subagents/ 아래 모든 *.jsonl을 포함한다 — 스펙 §4.1-3의 agent-*.jsonl보다 넓은 상위집합(의도).
+        let sub_dir = file.with_extension("").join("subagents");
+        if let Ok(entries) = std::fs::read_dir(&sub_dir) {
+            let n = entries
+                .flatten()
+                .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jsonl"))
+                .count() as i64;
+            if let Some(sid) = file.file_stem().and_then(|s| s.to_str()) {
+                store.conn.execute(
+                    "UPDATE sessions SET subagent_files=?2 WHERE session_id=?1",
+                    rusqlite::params![sid, n],
+                )?;
+            }
         }
+        store.set_offset(&file_key, new_offset)?;
     }
-
-    store.set_offset(&file_key, new_offset)?;
     Ok(inserted)
 }
 
@@ -1250,6 +1253,44 @@ mod tests {
         assert_eq!(store.count_events().unwrap(), 3);
         // idempotent re-insert
         assert_eq!(store.upsert_events(&evs).unwrap(), 0);
+    }
+
+    #[test]
+    fn bash_secret_never_persists_to_any_text_column() {
+        // 계약: Bash 명령 내 시크릿은 pattern_id만 저장되고 원문은 어떤 텍스트 컬럼에도 남지 않는다.
+        use crate::adapter::SourceAdapter;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let adapter = crate::adapter::ClaudeCodeAdapter {
+            root: std::path::PathBuf::from("."),
+            host: "Windows".into(),
+        };
+        let secret = "sk-ant-api03-AbCdEfGh123456";
+        let line = format!(
+            r#"{{"type":"assistant","sessionId":"s1","uuid":"u1","message":{{"model":"claude-opus-4-8","usage":{{"input_tokens":1,"output_tokens":1}},"content":[{{"type":"tool_use","id":"t1","name":"Bash","input":{{"command":"export ANTHROPIC_API_KEY={secret}"}}}}]}}}}"#
+        );
+        let evs = adapter.map(&line, "s1.jsonl", 0);
+        store.upsert_events(&evs).unwrap();
+
+        for col in [
+            "tool_target", "raw_name", "model_raw", "tool_kind", "tool_server",
+            "tool_tool", "session_id", "project_id", "source_file", "dedup_key",
+        ] {
+            let hits: i64 = store
+                .conn
+                .query_row(
+                    &format!("SELECT COUNT(*) FROM events WHERE {col} LIKE ?1"),
+                    params![format!("%{secret}%")],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert_eq!(hits, 0, "raw secret leaked into events.{col}");
+        }
+        // pattern_id 플래그는 정상 방출
+        let flags: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM events WHERE kind='secret_flag'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(flags, 1);
     }
 
     #[test]

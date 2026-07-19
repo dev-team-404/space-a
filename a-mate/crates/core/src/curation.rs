@@ -96,10 +96,16 @@ fn token_len_after(text: &str, start: usize) -> usize {
 pub fn find_secret_patterns(text: &str) -> Vec<&'static str> {
     let mut out: Vec<&'static str> = Vec::new();
     for (id, prefix) in SECRET_PREFIXES {
-        if let Some(pos) = text.find(prefix) {
+        // 첫 발생만 보면 앞선 짧은 언급(오탐 억제 대상)에 가려 뒤의 실제 키를 놓친다 —
+        // 유효 토큰이 붙은 발생을 찾을 때까지 모든 위치를 훑는다.
+        let mut search_start = 0;
+        while let Some(rel) = text[search_start..].find(prefix) {
+            let pos = search_start + rel;
             if token_len_after(text, pos + prefix.len()) >= 8 {
                 out.push(id);
+                break;
             }
+            search_start = pos + prefix.len();
         }
     }
     // 개인키 블록: BEGIN 헤더에 PRIVATE KEY 명시된 경우만
@@ -108,14 +114,18 @@ pub fn find_secret_patterns(text: &str) -> Vec<&'static str> {
             out.push("private_key_block");
         }
     }
-    // AWS Access Key ID: "AKIA" + 대문자/숫자 16자
-    if let Some(pos) = text.find("AKIA") {
-        let rest = text[pos + 4..].as_bytes();
+    // AWS Access Key ID: "AKIA" + 대문자/숫자 16자 (마찬가지로 모든 발생을 훑는다)
+    let mut search_start = 0;
+    while let Some(rel) = text[search_start..].find("AKIA") {
+        let pos = search_start + rel;
+        let rest = &text.as_bytes()[pos + 4..];
         if rest.len() >= 16
             && rest[..16].iter().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
         {
             out.push("aws_access_key");
+            break;
         }
+        search_start = pos + 4;
     }
     out.sort_unstable();
     out.dedup();
@@ -156,6 +166,20 @@ mod tests {
         assert_eq!(
             find_secret_patterns("ghp_AbCdEf0123456789 and sk-ant-api03-AbCdEfGh123456"),
             vec!["anthropic_api_key", "github_token"]
+        );
+    }
+
+    #[test]
+    fn secret_patterns_detect_real_key_after_short_prefix_mention() {
+        // 앞선 짧은 접두 언급(오탐 억제 대상) 뒤에 실제 키가 오면 놓치면 안 된다 —
+        // 첫 발생만 검사하던 회귀 방지.
+        assert_eq!(
+            find_secret_patterns("ghp_ 접두를 쓰세요; 실제키 ghp_AbCdEf0123456789"),
+            vec!["github_token"]
+        );
+        assert_eq!(
+            find_secret_patterns("AKIA는 접두일 뿐; 실제 AKIAIOSFODNN7EXAMPLE"),
+            vec!["aws_access_key"]
         );
     }
 

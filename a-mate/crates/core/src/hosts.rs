@@ -25,6 +25,20 @@ impl HostSource {
     pub fn adapter(&self) -> ClaudeCodeAdapter {
         ClaudeCodeAdapter { root: self.claude_root.clone(), host: self.host.clone() }
     }
+
+    /// 세션 cwd(호스트 관점 절대경로)를 로컬 Windows에서 접근 가능한 경로로 변환.
+    /// Windows 호스트는 그대로. WSL 호스트(`wsl:<distro>`)의 리눅스 cwd(`/home/...`)는
+    /// distro UNC 경로로 바꾼다 — 그래야 프로젝트 `.claude/skills` 를 실제로 찾을 수 있다.
+    /// UNC prefix(`\\wsl.localhost` vs `\\wsl$`)는 claude_root 가 쓴 것과 동일하게 유지한다.
+    pub fn resolve_cwd(&self, cwd: &str) -> PathBuf {
+        match self.host.strip_prefix("wsl:") {
+            None => PathBuf::from(cwd),
+            Some(distro) => {
+                let localhost = !self.claude_root.to_string_lossy().starts_with(r"\\wsl$");
+                wsl_path_to_unc(distro, cwd, localhost)
+            }
+        }
+    }
 }
 
 /// `wsl.exe -l -q` 출력(보통 UTF-16LE)을 문자열로 디코드. BOM 제거.
@@ -86,6 +100,14 @@ pub fn find_claude_roots_under(home_base: &Path) -> Vec<PathBuf> {
 fn wsl_home_base(distro: &str, localhost: bool) -> PathBuf {
     let prefix = if localhost { r"\\wsl.localhost" } else { r"\\wsl$" };
     PathBuf::from(format!(r"{prefix}\{distro}\home"))
+}
+
+/// WSL 절대경로(리눅스 cwd)를 Windows에서 접근 가능한 UNC 경로로 변환. 순수·테스트 가능.
+/// 예: ("Ubuntu-22.04", "/home/jay/proj", true) → `\\wsl.localhost\Ubuntu-22.04\home\jay\proj`.
+pub fn wsl_path_to_unc(distro: &str, wsl_path: &str, localhost: bool) -> PathBuf {
+    let prefix = if localhost { r"\\wsl.localhost" } else { r"\\wsl$" };
+    let rel = wsl_path.trim_start_matches('/').replace('/', r"\");
+    PathBuf::from(format!(r"{prefix}\{distro}\{rel}"))
 }
 
 fn windows_claude_root() -> Option<PathBuf> {
@@ -164,6 +186,45 @@ mod tests {
     #[test]
     fn find_claude_roots_missing_base_is_empty() {
         assert!(find_claude_roots_under(Path::new(r"\\wsl.localhost\nope\home")).is_empty());
+    }
+
+    #[test]
+    fn wsl_path_to_unc_maps_linux_cwd_to_distro_unc() {
+        assert_eq!(
+            wsl_path_to_unc("Ubuntu-22.04", "/home/jay/proj", true).to_string_lossy(),
+            r"\\wsl.localhost\Ubuntu-22.04\home\jay\proj"
+        );
+        assert_eq!(
+            wsl_path_to_unc("Debian", "/home/jay/proj", false).to_string_lossy(),
+            r"\\wsl$\Debian\home\jay\proj"
+        );
+    }
+
+    #[test]
+    fn resolve_cwd_passes_windows_through_and_converts_wsl() {
+        // Windows 호스트: cwd 그대로.
+        let win = HostSource { host: "Windows".into(), claude_root: PathBuf::from(r"C:\Users\jay\.claude") };
+        assert_eq!(win.resolve_cwd(r"D:\work\proj"), PathBuf::from(r"D:\work\proj"));
+
+        // WSL 호스트(localhost 루트): 리눅스 cwd → distro UNC.
+        let wsl = HostSource {
+            host: "wsl:Ubuntu-22.04".into(),
+            claude_root: PathBuf::from(r"\\wsl.localhost\Ubuntu-22.04\home\jay\.claude"),
+        };
+        assert_eq!(
+            wsl.resolve_cwd("/home/jay/proj").to_string_lossy(),
+            r"\\wsl.localhost\Ubuntu-22.04\home\jay\proj"
+        );
+
+        // WSL 호스트(\\wsl$ 폴백 루트): 동일 prefix 유지.
+        let wsl_dollar = HostSource {
+            host: "wsl:Debian".into(),
+            claude_root: PathBuf::from(r"\\wsl$\Debian\home\jay\.claude"),
+        };
+        assert_eq!(
+            wsl_dollar.resolve_cwd("/home/jay/proj").to_string_lossy(),
+            r"\\wsl$\Debian\home\jay\proj"
+        );
     }
 
     #[test]
