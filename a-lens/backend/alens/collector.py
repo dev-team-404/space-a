@@ -411,7 +411,7 @@ def _dummy_snapshot() -> dict:
                 "floor": i + 1,
                 "activity": activity,
                 "stats": {"knowledge": len(docs), "resolved": resolved, "reuse": reuses},
-                "highlight": None,
+                "highlight": raw.get("highlight"),
                 "demo": True,
             }
         )
@@ -421,6 +421,8 @@ def _dummy_snapshot() -> dict:
             "issues": issues,
             "knowledge": docs,
             "visits": raw.get("visits"),
+            # 오늘의 하이라이트 — 방 칠판에 표시할 한 줄
+            "highlight": raw.get("highlight"),
             "demo": True,
         }
 

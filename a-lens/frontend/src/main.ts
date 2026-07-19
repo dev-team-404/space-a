@@ -623,7 +623,7 @@ async function renderRoom(spaceId: string) {
     .slice(0, SCENE_MAX_AGENTS)
   currentScene = buildRoomScene(
     config,
-    { agents: sceneAgents, issues: data.issues, knowledgeCount: data.knowledge.length },
+    { agents: sceneAgents, issues: data.issues, knowledgeCount: data.knowledge.length, highlight: data.highlight },
     {
       onAgentTap: (agent) => showAgentPanel(agent),
       // 칠판(이슈)은 오른쪽 Hub "이슈 흐름"으로 흡수 — 클릭 팝업 제거 (2026-07-19).

@@ -971,9 +971,24 @@ def main() -> None:
             elif mine_issues:
                 m["activity"] = {"kind": "issue", "title": p(mine_issues)["title"]}
 
+        # 오늘의 하이라이트 — 하루치 raw data 중 가장 핵심인 사건 한 줄 (칠판에 표시).
+        # 가장 많이 재사용된 지식 > 최근 해결 이슈 순으로 뽑는다.
+        top = max(docs, key=lambda d: d["reuse_count"])
+        resolved = [i for i in issues if i["status"] == "resolved"]
+        if top["reuse_count"] > 0 and top["cited_by"]:
+            highlight = (
+                f"『{top['title']}』 지식이 {TEAM_NAME[top['cited_by'][0]]}에서 재사용됐어요"
+                f" (누적 {top['reuse_count']}회)"
+            )
+        elif resolved:
+            highlight = f"‘{resolved[0]['title']}’ 이슈가 해결됐어요"
+        else:
+            highlight = None
+
         lo1, hi1, lo2, hi2 = team["visits"]
         payload = {
             "space": {"space_id": team["space_id"], "name": team["name"]},
+            "highlight": highlight,
             "visits": {"today": rng.randint(lo1, hi1), "total": rng.randint(lo2, hi2)},
             "members": members,
             "issues": issues,

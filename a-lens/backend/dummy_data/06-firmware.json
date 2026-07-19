@@ -3,6 +3,7 @@
   "space_id": "firmware",
   "name": "펌웨어개발팀"
  },
+ "highlight": "『GPIO 인터럽트 레이턴시 측정 결과』 지식이 SoC 설계팀에서 재사용됐어요 (누적 15회)",
  "visits": {
   "today": 22,
   "total": 518
