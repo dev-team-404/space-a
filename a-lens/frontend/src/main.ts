@@ -69,6 +69,9 @@ async function ensureApp() {
   await app.init({ resizeTo: window, background: '#0d1220', antialias: true })
   sceneHost.appendChild(app.canvas)
   appReady = true
+  // 렌더러가 실제로 리사이즈된 뒤(screen.width 갱신 후) 씬을 다시 맞춘다.
+  // window resize만 듣던 이전 방식은 resizeTo의 반영 타이밍과 어긋나 배율이 안 맞았다.
+  app.renderer.on('resize', () => fitScene())
   window.addEventListener('resize', () => fitScene())
 }
 
