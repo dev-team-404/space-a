@@ -2,7 +2,7 @@
 // 로비(사옥) 화면은 보류 — 이슈 #44 순서 조정. 데이터는 백엔드 뷰모델만 사용 (ADR 0003).
 
 import { Application, Container } from 'pixi.js'
-import { fetchLobby, fetchSpace, type LobbyFloor, type SpaceView } from './api'
+import { fetchLobby, fetchSpace, type LobbyFloor, type SpaceAgent, type SpaceView } from './api'
 import { openBuilder } from './builder'
 import { loadKit } from './room/kit'
 import { buildRoomScene } from './room/renderer'
@@ -42,6 +42,8 @@ function kstTime(iso: string | null | undefined): string {
 }
 
 function showPanel(title: string, html: string) {
+  cancelTyping()
+  panel.classList.remove('panel-pixel')
   panelTitle.textContent = title
   panelBody.innerHTML = html
   positionPanel()
@@ -51,7 +53,73 @@ function showPanel(title: string, html: string) {
 function positionPanel() {
   panel.classList.toggle('hub-collapsed', hubCollapsed)
 }
-$('panel-close').addEventListener('click', () => (panel.hidden = true))
+$('panel-close').addEventListener('click', () => {
+  cancelTyping()
+  panel.hidden = true
+})
+
+// ── 캐릭터 상세 패널 — 픽셀 글씨체 + 한 글자씩 타이핑 (게임 대사창 느낌) ──
+let typingTimer: number | null = null
+function cancelTyping() {
+  if (typingTimer !== null) {
+    clearTimeout(typingTimer)
+    typingTimer = null
+  }
+}
+
+/** 여러 줄(label + value)을 한 글자씩 순차 타이핑한다. 라벨은 즉시, 값만 타이핑. */
+function typeLines(lines: { label: string; value: string }[]) {
+  cancelTyping()
+  panelBody.innerHTML = lines
+    .map((l, i) => `<div class="type-line" data-i="${i}"><b>${esc(l.label)}</b> <span class="type-val"></span></div>`)
+    .join('')
+  const vals = Array.from(panelBody.querySelectorAll<HTMLElement>('.type-val'))
+  const caret = document.createElement('span')
+  caret.className = 'type-caret'
+
+  let li = 0
+  let ci = 0
+  const SPEED = 38 // ms/글자
+  const step = () => {
+    if (li >= lines.length) {
+      caret.remove()
+      typingTimer = null
+      return
+    }
+    const target = lines[li].value
+    const span = vals[li]
+    if (ci === 0) span.after(caret) // 현재 줄 끝에 커서
+    if (ci < target.length) {
+      span.textContent = target.slice(0, ci + 1)
+      ci++
+      typingTimer = window.setTimeout(step, SPEED)
+    } else {
+      li++
+      ci = 0
+      if (li < lines.length) vals[li].after(caret)
+      typingTimer = window.setTimeout(step, SPEED * 3) // 줄바꿈은 살짝 쉼
+    }
+  }
+  step()
+}
+
+function showAgentPanel(agent: SpaceAgent) {
+  cancelTyping()
+  panel.classList.add('panel-pixel')
+  panelTitle.textContent = `🙂 ${agent.name}`
+  positionPanel()
+  panel.hidden = false
+  // 허브 실데이터엔 이름·상태·마지막 활동만 있다. 역할/소유자는 (있으면=데모) 조건부로만.
+  const lines = [
+    { label: '상태', value: agent.status === 'working' ? '🟢 활동 중' : '⚪ 자리 비움' },
+  ]
+  if (agent.role) lines.unshift({ label: '역할', value: agent.role })
+  if (agent.owner) lines.unshift({ label: '소유자', value: agent.owner })
+  const lastAt = kstTime(agent.last_active_at)
+  if (agent.status !== 'working' && lastAt) lines.push({ label: '마지막 활동', value: `${lastAt} (KST)` })
+  if (agent.status_line) lines.push({ label: '', value: agent.status_line })
+  typeLines(lines)
+}
 
 function showModal(title: string, bodyHtml: string) {
   modal.innerHTML = `
@@ -403,14 +471,7 @@ async function renderRoom(spaceId: string) {
     config,
     { agents: data.agents, issues: data.issues, knowledgeCount: data.knowledge.length },
     {
-      onAgentTap: (agent) =>
-        showPanel(
-          `🤖 ${agent.name}`,
-          `<div><b>역할</b> ${esc(agent.role || '-')}</div>
-           <div><b>소유자</b> ${esc(agent.owner || '-')}</div>
-           <div><b>상태</b> ${agent.status === 'working' ? '🟢 일하는 중' : '⚪ 자리 비움'}</div>
-           <div class="doc-summary">${esc(agent.status_line || '')}</div>`,
-        ),
+      onAgentTap: (agent) => showAgentPanel(agent),
       // 칠판(이슈)은 오른쪽 Hub "이슈 흐름"으로 흡수 — 클릭 팝업 제거 (2026-07-19).
       onShelfTap: () => openKnowledgePanel(data),
     },

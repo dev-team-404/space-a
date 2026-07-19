@@ -1,3 +1,6 @@
+/* 갈무리 — 한글 픽셀(비트맵) 폰트. 캐릭터 상세 패널의 게임풍 글씨체에 쓴다 (OFL 1.1). */
+@import url('https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/galmuri.css');
+
 /* 씬은 PixiJS 캔버스, 패널·모달·빌더는 DOM — ADR 0003 §3. */
 
 * { margin: 0; box-sizing: border-box; }
@@ -99,6 +102,31 @@ button { font: inherit; cursor: pointer; }
 /* Hub 접힘 상태 — 사이드바 자리가 비므로 패널을 화면 오른쪽 위에 붙인다 */
 #panel.hub-collapsed { right: 16px; }
 #panel h2 { font-size: 15px; margin-bottom: 10px; padding-right: 24px; }
+
+/* 캐릭터 상세 패널 — 게임풍 픽셀 글씨체 (갈무리). 픽셀 렌더 또렷하게. */
+#panel.panel-pixel {
+  font-family: 'Galmuri11', 'Apple SD Gothic Neo', monospace;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+  line-height: 1.9;
+}
+/* 픽셀 폰트는 굵기 변형이 없어 <b>가 faux-bold로 뭉개진다 — 볼드를 끄고 색/크기로만 강조. */
+#panel.panel-pixel h2 { font-family: inherit; font-weight: 400; font-size: 16px; }
+#panel.panel-pixel #panel-body { font-family: inherit; font-size: 13px; color: #d6dde6; }
+#panel.panel-pixel #panel-body b {
+  font-weight: 400;
+  color: #d9a441; /* 라벨은 굵기 대신 포인트 색으로 구분 */
+  margin-right: 4px;
+}
+/* 타이핑 커서 — 마지막 글자 뒤 깜빡이는 블록 */
+.type-caret {
+  display: inline-block;
+  width: 0.6em; height: 1em;
+  background: #d9a441;
+  vertical-align: -0.12em;
+  animation: caret-blink 0.7s steps(1) infinite;
+}
+@keyframes caret-blink { 50% { opacity: 0; } }
 #panel-body { font-size: 13px; line-height: 1.6; color: #aab2bd; }
 .panel-close { position: absolute; top: 8px; right: 8px; }
 .muted { color: #767d87; font-size: 12px; }
