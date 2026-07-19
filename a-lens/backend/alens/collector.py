@@ -5,6 +5,7 @@
   A_LENS_SOURCE      hub | fixtures | auto(기본) — auto는 허브 실패 시 픽스처 폴백
   A_LENS_WORK_URL    a-hub-work base URL (기본 https://spacea.msalt.net)
   A_LENS_WORK_TOKEN  허브 Bearer 토큰 (없으면 인증 필요한 상세는 비어서 내려감)
+  A_LENS_WORK_API_KEY  허브 x-api-key 헤더 값 (2026-07-19 허브 인증 전환 — 비면 생략)
   A_LENS_LIFE_URL    room-server base URL (프레즌스, #39 대기 — 비면 생략)
   A_LENS_CACHE_TTL   허브 폴링 캐시 초 (기본 30)
 
@@ -32,6 +33,7 @@ _FIXTURES = Path(__file__).resolve().parents[3] / "contracts" / "fixtures"
 SOURCE = os.environ.get("A_LENS_SOURCE", "auto")
 WORK_URL = os.environ.get("A_LENS_WORK_URL", "https://spacea.msalt.net").rstrip("/")
 WORK_TOKEN = os.environ.get("A_LENS_WORK_TOKEN", "")
+WORK_API_KEY = os.environ.get("A_LENS_WORK_API_KEY", "")
 LIFE_URL = os.environ.get("A_LENS_LIFE_URL", "")
 CACHE_TTL = float(os.environ.get("A_LENS_CACHE_TTL", "30"))
 
@@ -74,6 +76,8 @@ def _id_seq(entity_id: str) -> int:
 
 def _hub_snapshot() -> dict:
     headers = {"Authorization": f"Bearer {WORK_TOKEN}"} if WORK_TOKEN else {}
+    if WORK_API_KEY:
+        headers["x-api-key"] = WORK_API_KEY
     floors: list[dict] = []
     details: dict[str, dict] = {}
     all_pages: list[dict] = []

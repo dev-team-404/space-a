@@ -8,10 +8,15 @@
   </head>
   <body>
     <div id="scene"></div>
+    <main id="home" hidden></main>
+    <nav id="room-header" hidden></nav>
     <aside id="panel" hidden>
+      <button class="icon-btn panel-close" id="panel-close">✕</button>
       <h2 id="panel-title"></h2>
       <div id="panel-body"></div>
     </aside>
+    <div id="builder" class="overlay" hidden></div>
+    <div id="modal" class="overlay" hidden></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
