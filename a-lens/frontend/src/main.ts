@@ -73,20 +73,21 @@ async function ensureApp() {
 }
 
 const HUB_W = 340 // #hub 사이드바 폭 — 씬 가용 영역에서 제외
+const SCENE_PAD = 12 // 잘림 방지용 최소 여백 (px)
 function fitScene() {
   if (!currentScene || !appReady) return
   const b = currentScene.getLocalBounds()
-  const margin = 80
-  // Hub가 열려 있으면 오른쪽 340px를 뺀 왼쪽 영역에만 씬을 맞추고 그 중앙에 배치한다.
-  const avail = app.screen.width - (hub.hidden ? 0 : HUB_W)
-  const s = Math.min(
-    (avail - margin) / b.width,
-    (app.screen.height - margin - 60) / b.height,
-  )
+  // 가용 영역 = 전체 화면 − (열린 Hub 폭) − 상단 헤더 높이. 여백은 최소만 두고 방을 꽉 채운다.
+  const headerH = headerEl.hidden ? 0 : headerEl.offsetHeight
+  const availW = app.screen.width - (hub.hidden ? 0 : HUB_W) - SCENE_PAD * 2
+  const availH = app.screen.height - headerH - SCENE_PAD * 2
+  // contain: 잘림 없이 가용 영역에 최대로 — 가로/세로 배율 중 작은 쪽.
+  const s = Math.min(availW / b.width, availH / b.height)
   currentScene.scale.set(s)
+  // 가용 영역(헤더 아래 · Hub 왼쪽) 중앙에 배치.
   currentScene.position.set(
-    (avail - b.width * s) / 2 - b.x * s,
-    (app.screen.height - b.height * s) / 2 - b.y * s + 24,
+    SCENE_PAD + (availW - b.width * s) / 2 - b.x * s,
+    headerH + SCENE_PAD + (availH - b.height * s) / 2 - b.y * s,
   )
 }
 
