@@ -6,7 +6,7 @@
   A_LENS_WORK_URL    a-hub-work base URL (기본 https://spacea.msalt.net)
   A_LENS_WORK_TOKEN  허브 Bearer 토큰 (없으면 인증 필요한 상세는 비어서 내려감)
   A_LENS_WORK_API_KEY  허브 x-api-key 헤더 값 (2026-07-19 허브 인증 전환 — 비면 생략)
-  A_LENS_LIFE_URL    room-server base URL (프레즌스, #39 대기 — 비면 생략)
+  A_LENS_PRESENCE_WINDOW  online 판정 창(초, 기본 3600) — 이 시간 안에 write 한 사람만 online
   A_LENS_CACHE_TTL   허브 폴링 캐시 초 (기본 30)
 
 C2가 허브에 구현되기 전까지는 허브의 현행 REST(GET /spaces · tree · issues ·
@@ -34,7 +34,8 @@ SOURCE = os.environ.get("A_LENS_SOURCE", "auto")
 WORK_URL = os.environ.get("A_LENS_WORK_URL", "https://spacea.msalt.net").rstrip("/")
 WORK_TOKEN = os.environ.get("A_LENS_WORK_TOKEN", "")
 WORK_API_KEY = os.environ.get("A_LENS_WORK_API_KEY", "")
-LIFE_URL = os.environ.get("A_LENS_LIFE_URL", "")
+# 프레즌스는 work 최근 쓰기 활동으로 판정한다 (life room-server 프레즌스 대체, 2026-07-19).
+PRESENCE_WINDOW = float(os.environ.get("A_LENS_PRESENCE_WINDOW", "3600"))
 CACHE_TTL = float(os.environ.get("A_LENS_CACHE_TTL", "30"))
 
 _cache: dict[str, tuple[float, object]] = {}
@@ -71,6 +72,88 @@ def _id_seq(entity_id: str) -> int:
     return int(m.group(1)) if m else 0
 
 
+def _parse_ts(ts: str | None) -> datetime | None:
+    """ISO 8601 UTC 문자열 → tz-aware datetime. 파싱 불가·빈 값은 None."""
+    if not ts:
+        return None
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _bump_activity(
+    activity: dict[str, dict], agent_id: str | None, ts: str | None, kind: str, title: str
+) -> None:
+    """agent_id의 최근 활동을 갱신 — 더 최신 write면 항목(시각·종류·제목)을 통째로 덮어쓴다.
+    kind: 'knowledge'(page 작성) | 'issue'(이슈 열기). 사람이 읽을 문장 합성의 재료."""
+    if not agent_id:
+        return
+    dt = _parse_ts(ts)
+    if dt is None:
+        return
+    prev = activity.get(agent_id)
+    if prev is None or dt > prev["at"]:
+        activity[agent_id] = {"at": dt, "kind": kind, "title": title}
+
+
+def _flatten_tree(nodes: list[dict]) -> list[dict]:
+    """tree 응답은 children 중첩 구조 — 프레즌스 집계용으로 모든 노드를 평탄화한다.
+    응답이 예상과 다른 모양(리스트 아님·노드가 dict 아님)이어도 스냅숏을 살리도록 방어한다."""
+    if not isinstance(nodes, list):
+        return []
+    flat: list[dict] = []
+    for n in nodes:
+        if isinstance(n, dict):
+            flat.append(n)
+            flat.extend(_flatten_tree(n.get("children") or []))
+    return flat
+
+
+# 허브 이슈는 상태 전이 이력(timeline)을 아직 내려주지 않는다 (#40 대기). 프론트 뷰모델
+# (SpaceIssue.timeline)을 채우기 위해 현재 상태 1스텝을 합성한다 — 실제 단계별 이력은
+# 허브가 이슈 이벤트를 제공하면 대체한다.
+_ISSUE_STEP_LABEL = {"open": "이슈 발생", "knowledge_linked": "지식 연결", "resolved": "해결 완료"}
+
+
+# 최근 활동 → 사람이 읽는 문장. 지금은 규칙(제목+종류) 기반. 추후 이 함수 안에서 LLM으로
+# body를 요약/번역해 더 자연스러운 문장을 만들 수 있다 (교체 지점 — 시그니처 유지).
+def _humanize_activity(item: dict | None) -> dict | None:
+    if not item:
+        return None
+    title = (item.get("title") or "").strip() or "이름 없는 문서"
+    # 말풍선(brief)은 제목 없이 행동만 짧게 — "지식 공유중" / "이슈 해결중".
+    # 상세(detail)는 제목까지 풀어쓴다.
+    if item.get("kind") == "issue":
+        brief = "이슈 해결중"
+        detail = f"최근에 ‘{title}’ 문제를 이슈로 등록했어요. 팀이 함께 살펴보는 중이에요."
+    else:  # knowledge
+        brief = "지식 공유중"
+        detail = f"최근에 ‘{title}’ 내용을 정리해 팀에 공유했어요. 다른 사람이 참고해 재사용할 수 있어요."
+    return {"brief": brief, "detail": detail}
+
+
+def _issue_vm(issue: dict, member_name: dict[str, str]) -> dict:
+    status = issue.get("status", "open")
+    opener = issue.get("opened_by")
+    return {
+        "issue_id": issue.get("issue_id", ""),
+        "title": issue.get("title", ""),
+        "status": status,
+        "opened_by": opener,
+        "timeline": [
+            {
+                "step": status,
+                "label": _ISSUE_STEP_LABEL.get(status, status),
+                "actor": member_name.get(opener, opener or ""),
+                "at": issue.get("updated_at") or issue.get("created_at"),
+                "note": "",
+            }
+        ],
+    }
+
+
 # ── 허브 스냅숏 ──────────────────────────────────────────────
 
 
@@ -82,6 +165,8 @@ def _hub_snapshot() -> dict:
     details: dict[str, dict] = {}
     all_pages: list[dict] = []
     totals = {"issues": 0, "knowledge": 0, "skills": 0, "reuses": 0}
+    collected_at = datetime.now(timezone.utc)
+    online_cutoff = collected_at.timestamp() - PRESENCE_WINDOW
 
     with httpx.Client(base_url=WORK_URL, headers=headers, timeout=8) as client:
         spaces_raw = _hub_get(client, "/spaces").get("spaces", [])
@@ -92,7 +177,7 @@ def _hub_snapshot() -> dict:
                 continue
             # 비멤버 공간·권한 부족·깨진 응답은 빈 목록으로 강등 (전체 스냅숏은 살린다)
             try:
-                pages = _hub_get(client, f"/spaces/{sid}/tree").get("tree", [])
+                pages = _flatten_tree(_hub_get(client, f"/spaces/{sid}/tree").get("tree", []))
             except _DEGRADE as e:
                 log.warning("tree 수집 실패 (%s): %s", sid, e)
                 pages = []
@@ -106,6 +191,20 @@ def _hub_snapshot() -> dict:
             except _DEGRADE as e:
                 log.warning("members 수집 실패 (%s): %s", sid, e)
                 members = []
+
+            # 프레즌스: 이 방 사람들의 최근 write(page·issue) 시각을 집계 → online 판정 재료.
+            # (life room-server 프레즌스 대체 — a-lens는 사람이 보는 view라 '사람의 활동'으로 읽는다.)
+            last_write: dict[str, dict] = {}
+            for p in pages:
+                _bump_activity(
+                    last_write, p.get("created_by"), p.get("updated_at") or p.get("created_at"),
+                    "knowledge", p.get("title", ""),
+                )
+            for it in issues:
+                _bump_activity(
+                    last_write, it.get("opened_by"), it.get("updated_at") or it.get("created_at"),
+                    "issue", it.get("title", ""),
+                )
 
             resolved = sum(1 for it in issues if it.get("status") == "resolved")
             knowledge = len(pages)
@@ -142,13 +241,24 @@ def _hub_snapshot() -> dict:
                     doc["summary"] = ""
                 knowledge_docs.append(doc)
 
+            def _agent(m: dict) -> dict:
+                seen = last_write.get(m["agent_id"])
+                online = seen is not None and seen["at"].timestamp() >= online_cutoff
+                return {
+                    "agent_id": m["agent_id"],
+                    "name": m.get("name", m["agent_id"]),
+                    "status": "working" if online else "idle",
+                    "last_active_at": seen["at"].isoformat() if seen else None,
+                    # 사람이 읽을 최근 활동 문장 (말풍선=brief, 상세=detail). 번역은 _humanize_activity.
+                    "recent_activity": _humanize_activity(seen) if seen else None,
+                }
+
+            member_name = {m["agent_id"]: m.get("name", m["agent_id"]) for m in members}
+
             details[sid] = {
                 "space_id": sid,
-                "agents": [
-                    {"agent_id": m["agent_id"], "name": m.get("name", m["agent_id"]), "status": "idle"}
-                    for m in members
-                ],
-                "issues": issues,
+                "agents": [_agent(m) for m in members],
+                "issues": [_issue_vm(it, member_name) for it in issues],
                 "knowledge": knowledge_docs,
             }
             for p in pages:
@@ -169,7 +279,7 @@ def _hub_snapshot() -> dict:
 
     return {
         "source": "hub",
-        "collected_at": datetime.now(timezone.utc).isoformat(),  # 타임스탬프 부재(#40) 동안 시각 필드 대체재
+        "collected_at": collected_at.isoformat(),  # 타임스탬프 부재(#40) 동안 시각 필드 대체재 + 프레즌스 기준 시각
         "floors": floors,
         "details": details,
         "totals": totals,
@@ -229,7 +339,7 @@ def snapshot() -> dict:
 def space_detail(space_id: str, tier: str = "member") -> dict:
     snap = snapshot()
     if snap["source"] == "hub":
-        # deepcopy — 얕은 복사면 프레즌스 조인(pipeline)이 캐시된 스냅숏을 오염시킨다
+        # deepcopy — 얕은 복사면 tier별 변형(guest 이슈 제거 등)이 캐시된 스냅숏을 오염시킨다
         raw = snap["details"].get(space_id)
         detail = copy.deepcopy(raw) if raw else {"space_id": space_id, "agents": [], "issues": [], "knowledge": []}
         if tier == "guest":
@@ -240,15 +350,3 @@ def space_detail(space_id: str, tier: str = "member") -> dict:
     detail = _fixture(name)
     detail["space_id"] = space_id
     return detail
-
-
-def fetch_presence(room_id: str) -> dict | None:
-    """a-hub-life 프레즌스 (G8: a-lens가 직접 조회해 조인). #39 대기."""
-    if not LIFE_URL:
-        return None
-    try:
-        r = httpx.get(f"{LIFE_URL.rstrip('/')}/rooms/{room_id}", timeout=5)
-        r.raise_for_status()
-        return r.json()
-    except httpx.HTTPError:
-        return None

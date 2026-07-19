@@ -16,6 +16,11 @@ export type LobbyView = {
   highlight: { summary?: string } | null
 }
 
+export type RecentActivity = {
+  brief: string // 말풍선용 짧은 문장
+  detail: string // 상세 패널용 풀어쓴 설명
+}
+
 export type SpaceAgent = {
   agent_id: string
   name: string
@@ -24,6 +29,7 @@ export type SpaceAgent = {
   status: 'working' | 'idle' | string
   status_line: string
   last_active_at: string | null
+  recent_activity?: RecentActivity | null
 }
 
 export type IssueStep = {

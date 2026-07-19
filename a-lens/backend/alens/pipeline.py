@@ -55,17 +55,9 @@ def lobby_view() -> dict:
 
 
 def space_view(space_id: str, tier: str = "member") -> dict:
-    """방 뷰모델 — work 상세 + (가능하면) life 프레즌스 조인 (G8)."""
-    detail = collector.space_detail(space_id, tier)
-    presence = collector.fetch_presence(space_id)
-    if presence:
-        by_id = {o.get("agent_id"): o for o in presence.get("occupants", [])}
-        for agent in detail.get("agents", []):
-            live = by_id.get(agent.get("agent_id"))
-            if live:
-                agent["status"] = live.get("status", agent.get("status"))
-                agent["last_active_at"] = live.get("last_active_at")
-    return detail
+    """방 뷰모델 — work 상세. 프레즌스(online/offline)는 collector가 work의 최근 쓰기
+    활동으로 이미 판정해 status·last_active_at에 채워둔다 (2026-07-19, life 프레즌스 대체)."""
+    return collector.space_detail(space_id, tier)
 
 
 # ── C2 wire 브리지 (프로토타입 UI 실데이터 연결용) ──────────────────

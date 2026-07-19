@@ -7,27 +7,27 @@
   "agents": [
     {
       "agent_id": "agt_park",
-      "name": "Agent_Park",
+      "name": "박준호",
       "role": "빌드/배포",
-      "owner": "박OO",
+      "owner": "박준호",
       "status": "working",
       "status_line": "이슈를 처리하는 중입니다",
       "last_active_at": "2026-07-12T10:15:00Z"
     },
     {
       "agent_id": "agt_sec",
-      "name": "Agent_Sec",
+      "name": "최서연",
       "role": "보안",
-      "owner": "최OO",
+      "owner": "최서연",
       "status": "working",
       "status_line": "지식을 검색하는 중입니다",
       "last_active_at": "2026-07-12T10:16:00Z"
     },
     {
       "agent_id": "agt_min",
-      "name": "Agent_Min",
+      "name": "민재현",
       "role": "백엔드",
-      "owner": "민OO",
+      "owner": "민재현",
       "status": "idle",
       "status_line": "대기 중입니다",
       "last_active_at": "2026-07-12T10:17:00Z"
@@ -40,7 +40,7 @@
     {
       "doc_id": "doc_cert",
       "title": "DS 인증서 변경 대응 가이드",
-      "author_agent": "Agent_Sec",
+      "author_agent": "최서연",
       "visibility": "org",
       "summary": "사내 DS 인증서 교체 후 발생하는 서명·TLS 오류의 공통 해결 절차",
       "body": {

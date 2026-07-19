@@ -26,8 +26,8 @@ export type RoomSceneData = {
 /** 빌더 프리뷰용 샘플 — 실데이터 fetch 없이 방 모양만 확인 */
 export const PREVIEW_DATA: RoomSceneData = {
   agents: [
-    { agent_id: 'p1', name: 'Agent_A', role: '', owner: '', status: 'working', status_line: '', last_active_at: null },
-    { agent_id: 'p2', name: 'Agent_B', role: '', owner: '', status: 'idle', status_line: '', last_active_at: null },
+    { agent_id: 'p1', name: '김도현', role: '', owner: '', status: 'working', status_line: '', last_active_at: null },
+    { agent_id: 'p2', name: '이하늘', role: '', owner: '', status: 'idle', status_line: '', last_active_at: null },
   ],
   issues: [
     { issue_id: 'i1', title: '배포 후 5xx 급증', status: 'open', opened_by: '', timeline: [] },
@@ -288,16 +288,57 @@ export function buildRoomScene(
       .fill({ color: 0x0d1220, alpha: 0.92 })
       .stroke({ color: 0xffffff, alpha: 0.22, width: 1 })
     robot.addChild(namePill, nameTag)
-    // 작업 중이면 머리 위에 말풍선 점 표시
+    // 작업 중이면 머리 위에 말풍선 — 최근 활동 요약(brief)이 있으면 그 문구를, 없으면 '...'
     if (agent.status === 'working') {
-      const by = topY - 6
-      const bub = new Graphics()
-      bub.roundRect(12, by - 16, 30, 16, 8).fill(0xf0e6d2)
-      bub.poly([16, by - 1, 24, by - 1, 15, by + 6]).fill(0xf0e6d2)
-      bub.circle(20, by - 8, 1.8).fill(0x555)
-      bub.circle(27, by - 8, 1.8).fill(0x555)
-      bub.circle(34, by - 8, 1.8).fill(0x555)
-      robot.addChild(bub)
+      const brief = agent.recent_activity?.brief
+      const by = topY - 8
+      if (brief) {
+        // 말풍선은 한 줄만 — 넘치면 '…'로 자른다 (Pixi Text엔 CSS ellipsis가 없어 직접 계산).
+        const bubbleStyle = new TextStyle({
+          fill: 0x3a2f1a,
+          fontSize: 11,
+          fontWeight: '600',
+          fontFamily: '"Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif',
+        })
+        const MAX_W = 150
+        const txt = new Text({ text: brief, style: bubbleStyle })
+        if (txt.width > MAX_W) {
+          // 들어갈 최대 길이를 이진 탐색으로 — 한 글자씩 지우며 매번 측정하는 O(N)을 O(log N)으로.
+          let low = 0
+          let high = brief.length
+          let best = '…'
+          while (low <= high) {
+            const mid = Math.floor((low + high) / 2)
+            txt.text = brief.slice(0, mid) + '…'
+            if (txt.width <= MAX_W) {
+              best = txt.text
+              low = mid + 1
+            } else {
+              high = mid - 1
+            }
+          }
+          txt.text = best
+        }
+        txt.anchor.set(0.5, 1)
+        const padX = 8
+        const padY = 5
+        const bw = txt.width + padX * 2
+        const bh = txt.height + padY * 2
+        const cx = 0 // 캐릭터 머리 중앙 위
+        const bub = new Graphics()
+        bub.roundRect(cx - bw / 2, by - bh, bw, bh, 8).fill(0xf0e6d2)
+        bub.poly([cx - 5, by - 1, cx + 5, by - 1, cx, by + 6]).fill(0xf0e6d2) // 꼬리
+        txt.position.set(cx, by - padY)
+        robot.addChild(bub, txt)
+      } else {
+        const bub = new Graphics()
+        bub.roundRect(12, by - 14, 30, 16, 8).fill(0xf0e6d2)
+        bub.poly([16, by + 1, 24, by + 1, 15, by + 8]).fill(0xf0e6d2)
+        bub.circle(20, by - 6, 1.8).fill(0x555)
+        bub.circle(27, by - 6, 1.8).fill(0x555)
+        bub.circle(34, by - 6, 1.8).fill(0x555)
+        robot.addChild(bub)
+      }
     }
     robot.eventMode = 'static'
     robot.cursor = 'pointer'

@@ -1,7 +1,7 @@
 {
   "_comment": "Full C1 lifecycle for one issue, in call order. This is the loop the whole product exists to close: an agent in data-platform hits an error, finds knowledge authored by sw-innov, reuses it, and the reuse is recorded as a first-class event that Pillar 3 renders. Every call carries Authorization + X-Space-A-Trace-Id + X-Space-A-Depth in transport headers, not shown here.",
 
-  "scenario": "데이터 플랫폼팀의 Agent_Yoon이 수집 서버 TLS 오류를 만나, S/W 혁신팀이 작성한 인증서 지식을 재사용해 해결한다.",
+  "scenario": "데이터 플랫폼팀의 윤성호이 수집 서버 TLS 오류를 만나, S/W 혁신팀이 작성한 인증서 지식을 재사용해 해결한다.",
 
   "calls": [
     {
@@ -92,7 +92,7 @@
     "renders_in_pillar3_as": [
       "GET /reuse-events → 지식 재사용 피드에 'S/W 혁신팀 → 데이터 플랫폼팀' 항목",
       "GET /spaces/{id} → 이슈 타임라인 3단계 (open → knowledge_linked → resolved)",
-      "GET /activity → '데이터 플랫폼팀의 Agent_Yoon이 ... 재사용했습니다'"
+      "GET /activity → '데이터 플랫폼팀의 윤성호이 ... 재사용했습니다'"
     ],
     "note": "publish_knowledge를 false로 두었으므로 지식 문서는 늘지 않고, doc_cert의 reuse_count만 1 증가한다."
   }
