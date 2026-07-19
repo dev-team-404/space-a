@@ -920,7 +920,7 @@ mod tests {
                 kind: ToolKind::Execute, raw_name: "Bash".into(),
                 target: Some("C:/secret/build.sh".into()), tool_use_id: Some(tid.clone()),
             }, &mut off);
-            push(EventKind::ToolResult { tool_use_id: tid, status: ResultStatus::Error }, &mut off);
+            push(EventKind::ToolResult { tool_use_id: tid, status: ResultStatus::Error, result_len: 0 }, &mut off);
         }
         // 마지막 결과
         let tid = format!("{sess}-tf");
@@ -931,6 +931,7 @@ mod tests {
         push(EventKind::ToolResult {
             tool_use_id: tid,
             status: if last_ok { ResultStatus::Ok } else { ResultStatus::Error },
+            result_len: 0,
         }, &mut off);
         store.upsert_events(&evs).unwrap();
     }

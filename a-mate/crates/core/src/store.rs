@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS events (
   tok_eph_1h INTEGER DEFAULT 0, web_search INTEGER DEFAULT 0, web_fetch INTEGER DEFAULT 0,
   tool_kind TEXT, tool_server TEXT, tool_tool TEXT, tool_target TEXT, raw_name TEXT,
   is_sidechain INTEGER DEFAULT 0,
-  source_file TEXT, tool_use_id TEXT, result_status TEXT
+  source_file TEXT, tool_use_id TEXT, result_status TEXT,
+  result_len INTEGER DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS daily_rollup (
   host TEXT NOT NULL, project_id TEXT NOT NULL, date TEXT NOT NULL,
@@ -125,6 +126,16 @@ fn migrate(conn: &Connection) -> Result<()> {
              DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;",
         )?;
     }
+    // R8 대형 결과 마이그레이션 — result_len 부재 시 컬럼 추가 + 이벤트 재수집(결과 크기 백필).
+    let has_result_len = conn
+        .prepare("SELECT 1 FROM pragma_table_info('events') WHERE name='result_len'")?
+        .exists([])?;
+    if !has_result_len {
+        conn.execute_batch(
+            "ALTER TABLE events ADD COLUMN result_len INTEGER DEFAULT 0;
+             DELETE FROM events; DELETE FROM ingest_state; DELETE FROM daily_rollup;",
+        )?;
+    }
     // v3 수집 마이그레이션 — subagent_files 부재 시 컬럼 추가 + 전체 재수집.
     // (Agent 툴 매핑·permission-mode·secret_flag·first_prompt 오염 수정이 라인 재해석을 요구 — 스펙 §4.4)
     let has_subagent_files = conn
@@ -198,11 +209,11 @@ impl SqliteStore {
                 None => format!("{}:{}", e.source_file, e.source_offset),
             };
 
-            let (tool_use_id, result_status) = match &e.kind {
-                EventKind::ToolCall { tool_use_id, .. } => (tool_use_id.clone(), None),
-                EventKind::ToolResult { tool_use_id, status } =>
-                    (Some(tool_use_id.clone()), Some(status.as_str().to_string())),
-                _ => (None, None),
+            let (tool_use_id, result_status, result_len) = match &e.kind {
+                EventKind::ToolCall { tool_use_id, .. } => (tool_use_id.clone(), None, 0i64),
+                EventKind::ToolResult { tool_use_id, status, result_len } =>
+                    (Some(tool_use_id.clone()), Some(status.as_str().to_string()), *result_len as i64),
+                _ => (None, None, 0i64),
             };
 
             // 봉투 공통 + kind별 컬럼 추출
@@ -215,13 +226,13 @@ impl SqliteStore {
                   model_family, model_tier, model_raw, tok_input, tok_output, tok_cache_read,
                   tok_cache_create, tok_eph_1h, web_search, web_fetch,
                   tool_kind, tool_server, tool_tool, tool_target, raw_name, is_sidechain,
-                  source_file, tool_use_id, result_status)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26)",
+                  source_file, tool_use_id, result_status, result_len)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27)",
                 params![
                     dedup_key, e.session_id, e.host, e.project_id, e.ts, e.source_offset as i64, kind_str,
                     mfam, mtier, mraw, ti, to, tcr, tcc, e1h, ws, wf,
                     tkind, tsrv, ttool, ttarget, raw, e.is_sidechain as i64,
-                    e.source_file, tool_use_id, result_status
+                    e.source_file, tool_use_id, result_status, result_len
                 ],
             )?;
             inserted += n;
@@ -1046,6 +1057,41 @@ impl SqliteStore {
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
     }
 
+    /// R8 대형 MCP 결과 — 서버별로 큰(≥threshold자) tool_result를 집계.
+    /// tool_result(r).result_len ↔ 같은 세션 tool_call(c).tool_server 조인. since 이후만.
+    /// 반환: (server, 큰_결과_횟수, 총_문자수, 최대_문자수), 총합 내림차순.
+    pub fn mcp_large_results(
+        &self,
+        threshold: u64,
+        min_calls: u64,
+        since_rfc3339: &str,
+    ) -> Result<Vec<(String, u64, u64, u64)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT c.tool_server AS srv, COUNT(*) AS n,
+                    SUM(r.result_len) AS total, MAX(r.result_len) AS mx
+             FROM events r
+             JOIN events c ON c.tool_use_id = r.tool_use_id AND c.kind='tool_call'
+               AND c.session_id = r.session_id
+             WHERE r.kind='tool_result' AND c.tool_server IS NOT NULL
+               AND r.result_len >= ?1 AND r.ts >= ?3
+             GROUP BY c.tool_server
+             HAVING n >= ?2
+             ORDER BY total DESC",
+        )?;
+        let rows = stmt.query_map(
+            params![threshold as i64, min_calls as i64, since_rfc3339],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, i64>(1)? as u64,
+                    r.get::<_, i64>(2)? as u64,
+                    r.get::<_, i64>(3)? as u64,
+                ))
+            },
+        )?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
     /// 텔레메트리: 코칭 findings 상태별 개수 (채택·해결 흐름의 파생 신호).
     pub fn findings_status_counts(&self) -> Result<Vec<(String, u64)>> {
         let mut stmt = self
@@ -1118,6 +1164,53 @@ impl SqliteStore {
                 last_result_ok: last_status.as_deref() == Some("ok"),
             });
         }
+        Ok(out)
+    }
+
+    /// R6 스킬 초안용 — 특정 host의 (session_id, first_prompt_preview) 전량.
+    /// 정규화 동치 판정은 호출부(rules::r6::normalize)가 Rust에서 수행한다.
+    pub fn sessions_with_prompts(&self, host: &str) -> Result<Vec<(String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT session_id, first_prompt_preview FROM sessions
+             WHERE host = ?1 AND first_prompt_preview IS NOT NULL",
+        )?;
+        let rows = stmt.query_map(params![host], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// R6 스킬 초안용 — 주어진 세션들에서 실제로 쓴 도구(raw_name) 상위 집계.
+    /// 반복 워크플로가 어떤 도구 시퀀스인지 = 초안 본문의 재료.
+    pub fn tool_usage_for_sessions(&self, session_ids: &[String]) -> Result<Vec<(String, u64)>> {
+        if session_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        // SQLite 바인딩 변수 한도(SQLITE_LIMIT_VARIABLE_NUMBER, 기본 999) 초과 방지 —
+        // 세션이 많아도 크래시하지 않도록 990개씩 청크로 조회하고 Rust에서 합산·상위 12개.
+        use std::collections::HashMap;
+        let mut merged: HashMap<String, u64> = HashMap::new();
+        for chunk in session_ids.chunks(990) {
+            let placeholders = std::iter::repeat("?").take(chunk.len()).collect::<Vec<_>>().join(",");
+            let sql = format!(
+                "SELECT COALESCE(raw_name, tool_kind, '?') AS t, COUNT(*) AS n
+                 FROM events
+                 WHERE kind='tool_call' AND session_id IN ({placeholders})
+                 GROUP BY t",
+            );
+            let mut stmt = self.conn.prepare(&sql)?;
+            let params = rusqlite::params_from_iter(chunk.iter());
+            let rows = stmt.query_map(params, |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
+            })?;
+            for row in rows {
+                let (t, n) = row?;
+                *merged.entry(t).or_insert(0) += n;
+            }
+        }
+        let mut out: Vec<(String, u64)> = merged.into_iter().collect();
+        out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0))); // 동점은 이름순(결정론)
+        out.truncate(12);
         Ok(out)
     }
 
@@ -2030,6 +2123,31 @@ mod tests {
     }
 
     #[test]
+    fn tool_usage_for_sessions_chunks_beyond_sqlite_var_limit() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 실제 도구 호출 2세션 (Bash x2, Read x1)
+        let ev = |sess: &str, off: u64, raw: &str| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
+            uuid: Some(format!("{sess}-{off}")), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-19T10:00:00Z".into()), source_file: "s.jsonl".into(), source_offset: off,
+            kind: EventKind::ToolCall {
+                kind: ToolKind::from_raw_name(raw), raw_name: raw.into(), target: None,
+                tool_use_id: Some(format!("{sess}-{off}-t")),
+            },
+        };
+        store.upsert_events(&[ev("s0",1,"Bash"), ev("s0",2,"Bash"), ev("s1",1,"Read")]).unwrap();
+        // 999 초과 id (대부분 없는 것) — 청크 안 되면 "too many SQL variables"로 크래시
+        let mut ids: Vec<String> = (0..1500).map(|i| format!("z{i}")).collect();
+        ids.push("s0".into());
+        ids.push("s1".into());
+        let out = store.tool_usage_for_sessions(&ids).unwrap(); // 크래시하지 않아야
+        let map: std::collections::HashMap<_, _> = out.into_iter().collect();
+        assert_eq!(map.get("Bash"), Some(&2)); // 청크 경계 넘어 합산 정확
+        assert_eq!(map.get("Read"), Some(&1));
+    }
+
+    #[test]
     fn delete_findings_by_rule_and_scope_removes_only_matching() {
         let store = SqliteStore::open_in_memory().unwrap();
         let mk = |rule: &str, kind: &str, key: &str| crate::finding::Finding {
@@ -2058,7 +2176,7 @@ mod tests {
             uuid: Some("u1".into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-07T10:00:00Z".into()),
             source_file: "C:\\proj\\s1.jsonl".into(), source_offset: 42,
-            kind: EventKind::ToolResult { tool_use_id: "toolu_1".into(), status: ResultStatus::Denied },
+            kind: EventKind::ToolResult { tool_use_id: "toolu_1".into(), status: ResultStatus::Denied, result_len: 4200 },
         };
         assert_eq!(store.upsert_events(&[ev]).unwrap(), 1);
         let (kind, status, tuid, sfile): (String, Option<String>, Option<String>, Option<String>) =

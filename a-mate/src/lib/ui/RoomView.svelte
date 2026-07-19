@@ -1,6 +1,6 @@
 <script lang="ts">
   import { listen } from '@tauri-apps/api/event';
-  import { getSprite, robotSpecForSeed, roomCapabilities, roomMoveCell, roomSaveDesign, roomView, type RoomMe, type RoomObject, type RoomState } from '../api';
+  import { getSprite, getOccupantSprite, requestOccupantSprite, robotSpecForSeed, roomCapabilities, roomMoveCell, roomSaveDesign, roomView, type RoomMe, type RoomObject, type RoomState } from '../api';
   import { drawRobot, type RobotSpec } from '../robot/render'; import { frameAt } from '../robot/anim';
   import FurnitureSprite from './FurnitureSprite.svelte';
   import { CATEGORY_LABELS, FURNITURE, FURNITURE_BY_ID, ROTATIONS, THEMES, canonicalizeFurnitureGeometry, themeFor, wallRotation, type FurnitureCategory, type PlacedFurniture, type Rotation, type WallSide } from '../interior/catalog';
@@ -56,6 +56,11 @@
   // 내 캐릭터는 AI 스프라이트(캐시) — 데스크톱 마스코트·초상과 동일 인물 (없으면 절차 생성 폴백)
   let sprite=$state<string|null>(null);
   $effect(()=>{let un:(()=>void)|null=null;getSprite().then(v=>sprite=v);listen('sprite:ready',()=>getSprite().then(v=>sprite=v)).then(u=>un=u);return()=>un?.()});
+  // 다른 점유자도 내 캐릭터와 동일 로직의 AI 스프라이트로 — 캐시 있으면 즉시, 없으면 백그라운드 생성 요청(절차 폴백 유지)
+  let occSpr=$state<Record<string,string>>({});
+  const occSeed=(o:{mascot_seed?:string;name:string})=>o.mascot_seed||o.name;
+  $effect(()=>{const occ=room?.occupants??[];for(const o of occ){const s=occSeed(o);if(me&&o.agent_id===me.agent_id)continue;if(occSpr[s]!==undefined)continue;occSpr[s]='';getOccupantSprite(s).then(v=>{if(v)occSpr[s]=v;else requestOccupantSprite(s);})}});
+  $effect(()=>{let un:(()=>void)|null=null;listen<string>('occupant-sprite:ready',(e)=>{const s=e.payload;getOccupantSprite(s).then(v=>{if(v)occSpr={...occSpr,[s]:v}})}).then(u=>un=u);return()=>un?.()});
   const specs=new Map<string,RobotSpec>(); function robot(node:HTMLCanvasElement,name:string){let raf=0;const run=(spec:RobotSpec)=>{const c=node.getContext('2d')!;const loop=(t:number)=>{drawRobot(c,spec,frameAt('idle',t));raf=requestAnimationFrame(loop)};loop(0)};specs.has(name)?run(specs.get(name)!):robotSpecForSeed(name).then(s=>{specs.set(name,s);run(s)});return{destroy:()=>cancelAnimationFrame(raf)}}
   function spriteRotation(o:RoomObject|PlacedFurniture):Rotation{return o.category==='window'&&(o.wall==='north'||o.wall==='west')?wallRotation(o.wall):o.rotation}
   function objectLayout(o:RoomObject){
@@ -107,7 +112,7 @@
     </svg>
     {#if ghost}{@const gp=objectLayout(ghost)}<div class="furniture ghost" class:invalid={!canPlace(ghost)} style:left={`${gp.x/VW*100}%`} style:top={`${gp.y/VH*100}%`} style:width={`${gp.w/VW*100}%`} style:transform={`translate(${-gp.anchor[0]*100}%,${-gp.anchor[1]*100}%)`} style:z-index={gp.z}><FurnitureSprite assetId={ghost.asset_id} rotation={spriteRotation(ghost)} room/></div>{/if}
     {#each activeDesign.objects as o,i (`${o.asset_id}-${i}`)}{@const p=objectLayout(o)}<button class="furniture placed" data-category={o.category} data-object-index={i} style:left={`${p.x/VW*100}%`} style:top={`${p.y/VH*100}%`} style:width={`${p.w/VW*100}%`} style:transform={`translate(${-p.anchor[0]*100}%,${-p.anchor[1]*100}%)`} style:z-index={p.z} oncontextmenu={e=>openMenu(e,i)}><FurnitureSprite assetId={o.asset_id} rotation={spriteRotation(o)} label={FURNITURE_BY_ID.get(o.asset_id)?.name} room/></button>{/each}
-    {#each room.occupants as o (o.agent_id)}{@const p=iso(o.cell[0]+.5,o.cell[1]+.5)}<div class="agent" style:left={`${p[0]/VW*100}%`} style:top={`${p[1]/VH*100}%`} style:z-index={30+Math.round((o.cell[0]+o.cell[1])*10)}>{#if me&&o.agent_id===me.agent_id&&sprite}<img class="spr" src={'data:image/png;base64,'+sprite} alt={o.name} draggable="false"/>{:else}<canvas width="128" height="128" use:robot={o.mascot_seed||o.name}></canvas>{/if}<span>{o.name}</span></div>{/each}
+    {#each room.occupants as o (o.agent_id)}{@const p=iso(o.cell[0]+.5,o.cell[1]+.5)}<div class="agent" style:left={`${p[0]/VW*100}%`} style:top={`${p[1]/VH*100}%`} style:z-index={30+Math.round((o.cell[0]+o.cell[1])*10)}>{#if me&&o.agent_id===me.agent_id&&sprite}<img class="spr" src={'data:image/png;base64,'+sprite} alt={o.name} draggable="false"/>{:else if occSpr[o.mascot_seed||o.name]}<img class="spr" src={'data:image/png;base64,'+occSpr[o.mascot_seed||o.name]} alt={o.name} draggable="false"/>{:else}<canvas width="128" height="128" use:robot={o.mascot_seed||o.name}></canvas>{/if}<span>{o.name}</span></div>{/each}
     {#if menu}{@const menuObject=activeDesign.objects[menu.index]}<div class="object-menu" style:left={`${menu.x}px`} style:top={`${menu.y}px`}>{#if menuObject?.category!=='window'}<button onclick={()=>rotatePlaced(menu!.index,1)}>정방향 90° 회전</button><button onclick={()=>rotatePlaced(menu!.index,-1)}>역방향 90° 회전</button>{/if}<button class="remove" onclick={()=>removePlaced(menu!.index)}>가구 배치 해제</button></div><button class="menu-dismiss" aria-label="메뉴 닫기" onclick={()=>menu=null}></button>{/if}
   </div>
   {#if editing&&draft}<section class="editor"><header><div><b>인테리어 설정</b><small>바닥 가구는 우클릭으로 회전·해제하고, 창문은 벽 방향에 고정해 배치합니다.</small></div><nav><button onclick={cancel}>취소</button><button class="primary" onclick={save} disabled={saving}>{saving?'저장 중…':'저장'}</button></nav></header>

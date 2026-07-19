@@ -23,7 +23,8 @@ impl Default for R6RepeatedPrompts {
 }
 
 /// 프롬프트 정규화 — 공백 붕괴 + 소문자 + 60자 컷. 너무 짧으면(일반어) 제외.
-fn normalize(p: &str) -> Option<String> {
+/// R6 후속(skill_draft)이 세션 매칭에 같은 기준을 쓰도록 crate 공개.
+pub(crate) fn normalize(p: &str) -> Option<String> {
     let collapsed = p.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
     if collapsed.chars().count() < 8 {
         return None;

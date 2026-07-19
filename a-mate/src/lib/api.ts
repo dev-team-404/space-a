@@ -227,3 +227,50 @@ export const onContentReady = (cb: (rows: ContentItem[]) => void): Promise<Unlis
 export async function getSprite(): Promise<string | null> {
   try { return await invoke<string | null>('get_sprite'); } catch { return null; }
 }
+
+/** 방 점유자 AI 스프라이트(캐시) base64 — 없으면 null. */
+export async function getOccupantSprite(seed: string): Promise<string | null> {
+  try { return await invoke<string | null>('get_occupant_sprite', { seed }); } catch { return null; }
+}
+
+/** 점유자 스프라이트 백그라운드 생성 요청 — 완료 시 'occupant-sprite:ready'(seed) 이벤트. */
+export async function requestOccupantSprite(seed: string): Promise<void> {
+  try { await invoke('request_occupant_sprite', { seed }); } catch { /* 무시 */ }
+}
+
+export interface ProfileRung {
+  key: string;
+  label: string;
+  ladder_index: number;
+  mastery: 'not_started' | 'in_progress' | 'mastered';
+  evidence: string;
+  learn_hint: string;
+  is_frontier: boolean;
+}
+export interface ProfileView {
+  rungs: ProfileRung[];
+  frontier_key: string | null;
+  total_events: number;
+}
+
+/** AX 역량 사다리 — 각 축의 숙련도 + 지금 배울 것(frontier). */
+export async function getProfile(): Promise<ProfileView> {
+  return invoke<ProfileView>('get_profile');
+}
+
+export interface SkillDraft {
+  markdown: string;
+  slug: string;
+  llm_generated: boolean;
+  session_count: number;
+}
+
+/** R6 반복 지시(host + 대표 프롬프트) → SKILL.md 초안 생성. */
+export async function generateSkillDraft(host: string, representative: string): Promise<SkillDraft> {
+  return invoke<SkillDraft>('generate_skill_draft', { host, representative });
+}
+
+/** 초안을 ~/.claude/skills/<slug>/SKILL.md 로 저장. 저장된 절대 경로 반환. */
+export async function saveSkillDraft(slug: string, markdown: string): Promise<string> {
+  return invoke<string>('save_skill_draft', { slug, markdown });
+}

@@ -47,6 +47,42 @@ impl Dimension {
             Dimension::Orchestration => "orchestration",
         }
     }
+    /// UI용 한글 라벨 (역량 사다리 표시).
+    pub fn label_ko(&self) -> &'static str {
+        match self {
+            Dimension::ModelLiteracy => "모델 리터러시",
+            Dimension::ContextHygiene => "컨텍스트 위생",
+            Dimension::SkillReuse => "스킬 재사용",
+            Dimension::Automation => "자동화",
+            Dimension::Orchestration => "오케스트레이션",
+        }
+    }
+    /// "지금 배울 것" — 이 축을 밟을 때 무엇을 하면 되는지 한 줄.
+    pub fn learn_hint_ko(&self) -> &'static str {
+        match self {
+            Dimension::ModelLiteracy => "작업 난이도에 맞춰 모델 티어를 고르기 — 잔심부름은 sonnet/haiku로",
+            Dimension::ContextHygiene => "안 쓰는 MCP·플러그인 정리, 반복 지시는 CLAUDE.md에 기재",
+            Dimension::SkillReuse => "반복하는 작업 흐름을 스킬(SKILL.md)로 묶어 재사용",
+            Dimension::Automation => "커스텀 커맨드·hooks·권한 사전허용으로 마찰 제거",
+            Dimension::Orchestration => "큰 작업을 서브에이전트에 위임해 병렬로 처리",
+        }
+    }
+
+    /// 지금 당장 해볼 **구체적 첫걸음**(예시 포함). 오늘의 배움/코칭이 "어떻게"를 담도록.
+    pub fn first_step_ko(&self) -> &'static str {
+        match self {
+            Dimension::ModelLiteracy =>
+                "파일 정리·간단 수정 같은 잔심부름은 대화 중 `/model` 로 sonnet·haiku로 바꿔서 시켜보세요. 품질 차이 없이 비용만 줄어요.",
+            Dimension::ContextHygiene =>
+                "매번 반복해서 설명하는 규칙(코딩 스타일·폴더 규칙 등)을 프로젝트 루트의 `CLAUDE.md`에 한 번 적어두면, 이후엔 Claude가 알아서 지켜요.",
+            Dimension::SkillReuse =>
+                "자주 똑같이 시키는 작업 흐름을 `.claude/skills`의 SKILL.md 하나로 묶어두면 다음부턴 다시 설명 안 해도 돼요. (코치 탭 '스킬 초안 만들기'가 초안을 대신 써줘요.)",
+            Dimension::Automation =>
+                "자주 치는 지시를 슬래시 커맨드로 저장하세요 — 예: '테스트 돌리고 실패만 요약해줘'를 커맨드로 만들면 다음부턴 한 번에 불러요. 포맷·린트는 hooks로 저장 때 자동 실행되게 걸 수 있어요.",
+            Dimension::Orchestration =>
+                "큰 조사·구현은 '이 폴더 전체를 조사해서 핵심만 요약해줘'처럼 통째로 맡겨보세요. Claude가 별도 창(서브에이전트)에서 처리하고 요약만 가져와, 내 대화창은 안 불어나요.",
+        }
+    }
 }
 
 /// 한 축에서의 숙련 상태.
@@ -55,6 +91,17 @@ pub enum Mastery {
     NotStarted, // 아직 이 습관이 없음 (코칭 프론티어 후보)
     InProgress, // 배우는 중
     Mastered,   // 이미 잘 함 → 침묵
+}
+
+impl Mastery {
+    /// 프론트 직렬화용 안정 키.
+    pub fn key(&self) -> &'static str {
+        match self {
+            Mastery::NotStarted => "not_started",
+            Mastery::InProgress => "in_progress",
+            Mastery::Mastered => "mastered",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

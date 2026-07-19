@@ -147,7 +147,7 @@ mod tests {
             session_id: session.into(), uuid: Some(format!("{tuid}-r")), parent_uuid: None,
             is_sidechain: false, ts: Some("2026-07-06T10:00:00Z".into()),
             source_file: "s.jsonl".into(), source_offset: off,
-            kind: EventKind::ToolResult { tool_use_id: tuid.into(), status },
+            kind: EventKind::ToolResult { tool_use_id: tuid.into(), status, result_len: 0 },
         }
     }
 

@@ -237,6 +237,11 @@ pub fn chat_context_inner(store: &SqliteStore) -> anyhow::Result<agent_mentor::c
     })
 }
 
+/// Tier 2 질적 코칭 브리프 — core 공용 조립기에 위임 (CLI와 동일 경로).
+pub fn coaching_brief_inner(store: &SqliteStore) -> anyhow::Result<agent_mentor::chat::CoachingBrief> {
+    agent_mentor::chat::assemble_coaching_brief(store)
+}
+
 fn lock<'a>(state: &'a State<AppState>) -> Result<std::sync::MutexGuard<'a, SqliteStore>, String> {
     state.store.lock().map_err(|e| e.to_string())
 }
@@ -274,6 +279,59 @@ pub fn set_finding_status(state: State<AppState>, dedup_key: String, status: Str
 pub fn get_week_summary(state: State<AppState>) -> Result<Vec<DayStat>, String> {
     let guard = lock(&state)?;
     week_summary_inner(&*guard).map_err(|e| e.to_string())
+}
+
+// --- AX 역량 사다리 (튜터의 성장 지도) ---
+// core의 detect_profile(결정론)을 UI 친화 형태로 노출 — 학습자가 자기 위치+다음 단계를 본다.
+
+#[derive(Debug, Serialize)]
+pub struct ProfileRung {
+    pub key: String,
+    pub label: String,
+    pub ladder_index: u8,
+    pub mastery: String,
+    pub evidence: String,
+    pub learn_hint: String,
+    pub is_frontier: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ProfileView {
+    pub rungs: Vec<ProfileRung>,
+    pub frontier_key: Option<String>,
+    pub total_events: u64,
+}
+
+pub fn profile_inner(store: &SqliteStore) -> anyhow::Result<ProfileView> {
+    use agent_mentor::profile::{detect_profile, Dimension};
+    let p = detect_profile(store)?;
+    let frontier = p.frontier();
+    let rungs = Dimension::all()
+        .into_iter()
+        .map(|d| {
+            let st = p.dims.iter().find(|s| s.dimension == d);
+            ProfileRung {
+                key: d.key().to_string(),
+                label: d.label_ko().to_string(),
+                ladder_index: d.ladder_index(),
+                mastery: st.map(|s| s.mastery.key()).unwrap_or("not_started").to_string(),
+                evidence: st.map(|s| s.evidence.clone()).unwrap_or_default(),
+                learn_hint: d.learn_hint_ko().to_string(),
+                is_frontier: frontier == Some(d),
+            }
+        })
+        .collect();
+    Ok(ProfileView {
+        rungs,
+        frontier_key: frontier.map(|d| d.key().to_string()),
+        total_events: p.total_events,
+    })
+}
+
+#[tauri::command(async)]
+pub fn get_profile(state: State<AppState>) -> Result<ProfileView, String> {
+    let guard = lock(&state)?;
+    profile_inner(&*guard).map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]
@@ -400,19 +458,33 @@ pub fn chat_status(state: State<AppState>) -> Result<ChatStatus, String> {
 
 #[tauri::command(async)]
 pub fn chat_send(state: State<AppState>, messages: Vec<ChatMessage>) -> Result<String, String> {
+    use agent_mentor::chat::{classify_intent, ChatIntent};
     validate_chat_messages(&messages)?;
+    // 마지막 사용자 메시지로 의도 분류 → 티어 라우팅 (결정론)
+    let last_user = messages.iter().rev().find(|m| m.role == "user").map(|m| m.content.as_str()).unwrap_or("");
+    let intent = classify_intent(last_user);
+
     // 락 범위: 엔진 해석 + 컨텍스트 수집만. 네트워크(LLM) 호출 전에 반드시 해제.
-    let (engine, ctx) = {
+    // 코칭(Tier 2)이면 주간 코칭 브리프를, 아니면 오늘 요약 컨텍스트를 조립.
+    let (engine, system) = {
         let guard = lock(&state)?;
         let engine = crate::resolve_engine(&guard);
-        let ctx = chat_context_inner(&*guard).map_err(|e| e.to_string())?;
-        (engine, ctx)
+        let system = match intent {
+            ChatIntent::Coaching => {
+                let brief = coaching_brief_inner(&*guard).map_err(|e| e.to_string())?;
+                agent_mentor::chat::build_coaching_system_prompt(&brief)
+            }
+            _ => {
+                let ctx = chat_context_inner(&*guard).map_err(|e| e.to_string())?;
+                agent_mentor::chat::build_chat_system_prompt(&ctx)
+            }
+        };
+        (engine, system)
     };
     let Some(engine) = engine else {
         // UI는 chat_status로 사전 안내 — 여기는 방어선 (스펙 §5: 미설정은 에러가 아닌 안내)
         return Err("엔진이 설정되지 않았어요".into());
     };
-    let system = agent_mentor::chat::build_chat_system_prompt(&ctx);
     let recent = &messages[messages.len().saturating_sub(20)..]; // 이력 상한 20턴
     engine.chat(&system, recent).map(|o| o.text).map_err(|e| e.to_string())
 }
@@ -812,6 +884,36 @@ mod tests {
     }
 
     #[test]
+    fn coaching_brief_inner_assembles_without_error() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let brief = coaching_brief_inner(&store).unwrap();
+        // 빈 store에서도 안전하게 조립 (수치 0, 프로필 5축, 델타 없음)
+        assert_eq!(brief.week_sessions, 0);
+        assert_eq!(brief.profile.len(), 5);
+        assert!(brief.week_session_delta_pct.is_none()); // 지난주 0 → 델타 없음
+        // 코칭 프롬프트로도 문제없이 렌더
+        let p = agent_mentor::chat::build_coaching_system_prompt(&brief);
+        assert!(p.contains("질적 코칭 모드"));
+    }
+
+    #[test]
+    fn profile_inner_exposes_five_rungs_and_one_frontier() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let view = profile_inner(&store).unwrap();
+        assert_eq!(view.rungs.len(), 5);
+        // 사다리 순서 보존 (Lv0..Lv4)
+        assert_eq!(view.rungs[0].key, "model_literacy");
+        assert_eq!(view.rungs[0].ladder_index, 0);
+        assert_eq!(view.rungs[4].key, "orchestration");
+        // 프론티어는 최대 1개이며 frontier_key와 일치
+        let fronts: Vec<&str> = view.rungs.iter().filter(|r| r.is_frontier).map(|r| r.key.as_str()).collect();
+        assert!(fronts.len() <= 1);
+        assert_eq!(view.frontier_key.as_deref(), fronts.first().copied());
+        // 라벨·학습 힌트가 비어있지 않음 (UI 표시용)
+        assert!(view.rungs.iter().all(|r| !r.label.is_empty() && !r.learn_hint.is_empty()));
+    }
+
+    #[test]
     fn week_summary_is_7_days_oldest_first() {
         let store = SqliteStore::open_in_memory().unwrap();
         let days = week_summary_inner(&store).unwrap();
@@ -1020,4 +1122,125 @@ pub fn get_sprite(app: tauri::AppHandle) -> Result<Option<String>, String> {
         Ok(bytes) => Ok(Some(base64::engine::general_purpose::STANDARD.encode(bytes))),
         Err(_) => Ok(None),
     }
+}
+
+/// 방 점유자 스프라이트 캐시 경로 — app_data/sprites/<hash>.png.
+fn occupant_sprite_path(app: &tauri::AppHandle, seed: &str) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager as _;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("sprites");
+    Ok(dir.join(format!("{}.png", agent_mentor::sprite::seed_cache_name(seed))))
+}
+
+/// 방 점유자의 AI 스프라이트(캐시) base64 — 없으면 None(프론트는 절차 생성 폴백).
+/// 다른 사람도 내 캐릭터와 동일 로직(seed→spec→description→이미지)으로 그려 화풍을 맞춘다.
+#[tauri::command(async)]
+pub fn get_occupant_sprite(app: tauri::AppHandle, seed: String) -> Result<Option<String>, String> {
+    use base64::Engine as _;
+    let p = occupant_sprite_path(&app, &seed)?;
+    match std::fs::read(&p) {
+        Ok(bytes) => Ok(Some(base64::engine::general_purpose::STANDARD.encode(bytes))),
+        Err(_) => Ok(None),
+    }
+}
+
+/// 점유자 스프라이트를 백그라운드로 생성 요청(즉시 반환). 이미지 모델 미설정이면 no-op(절차 유지).
+/// 완료 시 `occupant-sprite:ready`(payload=seed) 이벤트 → 프론트가 다시 불러와 교체.
+#[tauri::command(async)]
+pub fn request_occupant_sprite(app: tauri::AppHandle, seed: String) -> Result<(), String> {
+    use tauri::Emitter as _;
+    let p = occupant_sprite_path(&app, &seed)?;
+    if p.exists() {
+        return Ok(()); // 이미 있음
+    }
+    let Some(cfg) = agent_mentor::sprite::SpriteConfig::from_env() else {
+        return Ok(()); // 이미지 모델 미설정 — 절차 폴백 유지
+    };
+    // pending 마커로 동시/중복 생성 방지 (토큰 낭비 차단)
+    let pending = p.with_extension("pending");
+    if pending.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = p.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(&pending, b"");
+    let app2 = app.clone();
+    std::thread::spawn(move || {
+        let res = agent_mentor::sprite::sprite_for_seed(&cfg, &seed);
+        let _ = std::fs::remove_file(&pending);
+        match res {
+            Ok(png) => {
+                if std::fs::write(&p, png).is_ok() {
+                    log::info!("점유자 AI 스프라이트 생성: {}", p.display());
+                    let _ = app2.emit("occupant-sprite:ready", seed);
+                }
+            }
+            Err(e) => log::warn!("점유자 스프라이트 생성 실패: {e}"),
+        }
+    });
+    Ok(())
+}
+
+// --- R6 반복 지시 → SKILL.md 초안 (skill_draft) ---
+// 엔진은 store 설정(engine_url…) 우선, 없으면 .env 폴백 — engine_settings_get과 같은 규칙.
+// 규율: 재료 수집(SQL)은 락 안, 초안 생성(LLM 네트워크)은 락 밖.
+
+/// store 설정 우선으로 엔진을 구성. 둘 다 없으면 None(→ 결정론 골격 폴백).
+fn resolve_engine(store: &SqliteStore) -> Option<OpenAiCompatEngine> {
+    let get = |k: &str| store.get_setting(k).ok().flatten().unwrap_or_default();
+    let url = get("engine_url").trim().to_string();
+    if !url.is_empty() {
+        let model = get("engine_model");
+        return Some(OpenAiCompatEngine {
+            base_url: url,
+            api_key: get("engine_key").trim().to_string(),
+            model: if model.trim().is_empty() { "gpt-4o-mini".into() } else { model.trim().into() },
+        });
+    }
+    OpenAiCompatEngine::from_env()
+}
+
+#[derive(Debug, Serialize)]
+pub struct SkillDraftResult {
+    pub markdown: String,
+    pub slug: String,
+    pub llm_generated: bool,
+    pub session_count: u64,
+}
+
+/// R6 finding(host + 대표 프롬프트)으로 반복 워크플로를 되짚어 SKILL.md 초안을 생성.
+#[tauri::command(async)]
+pub fn generate_skill_draft(
+    state: State<AppState>,
+    host: String,
+    representative: String,
+) -> Result<SkillDraftResult, String> {
+    // 1) 재료 수집 + 엔진 구성 (락 안, SQL만)
+    let (ctx, engine) = {
+        let guard = lock(&state)?;
+        let ctx = agent_mentor::skill_draft::gather_context(&guard, &host, &representative)
+            .map_err(|e| e.to_string())?;
+        (ctx, resolve_engine(&guard))
+    };
+    // 2) 초안 생성 (락 밖, LLM 네트워크 가능)
+    let draft = agent_mentor::skill_draft::build_draft(&ctx, engine.as_ref().map(|e| e as &dyn Engine));
+    Ok(SkillDraftResult {
+        markdown: draft.markdown,
+        slug: draft.slug,
+        llm_generated: draft.llm_generated,
+        session_count: ctx.session_count,
+    })
+}
+
+/// 초안을 사용자의 스킬 디렉터리에 저장 — `%USERPROFILE%\.claude\skills\<slug>\SKILL.md`.
+/// 이미 있으면 덮어쓰지 않고 `-2`, `-3`… 접미를 붙여 사용자의 기존 스킬을 보호한다.
+#[tauri::command(async)]
+pub fn save_skill_draft(slug: String, markdown: String) -> Result<String, String> {
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .map_err(|_| "홈 디렉터리를 찾지 못했습니다".to_string())?;
+    let base = std::path::Path::new(&home).join(".claude").join("skills");
+    let path = agent_mentor::skill_draft::write_draft(&base, &slug, &markdown)
+        .map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
 }

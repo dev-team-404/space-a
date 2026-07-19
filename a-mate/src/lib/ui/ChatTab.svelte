@@ -39,6 +39,14 @@
     }
   }
 
+  // 코칭(Tier 2)을 발견 가능하게 — 빈 상태의 예시 질문 칩
+  const suggestions = ['이번 주 깊게 봐줘', '내 약점이 뭐야?', '지금 뭘 배우면 좋아?'];
+  function ask(text: string) {
+    if (sending) return;
+    draft = text;
+    send();
+  }
+
   function onKeydown(e: KeyboardEvent) {
     // isComposing: 한글 IME 조합 중 Enter로 전송되는 것 방지
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
@@ -66,7 +74,14 @@
   {:else}
     <div class="list" bind:this={listEl}>
       {#if chatState.messages.length === 0}
-        <p class="hint">오늘 요약이나 코칭 지적에 대해 물어보세요. (예: “왜 playwright를 빼라는 거야?”)</p>
+        <div class="welcome">
+          <p class="hint">오늘 요약이나 코칭 지적을 물어보세요. 이번 주를 <b>깊게</b> 봐달라고 하면 성장 코칭을 해드려요.</p>
+          <div class="chips">
+            {#each suggestions as s (s)}
+              <button class="chip" onclick={() => ask(s)} disabled={sending}>{s}</button>
+            {/each}
+          </div>
+        </div>
       {/if}
       {#each chatState.messages as m, i (i)}
         <div class="msg {m.role}">{m.content}</div>
@@ -97,7 +112,16 @@
   .setup .fine { color: var(--ink-soft); font-size: 12px; }
   .setup code { background: var(--pastel-lav); border-radius: var(--radius-s); padding: 1px 4px; }
   .list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
-  .hint { color: var(--ink-soft); font-size: 12px; margin: auto; }
+  .hint { color: var(--ink-soft); font-size: 12px; margin: 0; }
+  .welcome { margin: auto; max-width: 340px; text-align: center; display: flex; flex-direction: column; gap: 12px; }
+  .welcome b { color: var(--accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .chips .chip {
+    border: 1px solid var(--pastel-lav); background: var(--frame-bg); color: var(--ink);
+    cursor: pointer; font: inherit; font-size: 12px; border-radius: 999px; padding: 5px 11px;
+  }
+  .chips .chip:hover { background: var(--pastel-lav); }
+  .chips .chip:disabled { opacity: 0.6; cursor: default; }
   .msg {
     max-width: 78%; padding: 8px 12px; font-size: 13px; white-space: pre-wrap;
     border-radius: var(--radius-m); box-shadow: var(--shadow-soft); line-height: 1.5;

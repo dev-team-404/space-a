@@ -16,6 +16,7 @@ pub mod pipeline;
 pub mod profile;
 pub mod rooms_client;
 pub mod rules;
+pub mod skill_draft;
 pub mod store;
 pub mod transcript;
 

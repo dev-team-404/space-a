@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { listFindings, onNewFindings, setFindingStatus, sessionsCtx, type CoachFinding, type SessionCtxItem } from '../api';
+  import { listFindings, onNewFindings, setFindingStatus, sessionsCtx, generateSkillDraft, saveSkillDraft, type CoachFinding, type SessionCtxItem, type SkillDraft } from '../api';
   import SessionModal from './SessionModal.svelte';
   import { coachTitle, ctxLine, sessionIdsOf, totalSessionsOf } from './coach-helpers';
 
@@ -75,7 +75,54 @@
   }
 
   const icon = (s: CoachFinding['severity']) => (s === 'warn' ? '⚠' : s === 'suggest' ? '💡' : 'ℹ');
+
+  // R6 → SKILL.md 초안: 반복 지시를 재사용 스킬로 전환 ("반복 작업은 Skill로 전환된다")
+  const repeatedPromptOf = (f: CoachFinding): string | null => {
+    const ev = f.evidence as { repeated_prompt?: string } | null;
+    return ev?.repeated_prompt ?? null;
+  };
+  let draft = $state<{
+    key: string;
+    loading: boolean;
+    result: SkillDraft | null;
+    error: string | null;
+    savedPath: string | null;
+    copied: boolean;
+  } | null>(null);
+
+  async function makeDraft(f: CoachFinding) {
+    const rep = repeatedPromptOf(f);
+    if (!rep) return;
+    draft = { key: f.dedup_key, loading: true, result: null, error: null, savedPath: null, copied: false };
+    try {
+      const r = await generateSkillDraft(f.scope_host ?? '', rep);
+      draft = { key: f.dedup_key, loading: false, result: r, error: null, savedPath: null, copied: false };
+    } catch (e) {
+      draft = { key: f.dedup_key, loading: false, result: null, error: String(e), savedPath: null, copied: false };
+    }
+  }
+
+  async function copyDraft() {
+    if (!draft?.result) return;
+    try {
+      await navigator.clipboard.writeText(draft.result.markdown);
+      draft = { ...draft, copied: true };
+      setTimeout(() => { if (draft) draft = { ...draft, copied: false }; }, 1500);
+    } catch { /* 복사 실패 무시 */ }
+  }
+
+  async function saveDraft() {
+    if (!draft?.result) return;
+    try {
+      const path = await saveSkillDraft(draft.result.slug, draft.result.markdown);
+      draft = { ...draft, savedPath: path, error: null };
+    } catch (e) {
+      draft = { ...draft, error: String(e) };
+    }
+  }
 </script>
+
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape' && draft) draft = null; }} />
 
 <section class="coach">
   {#if active.length === 0}
@@ -120,6 +167,9 @@
               {copied === f.dedup_key ? '복사됨!' : `📋 ${f.fix_command}`}
             </button>
           {/if}
+          {#if f.rule_id === 'R6' && repeatedPromptOf(f)}
+            <button class="skillify" onclick={() => makeDraft(f)}>🧩 스킬 초안 만들기</button>
+          {/if}
           {#if f.scope_kind === 'session'}
             <button onclick={() => openDetail(f)}>세션 상세</button>
           {/if}
@@ -156,6 +206,35 @@
 
   {#if detail}
     <SessionModal sessionId={detail.id} title={detail.title} onClose={() => (detail = null)} />
+  {/if}
+
+  {#if draft}
+    <div class="draft-scrim">
+      <div class="draft-modal" role="dialog" aria-modal="true" aria-label="스킬 초안">
+        <header class="draft-head">
+          <span>🧩 SKILL.md 초안</span>
+          <button class="x" onclick={() => (draft = null)} aria-label="닫기">✕</button>
+        </header>
+        {#if draft.loading}
+          <p class="draft-msg">반복 패턴을 스킬로 정리하는 중…</p>
+        {:else if draft.error}
+          <p class="draft-msg err">초안 생성 실패: {draft.error}</p>
+        {:else if draft.result}
+          <p class="draft-msg">
+            같은 지시로 연 {draft.result.session_count}개 세션을 하나의 스킬로 묶었어요.
+            {draft.result.llm_generated ? '' : '(엔진 미설정 — 기본 골격)'}
+          </p>
+          <pre class="draft-body">{draft.result.markdown}</pre>
+          <div class="draft-actions">
+            <button onclick={copyDraft}>{draft.copied ? '복사됨!' : '📋 복사'}</button>
+            <button class="primary" onclick={saveDraft}>💾 스킬로 저장</button>
+          </div>
+          {#if draft.savedPath}
+            <p class="draft-saved">저장됨 → <code>{draft.savedPath}</code></p>
+          {/if}
+        {/if}
+      </div>
+    </div>
   {/if}
 </section>
 
@@ -204,4 +283,29 @@
     border: none; cursor: pointer; font: inherit; font-size: 11px;
     background: var(--pastel-mint); border-radius: var(--radius-s); padding: 3px 8px;
   }
+  .actions .skillify { background: var(--pastel-mint); font-weight: 600; }
+  .draft-scrim {
+    position: fixed; inset: 0; background: rgba(40, 30, 60, 0.35);
+    display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px;
+  }
+  .draft-modal {
+    background: var(--frame-bg); border-radius: var(--radius-m); box-shadow: var(--shadow-soft);
+    width: min(560px, 100%); max-height: 82vh; display: flex; flex-direction: column; padding: 14px 16px;
+  }
+  .draft-head { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+  .draft-head .x { border: none; background: none; cursor: pointer; font: inherit; color: var(--ink-soft); }
+  .draft-msg { font-size: 12px; color: var(--ink-soft); margin: 8px 0; }
+  .draft-msg.err { color: var(--pastel-coral); }
+  .draft-body {
+    background: #f4f1fa; border-radius: var(--radius-s); padding: 10px;
+    overflow: auto; font-size: 11.5px; line-height: 1.5; margin: 0; white-space: pre-wrap; flex: 1;
+  }
+  .draft-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .draft-actions button {
+    border: none; cursor: pointer; font: inherit; font-size: 12px;
+    background: var(--pastel-lav); color: var(--ink); border-radius: var(--radius-s); padding: 6px 12px;
+  }
+  .draft-actions .primary { background: var(--pastel-mint); font-weight: 600; }
+  .draft-saved { font-size: 11px; color: var(--ink-soft); margin: 8px 0 0; word-break: break-all; }
+  .draft-saved code { background: #f4f1fa; padding: 1px 4px; border-radius: 3px; }
 </style>
