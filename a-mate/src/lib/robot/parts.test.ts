@@ -56,10 +56,10 @@ describe('buildRobotShapes', () => {
     }
   });
 
-  it('color 인덱스가 0..8 범위', () => {
+  it('color 인덱스가 0..9 범위 (9=실루엣 아웃라인 상수)', () => {
     for (const s of buildRobotShapes(baseSpec, baseFrame)) {
       expect(s.color).toBeGreaterThanOrEqual(0);
-      expect(s.color).toBeLessThan(9);
+      expect(s.color).toBeLessThan(10);
     }
   });
 
