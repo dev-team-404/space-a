@@ -1186,19 +1186,32 @@ impl SqliteStore {
         if session_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let placeholders = std::iter::repeat("?").take(session_ids.len()).collect::<Vec<_>>().join(",");
-        let sql = format!(
-            "SELECT COALESCE(raw_name, tool_kind, '?') AS t, COUNT(*) AS n
-             FROM events
-             WHERE kind='tool_call' AND session_id IN ({placeholders})
-             GROUP BY t ORDER BY n DESC LIMIT 12",
-        );
-        let mut stmt = self.conn.prepare(&sql)?;
-        let params = rusqlite::params_from_iter(session_ids.iter());
-        let rows = stmt.query_map(params, |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
-        })?;
-        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+        // SQLite 바인딩 변수 한도(SQLITE_LIMIT_VARIABLE_NUMBER, 기본 999) 초과 방지 —
+        // 세션이 많아도 크래시하지 않도록 990개씩 청크로 조회하고 Rust에서 합산·상위 12개.
+        use std::collections::HashMap;
+        let mut merged: HashMap<String, u64> = HashMap::new();
+        for chunk in session_ids.chunks(990) {
+            let placeholders = std::iter::repeat("?").take(chunk.len()).collect::<Vec<_>>().join(",");
+            let sql = format!(
+                "SELECT COALESCE(raw_name, tool_kind, '?') AS t, COUNT(*) AS n
+                 FROM events
+                 WHERE kind='tool_call' AND session_id IN ({placeholders})
+                 GROUP BY t",
+            );
+            let mut stmt = self.conn.prepare(&sql)?;
+            let params = rusqlite::params_from_iter(chunk.iter());
+            let rows = stmt.query_map(params, |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)? as u64))
+            })?;
+            for row in rows {
+                let (t, n) = row?;
+                *merged.entry(t).or_insert(0) += n;
+            }
+        }
+        let mut out: Vec<(String, u64)> = merged.into_iter().collect();
+        out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0))); // 동점은 이름순(결정론)
+        out.truncate(12);
+        Ok(out)
     }
 
     /// hub_share_state에서 특정 접두사 키가 특정 날짜(shared_at 접두사)에 몇 건인지 — 일일 상한용.
@@ -2107,6 +2120,31 @@ mod tests {
         assert_eq!(cwd.as_deref(), Some("D:\\Project\\cowork"));
         assert_eq!(prompt.as_deref(), Some("Run this exact Bash command"));
         assert!(store.session_ctx("nope").unwrap().is_none());
+    }
+
+    #[test]
+    fn tool_usage_for_sessions_chunks_beyond_sqlite_var_limit() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 실제 도구 호출 2세션 (Bash x2, Read x1)
+        let ev = |sess: &str, off: u64, raw: &str| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
+            uuid: Some(format!("{sess}-{off}")), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-19T10:00:00Z".into()), source_file: "s.jsonl".into(), source_offset: off,
+            kind: EventKind::ToolCall {
+                kind: ToolKind::from_raw_name(raw), raw_name: raw.into(), target: None,
+                tool_use_id: Some(format!("{sess}-{off}-t")),
+            },
+        };
+        store.upsert_events(&[ev("s0",1,"Bash"), ev("s0",2,"Bash"), ev("s1",1,"Read")]).unwrap();
+        // 999 초과 id (대부분 없는 것) — 청크 안 되면 "too many SQL variables"로 크래시
+        let mut ids: Vec<String> = (0..1500).map(|i| format!("z{i}")).collect();
+        ids.push("s0".into());
+        ids.push("s1".into());
+        let out = store.tool_usage_for_sessions(&ids).unwrap(); // 크래시하지 않아야
+        let map: std::collections::HashMap<_, _> = out.into_iter().collect();
+        assert_eq!(map.get("Bash"), Some(&2)); // 청크 경계 넘어 합산 정확
+        assert_eq!(map.get("Read"), Some(&1));
     }
 
     #[test]

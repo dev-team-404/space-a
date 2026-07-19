@@ -37,13 +37,36 @@ const COACHING_MARKERS: &[&str] = &[
 const QUANT_MARKERS: &[&str] =
     &["얼마", "몇 ", "몇개", "몇 개", "몇번", "몇 번", "총 ", "합계", "통계", "how many", "how much", "count"];
 
+/// 키워드 포함 검사. 순수 ASCII 알파벳 키워드는 **단어 경계**를 요구해 오탐을 막는다
+/// (예: "review"가 "preview"에, "count"가 "account"에 걸리는 것 방지). 한글 등은 부분일치 그대로.
+/// 바이트 인덱스 기반 — 한/영 혼합 문자열에서도 안전(char-index 혼동 없음).
+fn contains_keyword(msg: &str, keyword: &str) -> bool {
+    if !keyword.is_ascii() || keyword.bytes().any(|b| !b.is_ascii_alphabetic()) {
+        return msg.contains(keyword); // 비-ASCII·공백 포함 키워드는 그대로
+    }
+    let bytes = msg.as_bytes();
+    let klen = keyword.len();
+    let mut start = 0;
+    while let Some(idx) = msg[start..].find(keyword) {
+        let abs = start + idx;
+        let before_ok = abs == 0 || !bytes[abs - 1].is_ascii_alphanumeric();
+        let end = abs + klen;
+        let after_ok = end == bytes.len() || !bytes[end].is_ascii_alphanumeric();
+        if before_ok && after_ok {
+            return true;
+        }
+        start = abs + 1;
+    }
+    false
+}
+
 /// 사용자 메시지 하나의 의도를 결정론적으로 분류. 코칭 신호 우선(질적 도움이 최우선 가치).
 pub fn classify_intent(msg: &str) -> ChatIntent {
     let m = msg.to_lowercase();
-    if COACHING_MARKERS.iter().any(|k| m.contains(k)) {
+    if COACHING_MARKERS.iter().any(|k| contains_keyword(&m, k)) {
         return ChatIntent::Coaching;
     }
-    if QUANT_MARKERS.iter().any(|k| m.contains(k)) {
+    if QUANT_MARKERS.iter().any(|k| contains_keyword(&m, k)) {
         return ChatIntent::Quantitative;
     }
     ChatIntent::Narrative
@@ -149,7 +172,9 @@ pub fn build_coaching_system_prompt(brief: &CoachingBrief) -> String {
 /// 전부 파생 수치·요약이며 트랜스크립트 원문은 없다(전송 경계).
 pub fn assemble_coaching_brief(store: &crate::store::SqliteStore) -> anyhow::Result<CoachingBrief> {
     use crate::profile::{detect_profile, Dimension};
-    let user_name = std::env::var("USERNAME").unwrap_or_else(|_| "주인".into());
+    let user_name = std::env::var("USERNAME")
+        .or_else(|_| std::env::var("USER")) // Unix 계열은 USER
+        .unwrap_or_else(|_| "주인".into());
     let today = chrono::Local::now().date_naive();
     let d = |n: i64| (today - chrono::Duration::days(n)).format("%Y-%m-%d").to_string();
     // 이번 주(0..6일) vs 지난주(7..13일)
@@ -299,6 +324,17 @@ mod tests {
     fn classify_intent_prioritizes_coaching_over_quant() {
         // 코칭 신호가 있으면 수치 단어가 섞여도 코칭 우선
         assert_eq!(classify_intent("토큰을 얼마나 아꼈는지 말고, 어떻게 개선할지 코칭해줘"), ChatIntent::Coaching);
+    }
+
+    #[test]
+    fn classify_intent_no_false_positive_on_substring_keywords() {
+        // 영어 키워드가 다른 단어의 일부일 때 오탐 금지 (gemini 리뷰):
+        assert_eq!(classify_intent("markdown preview 좀 보여줘"), ChatIntent::Narrative); // review ⊄
+        assert_eq!(classify_intent("내 account 잔액 알려줘"), ChatIntent::Narrative);     // count ⊄
+        assert_eq!(classify_intent("cockroach 사진 찾아줘"), ChatIntent::Narrative);       // coach ⊄
+        // 단어로 쓰이면 여전히 코칭
+        assert_eq!(classify_intent("please review my week"), ChatIntent::Coaching);
+        assert_eq!(classify_intent("how many sessions this week?"), ChatIntent::Quantitative);
     }
 
     fn sample_brief() -> CoachingBrief {
