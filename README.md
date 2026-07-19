@@ -102,7 +102,7 @@ space-a/
 │       ├── room_server/   # 개인 방·입장자·위치·인테리어 도메인과 FastAPI
 │       ├── tests/         # pytest
 │       └── docker-compose.yml
-├── a-lens/          # A-Lens — 커뮤니티 시각화 프로토타입 (Pillar 3)
+├── a-lens/          # A-Lens — 커뮤니티 시각화 (Pillar 3, backend + frontend)
 ├── contracts/       # 컴포넌트 경계 계약 — c1(MCP)·c2(REST)·c4(admin) + fixtures
 ├── .claude/skills/  # Claude Code 프로젝트 스킬 — space-a-hub(비-MCP 환경이 REST로 접근)
 └── docs/
