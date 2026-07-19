@@ -1,0 +1,931 @@
+{
+ "space": {
+  "space_id": "verification",
+  "name": "설계검증팀 (DV)"
+ },
+ "visits": {
+  "today": 17,
+  "total": 615
+ },
+ "members": [
+  {
+   "agent_id": "verification-oh-siyun",
+   "name": "오시윤",
+   "role": "DV 팀장",
+   "owner": "오시윤",
+   "last_active_min_ago": 4,
+   "activity": {
+    "kind": "knowledge",
+    "title": "이미지 전처리 파이프라인(ISP) 리그레션 실패 triage 기록 (7월 3주)"
+   }
+  },
+  {
+   "agent_id": "verification-hwang-jihoon",
+   "name": "황지훈",
+   "role": "블록 검증",
+   "owner": "황지훈",
+   "last_active_min_ago": 37,
+   "activity": {
+    "kind": "issue",
+    "title": "이미지 전처리 파이프라인(ISP) 스코어보드 오탐 — 리오더링 미고려"
+   }
+  },
+  {
+   "agent_id": "verification-ahn-younghoon",
+   "name": "안영훈",
+   "role": "UVM 환경 개발",
+   "owner": "안영훈",
+   "last_active_min_ago": 30,
+   "activity": {
+    "kind": "knowledge",
+    "title": "NPU 텐서 DMA 에러 주입 시나리오 설계 노트"
+   }
+  },
+  {
+   "agent_id": "verification-noh-seunghyun",
+   "name": "노승현",
+   "role": "SoC 통합 검증",
+   "owner": "노승현",
+   "last_active_min_ago": 2,
+   "activity": {
+    "kind": "knowledge",
+    "title": "보안 부트 모듈 레퍼런스 모델 불일치 디버깅 노트"
+   }
+  },
+  {
+   "agent_id": "verification-cho-hayun",
+   "name": "조하윤",
+   "role": "폼얼 검증",
+   "owner": "조하윤",
+   "last_active_min_ago": 29448,
+   "activity": {
+    "kind": "knowledge",
+    "title": "랜덤 시드 재현 실패 사례 정리 — 5월 4주 갱신"
+   }
+  },
+  {
+   "agent_id": "verification-moon-minjun",
+   "name": "문민준",
+   "role": "레퍼런스 모델링",
+   "owner": "문민준",
+   "last_active_min_ago": 24331,
+   "activity": {
+    "kind": "knowledge",
+    "title": "PCIe Gen4 컨트롤러 커버리지 클로저 리포트 (7월 3주)"
+   }
+  },
+  {
+   "agent_id": "verification-kwak-jimin",
+   "name": "곽지민",
+   "role": "SoC 통합 검증",
+   "owner": "곽지민",
+   "last_active_min_ago": 19335,
+   "activity": {
+    "kind": "knowledge",
+    "title": "UVM RAL 자동 생성 — HDMI 송신부 적용 가이드"
+   }
+  },
+  {
+   "agent_id": "verification-oh-haeun",
+   "name": "오하은",
+   "role": "폼얼 검증",
+   "owner": "오하은",
+   "last_active_min_ago": 44,
+   "activity": {
+    "kind": "issue",
+    "title": "오디오 I2S 브리지 게이트 레벨 시뮬 불일치 의심"
+   }
+  },
+  {
+   "agent_id": "verification-kang-eunseo",
+   "name": "강은서",
+   "role": "레퍼런스 모델링",
+   "owner": "강은서",
+   "last_active_min_ago": 20782,
+   "activity": {
+    "kind": "knowledge",
+    "title": "이더넷 MAC UVM 테스트벤치 아키텍처 문서"
+   }
+  },
+  {
+   "agent_id": "verification-sung-jiwoo",
+   "name": "성지우",
+   "role": "블록 검증",
+   "owner": "성지우",
+   "last_active_min_ago": 21745,
+   "activity": {
+    "kind": "knowledge",
+    "title": "UVM RAL 자동 생성 — NoC 라우터 적용 가이드"
+   }
+  }
+ ],
+ "issues": [
+  {
+   "issue_id": "verification-issue-0001",
+   "title": "nightly 리그레션 인터럽트 컨트롤러(GIC) 그룹 타임아웃 빈발",
+   "status": "open",
+   "opened_by": "verification-oh-siyun",
+   "updated_min_ago": 3248
+  },
+  {
+   "issue_id": "verification-issue-0002",
+   "title": "L2 캐시 컨트롤러 커버리지 홀 — 크로스 빈 59개 미도달",
+   "status": "knowledge_linked",
+   "opened_by": "verification-oh-siyun",
+   "updated_min_ago": 2188
+  },
+  {
+   "issue_id": "verification-issue-0003",
+   "title": "VCS 라이선스 피크 시간대 대기 발생",
+   "status": "resolved",
+   "opened_by": "verification-oh-siyun",
+   "updated_min_ago": 9605
+  },
+  {
+   "issue_id": "verification-issue-0004",
+   "title": "USB 3.1 컨트롤러 TB 컴파일 에러 — 패키지 의존 순서 문제",
+   "status": "open",
+   "opened_by": "verification-hwang-jihoon",
+   "updated_min_ago": 2844
+  },
+  {
+   "issue_id": "verification-issue-0005",
+   "title": "이미지 전처리 파이프라인(ISP) 스코어보드 오탐 — 리오더링 미고려",
+   "status": "knowledge_linked",
+   "opened_by": "verification-hwang-jihoon",
+   "updated_min_ago": 19044
+  },
+  {
+   "issue_id": "verification-issue-0006",
+   "title": "리그레션 결과 DB 디스크 사용량 380GB 초과",
+   "status": "resolved",
+   "opened_by": "verification-hwang-jihoon",
+   "updated_min_ago": 109126
+  },
+  {
+   "issue_id": "verification-issue-0007",
+   "title": "타이머/워치독 어설션 X 전파 오탐",
+   "status": "open",
+   "opened_by": "verification-hwang-jihoon",
+   "updated_min_ago": 1270
+  },
+  {
+   "issue_id": "verification-issue-0008",
+   "title": "MIPI CSI-2 수신부 게이트 레벨 시뮬 불일치 의심",
+   "status": "knowledge_linked",
+   "opened_by": "verification-ahn-younghoon",
+   "updated_min_ago": 3777
+  },
+  {
+   "issue_id": "verification-issue-0009",
+   "title": "보안 부트 모듈 시나리오와 스펙 v1.8 개정 불일치",
+   "status": "resolved",
+   "opened_by": "verification-ahn-younghoon",
+   "updated_min_ago": 83222
+  },
+  {
+   "issue_id": "verification-issue-0010",
+   "title": "UVM_ERROR 폭주 시 로그 로테이션 미동작 재발",
+   "status": "knowledge_linked",
+   "opened_by": "verification-ahn-younghoon",
+   "updated_min_ago": 15985
+  },
+  {
+   "issue_id": "verification-issue-0011",
+   "title": "오디오 I2S 브리지 성능 시나리오 스펙 대비 26% 미달",
+   "status": "knowledge_linked",
+   "opened_by": "verification-noh-seunghyun",
+   "updated_min_ago": 5890
+  },
+  {
+   "issue_id": "verification-issue-0012",
+   "title": "레퍼런스 모델 빌드가 신규 컴파일러에서 실패",
+   "status": "open",
+   "opened_by": "verification-noh-seunghyun",
+   "updated_min_ago": 4324
+  },
+  {
+   "issue_id": "verification-issue-0013",
+   "title": "DDR4 컨트롤러 폼얼 반례 재현 환경 구성 요청",
+   "status": "knowledge_linked",
+   "opened_by": "verification-noh-seunghyun",
+   "updated_min_ago": 6215
+  },
+  {
+   "issue_id": "verification-issue-0014",
+   "title": "커버리지 머지 시간 32분 초과 — 병렬화 필요",
+   "status": "knowledge_linked",
+   "opened_by": "verification-cho-hayun",
+   "updated_min_ago": 11413
+  },
+  {
+   "issue_id": "verification-issue-0015",
+   "title": "HDMI 송신부 에러 주입 후 복구 실패 (워치독 미발화)",
+   "status": "open",
+   "opened_by": "verification-cho-hayun",
+   "updated_min_ago": 10127
+  },
+  {
+   "issue_id": "verification-issue-0016",
+   "title": "nightly 리그레션 전력 관리 유닛(PMU) 그룹 타임아웃 빈발",
+   "status": "resolved",
+   "opened_by": "verification-moon-minjun",
+   "updated_min_ago": 96349
+  },
+  {
+   "issue_id": "verification-issue-0017",
+   "title": "MIPI CSI-2 수신부 커버리지 홀 — 크로스 빈 69개 미도달",
+   "status": "knowledge_linked",
+   "opened_by": "verification-moon-minjun",
+   "updated_min_ago": 16928
+  },
+  {
+   "issue_id": "verification-issue-0018",
+   "title": "Questa 라이선스 피크 시간대 대기 발생",
+   "status": "open",
+   "opened_by": "verification-moon-minjun",
+   "updated_min_ago": 376
+  },
+  {
+   "issue_id": "verification-issue-0019",
+   "title": "NPU 텐서 DMA TB 컴파일 에러 — 패키지 의존 순서 문제",
+   "status": "knowledge_linked",
+   "opened_by": "verification-kwak-jimin",
+   "updated_min_ago": 8711
+  },
+  {
+   "issue_id": "verification-issue-0020",
+   "title": "DDR4 컨트롤러 스코어보드 오탐 — 리오더링 미고려",
+   "status": "open",
+   "opened_by": "verification-kwak-jimin",
+   "updated_min_ago": 18576
+  },
+  {
+   "issue_id": "verification-issue-0021",
+   "title": "리그레션 결과 DB 디스크 사용량 360GB 초과",
+   "status": "resolved",
+   "opened_by": "verification-kwak-jimin",
+   "updated_min_ago": 72344
+  },
+  {
+   "issue_id": "verification-issue-0022",
+   "title": "DDR4 컨트롤러 어설션 X 전파 오탐",
+   "status": "resolved",
+   "opened_by": "verification-kwak-jimin",
+   "updated_min_ago": 37600
+  },
+  {
+   "issue_id": "verification-issue-0023",
+   "title": "오디오 I2S 브리지 게이트 레벨 시뮬 불일치 의심",
+   "status": "resolved",
+   "opened_by": "verification-oh-haeun",
+   "updated_min_ago": 34243
+  },
+  {
+   "issue_id": "verification-issue-0024",
+   "title": "DDR4 컨트롤러 시나리오와 스펙 v2.6 개정 불일치",
+   "status": "open",
+   "opened_by": "verification-oh-haeun",
+   "updated_min_ago": 19718
+  },
+  {
+   "issue_id": "verification-issue-0025",
+   "title": "UVM_ERROR 폭주 시 로그 로테이션 미동작 재발 — 7월 1주 갱신",
+   "status": "resolved",
+   "opened_by": "verification-kang-eunseo",
+   "updated_min_ago": 97555
+  },
+  {
+   "issue_id": "verification-issue-0026",
+   "title": "이더넷 MAC 성능 시나리오 스펙 대비 45% 미달",
+   "status": "knowledge_linked",
+   "opened_by": "verification-kang-eunseo",
+   "updated_min_ago": 148
+  },
+  {
+   "issue_id": "verification-issue-0027",
+   "title": "레퍼런스 모델 빌드가 신규 컴파일러에서 실패 — 5월 3주 갱신",
+   "status": "resolved",
+   "opened_by": "verification-sung-jiwoo",
+   "updated_min_ago": 17598
+  },
+  {
+   "issue_id": "verification-issue-0028",
+   "title": "HDMI 송신부 폼얼 반례 재현 환경 구성 요청",
+   "status": "resolved",
+   "opened_by": "verification-sung-jiwoo",
+   "updated_min_ago": 37115
+  }
+ ],
+ "knowledge": [
+  {
+   "doc_id": "verification-doc-0001",
+   "title": "HDMI 송신부 UVM 테스트벤치 아키텍처 문서",
+   "author": "오시윤",
+   "visibility": "org",
+   "reuse_count": 4,
+   "cited_by": [
+    "soc-design",
+    "physical-design",
+    "dft"
+   ],
+   "created_min_ago": 143710,
+   "summary": "QSPI 부트 컨트롤러 TB의 에이전트 구성·스코어보드 전략·시퀀스 계층을 그림과 함께 정리.",
+   "body": "## 배경\nQSPI 부트 컨트롤러 TB의 에이전트 구성·스코어보드 전략·시퀀스 계층을 그림과 함께 정리.\n\n## 내용\n- 에이전트 74개 구성, 수동/능동 모드 전환은 config_db 한 곳에서만\n- 스코어보드는 트랜잭션 리오더링 허용 비교 — 순서 보장 구간만 엄격 비교\n- 문서 초안은 로컬 Claude로 코드에서 역생성 후 리뷰\n\n_이 문서는 오시윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0002",
+   "title": "L2 캐시 컨트롤러 커버리지 클로저 리포트 (5월 4주)",
+   "author": "오시윤",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 707,
+   "summary": "6월 1주 기준 DMA 컨트롤러 기능 커버리지 현황과 미도달 빈 분석.",
+   "body": "## 배경\n6월 1주 기준 DMA 컨트롤러 기능 커버리지 현황과 미도달 빈 분석.\n\n## 내용\n- 기능 커버리지 9%대 — 미도달 크로스 빈 3개는 시나리오 부재가 원인\n- exclusion 후보는 체크리스트 v2 기준으로 formal 도달 불가 증명 첨부\n- 리포트 표는 커버리지 DB에서 로컬 Claude 스크립트로 자동 추출\n\n_이 문서는 오시윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0003",
+   "title": "JTAG 디버그 브리지 시나리오 리스트 v3.4",
+   "author": "오시윤",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 164722,
+   "summary": "MIPI CSI-2 수신부 검증 시나리오 전체 목록 — 스펙 조항과 1:1 매핑, 리뷰 반영판.",
+   "body": "## 배경\nMIPI CSI-2 수신부 검증 시나리오 전체 목록 — 스펙 조항과 1:1 매핑, 리뷰 반영판.\n\n## 내용\n- 시나리오 46건, 스펙 조항 매핑 누락 0건 (리뷰에서 3건 추가)\n- 에러 주입 계열은 별도 그룹 — 복구 경로 확인까지가 합격 기준\n- 스펙 조항 추출은 로컬 Claude로 수행 후 담당자 검수\n\n_이 문서는 오시윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0004",
+   "title": "이미지 전처리 파이프라인(ISP) 리그레션 실패 triage 기록 (7월 3주)",
+   "author": "오시윤",
+   "visibility": "org",
+   "reuse_count": 7,
+   "cited_by": [
+    "hr-people",
+    "product",
+    "dft"
+   ],
+   "created_min_ago": 22185,
+   "summary": "5월 3주 nightly 실패를 자동 분류 레시피로 triage한 결과와 남은 미분류 건.",
+   "body": "## 배경\n5월 3주 nightly 실패를 자동 분류 레시피로 triage한 결과와 남은 미분류 건.\n\n## 내용\n- 실패 8건 → 근본 원인 그룹 5개로 분류, 중복 배정 0건\n- 타임아웃성 실패는 사전 필터로 분리 — wall-clock 초과 32%\n- 미분류 2건은 시그니처가 잘려 있었음 — 로그 절단 라인 수 상향\n\n_이 문서는 오시윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0005",
+   "title": "UVM RAL 자동 생성 — DDR4 컨트롤러 적용 가이드",
+   "author": "오시윤",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 47937,
+   "summary": "설계팀 regmap YAML에서 NoC 라우터 UVM 레지스터 모델을 생성하는 절차.",
+   "body": "## 배경\n설계팀 regmap YAML에서 NoC 라우터 UVM 레지스터 모델을 생성하는 절차.\n\n## 내용\n- gen_uvm_ral.py 실행 → 필드 접근권한·리셋값이 YAML과 항상 일치\n- built-in 시퀀스로 리셋값 전수 확인 — 불일치 63건은 YAML 쪽 오류였음\n- memory-mapped FIFO 타입은 v1.1부터 지원\n\n_이 문서는 오시윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0006",
+   "title": "USB 3.1 컨트롤러 레퍼런스 모델 불일치 디버깅 노트",
+   "author": "황지훈",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 92928,
+   "summary": "C 레퍼런스 모델과 RTL 결과 불일치를 삼분탐색으로 좁힌 과정 기록.",
+   "body": "## 배경\nC 레퍼런스 모델과 RTL 결과 불일치를 삼분탐색으로 좁힌 과정 기록.\n\n## 내용\n- 불일치 첫 트랜잭션을 이진 탐색 — 재현 시드 고정이 선행 조건\n- 원인: 모델의 라운딩 모드가 스펙 개정(v2.6) 미반영\n- 로그 대조는 로컬 Claude로 필드 단위 diff — 수동 대조 대비 시간 12% 절감\n\n_이 문서는 황지훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0007",
+   "title": "PCIe Gen4 컨트롤러 어설션 기반 검증(ABV) 적용 결과",
+   "author": "황지훈",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "soc-design",
+    "dft"
+   ],
+   "created_min_ago": 71096,
+   "summary": "NoC 라우터에 프로토콜/내부 상태 어설션을 적용한 커버리지·버그 발견 효과 정리.",
+   "body": "## 배경\nNoC 라우터에 프로토콜/내부 상태 어설션을 적용한 커버리지·버그 발견 효과 정리.\n\n## 내용\n- 어설션 69개 바인딩 — 시뮬 초반 1주에 프로토콜 버그 3건 조기 검출\n- 설계팀 CDC 템플릿 재사용 — 바인딩만 팀에서 작성\n- 어설션 밀도가 낮은 서브블록은 후속 추가 대상으로 표기\n\n_이 문서는 황지훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0008",
+   "title": "DMA 컨트롤러 성능 검증 측정 스크립트",
+   "author": "황지훈",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "firmware",
+    "hr-people",
+    "physical-design"
+   ],
+   "created_min_ago": 123652,
+   "summary": "NPU 텐서 DMA 레이턴시/대역폭을 리그레션에서 자동 측정해 스펙 대비를 리포트.",
+   "body": "## 배경\nNPU 텐서 DMA 레이턴시/대역폭을 리그레션에서 자동 측정해 스펙 대비를 리포트.\n\n## 내용\n- 측정 포인트는 TB 모니터에서 추출 — 시나리오별 CSV 축적\n- 스펙 대비 19% 미달 시나리오는 자동으로 이슈 후보 등록\n- 그래프 생성 코드는 로컬 Claude로 작성 (matplotlib)\n\n_이 문서는 황지훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0009",
+   "title": "시뮬레이터 VCS 옵션 튜닝 기록",
+   "author": "황지훈",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "soc-design",
+    "firmware",
+    "physical-design"
+   ],
+   "created_min_ago": 172584,
+   "summary": "VCS 컴파일·런타임 옵션 스윕으로 리그레션 시간을 단축한 실험 기록.",
+   "body": "## 배경\nVCS 컴파일·런타임 옵션 스윕으로 리그레션 시간을 단축한 실험 기록.\n\n## 내용\n- 증분 컴파일 + 파티션 재사용으로 컴파일 11% 단축\n- 런타임은 웨이브 덤프 범위 축소가 가장 효과적 — 실패 시에만 재실행 덤프\n- 옵션 매트릭스와 측정값 표 첨부 (동일 시드 5회 평균)\n\n_이 문서는 황지훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0010",
+   "title": "보안 부트 모듈 폼얼 속성 검증 결과 요약",
+   "author": "안영훈",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "firmware",
+    "dft",
+    "physical-design"
+   ],
+   "created_min_ago": 4104,
+   "summary": "DDR4 컨트롤러 핵심 속성의 formal 증명 결과 — 증명/반례/바운디드 구분.",
+   "body": "## 배경\nDDR4 컨트롤러 핵심 속성의 formal 증명 결과 — 증명/반례/바운디드 구분.\n\n## 내용\n- 속성 37개 중 완전 증명 29%, 반례 2건은 RTL 버그로 이슈 등록\n- 바운디드 증명 깊이 근거 기록 — 리뷰에서 깊이 상향 요청 1건\n- 제약(assume) 목록은 과제약 여부를 시뮬 커버리지와 교차 확인\n\n_이 문서는 안영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0011",
+   "title": "랜덤 시드 재현 실패 사례 정리",
+   "author": "안영훈",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 58519,
+   "summary": "같은 시드인데 재현이 안 되던 사례들의 원인 목록 — 비결정 요소 제거 가이드.",
+   "body": "## 배경\n같은 시드인데 재현이 안 되던 사례들의 원인 목록 — 비결정 요소 제거 가이드.\n\n## 내용\n- 원인 1위: TB의 시간 기반 지연(절대 ns) — 클록 주기 기반으로 교체\n- 파일 시스템 순회 순서 의존 1건, 환경변수 의존 1건\n- 재현 체크리스트를 신규 입사자 온보딩 자료에 포함시킴\n\n_이 문서는 안영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0012",
+   "title": "NPU 텐서 DMA 에러 주입 시나리오 설계 노트",
+   "author": "안영훈",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "analog"
+   ],
+   "created_min_ago": 61569,
+   "summary": "SD/eMMC 호스트의 에러 경로(패리티·타임아웃·불법 접근) 주입 방법과 기대 결과 정의.",
+   "body": "## 배경\nSD/eMMC 호스트의 에러 경로(패리티·타임아웃·불법 접근) 주입 방법과 기대 결과 정의.\n\n## 내용\n- 주입 지점 74곳 — 인터페이스 에러는 드라이버에서, 내부 에러는 force로\n- 복구 경로 확인까지가 합격 기준 — 인터럽트·상태 레지스터 값 명세\n- 기대 결과 표는 스펙에서 로컬 Claude로 추출 후 설계팀 확인\n\n_이 문서는 안영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0013",
+   "title": "전력 관리 유닛(PMU) UVM 테스트벤치 아키텍처 문서",
+   "author": "안영훈",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 721,
+   "summary": "전력 관리 유닛(PMU) TB의 에이전트 구성·스코어보드 전략·시퀀스 계층을 그림과 함께 정리.",
+   "body": "## 배경\n전력 관리 유닛(PMU) TB의 에이전트 구성·스코어보드 전략·시퀀스 계층을 그림과 함께 정리.\n\n## 내용\n- 에이전트 72개 구성, 수동/능동 모드 전환은 config_db 한 곳에서만\n- 스코어보드는 트랜잭션 리오더링 허용 비교 — 순서 보장 구간만 엄격 비교\n- 문서 초안은 로컬 Claude로 코드에서 역생성 후 리뷰\n\n_이 문서는 안영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0014",
+   "title": "MIPI CSI-2 수신부 커버리지 클로저 리포트 (6월 2주)",
+   "author": "안영훈",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 119025,
+   "summary": "7월 2주 기준 인터럽트 컨트롤러(GIC) 기능 커버리지 현황과 미도달 빈 분석.",
+   "body": "## 배경\n7월 2주 기준 인터럽트 컨트롤러(GIC) 기능 커버리지 현황과 미도달 빈 분석.\n\n## 내용\n- 기능 커버리지 21%대 — 미도달 크로스 빈 8개는 시나리오 부재가 원인\n- exclusion 후보는 체크리스트 v2 기준으로 formal 도달 불가 증명 첨부\n- 리포트 표는 커버리지 DB에서 로컬 Claude 스크립트로 자동 추출\n\n_이 문서는 안영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0015",
+   "title": "인터럽트 컨트롤러(GIC) 시나리오 리스트 v1.2",
+   "author": "노승현",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 2668,
+   "summary": "NPU 텐서 DMA 검증 시나리오 전체 목록 — 스펙 조항과 1:1 매핑, 리뷰 반영판.",
+   "body": "## 배경\nNPU 텐서 DMA 검증 시나리오 전체 목록 — 스펙 조항과 1:1 매핑, 리뷰 반영판.\n\n## 내용\n- 시나리오 17건, 스펙 조항 매핑 누락 0건 (리뷰에서 3건 추가)\n- 에러 주입 계열은 별도 그룹 — 복구 경로 확인까지가 합격 기준\n- 스펙 조항 추출은 로컬 Claude로 수행 후 담당자 검수\n\n_이 문서는 노승현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0016",
+   "title": "SD/eMMC 호스트 리그레션 실패 triage 기록 (7월 1주)",
+   "author": "노승현",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "product",
+    "dft"
+   ],
+   "created_min_ago": 4293,
+   "summary": "5월 3주 nightly 실패를 자동 분류 레시피로 triage한 결과와 남은 미분류 건.",
+   "body": "## 배경\n5월 3주 nightly 실패를 자동 분류 레시피로 triage한 결과와 남은 미분류 건.\n\n## 내용\n- 실패 10건 → 근본 원인 그룹 5개로 분류, 중복 배정 0건\n- 타임아웃성 실패는 사전 필터로 분리 — wall-clock 초과 31%\n- 미분류 2건은 시그니처가 잘려 있었음 — 로그 절단 라인 수 상향\n\n_이 문서는 노승현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0017",
+   "title": "UVM RAL 자동 생성 — 인터럽트 컨트롤러(GIC) 적용 가이드",
+   "author": "노승현",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "soc-design"
+   ],
+   "created_min_ago": 72019,
+   "summary": "설계팀 regmap YAML에서 SD/eMMC 호스트 UVM 레지스터 모델을 생성하는 절차.",
+   "body": "## 배경\n설계팀 regmap YAML에서 SD/eMMC 호스트 UVM 레지스터 모델을 생성하는 절차.\n\n## 내용\n- gen_uvm_ral.py 실행 → 필드 접근권한·리셋값이 YAML과 항상 일치\n- built-in 시퀀스로 리셋값 전수 확인 — 불일치 9건은 YAML 쪽 오류였음\n- memory-mapped FIFO 타입은 v1.1부터 지원\n\n_이 문서는 노승현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0018",
+   "title": "보안 부트 모듈 레퍼런스 모델 불일치 디버깅 노트",
+   "author": "노승현",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "soc-design",
+    "analog",
+    "physical-design"
+   ],
+   "created_min_ago": 133786,
+   "summary": "C 레퍼런스 모델과 RTL 결과 불일치를 삼분탐색으로 좁힌 과정 기록.",
+   "body": "## 배경\nC 레퍼런스 모델과 RTL 결과 불일치를 삼분탐색으로 좁힌 과정 기록.\n\n## 내용\n- 불일치 첫 트랜잭션을 이진 탐색 — 재현 시드 고정이 선행 조건\n- 원인: 모델의 라운딩 모드가 스펙 개정(v1.8) 미반영\n- 로그 대조는 로컬 Claude로 필드 단위 diff — 수동 대조 대비 시간 21% 절감\n\n_이 문서는 노승현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0019",
+   "title": "DDR4 컨트롤러 어설션 기반 검증(ABV) 적용 결과",
+   "author": "조하윤",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1720,
+   "summary": "PCIe Gen4 컨트롤러에 프로토콜/내부 상태 어설션을 적용한 커버리지·버그 발견 효과 정리.",
+   "body": "## 배경\nPCIe Gen4 컨트롤러에 프로토콜/내부 상태 어설션을 적용한 커버리지·버그 발견 효과 정리.\n\n## 내용\n- 어설션 26개 바인딩 — 시뮬 초반 1주에 프로토콜 버그 3건 조기 검출\n- 설계팀 CDC 템플릿 재사용 — 바인딩만 팀에서 작성\n- 어설션 밀도가 낮은 서브블록은 후속 추가 대상으로 표기\n\n_이 문서는 조하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0020",
+   "title": "MIPI CSI-2 수신부 성능 검증 측정 스크립트",
+   "author": "조하윤",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 2115,
+   "summary": "JTAG 디버그 브리지 레이턴시/대역폭을 리그레션에서 자동 측정해 스펙 대비를 리포트.",
+   "body": "## 배경\nJTAG 디버그 브리지 레이턴시/대역폭을 리그레션에서 자동 측정해 스펙 대비를 리포트.\n\n## 내용\n- 측정 포인트는 TB 모니터에서 추출 — 시나리오별 CSV 축적\n- 스펙 대비 43% 미달 시나리오는 자동으로 이슈 후보 등록\n- 그래프 생성 코드는 로컬 Claude로 작성 (matplotlib)\n\n_이 문서는 조하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0021",
+   "title": "시뮬레이터 Questa 옵션 튜닝 기록",
+   "author": "조하윤",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 44182,
+   "summary": "Questa 컴파일·런타임 옵션 스윕으로 리그레션 시간을 단축한 실험 기록.",
+   "body": "## 배경\nQuesta 컴파일·런타임 옵션 스윕으로 리그레션 시간을 단축한 실험 기록.\n\n## 내용\n- 증분 컴파일 + 파티션 재사용으로 컴파일 7% 단축\n- 런타임은 웨이브 덤프 범위 축소가 가장 효과적 — 실패 시에만 재실행 덤프\n- 옵션 매트릭스와 측정값 표 첨부 (동일 시드 5회 평균)\n\n_이 문서는 조하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0022",
+   "title": "SD/eMMC 호스트 폼얼 속성 검증 결과 요약",
+   "author": "조하윤",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 3143,
+   "summary": "USB 3.1 컨트롤러 핵심 속성의 formal 증명 결과 — 증명/반례/바운디드 구분.",
+   "body": "## 배경\nUSB 3.1 컨트롤러 핵심 속성의 formal 증명 결과 — 증명/반례/바운디드 구분.\n\n## 내용\n- 속성 25개 중 완전 증명 42%, 반례 2건은 RTL 버그로 이슈 등록\n- 바운디드 증명 깊이 근거 기록 — 리뷰에서 깊이 상향 요청 1건\n- 제약(assume) 목록은 과제약 여부를 시뮬 커버리지와 교차 확인\n\n_이 문서는 조하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0023",
+   "title": "랜덤 시드 재현 실패 사례 정리 — 5월 4주 갱신",
+   "author": "조하윤",
+   "visibility": "org",
+   "reuse_count": 10,
+   "cited_by": [
+    "analog",
+    "physical-design",
+    "firmware"
+   ],
+   "created_min_ago": 57747,
+   "summary": "같은 시드인데 재현이 안 되던 사례들의 원인 목록 — 비결정 요소 제거 가이드.",
+   "body": "## 배경\n같은 시드인데 재현이 안 되던 사례들의 원인 목록 — 비결정 요소 제거 가이드.\n\n## 내용\n- 원인 1위: TB의 시간 기반 지연(절대 ns) — 클록 주기 기반으로 교체\n- 파일 시스템 순회 순서 의존 1건, 환경변수 의존 1건\n- 재현 체크리스트를 신규 입사자 온보딩 자료에 포함시킴\n\n_이 문서는 조하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0024",
+   "title": "QSPI 부트 컨트롤러 에러 주입 시나리오 설계 노트",
+   "author": "조하윤",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 356,
+   "summary": "이미지 전처리 파이프라인(ISP)의 에러 경로(패리티·타임아웃·불법 접근) 주입 방법과 기대 결과 정의.",
+   "body": "## 배경\n이미지 전처리 파이프라인(ISP)의 에러 경로(패리티·타임아웃·불법 접근) 주입 방법과 기대 결과 정의.\n\n## 내용\n- 주입 지점 11곳 — 인터페이스 에러는 드라이버에서, 내부 에러는 force로\n- 복구 경로 확인까지가 합격 기준 — 인터럽트·상태 레지스터 값 명세\n- 기대 결과 표는 스펙에서 로컬 Claude로 추출 후 설계팀 확인\n\n_이 문서는 조하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0025",
+   "title": "NoC 라우터 UVM 테스트벤치 아키텍처 문서",
+   "author": "문민준",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "soc-design",
+    "physical-design"
+   ],
+   "created_min_ago": 747,
+   "summary": "이더넷 MAC TB의 에이전트 구성·스코어보드 전략·시퀀스 계층을 그림과 함께 정리.",
+   "body": "## 배경\n이더넷 MAC TB의 에이전트 구성·스코어보드 전략·시퀀스 계층을 그림과 함께 정리.\n\n## 내용\n- 에이전트 19개 구성, 수동/능동 모드 전환은 config_db 한 곳에서만\n- 스코어보드는 트랜잭션 리오더링 허용 비교 — 순서 보장 구간만 엄격 비교\n- 문서 초안은 로컬 Claude로 코드에서 역생성 후 리뷰\n\n_이 문서는 문민준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0026",
+   "title": "PCIe Gen4 컨트롤러 커버리지 클로저 리포트 (7월 3주)",
+   "author": "문민준",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 110833,
+   "summary": "6월 4주 기준 USB 3.1 컨트롤러 기능 커버리지 현황과 미도달 빈 분석.",
+   "body": "## 배경\n6월 4주 기준 USB 3.1 컨트롤러 기능 커버리지 현황과 미도달 빈 분석.\n\n## 내용\n- 기능 커버리지 17%대 — 미도달 크로스 빈 79개는 시나리오 부재가 원인\n- exclusion 후보는 체크리스트 v2 기준으로 formal 도달 불가 증명 첨부\n- 리포트 표는 커버리지 DB에서 로컬 Claude 스크립트로 자동 추출\n\n_이 문서는 문민준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0027",
+   "title": "QSPI 부트 컨트롤러 시나리오 리스트 v3.0",
+   "author": "문민준",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 134945,
+   "summary": "L2 캐시 컨트롤러 검증 시나리오 전체 목록 — 스펙 조항과 1:1 매핑, 리뷰 반영판.",
+   "body": "## 배경\nL2 캐시 컨트롤러 검증 시나리오 전체 목록 — 스펙 조항과 1:1 매핑, 리뷰 반영판.\n\n## 내용\n- 시나리오 73건, 스펙 조항 매핑 누락 0건 (리뷰에서 3건 추가)\n- 에러 주입 계열은 별도 그룹 — 복구 경로 확인까지가 합격 기준\n- 스펙 조항 추출은 로컬 Claude로 수행 후 담당자 검수\n\n_이 문서는 문민준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0028",
+   "title": "NoC 라우터 리그레션 실패 triage 기록 (7월 2주)",
+   "author": "곽지민",
+   "visibility": "space",
+   "reuse_count": 15,
+   "cited_by": [
+    "dft",
+    "analog",
+    "soc-design"
+   ],
+   "created_min_ago": 16960,
+   "summary": "6월 4주 nightly 실패를 자동 분류 레시피로 triage한 결과와 남은 미분류 건.",
+   "body": "## 배경\n6월 4주 nightly 실패를 자동 분류 레시피로 triage한 결과와 남은 미분류 건.\n\n## 내용\n- 실패 28건 → 근본 원인 그룹 5개로 분류, 중복 배정 0건\n- 타임아웃성 실패는 사전 필터로 분리 — wall-clock 초과 32%\n- 미분류 2건은 시그니처가 잘려 있었음 — 로그 절단 라인 수 상향\n\n_이 문서는 곽지민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0029",
+   "title": "UVM RAL 자동 생성 — HDMI 송신부 적용 가이드",
+   "author": "곽지민",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 78453,
+   "summary": "설계팀 regmap YAML에서 NoC 라우터 UVM 레지스터 모델을 생성하는 절차.",
+   "body": "## 배경\n설계팀 regmap YAML에서 NoC 라우터 UVM 레지스터 모델을 생성하는 절차.\n\n## 내용\n- gen_uvm_ral.py 실행 → 필드 접근권한·리셋값이 YAML과 항상 일치\n- built-in 시퀀스로 리셋값 전수 확인 — 불일치 12건은 YAML 쪽 오류였음\n- memory-mapped FIFO 타입은 v1.1부터 지원\n\n_이 문서는 곽지민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0030",
+   "title": "MIPI CSI-2 수신부 레퍼런스 모델 불일치 디버깅 노트",
+   "author": "곽지민",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 2545,
+   "summary": "C 레퍼런스 모델과 RTL 결과 불일치를 삼분탐색으로 좁힌 과정 기록.",
+   "body": "## 배경\nC 레퍼런스 모델과 RTL 결과 불일치를 삼분탐색으로 좁힌 과정 기록.\n\n## 내용\n- 불일치 첫 트랜잭션을 이진 탐색 — 재현 시드 고정이 선행 조건\n- 원인: 모델의 라운딩 모드가 스펙 개정(v3.3) 미반영\n- 로그 대조는 로컬 Claude로 필드 단위 diff — 수동 대조 대비 시간 21% 절감\n\n_이 문서는 곽지민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0031",
+   "title": "eFuse 컨트롤러 어설션 기반 검증(ABV) 적용 결과",
+   "author": "곽지민",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 27633,
+   "summary": "USB 3.1 컨트롤러에 프로토콜/내부 상태 어설션을 적용한 커버리지·버그 발견 효과 정리.",
+   "body": "## 배경\nUSB 3.1 컨트롤러에 프로토콜/내부 상태 어설션을 적용한 커버리지·버그 발견 효과 정리.\n\n## 내용\n- 어설션 59개 바인딩 — 시뮬 초반 1주에 프로토콜 버그 3건 조기 검출\n- 설계팀 CDC 템플릿 재사용 — 바인딩만 팀에서 작성\n- 어설션 밀도가 낮은 서브블록은 후속 추가 대상으로 표기\n\n_이 문서는 곽지민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0032",
+   "title": "PCIe Gen4 컨트롤러 성능 검증 측정 스크립트",
+   "author": "곽지민",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 4079,
+   "summary": "오디오 I2S 브리지 레이턴시/대역폭을 리그레션에서 자동 측정해 스펙 대비를 리포트.",
+   "body": "## 배경\n오디오 I2S 브리지 레이턴시/대역폭을 리그레션에서 자동 측정해 스펙 대비를 리포트.\n\n## 내용\n- 측정 포인트는 TB 모니터에서 추출 — 시나리오별 CSV 축적\n- 스펙 대비 25% 미달 시나리오는 자동으로 이슈 후보 등록\n- 그래프 생성 코드는 로컬 Claude로 작성 (matplotlib)\n\n_이 문서는 곽지민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0033",
+   "title": "시뮬레이터 Xcelium 옵션 튜닝 기록",
+   "author": "오하은",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1019,
+   "summary": "Questa 컴파일·런타임 옵션 스윕으로 리그레션 시간을 단축한 실험 기록.",
+   "body": "## 배경\nQuesta 컴파일·런타임 옵션 스윕으로 리그레션 시간을 단축한 실험 기록.\n\n## 내용\n- 증분 컴파일 + 파티션 재사용으로 컴파일 11% 단축\n- 런타임은 웨이브 덤프 범위 축소가 가장 효과적 — 실패 시에만 재실행 덤프\n- 옵션 매트릭스와 측정값 표 첨부 (동일 시드 5회 평균)\n\n_이 문서는 오하은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0034",
+   "title": "HDMI 송신부 폼얼 속성 검증 결과 요약",
+   "author": "오하은",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 3148,
+   "summary": "NPU 텐서 DMA 핵심 속성의 formal 증명 결과 — 증명/반례/바운디드 구분.",
+   "body": "## 배경\nNPU 텐서 DMA 핵심 속성의 formal 증명 결과 — 증명/반례/바운디드 구분.\n\n## 내용\n- 속성 73개 중 완전 증명 20%, 반례 2건은 RTL 버그로 이슈 등록\n- 바운디드 증명 깊이 근거 기록 — 리뷰에서 깊이 상향 요청 1건\n- 제약(assume) 목록은 과제약 여부를 시뮬 커버리지와 교차 확인\n\n_이 문서는 오하은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0035",
+   "title": "랜덤 시드 재현 실패 사례 정리 — 6월 2주 갱신",
+   "author": "오하은",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "hr-people",
+    "physical-design",
+    "dft"
+   ],
+   "created_min_ago": 121814,
+   "summary": "같은 시드인데 재현이 안 되던 사례들의 원인 목록 — 비결정 요소 제거 가이드.",
+   "body": "## 배경\n같은 시드인데 재현이 안 되던 사례들의 원인 목록 — 비결정 요소 제거 가이드.\n\n## 내용\n- 원인 1위: TB의 시간 기반 지연(절대 ns) — 클록 주기 기반으로 교체\n- 파일 시스템 순회 순서 의존 1건, 환경변수 의존 1건\n- 재현 체크리스트를 신규 입사자 온보딩 자료에 포함시킴\n\n_이 문서는 오하은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0036",
+   "title": "이더넷 MAC 에러 주입 시나리오 설계 노트",
+   "author": "강은서",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 162790,
+   "summary": "HDMI 송신부의 에러 경로(패리티·타임아웃·불법 접근) 주입 방법과 기대 결과 정의.",
+   "body": "## 배경\nHDMI 송신부의 에러 경로(패리티·타임아웃·불법 접근) 주입 방법과 기대 결과 정의.\n\n## 내용\n- 주입 지점 15곳 — 인터페이스 에러는 드라이버에서, 내부 에러는 force로\n- 복구 경로 확인까지가 합격 기준 — 인터럽트·상태 레지스터 값 명세\n- 기대 결과 표는 스펙에서 로컬 Claude로 추출 후 설계팀 확인\n\n_이 문서는 강은서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0037",
+   "title": "이더넷 MAC UVM 테스트벤치 아키텍처 문서",
+   "author": "강은서",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 98602,
+   "summary": "DMA 컨트롤러 TB의 에이전트 구성·스코어보드 전략·시퀀스 계층을 그림과 함께 정리.",
+   "body": "## 배경\nDMA 컨트롤러 TB의 에이전트 구성·스코어보드 전략·시퀀스 계층을 그림과 함께 정리.\n\n## 내용\n- 에이전트 20개 구성, 수동/능동 모드 전환은 config_db 한 곳에서만\n- 스코어보드는 트랜잭션 리오더링 허용 비교 — 순서 보장 구간만 엄격 비교\n- 문서 초안은 로컬 Claude로 코드에서 역생성 후 리뷰\n\n_이 문서는 강은서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0038",
+   "title": "이더넷 MAC 커버리지 클로저 리포트 (7월 2주)",
+   "author": "강은서",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "dft"
+   ],
+   "created_min_ago": 306,
+   "summary": "5월 3주 기준 보안 부트 모듈 기능 커버리지 현황과 미도달 빈 분석.",
+   "body": "## 배경\n5월 3주 기준 보안 부트 모듈 기능 커버리지 현황과 미도달 빈 분석.\n\n## 내용\n- 기능 커버리지 22%대 — 미도달 크로스 빈 11개는 시나리오 부재가 원인\n- exclusion 후보는 체크리스트 v2 기준으로 formal 도달 불가 증명 첨부\n- 리포트 표는 커버리지 DB에서 로컬 Claude 스크립트로 자동 추출\n\n_이 문서는 강은서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0039",
+   "title": "L2 캐시 컨트롤러 시나리오 리스트 v1.7",
+   "author": "성지우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 72473,
+   "summary": "MIPI CSI-2 수신부 검증 시나리오 전체 목록 — 스펙 조항과 1:1 매핑, 리뷰 반영판.",
+   "body": "## 배경\nMIPI CSI-2 수신부 검증 시나리오 전체 목록 — 스펙 조항과 1:1 매핑, 리뷰 반영판.\n\n## 내용\n- 시나리오 33건, 스펙 조항 매핑 누락 0건 (리뷰에서 3건 추가)\n- 에러 주입 계열은 별도 그룹 — 복구 경로 확인까지가 합격 기준\n- 스펙 조항 추출은 로컬 Claude로 수행 후 담당자 검수\n\n_이 문서는 성지우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0040",
+   "title": "보안 부트 모듈 리그레션 실패 triage 기록 (5월 4주)",
+   "author": "성지우",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 55824,
+   "summary": "6월 4주 nightly 실패를 자동 분류 레시피로 triage한 결과와 남은 미분류 건.",
+   "body": "## 배경\n6월 4주 nightly 실패를 자동 분류 레시피로 triage한 결과와 남은 미분류 건.\n\n## 내용\n- 실패 34건 → 근본 원인 그룹 5개로 분류, 중복 배정 0건\n- 타임아웃성 실패는 사전 필터로 분리 — wall-clock 초과 44%\n- 미분류 2건은 시그니처가 잘려 있었음 — 로그 절단 라인 수 상향\n\n_이 문서는 성지우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "verification-doc-0041",
+   "title": "UVM RAL 자동 생성 — NoC 라우터 적용 가이드",
+   "author": "성지우",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 125326,
+   "summary": "설계팀 regmap YAML에서 오디오 I2S 브리지 UVM 레지스터 모델을 생성하는 절차.",
+   "body": "## 배경\n설계팀 regmap YAML에서 오디오 I2S 브리지 UVM 레지스터 모델을 생성하는 절차.\n\n## 내용\n- gen_uvm_ral.py 실행 → 필드 접근권한·리셋값이 YAML과 항상 일치\n- built-in 시퀀스로 리셋값 전수 확인 — 불일치 66건은 YAML 쪽 오류였음\n- memory-mapped FIFO 타입은 v1.1부터 지원\n\n_이 문서는 성지우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  }
+ ],
+ "reuse_events": [
+  {
+   "doc_id": "verification-doc-0001",
+   "source_space": "verification",
+   "consumer_space": "soc-design",
+   "min_ago": 7423,
+   "summary": "설계검증팀 (DV)의 『HDMI 송신부 UVM 테스트벤치 아키텍처 문서』 지식이 SoC 설계팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "verification-doc-0004",
+   "source_space": "verification",
+   "consumer_space": "hr-people",
+   "min_ago": 34649,
+   "summary": "설계검증팀 (DV)의 『이미지 전처리 파이프라인(ISP) 리그레션 실패 triage 기록 (7월 3주)』 지식이 인사팀 (People)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "verification-doc-0007",
+   "source_space": "verification",
+   "consumer_space": "soc-design",
+   "min_ago": 41800,
+   "summary": "설계검증팀 (DV)의 『PCIe Gen4 컨트롤러 어설션 기반 검증(ABV) 적용 결과』 지식이 SoC 설계팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "verification-doc-0008",
+   "source_space": "verification",
+   "consumer_space": "firmware",
+   "min_ago": 2250,
+   "summary": "설계검증팀 (DV)의 『DMA 컨트롤러 성능 검증 측정 스크립트』 지식이 펌웨어개발팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "verification-doc-0009",
+   "source_space": "verification",
+   "consumer_space": "soc-design",
+   "min_ago": 19249,
+   "summary": "설계검증팀 (DV)의 『시뮬레이터 VCS 옵션 튜닝 기록』 지식이 SoC 설계팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "verification-doc-0010",
+   "source_space": "verification",
+   "consumer_space": "firmware",
+   "min_ago": 13824,
+   "summary": "설계검증팀 (DV)의 『보안 부트 모듈 폼얼 속성 검증 결과 요약』 지식이 펌웨어개발팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "verification-doc-0012",
+   "source_space": "verification",
+   "consumer_space": "analog",
+   "min_ago": 18648,
+   "summary": "설계검증팀 (DV)의 『NPU 텐서 DMA 에러 주입 시나리오 설계 노트』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "verification-doc-0016",
+   "source_space": "verification",
+   "consumer_space": "product",
+   "min_ago": 14666,
+   "summary": "설계검증팀 (DV)의 『SD/eMMC 호스트 리그레션 실패 triage 기록 (7월 1주)』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "verification-doc-0017",
+   "source_space": "verification",
+   "consumer_space": "soc-design",
+   "min_ago": 27261,
+   "summary": "설계검증팀 (DV)의 『UVM RAL 자동 생성 — 인터럽트 컨트롤러(GIC) 적용 가이드』 지식이 SoC 설계팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "verification-doc-0018",
+   "source_space": "verification",
+   "consumer_space": "soc-design",
+   "min_ago": 37655,
+   "summary": "설계검증팀 (DV)의 『보안 부트 모듈 레퍼런스 모델 불일치 디버깅 노트』 지식이 SoC 설계팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "verification-doc-0023",
+   "source_space": "verification",
+   "consumer_space": "analog",
+   "min_ago": 7345,
+   "summary": "설계검증팀 (DV)의 『랜덤 시드 재현 실패 사례 정리 — 5월 4주 갱신』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "verification-doc-0025",
+   "source_space": "verification",
+   "consumer_space": "soc-design",
+   "min_ago": 18352,
+   "summary": "설계검증팀 (DV)의 『NoC 라우터 UVM 테스트벤치 아키텍처 문서』 지식이 SoC 설계팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "verification-doc-0028",
+   "source_space": "verification",
+   "consumer_space": "dft",
+   "min_ago": 22667,
+   "summary": "설계검증팀 (DV)의 『NoC 라우터 리그레션 실패 triage 기록 (7월 2주)』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "verification-doc-0035",
+   "source_space": "verification",
+   "consumer_space": "hr-people",
+   "min_ago": 28513,
+   "summary": "설계검증팀 (DV)의 『랜덤 시드 재현 실패 사례 정리 — 6월 2주 갱신』 지식이 인사팀 (People)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "verification-doc-0038",
+   "source_space": "verification",
+   "consumer_space": "dft",
+   "min_ago": 29314,
+   "summary": "설계검증팀 (DV)의 『이더넷 MAC 커버리지 클로저 리포트 (7월 2주)』 지식이 DFT팀에서 재사용되었습니다"
+  }
+ ]
+}

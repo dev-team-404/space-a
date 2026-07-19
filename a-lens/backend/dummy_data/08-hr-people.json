@@ -1,0 +1,1098 @@
+{
+ "space": {
+  "space_id": "hr-people",
+  "name": "인사팀 (People)"
+ },
+ "visits": {
+  "today": 14,
+  "total": 278
+ },
+ "members": [
+  {
+   "agent_id": "hr-people-nam-sungbin",
+   "name": "남성빈",
+   "role": "인사 팀장",
+   "owner": "남성빈",
+   "last_active_min_ago": 3,
+   "activity": {
+    "kind": "knowledge",
+    "title": "CAD 직군 JD 표준 템플릿"
+   }
+  },
+  {
+   "agent_id": "hr-people-kang-sungbin",
+   "name": "강성빈",
+   "role": "채용(테크 리크루팅)",
+   "owner": "강성빈",
+   "last_active_min_ago": 11,
+   "activity": {
+    "kind": "issue",
+    "title": "교육장 예약 충돌 (7월 신입 교육)"
+   }
+  },
+  {
+   "agent_id": "hr-people-joo-eunwoo",
+   "name": "주은우",
+   "role": "HRIS",
+   "owner": "주은우",
+   "last_active_min_ago": 25,
+   "activity": {
+    "kind": "issue",
+    "title": "퇴직 인터뷰 축적 데이터 분석 요청 (익명화 필수)"
+   }
+  },
+  {
+   "agent_id": "hr-people-bae-chaewon",
+   "name": "배채원",
+   "role": "평가/보상",
+   "owner": "배채원",
+   "last_active_min_ago": 5843,
+   "activity": {
+    "kind": "issue",
+    "title": "복지 포인트 정산 오류 문의 28건"
+   }
+  },
+  {
+   "agent_id": "hr-people-kwak-dohyun",
+   "name": "곽도현",
+   "role": "조직문화",
+   "owner": "곽도현",
+   "last_active_min_ago": 12300,
+   "activity": {
+    "kind": "knowledge",
+    "title": "DV 직군 JD 표준 템플릿"
+   }
+  },
+  {
+   "agent_id": "hr-people-na-hyunwoo",
+   "name": "나현우",
+   "role": "HRIS",
+   "owner": "나현우",
+   "last_active_min_ago": 5,
+   "activity": {
+    "kind": "knowledge",
+    "title": "하반기 공채 전형 운영 리뷰 — 6월 1주 갱신"
+   }
+  },
+  {
+   "agent_id": "hr-people-kwak-sumin",
+   "name": "곽수민",
+   "role": "HRIS",
+   "owner": "곽수민",
+   "last_active_min_ago": 9241,
+   "activity": {
+    "kind": "knowledge",
+    "title": "평가 캘리브레이션 세션 운영 가이드 — 6월 3주 갱신"
+   }
+  },
+  {
+   "agent_id": "hr-people-baek-jiwoo",
+   "name": "백지우",
+   "role": "노무/총무",
+   "owner": "백지우",
+   "last_active_min_ago": 24616,
+   "activity": {
+    "kind": "knowledge",
+    "title": "근태·휴가 시스템 이관 준비 노트 — 6월 4주 갱신"
+   }
+  },
+  {
+   "agent_id": "hr-people-kang-chaewon",
+   "name": "강채원",
+   "role": "HRIS",
+   "owner": "강채원",
+   "last_active_min_ago": 26424,
+   "activity": {
+    "kind": "knowledge",
+    "title": "근태·휴가 시스템 이관 준비 노트 — 6월 4주 갱신 (2차)"
+   }
+  },
+  {
+   "agent_id": "hr-people-bae-minjun",
+   "name": "배민준",
+   "role": "HRD/교육",
+   "owner": "배민준",
+   "last_active_min_ago": 3753,
+   "activity": {
+    "kind": "knowledge",
+    "title": "신입 온보딩 커리큘럼 개정안 (9월) — 6월 3주 갱신"
+   }
+  }
+ ],
+ "issues": [
+  {
+   "issue_id": "hr-people-issue-0001",
+   "title": "상반기 공채 CAD 직군 서류 평가 기준 정렬 필요",
+   "status": "knowledge_linked",
+   "opened_by": "hr-people-nam-sungbin",
+   "updated_min_ago": 15839
+  },
+  {
+   "issue_id": "hr-people-issue-0002",
+   "title": "신규 입사자 개발 서버 계정 발급 지연 재발",
+   "status": "resolved",
+   "opened_by": "hr-people-nam-sungbin",
+   "updated_min_ago": 8514
+  },
+  {
+   "issue_id": "hr-people-issue-0003",
+   "title": "RTL 설계 직군 채용 공고 지원자 수 저조 — 채널 재검토",
+   "status": "resolved",
+   "opened_by": "hr-people-nam-sungbin",
+   "updated_min_ago": 123225
+  },
+  {
+   "issue_id": "hr-people-issue-0004",
+   "title": "면접관 일정 조율 지연 — 5월 4주 면접 2건 밀림",
+   "status": "open",
+   "opened_by": "hr-people-nam-sungbin",
+   "updated_min_ago": 1884
+  },
+  {
+   "issue_id": "hr-people-issue-0005",
+   "title": "온보딩 만족도 설문 응답률 54% — 독려 필요",
+   "status": "resolved",
+   "opened_by": "hr-people-kang-sungbin",
+   "updated_min_ago": 103328
+  },
+  {
+   "issue_id": "hr-people-issue-0006",
+   "title": "경력직 처우 협의 19건 대기 — 보상 기준표 개정 필요",
+   "status": "open",
+   "opened_by": "hr-people-kang-sungbin",
+   "updated_min_ago": 4457
+  },
+  {
+   "issue_id": "hr-people-issue-0007",
+   "title": "교육장 예약 충돌 (7월 신입 교육)",
+   "status": "open",
+   "opened_by": "hr-people-kang-sungbin",
+   "updated_min_ago": 17328
+  },
+  {
+   "issue_id": "hr-people-issue-0008",
+   "title": "HRIS 근태 데이터 불일치 60건 — 이관 검증 중",
+   "status": "resolved",
+   "opened_by": "hr-people-kang-sungbin",
+   "updated_min_ago": 122129
+  },
+  {
+   "issue_id": "hr-people-issue-0009",
+   "title": "퇴직 인터뷰 축적 데이터 분석 요청 (익명화 필수)",
+   "status": "resolved",
+   "opened_by": "hr-people-joo-eunwoo",
+   "updated_min_ago": 28110
+  },
+  {
+   "issue_id": "hr-people-issue-0010",
+   "title": "사내 공모 규정 문구 해석 이견 — 노무 검토 요청",
+   "status": "knowledge_linked",
+   "opened_by": "hr-people-joo-eunwoo",
+   "updated_min_ago": 13463
+  },
+  {
+   "issue_id": "hr-people-issue-0011",
+   "title": "CAD 직군 면접 질문 뱅크 갱신 필요 (기술 트렌드 반영)",
+   "status": "knowledge_linked",
+   "opened_by": "hr-people-joo-eunwoo",
+   "updated_min_ago": 12876
+  },
+  {
+   "issue_id": "hr-people-issue-0012",
+   "title": "복지 포인트 정산 오류 문의 28건",
+   "status": "open",
+   "opened_by": "hr-people-bae-chaewon",
+   "updated_min_ago": 17643
+  },
+  {
+   "issue_id": "hr-people-issue-0013",
+   "title": "조직도 시스템 반영 지연 — 8월 조직 개편분",
+   "status": "knowledge_linked",
+   "opened_by": "hr-people-bae-chaewon",
+   "updated_min_ago": 1624
+  },
+  {
+   "issue_id": "hr-people-issue-0014",
+   "title": "채용 설명회(대학 채용 설명회) 자료 현업 검수 지연",
+   "status": "resolved",
+   "opened_by": "hr-people-bae-chaewon",
+   "updated_min_ago": 85970
+  },
+  {
+   "issue_id": "hr-people-issue-0015",
+   "title": "하반기 공채 아날로그 설계 직군 서류 평가 기준 정렬 필요",
+   "status": "resolved",
+   "opened_by": "hr-people-bae-chaewon",
+   "updated_min_ago": 13311
+  },
+  {
+   "issue_id": "hr-people-issue-0016",
+   "title": "신규 입사자 개발 서버 계정 발급 지연 재발 — 6월 2주 갱신",
+   "status": "knowledge_linked",
+   "opened_by": "hr-people-kwak-dohyun",
+   "updated_min_ago": 9330
+  },
+  {
+   "issue_id": "hr-people-issue-0017",
+   "title": "제품기획 직군 채용 공고 지원자 수 저조 — 채널 재검토",
+   "status": "resolved",
+   "opened_by": "hr-people-kwak-dohyun",
+   "updated_min_ago": 39003
+  },
+  {
+   "issue_id": "hr-people-issue-0018",
+   "title": "면접관 일정 조율 지연 — 6월 3주 면접 7건 밀림",
+   "status": "open",
+   "opened_by": "hr-people-kwak-dohyun",
+   "updated_min_ago": 5841
+  },
+  {
+   "issue_id": "hr-people-issue-0019",
+   "title": "온보딩 만족도 설문 응답률 22% — 독려 필요",
+   "status": "resolved",
+   "opened_by": "hr-people-na-hyunwoo",
+   "updated_min_ago": 34617
+  },
+  {
+   "issue_id": "hr-people-issue-0020",
+   "title": "경력직 처우 협의 18건 대기 — 보상 기준표 개정 필요",
+   "status": "resolved",
+   "opened_by": "hr-people-na-hyunwoo",
+   "updated_min_ago": 84606
+  },
+  {
+   "issue_id": "hr-people-issue-0021",
+   "title": "교육장 예약 충돌 (8월 신입 교육)",
+   "status": "resolved",
+   "opened_by": "hr-people-na-hyunwoo",
+   "updated_min_ago": 47179
+  },
+  {
+   "issue_id": "hr-people-issue-0022",
+   "title": "HRIS 근태 데이터 불일치 18건 — 이관 검증 중",
+   "status": "open",
+   "opened_by": "hr-people-na-hyunwoo",
+   "updated_min_ago": 11244
+  },
+  {
+   "issue_id": "hr-people-issue-0023",
+   "title": "퇴직 인터뷰 축적 데이터 분석 요청 (익명화 필수) — 6월 2주 갱신",
+   "status": "resolved",
+   "opened_by": "hr-people-kwak-sumin",
+   "updated_min_ago": 75300
+  },
+  {
+   "issue_id": "hr-people-issue-0024",
+   "title": "사내 공모 규정 문구 해석 이견 — 노무 검토 요청 — 7월 2주 갱신",
+   "status": "resolved",
+   "opened_by": "hr-people-kwak-sumin",
+   "updated_min_ago": 118079
+  },
+  {
+   "issue_id": "hr-people-issue-0025",
+   "title": "PD 직군 면접 질문 뱅크 갱신 필요 (기술 트렌드 반영)",
+   "status": "open",
+   "opened_by": "hr-people-kwak-sumin",
+   "updated_min_ago": 11362
+  },
+  {
+   "issue_id": "hr-people-issue-0026",
+   "title": "복지 포인트 정산 오류 문의 23건",
+   "status": "resolved",
+   "opened_by": "hr-people-kwak-sumin",
+   "updated_min_ago": 59565
+  },
+  {
+   "issue_id": "hr-people-issue-0027",
+   "title": "조직도 시스템 반영 지연 — 9월 조직 개편분",
+   "status": "knowledge_linked",
+   "opened_by": "hr-people-baek-jiwoo",
+   "updated_min_ago": 19105
+  },
+  {
+   "issue_id": "hr-people-issue-0028",
+   "title": "채용 설명회(대학 채용 설명회) 자료 현업 검수 지연 — 7월 3주 갱신",
+   "status": "knowledge_linked",
+   "opened_by": "hr-people-baek-jiwoo",
+   "updated_min_ago": 18686
+  },
+  {
+   "issue_id": "hr-people-issue-0029",
+   "title": "하반기 공채 CAD 직군 서류 평가 기준 정렬 필요",
+   "status": "resolved",
+   "opened_by": "hr-people-baek-jiwoo",
+   "updated_min_ago": 7377
+  },
+  {
+   "issue_id": "hr-people-issue-0030",
+   "title": "신규 입사자 개발 서버 계정 발급 지연 재발 — 5월 3주 갱신",
+   "status": "resolved",
+   "opened_by": "hr-people-baek-jiwoo",
+   "updated_min_ago": 60929
+  },
+  {
+   "issue_id": "hr-people-issue-0031",
+   "title": "아날로그 설계 직군 채용 공고 지원자 수 저조 — 채널 재검토",
+   "status": "resolved",
+   "opened_by": "hr-people-kang-chaewon",
+   "updated_min_ago": 103220
+  },
+  {
+   "issue_id": "hr-people-issue-0032",
+   "title": "면접관 일정 조율 지연 — 7월 3주 면접 13건 밀림",
+   "status": "open",
+   "opened_by": "hr-people-kang-chaewon",
+   "updated_min_ago": 3341
+  },
+  {
+   "issue_id": "hr-people-issue-0033",
+   "title": "온보딩 만족도 설문 응답률 59% — 독려 필요",
+   "status": "open",
+   "opened_by": "hr-people-kang-chaewon",
+   "updated_min_ago": 5501
+  },
+  {
+   "issue_id": "hr-people-issue-0034",
+   "title": "경력직 처우 협의 60건 대기 — 보상 기준표 개정 필요",
+   "status": "open",
+   "opened_by": "hr-people-kang-chaewon",
+   "updated_min_ago": 19672
+  },
+  {
+   "issue_id": "hr-people-issue-0035",
+   "title": "교육장 예약 충돌 (9월 신입 교육)",
+   "status": "resolved",
+   "opened_by": "hr-people-bae-minjun",
+   "updated_min_ago": 98284
+  },
+  {
+   "issue_id": "hr-people-issue-0036",
+   "title": "HRIS 근태 데이터 불일치 57건 — 이관 검증 중",
+   "status": "resolved",
+   "opened_by": "hr-people-bae-minjun",
+   "updated_min_ago": 102900
+  },
+  {
+   "issue_id": "hr-people-issue-0037",
+   "title": "퇴직 인터뷰 축적 데이터 분석 요청 (익명화 필수) — 7월 2주 갱신",
+   "status": "knowledge_linked",
+   "opened_by": "hr-people-bae-minjun",
+   "updated_min_ago": 1341
+  }
+ ],
+ "knowledge": [
+  {
+   "doc_id": "hr-people-doc-0001",
+   "title": "CAD 직군 JD 표준 템플릿",
+   "author": "남성빈",
+   "visibility": "org",
+   "reuse_count": 12,
+   "cited_by": [
+    "soc-design",
+    "product",
+    "analog"
+   ],
+   "created_min_ago": 23671,
+   "summary": "제품기획 직군 채용 공고의 표준 템플릿 — 직무 기술·자격 요건·우대 사항. 현업 검수 완료.",
+   "body": "## 배경\n제품기획 직군 채용 공고의 표준 템플릿 — 직무 기술·자격 요건·우대 사항. 현업 검수 완료.\n\n## 내용\n- 초안은 로컬 Claude로 생성 후 현업 팀장 검수 — 과장 표현 제거 원칙\n- 자격 요건은 필수/우대 구분 명확화 — 지원 장벽 낮추기\n- 직무 키워드는 채용 플랫폼 검색 최적화 반영\n\n_이 문서는 남성빈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0002",
+   "title": "신입 온보딩 커리큘럼 개정안 (8월)",
+   "author": "남성빈",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "dft"
+   ],
+   "created_min_ago": 158138,
+   "summary": "신규 입사자 2주 온보딩의 세션 구성·멘토 배정·계정 발급 절차 개정안.",
+   "body": "## 배경\n신규 입사자 2주 온보딩의 세션 구성·멘토 배정·계정 발급 절차 개정안.\n\n## 내용\n- 세션 20개 — 반도체 기초는 직군 무관 공통, 이후 직군 분기\n- 계정·장비 발급을 입사 1일차 오전으로 앞당김 (지연 민원 반영)\n- 설문 주관식 응답은 로컬 Claude로 요약해 개정 근거로 사용\n\n_이 문서는 남성빈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0003",
+   "title": "제품기획 직군 면접 질문 뱅크",
+   "author": "남성빈",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "dft",
+    "product"
+   ],
+   "created_min_ago": 138060,
+   "summary": "PD 면접관용 구조화 질문 세트 — 평가 기준 루브릭 포함, 면접관 교육 자료.",
+   "body": "## 배경\nPD 면접관용 구조화 질문 세트 — 평가 기준 루브릭 포함, 면접관 교육 자료.\n\n## 내용\n- 기술 심층/협업 상황/문제 해결 3축 질문 16개\n- 평가 루브릭 4단계 — 면접관 간 편차 축소 목적\n- 기술 질문은 현업 검수, 편향 표현은 로컬 Claude 점검 패스\n\n_이 문서는 남성빈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0004",
+   "title": "재택·유연근무 규정 개정 FAQ (7월)",
+   "author": "강성빈",
+   "visibility": "org",
+   "reuse_count": 8,
+   "cited_by": [
+    "soc-design",
+    "dft",
+    "product"
+   ],
+   "created_min_ago": 94,
+   "summary": "근무 제도 개정에 대한 문의를 FAQ로 정리 — 노무 검토 완료본.",
+   "body": "## 배경\n근무 제도 개정에 대한 문의를 FAQ로 정리 — 노무 검토 완료본.\n\n## 내용\n- 문의 38건 유형화 — 코어타임·출장 처리·보안 구역 근무가 상위\n- 답변은 노무사 검토 완료 표시와 함께 게시\n- 규정 원문 개정 이력 링크 포함\n\n_이 문서는 강성빈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0005",
+   "title": "하반기 공채 전형 운영 리뷰",
+   "author": "강성빈",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 133890,
+   "summary": "하반기 공채의 전형 단계별 전환율·소요 기간·개선점 리뷰.",
+   "body": "## 배경\n하반기 공채의 전형 단계별 전환율·소요 기간·개선점 리뷰.\n\n## 내용\n- 서류→면접 전환율 94% — 병목은 면접관 일정 조율\n- 전형 데이터 집계는 HRIS 추출 후 로컬 Claude로 표 정리\n- 개선안: 면접관 풀 사전 확보, 코딩 과제 채점 루브릭 공유\n\n_이 문서는 강성빈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0006",
+   "title": "조직문화 설문 주관식 응답 분석 (9월)",
+   "author": "강성빈",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 3093,
+   "summary": "분기 조직문화 설문의 주관식 응답을 익명화 후 로컬 Claude로 주제 분류한 결과.",
+   "body": "## 배경\n분기 조직문화 설문의 주관식 응답을 익명화 후 로컬 Claude로 주제 분류한 결과.\n\n## 내용\n- 응답 58건 → 주제 6개 분류 — 회의 문화·성장 기회가 상위\n- 익명화 처리 후 분석 (개인 식별 표현 제거) — 원문은 접근 제한\n- 후속: 회의 가이드라인 개정안 착수\n\n_이 문서는 강성빈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0007",
+   "title": "교육 프로그램 수요 조사 결과 (하반기)",
+   "author": "강성빈",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "dft",
+    "soc-design",
+    "verification"
+   ],
+   "created_min_ago": 67925,
+   "summary": "직군별 교육 수요 조사 집계와 하반기 교육 편성안.",
+   "body": "## 배경\n직군별 교육 수요 조사 집계와 하반기 교육 편성안.\n\n## 내용\n- 최다 수요: DFT 직군 심화 과정 — 외부 강사 섭외 진행\n- 사내 강사 후보 28명 — 강의료 규정 확인 완료\n- 설문 집계·교차표는 로컬 Claude로 생성\n\n_이 문서는 강성빈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0008",
+   "title": "평가 캘리브레이션 세션 운영 가이드",
+   "author": "주은우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 168074,
+   "summary": "부서 간 평가 눈높이 맞추기(캘리브레이션) 세션의 운영 절차와 퍼실리테이션 가이드.",
+   "body": "## 배경\n부서 간 평가 눈높이 맞추기(캘리브레이션) 세션의 운영 절차와 퍼실리테이션 가이드.\n\n## 내용\n- 세션 전 배포 자료: 등급 분포·근거 작성 가이드\n- 회의록은 결정 사항만 기록 — 개인 평가 내용은 시스템 밖 기록 금지\n- 운영 체크리스트 53항목\n\n_이 문서는 주은우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0009",
+   "title": "사내 공모(잡포스팅) 제도 운영 기록 (하반기)",
+   "author": "주은우",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1634,
+   "summary": "부서 이동 공모 제도의 공고·지원·이동 현황과 운영 개선점.",
+   "body": "## 배경\n부서 이동 공모 제도의 공고·지원·이동 현황과 운영 개선점.\n\n## 내용\n- 공고 55건, 이동 성사 35% — 직군 전환 성공 사례 2건 인터뷰 게시\n- 현 부서장 사전 협의 절차 관련 민원 1건 — 규정 문구 명확화\n- 공고 문안 표준화 템플릿 적용\n\n_이 문서는 주은우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0010",
+   "title": "근태·휴가 시스템 이관 준비 노트",
+   "author": "주은우",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 2550,
+   "summary": "HRIS 근태 모듈 이관의 데이터 검증·병행 운영 계획.",
+   "body": "## 배경\nHRIS 근태 모듈 이관의 데이터 검증·병행 운영 계획.\n\n## 내용\n- 이관 데이터 검증 스크립트 — 잔여 연차 불일치 8건 사전 발견\n- 병행 운영 2주 — 불일치 리포트 매일 자동 생성 (로컬 Claude 스크립트)\n- 부서별 안내문과 FAQ 초안 준비\n\n_이 문서는 주은우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0011",
+   "title": "아날로그 설계 직군 JD 표준 템플릿",
+   "author": "주은우",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "product"
+   ],
+   "created_min_ago": 68760,
+   "summary": "DV 직군 채용 공고의 표준 템플릿 — 직무 기술·자격 요건·우대 사항. 현업 검수 완료.",
+   "body": "## 배경\nDV 직군 채용 공고의 표준 템플릿 — 직무 기술·자격 요건·우대 사항. 현업 검수 완료.\n\n## 내용\n- 초안은 로컬 Claude로 생성 후 현업 팀장 검수 — 과장 표현 제거 원칙\n- 자격 요건은 필수/우대 구분 명확화 — 지원 장벽 낮추기\n- 직무 키워드는 채용 플랫폼 검색 최적화 반영\n\n_이 문서는 주은우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0012",
+   "title": "신입 온보딩 커리큘럼 개정안 (7월)",
+   "author": "주은우",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 587,
+   "summary": "신규 입사자 2주 온보딩의 세션 구성·멘토 배정·계정 발급 절차 개정안.",
+   "body": "## 배경\n신규 입사자 2주 온보딩의 세션 구성·멘토 배정·계정 발급 절차 개정안.\n\n## 내용\n- 세션 18개 — 반도체 기초는 직군 무관 공통, 이후 직군 분기\n- 계정·장비 발급을 입사 1일차 오전으로 앞당김 (지연 민원 반영)\n- 설문 주관식 응답은 로컬 Claude로 요약해 개정 근거로 사용\n\n_이 문서는 주은우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0013",
+   "title": "RTL 설계 직군 면접 질문 뱅크",
+   "author": "주은우",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "analog",
+    "dft"
+   ],
+   "created_min_ago": 127139,
+   "summary": "PD 면접관용 구조화 질문 세트 — 평가 기준 루브릭 포함, 면접관 교육 자료.",
+   "body": "## 배경\nPD 면접관용 구조화 질문 세트 — 평가 기준 루브릭 포함, 면접관 교육 자료.\n\n## 내용\n- 기술 심층/협업 상황/문제 해결 3축 질문 7개\n- 평가 루브릭 4단계 — 면접관 간 편차 축소 목적\n- 기술 질문은 현업 검수, 편향 표현은 로컬 Claude 점검 패스\n\n_이 문서는 주은우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0014",
+   "title": "재택·유연근무 규정 개정 FAQ (9월)",
+   "author": "배채원",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 8283,
+   "summary": "근무 제도 개정에 대한 문의를 FAQ로 정리 — 노무 검토 완료본.",
+   "body": "## 배경\n근무 제도 개정에 대한 문의를 FAQ로 정리 — 노무 검토 완료본.\n\n## 내용\n- 문의 12건 유형화 — 코어타임·출장 처리·보안 구역 근무가 상위\n- 답변은 노무사 검토 완료 표시와 함께 게시\n- 규정 원문 개정 이력 링크 포함\n\n_이 문서는 배채원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0015",
+   "title": "상반기 공채 전형 운영 리뷰",
+   "author": "배채원",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 3576,
+   "summary": "하반기 공채의 전형 단계별 전환율·소요 기간·개선점 리뷰.",
+   "body": "## 배경\n하반기 공채의 전형 단계별 전환율·소요 기간·개선점 리뷰.\n\n## 내용\n- 서류→면접 전환율 68% — 병목은 면접관 일정 조율\n- 전형 데이터 집계는 HRIS 추출 후 로컬 Claude로 표 정리\n- 개선안: 면접관 풀 사전 확보, 코딩 과제 채점 루브릭 공유\n\n_이 문서는 배채원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0016",
+   "title": "조직문화 설문 주관식 응답 분석 (8월)",
+   "author": "배채원",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "physical-design",
+    "analog"
+   ],
+   "created_min_ago": 847,
+   "summary": "분기 조직문화 설문의 주관식 응답을 익명화 후 로컬 Claude로 주제 분류한 결과.",
+   "body": "## 배경\n분기 조직문화 설문의 주관식 응답을 익명화 후 로컬 Claude로 주제 분류한 결과.\n\n## 내용\n- 응답 5건 → 주제 6개 분류 — 회의 문화·성장 기회가 상위\n- 익명화 처리 후 분석 (개인 식별 표현 제거) — 원문은 접근 제한\n- 후속: 회의 가이드라인 개정안 착수\n\n_이 문서는 배채원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0017",
+   "title": "교육 프로그램 수요 조사 결과 (상반기)",
+   "author": "곽도현",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 36814,
+   "summary": "직군별 교육 수요 조사 집계와 하반기 교육 편성안.",
+   "body": "## 배경\n직군별 교육 수요 조사 집계와 하반기 교육 편성안.\n\n## 내용\n- 최다 수요: PD 직군 심화 과정 — 외부 강사 섭외 진행\n- 사내 강사 후보 33명 — 강의료 규정 확인 완료\n- 설문 집계·교차표는 로컬 Claude로 생성\n\n_이 문서는 곽도현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0018",
+   "title": "평가 캘리브레이션 세션 운영 가이드 — 5월 4주 갱신",
+   "author": "곽도현",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "soc-design"
+   ],
+   "created_min_ago": 21238,
+   "summary": "부서 간 평가 눈높이 맞추기(캘리브레이션) 세션의 운영 절차와 퍼실리테이션 가이드.",
+   "body": "## 배경\n부서 간 평가 눈높이 맞추기(캘리브레이션) 세션의 운영 절차와 퍼실리테이션 가이드.\n\n## 내용\n- 세션 전 배포 자료: 등급 분포·근거 작성 가이드\n- 회의록은 결정 사항만 기록 — 개인 평가 내용은 시스템 밖 기록 금지\n- 운영 체크리스트 33항목\n\n_이 문서는 곽도현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0019",
+   "title": "사내 공모(잡포스팅) 제도 운영 기록 (상반기)",
+   "author": "곽도현",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "product",
+    "verification"
+   ],
+   "created_min_ago": 172553,
+   "summary": "부서 이동 공모 제도의 공고·지원·이동 현황과 운영 개선점.",
+   "body": "## 배경\n부서 이동 공모 제도의 공고·지원·이동 현황과 운영 개선점.\n\n## 내용\n- 공고 42건, 이동 성사 63% — 직군 전환 성공 사례 2건 인터뷰 게시\n- 현 부서장 사전 협의 절차 관련 민원 1건 — 규정 문구 명확화\n- 공고 문안 표준화 템플릿 적용\n\n_이 문서는 곽도현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0020",
+   "title": "근태·휴가 시스템 이관 준비 노트 — 7월 1주 갱신",
+   "author": "곽도현",
+   "visibility": "org",
+   "reuse_count": 11,
+   "cited_by": [
+    "physical-design",
+    "product",
+    "verification"
+   ],
+   "created_min_ago": 57632,
+   "summary": "HRIS 근태 모듈 이관의 데이터 검증·병행 운영 계획.",
+   "body": "## 배경\nHRIS 근태 모듈 이관의 데이터 검증·병행 운영 계획.\n\n## 내용\n- 이관 데이터 검증 스크립트 — 잔여 연차 불일치 43건 사전 발견\n- 병행 운영 2주 — 불일치 리포트 매일 자동 생성 (로컬 Claude 스크립트)\n- 부서별 안내문과 FAQ 초안 준비\n\n_이 문서는 곽도현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0021",
+   "title": "DV 직군 JD 표준 템플릿",
+   "author": "곽도현",
+   "visibility": "space",
+   "reuse_count": 1,
+   "cited_by": [
+    "dft"
+   ],
+   "created_min_ago": 43710,
+   "summary": "RTL 설계 직군 채용 공고의 표준 템플릿 — 직무 기술·자격 요건·우대 사항. 현업 검수 완료.",
+   "body": "## 배경\nRTL 설계 직군 채용 공고의 표준 템플릿 — 직무 기술·자격 요건·우대 사항. 현업 검수 완료.\n\n## 내용\n- 초안은 로컬 Claude로 생성 후 현업 팀장 검수 — 과장 표현 제거 원칙\n- 자격 요건은 필수/우대 구분 명확화 — 지원 장벽 낮추기\n- 직무 키워드는 채용 플랫폼 검색 최적화 반영\n\n_이 문서는 곽도현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0022",
+   "title": "신입 온보딩 커리큘럼 개정안 (9월)",
+   "author": "곽도현",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 50068,
+   "summary": "신규 입사자 2주 온보딩의 세션 구성·멘토 배정·계정 발급 절차 개정안.",
+   "body": "## 배경\n신규 입사자 2주 온보딩의 세션 구성·멘토 배정·계정 발급 절차 개정안.\n\n## 내용\n- 세션 3개 — 반도체 기초는 직군 무관 공통, 이후 직군 분기\n- 계정·장비 발급을 입사 1일차 오전으로 앞당김 (지연 민원 반영)\n- 설문 주관식 응답은 로컬 Claude로 요약해 개정 근거로 사용\n\n_이 문서는 곽도현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0023",
+   "title": "DFT 직군 면접 질문 뱅크",
+   "author": "나현우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 30996,
+   "summary": "CAD 면접관용 구조화 질문 세트 — 평가 기준 루브릭 포함, 면접관 교육 자료.",
+   "body": "## 배경\nCAD 면접관용 구조화 질문 세트 — 평가 기준 루브릭 포함, 면접관 교육 자료.\n\n## 내용\n- 기술 심층/협업 상황/문제 해결 3축 질문 11개\n- 평가 루브릭 4단계 — 면접관 간 편차 축소 목적\n- 기술 질문은 현업 검수, 편향 표현은 로컬 Claude 점검 패스\n\n_이 문서는 나현우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0024",
+   "title": "재택·유연근무 규정 개정 FAQ (8월)",
+   "author": "나현우",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "physical-design",
+    "analog"
+   ],
+   "created_min_ago": 54348,
+   "summary": "근무 제도 개정에 대한 문의를 FAQ로 정리 — 노무 검토 완료본.",
+   "body": "## 배경\n근무 제도 개정에 대한 문의를 FAQ로 정리 — 노무 검토 완료본.\n\n## 내용\n- 문의 14건 유형화 — 코어타임·출장 처리·보안 구역 근무가 상위\n- 답변은 노무사 검토 완료 표시와 함께 게시\n- 규정 원문 개정 이력 링크 포함\n\n_이 문서는 나현우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0025",
+   "title": "하반기 공채 전형 운영 리뷰 — 6월 1주 갱신",
+   "author": "나현우",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 2034,
+   "summary": "상반기 공채의 전형 단계별 전환율·소요 기간·개선점 리뷰.",
+   "body": "## 배경\n상반기 공채의 전형 단계별 전환율·소요 기간·개선점 리뷰.\n\n## 내용\n- 서류→면접 전환율 20% — 병목은 면접관 일정 조율\n- 전형 데이터 집계는 HRIS 추출 후 로컬 Claude로 표 정리\n- 개선안: 면접관 풀 사전 확보, 코딩 과제 채점 루브릭 공유\n\n_이 문서는 나현우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0026",
+   "title": "조직문화 설문 주관식 응답 분석 (7월)",
+   "author": "곽수민",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 133924,
+   "summary": "분기 조직문화 설문의 주관식 응답을 익명화 후 로컬 Claude로 주제 분류한 결과.",
+   "body": "## 배경\n분기 조직문화 설문의 주관식 응답을 익명화 후 로컬 Claude로 주제 분류한 결과.\n\n## 내용\n- 응답 9건 → 주제 6개 분류 — 회의 문화·성장 기회가 상위\n- 익명화 처리 후 분석 (개인 식별 표현 제거) — 원문은 접근 제한\n- 후속: 회의 가이드라인 개정안 착수\n\n_이 문서는 곽수민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0027",
+   "title": "교육 프로그램 수요 조사 결과 (하반기) — 5월 3주 갱신",
+   "author": "곽수민",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "dft",
+    "soc-design"
+   ],
+   "created_min_ago": 251,
+   "summary": "직군별 교육 수요 조사 집계와 상반기 교육 편성안.",
+   "body": "## 배경\n직군별 교육 수요 조사 집계와 상반기 교육 편성안.\n\n## 내용\n- 최다 수요: 제품기획 직군 심화 과정 — 외부 강사 섭외 진행\n- 사내 강사 후보 34명 — 강의료 규정 확인 완료\n- 설문 집계·교차표는 로컬 Claude로 생성\n\n_이 문서는 곽수민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0028",
+   "title": "평가 캘리브레이션 세션 운영 가이드 — 6월 3주 갱신",
+   "author": "곽수민",
+   "visibility": "org",
+   "reuse_count": 4,
+   "cited_by": [
+    "analog",
+    "verification",
+    "physical-design"
+   ],
+   "created_min_ago": 313,
+   "summary": "부서 간 평가 눈높이 맞추기(캘리브레이션) 세션의 운영 절차와 퍼실리테이션 가이드.",
+   "body": "## 배경\n부서 간 평가 눈높이 맞추기(캘리브레이션) 세션의 운영 절차와 퍼실리테이션 가이드.\n\n## 내용\n- 세션 전 배포 자료: 등급 분포·근거 작성 가이드\n- 회의록은 결정 사항만 기록 — 개인 평가 내용은 시스템 밖 기록 금지\n- 운영 체크리스트 48항목\n\n_이 문서는 곽수민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0029",
+   "title": "사내 공모(잡포스팅) 제도 운영 기록 (상반기) — 6월 4주 갱신",
+   "author": "곽수민",
+   "visibility": "space",
+   "reuse_count": 3,
+   "cited_by": [
+    "verification",
+    "product",
+    "physical-design"
+   ],
+   "created_min_ago": 144371,
+   "summary": "부서 이동 공모 제도의 공고·지원·이동 현황과 운영 개선점.",
+   "body": "## 배경\n부서 이동 공모 제도의 공고·지원·이동 현황과 운영 개선점.\n\n## 내용\n- 공고 24건, 이동 성사 90% — 직군 전환 성공 사례 2건 인터뷰 게시\n- 현 부서장 사전 협의 절차 관련 민원 1건 — 규정 문구 명확화\n- 공고 문안 표준화 템플릿 적용\n\n_이 문서는 곽수민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0030",
+   "title": "근태·휴가 시스템 이관 준비 노트 — 6월 4주 갱신",
+   "author": "백지우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 84979,
+   "summary": "HRIS 근태 모듈 이관의 데이터 검증·병행 운영 계획.",
+   "body": "## 배경\nHRIS 근태 모듈 이관의 데이터 검증·병행 운영 계획.\n\n## 내용\n- 이관 데이터 검증 스크립트 — 잔여 연차 불일치 28건 사전 발견\n- 병행 운영 2주 — 불일치 리포트 매일 자동 생성 (로컬 Claude 스크립트)\n- 부서별 안내문과 FAQ 초안 준비\n\n_이 문서는 백지우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0031",
+   "title": "펌웨어 직군 JD 표준 템플릿",
+   "author": "백지우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 49014,
+   "summary": "DFT 직군 채용 공고의 표준 템플릿 — 직무 기술·자격 요건·우대 사항. 현업 검수 완료.",
+   "body": "## 배경\nDFT 직군 채용 공고의 표준 템플릿 — 직무 기술·자격 요건·우대 사항. 현업 검수 완료.\n\n## 내용\n- 초안은 로컬 Claude로 생성 후 현업 팀장 검수 — 과장 표현 제거 원칙\n- 자격 요건은 필수/우대 구분 명확화 — 지원 장벽 낮추기\n- 직무 키워드는 채용 플랫폼 검색 최적화 반영\n\n_이 문서는 백지우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0032",
+   "title": "신입 온보딩 커리큘럼 개정안 (7월) — 7월 3주 갱신",
+   "author": "백지우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 7414,
+   "summary": "신규 입사자 2주 온보딩의 세션 구성·멘토 배정·계정 발급 절차 개정안.",
+   "body": "## 배경\n신규 입사자 2주 온보딩의 세션 구성·멘토 배정·계정 발급 절차 개정안.\n\n## 내용\n- 세션 42개 — 반도체 기초는 직군 무관 공통, 이후 직군 분기\n- 계정·장비 발급을 입사 1일차 오전으로 앞당김 (지연 민원 반영)\n- 설문 주관식 응답은 로컬 Claude로 요약해 개정 근거로 사용\n\n_이 문서는 백지우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0033",
+   "title": "아날로그 설계 직군 면접 질문 뱅크",
+   "author": "백지우",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1326,
+   "summary": "DFT 면접관용 구조화 질문 세트 — 평가 기준 루브릭 포함, 면접관 교육 자료.",
+   "body": "## 배경\nDFT 면접관용 구조화 질문 세트 — 평가 기준 루브릭 포함, 면접관 교육 자료.\n\n## 내용\n- 기술 심층/협업 상황/문제 해결 3축 질문 37개\n- 평가 루브릭 4단계 — 면접관 간 편차 축소 목적\n- 기술 질문은 현업 검수, 편향 표현은 로컬 Claude 점검 패스\n\n_이 문서는 백지우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0034",
+   "title": "재택·유연근무 규정 개정 FAQ (8월) — 6월 4주 갱신",
+   "author": "백지우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 169786,
+   "summary": "근무 제도 개정에 대한 문의를 FAQ로 정리 — 노무 검토 완료본.",
+   "body": "## 배경\n근무 제도 개정에 대한 문의를 FAQ로 정리 — 노무 검토 완료본.\n\n## 내용\n- 문의 46건 유형화 — 코어타임·출장 처리·보안 구역 근무가 상위\n- 답변은 노무사 검토 완료 표시와 함께 게시\n- 규정 원문 개정 이력 링크 포함\n\n_이 문서는 백지우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0035",
+   "title": "하반기 공채 전형 운영 리뷰 — 6월 4주 갱신",
+   "author": "백지우",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1344,
+   "summary": "상반기 공채의 전형 단계별 전환율·소요 기간·개선점 리뷰.",
+   "body": "## 배경\n상반기 공채의 전형 단계별 전환율·소요 기간·개선점 리뷰.\n\n## 내용\n- 서류→면접 전환율 76% — 병목은 면접관 일정 조율\n- 전형 데이터 집계는 HRIS 추출 후 로컬 Claude로 표 정리\n- 개선안: 면접관 풀 사전 확보, 코딩 과제 채점 루브릭 공유\n\n_이 문서는 백지우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0036",
+   "title": "조직문화 설문 주관식 응답 분석 (9월) — 7월 2주 갱신",
+   "author": "강채원",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 116447,
+   "summary": "분기 조직문화 설문의 주관식 응답을 익명화 후 로컬 Claude로 주제 분류한 결과.",
+   "body": "## 배경\n분기 조직문화 설문의 주관식 응답을 익명화 후 로컬 Claude로 주제 분류한 결과.\n\n## 내용\n- 응답 17건 → 주제 6개 분류 — 회의 문화·성장 기회가 상위\n- 익명화 처리 후 분석 (개인 식별 표현 제거) — 원문은 접근 제한\n- 후속: 회의 가이드라인 개정안 착수\n\n_이 문서는 강채원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0037",
+   "title": "교육 프로그램 수요 조사 결과 (상반기) — 7월 2주 갱신",
+   "author": "강채원",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1169,
+   "summary": "직군별 교육 수요 조사 집계와 상반기 교육 편성안.",
+   "body": "## 배경\n직군별 교육 수요 조사 집계와 상반기 교육 편성안.\n\n## 내용\n- 최다 수요: 제품기획 직군 심화 과정 — 외부 강사 섭외 진행\n- 사내 강사 후보 60명 — 강의료 규정 확인 완료\n- 설문 집계·교차표는 로컬 Claude로 생성\n\n_이 문서는 강채원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0038",
+   "title": "평가 캘리브레이션 세션 운영 가이드 — 7월 1주 갱신",
+   "author": "강채원",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "soc-design"
+   ],
+   "created_min_ago": 3686,
+   "summary": "부서 간 평가 눈높이 맞추기(캘리브레이션) 세션의 운영 절차와 퍼실리테이션 가이드.",
+   "body": "## 배경\n부서 간 평가 눈높이 맞추기(캘리브레이션) 세션의 운영 절차와 퍼실리테이션 가이드.\n\n## 내용\n- 세션 전 배포 자료: 등급 분포·근거 작성 가이드\n- 회의록은 결정 사항만 기록 — 개인 평가 내용은 시스템 밖 기록 금지\n- 운영 체크리스트 58항목\n\n_이 문서는 강채원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0039",
+   "title": "사내 공모(잡포스팅) 제도 운영 기록 (하반기) — 7월 3주 갱신",
+   "author": "강채원",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 150521,
+   "summary": "부서 이동 공모 제도의 공고·지원·이동 현황과 운영 개선점.",
+   "body": "## 배경\n부서 이동 공모 제도의 공고·지원·이동 현황과 운영 개선점.\n\n## 내용\n- 공고 21건, 이동 성사 94% — 직군 전환 성공 사례 2건 인터뷰 게시\n- 현 부서장 사전 협의 절차 관련 민원 1건 — 규정 문구 명확화\n- 공고 문안 표준화 템플릿 적용\n\n_이 문서는 강채원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0040",
+   "title": "근태·휴가 시스템 이관 준비 노트 — 6월 4주 갱신 (2차)",
+   "author": "강채원",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "dft"
+   ],
+   "created_min_ago": 4029,
+   "summary": "HRIS 근태 모듈 이관의 데이터 검증·병행 운영 계획.",
+   "body": "## 배경\nHRIS 근태 모듈 이관의 데이터 검증·병행 운영 계획.\n\n## 내용\n- 이관 데이터 검증 스크립트 — 잔여 연차 불일치 48건 사전 발견\n- 병행 운영 2주 — 불일치 리포트 매일 자동 생성 (로컬 Claude 스크립트)\n- 부서별 안내문과 FAQ 초안 준비\n\n_이 문서는 강채원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0041",
+   "title": "PD 직군 JD 표준 템플릿",
+   "author": "배민준",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 2668,
+   "summary": "펌웨어 직군 채용 공고의 표준 템플릿 — 직무 기술·자격 요건·우대 사항. 현업 검수 완료.",
+   "body": "## 배경\n펌웨어 직군 채용 공고의 표준 템플릿 — 직무 기술·자격 요건·우대 사항. 현업 검수 완료.\n\n## 내용\n- 초안은 로컬 Claude로 생성 후 현업 팀장 검수 — 과장 표현 제거 원칙\n- 자격 요건은 필수/우대 구분 명확화 — 지원 장벽 낮추기\n- 직무 키워드는 채용 플랫폼 검색 최적화 반영\n\n_이 문서는 배민준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0042",
+   "title": "신입 온보딩 커리큘럼 개정안 (9월) — 6월 3주 갱신",
+   "author": "배민준",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 169832,
+   "summary": "신규 입사자 2주 온보딩의 세션 구성·멘토 배정·계정 발급 절차 개정안.",
+   "body": "## 배경\n신규 입사자 2주 온보딩의 세션 구성·멘토 배정·계정 발급 절차 개정안.\n\n## 내용\n- 세션 49개 — 반도체 기초는 직군 무관 공통, 이후 직군 분기\n- 계정·장비 발급을 입사 1일차 오전으로 앞당김 (지연 민원 반영)\n- 설문 주관식 응답은 로컬 Claude로 요약해 개정 근거로 사용\n\n_이 문서는 배민준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0043",
+   "title": "PD 직군 면접 질문 뱅크",
+   "author": "배민준",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "dft",
+    "product"
+   ],
+   "created_min_ago": 112659,
+   "summary": "DFT 면접관용 구조화 질문 세트 — 평가 기준 루브릭 포함, 면접관 교육 자료.",
+   "body": "## 배경\nDFT 면접관용 구조화 질문 세트 — 평가 기준 루브릭 포함, 면접관 교육 자료.\n\n## 내용\n- 기술 심층/협업 상황/문제 해결 3축 질문 40개\n- 평가 루브릭 4단계 — 면접관 간 편차 축소 목적\n- 기술 질문은 현업 검수, 편향 표현은 로컬 Claude 점검 패스\n\n_이 문서는 배민준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0044",
+   "title": "재택·유연근무 규정 개정 FAQ (9월) — 6월 2주 갱신",
+   "author": "배민준",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "firmware",
+    "physical-design",
+    "product"
+   ],
+   "created_min_ago": 1452,
+   "summary": "근무 제도 개정에 대한 문의를 FAQ로 정리 — 노무 검토 완료본.",
+   "body": "## 배경\n근무 제도 개정에 대한 문의를 FAQ로 정리 — 노무 검토 완료본.\n\n## 내용\n- 문의 55건 유형화 — 코어타임·출장 처리·보안 구역 근무가 상위\n- 답변은 노무사 검토 완료 표시와 함께 게시\n- 규정 원문 개정 이력 링크 포함\n\n_이 문서는 배민준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0045",
+   "title": "상반기 공채 전형 운영 리뷰 — 7월 2주 갱신",
+   "author": "배민준",
+   "visibility": "space",
+   "reuse_count": 1,
+   "cited_by": [
+    "product"
+   ],
+   "created_min_ago": 2550,
+   "summary": "하반기 공채의 전형 단계별 전환율·소요 기간·개선점 리뷰.",
+   "body": "## 배경\n하반기 공채의 전형 단계별 전환율·소요 기간·개선점 리뷰.\n\n## 내용\n- 서류→면접 전환율 51% — 병목은 면접관 일정 조율\n- 전형 데이터 집계는 HRIS 추출 후 로컬 Claude로 표 정리\n- 개선안: 면접관 풀 사전 확보, 코딩 과제 채점 루브릭 공유\n\n_이 문서는 배민준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "hr-people-doc-0046",
+   "title": "조직문화 설문 주관식 응답 분석 (7월) — 6월 1주 갱신",
+   "author": "배민준",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "verification"
+   ],
+   "created_min_ago": 42225,
+   "summary": "분기 조직문화 설문의 주관식 응답을 익명화 후 로컬 Claude로 주제 분류한 결과.",
+   "body": "## 배경\n분기 조직문화 설문의 주관식 응답을 익명화 후 로컬 Claude로 주제 분류한 결과.\n\n## 내용\n- 응답 49건 → 주제 6개 분류 — 회의 문화·성장 기회가 상위\n- 익명화 처리 후 분석 (개인 식별 표현 제거) — 원문은 접근 제한\n- 후속: 회의 가이드라인 개정안 착수\n\n_이 문서는 배민준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  }
+ ],
+ "reuse_events": [
+  {
+   "doc_id": "hr-people-doc-0002",
+   "source_space": "hr-people",
+   "consumer_space": "dft",
+   "min_ago": 1246,
+   "summary": "인사팀 (People)의 『신입 온보딩 커리큘럼 개정안 (8월)』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0044",
+   "source_space": "hr-people",
+   "consumer_space": "firmware",
+   "min_ago": 21620,
+   "summary": "인사팀 (People)의 『재택·유연근무 규정 개정 FAQ (9월) — 6월 2주 갱신』 지식이 펌웨어개발팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0016",
+   "source_space": "hr-people",
+   "consumer_space": "physical-design",
+   "min_ago": 22002,
+   "summary": "인사팀 (People)의 『조직문화 설문 주관식 응답 분석 (8월)』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0043",
+   "source_space": "hr-people",
+   "consumer_space": "dft",
+   "min_ago": 19381,
+   "summary": "인사팀 (People)의 『PD 직군 면접 질문 뱅크』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0021",
+   "source_space": "hr-people",
+   "consumer_space": "dft",
+   "min_ago": 24966,
+   "summary": "인사팀 (People)의 『DV 직군 JD 표준 템플릿』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0004",
+   "source_space": "hr-people",
+   "consumer_space": "soc-design",
+   "min_ago": 10338,
+   "summary": "인사팀 (People)의 『재택·유연근무 규정 개정 FAQ (7월)』 지식이 SoC 설계팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0038",
+   "source_space": "hr-people",
+   "consumer_space": "soc-design",
+   "min_ago": 39370,
+   "summary": "인사팀 (People)의 『평가 캘리브레이션 세션 운영 가이드 — 7월 1주 갱신』 지식이 SoC 설계팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0007",
+   "source_space": "hr-people",
+   "consumer_space": "dft",
+   "min_ago": 28181,
+   "summary": "인사팀 (People)의 『교육 프로그램 수요 조사 결과 (하반기)』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0020",
+   "source_space": "hr-people",
+   "consumer_space": "physical-design",
+   "min_ago": 8601,
+   "summary": "인사팀 (People)의 『근태·휴가 시스템 이관 준비 노트 — 7월 1주 갱신』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0028",
+   "source_space": "hr-people",
+   "consumer_space": "analog",
+   "min_ago": 39202,
+   "summary": "인사팀 (People)의 『평가 캘리브레이션 세션 운영 가이드 — 6월 3주 갱신』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0001",
+   "source_space": "hr-people",
+   "consumer_space": "soc-design",
+   "min_ago": 25906,
+   "summary": "인사팀 (People)의 『CAD 직군 JD 표준 템플릿』 지식이 SoC 설계팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0019",
+   "source_space": "hr-people",
+   "consumer_space": "product",
+   "min_ago": 23744,
+   "summary": "인사팀 (People)의 『사내 공모(잡포스팅) 제도 운영 기록 (상반기)』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0024",
+   "source_space": "hr-people",
+   "consumer_space": "physical-design",
+   "min_ago": 30878,
+   "summary": "인사팀 (People)의 『재택·유연근무 규정 개정 FAQ (8월)』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0040",
+   "source_space": "hr-people",
+   "consumer_space": "dft",
+   "min_ago": 26761,
+   "summary": "인사팀 (People)의 『근태·휴가 시스템 이관 준비 노트 — 6월 4주 갱신 (2차)』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0018",
+   "source_space": "hr-people",
+   "consumer_space": "soc-design",
+   "min_ago": 12230,
+   "summary": "인사팀 (People)의 『평가 캘리브레이션 세션 운영 가이드 — 5월 4주 갱신』 지식이 SoC 설계팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0046",
+   "source_space": "hr-people",
+   "consumer_space": "verification",
+   "min_ago": 31762,
+   "summary": "인사팀 (People)의 『조직문화 설문 주관식 응답 분석 (7월) — 6월 1주 갱신』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0011",
+   "source_space": "hr-people",
+   "consumer_space": "product",
+   "min_ago": 13841,
+   "summary": "인사팀 (People)의 『아날로그 설계 직군 JD 표준 템플릿』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0027",
+   "source_space": "hr-people",
+   "consumer_space": "dft",
+   "min_ago": 29451,
+   "summary": "인사팀 (People)의 『교육 프로그램 수요 조사 결과 (하반기) — 5월 3주 갱신』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0045",
+   "source_space": "hr-people",
+   "consumer_space": "product",
+   "min_ago": 22849,
+   "summary": "인사팀 (People)의 『상반기 공채 전형 운영 리뷰 — 7월 2주 갱신』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "hr-people-doc-0013",
+   "source_space": "hr-people",
+   "consumer_space": "analog",
+   "min_ago": 16319,
+   "summary": "인사팀 (People)의 『RTL 설계 직군 면접 질문 뱅크』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
+  }
+ ]
+}

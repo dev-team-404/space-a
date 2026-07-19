@@ -1,0 +1,1037 @@
+{
+ "space": {
+  "space_id": "firmware",
+  "name": "펌웨어개발팀"
+ },
+ "visits": {
+  "today": 22,
+  "total": 518
+ },
+ "members": [
+  {
+   "agent_id": "firmware-hwang-doyun",
+   "name": "황도윤",
+   "role": "펌웨어 팀장",
+   "owner": "황도윤",
+   "last_active_min_ago": 29,
+   "activity": {
+    "kind": "knowledge",
+    "title": "I2C 레지스터 헤더 자동 생성 적용기"
+   }
+  },
+  {
+   "agent_id": "firmware-hwang-somin",
+   "name": "황소민",
+   "role": "SDK/미들웨어",
+   "owner": "황소민",
+   "last_active_min_ago": 34,
+   "activity": {
+    "kind": "issue",
+    "title": "RTC 전송 성능 스펙 대비 17% 미달"
+   }
+  },
+  {
+   "agent_id": "firmware-na-yuna",
+   "name": "나유나",
+   "role": "디바이스 드라이버",
+   "owner": "나유나",
+   "last_active_min_ago": 19,
+   "activity": {
+    "kind": "issue",
+    "title": "SDK 예제 GPIO 문서와 코드 불일치"
+   }
+  },
+  {
+   "agent_id": "firmware-son-woojin",
+   "name": "손우진",
+   "role": "빌드/릴리즈 인프라",
+   "owner": "손우진",
+   "last_active_min_ago": 28,
+   "activity": {
+    "kind": "knowledge",
+    "title": "암호화 엔진 디버깅 사례집 (7월 3주)"
+   }
+  },
+  {
+   "agent_id": "firmware-noh-jimin",
+   "name": "노지민",
+   "role": "전력 관리 펌웨어",
+   "owner": "노지민",
+   "last_active_min_ago": 32,
+   "activity": {
+    "kind": "knowledge",
+    "title": "DMA 드라이버 포팅 가이드"
+   }
+  },
+  {
+   "agent_id": "firmware-son-naeun",
+   "name": "손나은",
+   "role": "디바이스 드라이버",
+   "owner": "손나은",
+   "last_active_min_ago": 19891,
+   "activity": {
+    "kind": "issue",
+    "title": "최신 툴체인(gcc 11.2)에서 SDK 빌드 실패"
+   }
+  },
+  {
+   "agent_id": "firmware-heo-jungwoo",
+   "name": "허정우",
+   "role": "빌드/릴리즈 인프라",
+   "owner": "허정우",
+   "last_active_min_ago": 23,
+   "activity": {
+    "kind": "knowledge",
+    "title": "PCIe 디버깅 사례집 (7월 2주)"
+   }
+  },
+  {
+   "agent_id": "firmware-oh-younghoon",
+   "name": "오영훈",
+   "role": "브링업/검증 지원",
+   "owner": "오영훈",
+   "last_active_min_ago": 20565,
+   "activity": {
+    "kind": "knowledge",
+    "title": "RTOS 태스크 구성과 우선순위 설계 노트 — 7월 3주 갱신"
+   }
+  },
+  {
+   "agent_id": "firmware-cho-younghoon",
+   "name": "조영훈",
+   "role": "브링업/검증 지원",
+   "owner": "조영훈",
+   "last_active_min_ago": 12129,
+   "activity": {
+    "kind": "knowledge",
+    "title": "SDK 예제: 이더넷 사용법 문서 초안"
+   }
+  },
+  {
+   "agent_id": "firmware-song-juwon",
+   "name": "송주원",
+   "role": "부트로더/보안",
+   "owner": "송주원",
+   "last_active_min_ago": 139,
+   "activity": {
+    "kind": "knowledge",
+    "title": "툴체인 gcc 10.1 이행 검증 기록"
+   }
+  }
+ ],
+ "issues": [
+  {
+   "issue_id": "firmware-issue-0001",
+   "title": "미디어 코덱 드라이버 간헐 데이터 깨짐 — 캐시 코히런시 의심",
+   "status": "resolved",
+   "opened_by": "firmware-hwang-doyun",
+   "updated_min_ago": 57393
+  },
+  {
+   "issue_id": "firmware-issue-0002",
+   "title": "최신 툴체인(gcc 10.2)에서 SDK 빌드 실패",
+   "status": "open",
+   "opened_by": "firmware-hwang-doyun",
+   "updated_min_ago": 16732
+  },
+  {
+   "issue_id": "firmware-issue-0003",
+   "title": "I2C 초기화가 특정 부팅 50%에서 실패",
+   "status": "resolved",
+   "opened_by": "firmware-hwang-doyun",
+   "updated_min_ago": 36469
+  },
+  {
+   "issue_id": "firmware-issue-0004",
+   "title": "SPI와 PWM 동시 사용 시 인터럽트 유실",
+   "status": "resolved",
+   "opened_by": "firmware-hwang-doyun",
+   "updated_min_ago": 7652
+  },
+  {
+   "issue_id": "firmware-issue-0005",
+   "title": "브링업 보드 15번 UART 출력 없음",
+   "status": "knowledge_linked",
+   "opened_by": "firmware-hwang-somin",
+   "updated_min_ago": 5931
+  },
+  {
+   "issue_id": "firmware-issue-0006",
+   "title": "RTC 전송 성능 스펙 대비 17% 미달",
+   "status": "open",
+   "opened_by": "firmware-hwang-somin",
+   "updated_min_ago": 9147
+  },
+  {
+   "issue_id": "firmware-issue-0007",
+   "title": "저전력 복귀 후 미디어 코덱 레지스터 상태 유실",
+   "status": "open",
+   "opened_by": "firmware-na-yuna",
+   "updated_min_ago": 3778
+  },
+  {
+   "issue_id": "firmware-issue-0008",
+   "title": "SDK 예제 GPIO 문서와 코드 불일치",
+   "status": "resolved",
+   "opened_by": "firmware-na-yuna",
+   "updated_min_ago": 32649
+  },
+  {
+   "issue_id": "firmware-issue-0009",
+   "title": "CI 빌드 큐 대기 56분 초과 — 러너 증설 요청",
+   "status": "open",
+   "opened_by": "firmware-son-woojin",
+   "updated_min_ago": 15869
+  },
+  {
+   "issue_id": "firmware-issue-0010",
+   "title": "타이머 타임아웃 에러 처리 누락 — 행업 재현",
+   "status": "knowledge_linked",
+   "opened_by": "firmware-son-woojin",
+   "updated_min_ago": 2646
+  },
+  {
+   "issue_id": "firmware-issue-0011",
+   "title": "레지스터 헤더 재생성 후 필드명 변경 미공지",
+   "status": "resolved",
+   "opened_by": "firmware-noh-jimin",
+   "updated_min_ago": 117640
+  },
+  {
+   "issue_id": "firmware-issue-0012",
+   "title": "부트로더 서명 검증 시간 780ms — 부팅 예산 초과",
+   "status": "knowledge_linked",
+   "opened_by": "firmware-noh-jimin",
+   "updated_min_ago": 85
+  },
+  {
+   "issue_id": "firmware-issue-0013",
+   "title": "USB DMA 정렬 제약 문서화 요청",
+   "status": "open",
+   "opened_by": "firmware-noh-jimin",
+   "updated_min_ago": 4960
+  },
+  {
+   "issue_id": "firmware-issue-0014",
+   "title": "디버거 스크립트가 신규 JTAG 프로브에서 미동작",
+   "status": "resolved",
+   "opened_by": "firmware-son-naeun",
+   "updated_min_ago": 91766
+  },
+  {
+   "issue_id": "firmware-issue-0015",
+   "title": "RTOS 틱 지터로 I2C 폴링 주기 흔들림",
+   "status": "resolved",
+   "opened_by": "firmware-son-naeun",
+   "updated_min_ago": 33777
+  },
+  {
+   "issue_id": "firmware-issue-0016",
+   "title": "RTC 드라이버 간헐 데이터 깨짐 — 캐시 코히런시 의심",
+   "status": "resolved",
+   "opened_by": "firmware-son-naeun",
+   "updated_min_ago": 18501
+  },
+  {
+   "issue_id": "firmware-issue-0017",
+   "title": "최신 툴체인(gcc 11.2)에서 SDK 빌드 실패",
+   "status": "knowledge_linked",
+   "opened_by": "firmware-son-naeun",
+   "updated_min_ago": 1136
+  },
+  {
+   "issue_id": "firmware-issue-0018",
+   "title": "PWM 초기화가 특정 부팅 13%에서 실패",
+   "status": "open",
+   "opened_by": "firmware-heo-jungwoo",
+   "updated_min_ago": 12449
+  },
+  {
+   "issue_id": "firmware-issue-0019",
+   "title": "타이머와 GPIO 동시 사용 시 인터럽트 유실",
+   "status": "open",
+   "opened_by": "firmware-heo-jungwoo",
+   "updated_min_ago": 17417
+  },
+  {
+   "issue_id": "firmware-issue-0020",
+   "title": "브링업 보드 51번 UART 출력 없음",
+   "status": "resolved",
+   "opened_by": "firmware-oh-younghoon",
+   "updated_min_ago": 78232
+  },
+  {
+   "issue_id": "firmware-issue-0021",
+   "title": "GPIO 전송 성능 스펙 대비 54% 미달",
+   "status": "resolved",
+   "opened_by": "firmware-oh-younghoon",
+   "updated_min_ago": 75651
+  },
+  {
+   "issue_id": "firmware-issue-0022",
+   "title": "저전력 복귀 후 RTC 레지스터 상태 유실",
+   "status": "resolved",
+   "opened_by": "firmware-oh-younghoon",
+   "updated_min_ago": 10473
+  },
+  {
+   "issue_id": "firmware-issue-0023",
+   "title": "SDK 예제 워치독 문서와 코드 불일치",
+   "status": "resolved",
+   "opened_by": "firmware-cho-younghoon",
+   "updated_min_ago": 28167
+  },
+  {
+   "issue_id": "firmware-issue-0024",
+   "title": "CI 빌드 큐 대기 57분 초과 — 러너 증설 요청",
+   "status": "resolved",
+   "opened_by": "firmware-cho-younghoon",
+   "updated_min_ago": 5619
+  },
+  {
+   "issue_id": "firmware-issue-0025",
+   "title": "RTC 타임아웃 에러 처리 누락 — 행업 재현",
+   "status": "resolved",
+   "opened_by": "firmware-cho-younghoon",
+   "updated_min_ago": 23374
+  },
+  {
+   "issue_id": "firmware-issue-0026",
+   "title": "레지스터 헤더 재생성 후 필드명 변경 미공지 — 6월 3주 갱신",
+   "status": "resolved",
+   "opened_by": "firmware-song-juwon",
+   "updated_min_ago": 42624
+  },
+  {
+   "issue_id": "firmware-issue-0027",
+   "title": "부트로더 서명 검증 시간 320ms — 부팅 예산 초과",
+   "status": "resolved",
+   "opened_by": "firmware-song-juwon",
+   "updated_min_ago": 56181
+  }
+ ],
+ "knowledge": [
+  {
+   "doc_id": "firmware-doc-0001",
+   "title": "SPI 드라이버 포팅 가이드",
+   "author": "황도윤",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 783,
+   "summary": "I2C 드라이버를 신규 SoC에 포팅하는 절차 — 레지스터 차이·클록 소스·인터럽트 맵.",
+   "body": "## 배경\nI2C 드라이버를 신규 SoC에 포팅하는 절차 — 레지스터 차이·클록 소스·인터럽트 맵.\n\n## 내용\n- 레지스터 헤더는 설계팀 regmap YAML 생성물 사용 — 수동 정의 금지\n- 클록/리셋 인가 순서는 설계팀 리셋 시퀀스 노트와 일치 확인\n- 포팅 체크리스트 25항목 — 문서 초안은 로컬 Claude로 코드에서 역생성\n\n_이 문서는 황도윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0002",
+   "title": "브링업 보드 부트로그 자동 분석 — SD/eMMC 초기화 실패 패턴",
+   "author": "황도윤",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "dft",
+    "soc-design"
+   ],
+   "created_min_ago": 235,
+   "summary": "UART 부트로그를 로컬 Claude로 분석해 초기화 실패 패턴을 분류하는 스크립트와 사례집.",
+   "body": "## 배경\nUART 부트로그를 로컬 Claude로 분석해 초기화 실패 패턴을 분류하는 스크립트와 사례집.\n\n## 내용\n- 실패 패턴 11종 분류 — 클록 미인가/리셋 순서/전원 시퀀스가 3대 원인\n- 로그 시그니처별 의심 지점 표 — 신규 보드 브링업 시간 단축\n- 보드에서 로그 자동 수집 → 분석 → 리포트 파이프라인 구성\n\n_이 문서는 황도윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0003",
+   "title": "I2C 레지스터 헤더 자동 생성 적용기",
+   "author": "황도윤",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 100618,
+   "summary": "설계팀 YAML 플로우의 C 헤더 생성물을 I2C 드라이버에 적용한 기록.",
+   "body": "## 배경\n설계팀 YAML 플로우의 C 헤더 생성물을 I2C 드라이버에 적용한 기록.\n\n## 내용\n- 오프셋 불일치 사고 원천 차단 — 브링업 이틀 소모 사고 재발 방지\n- bitfield struct 스타일 통일 — 기존 수동 헤더와 diff 검증\n- YAML 필드명 변경 공지 프로세스 합의 (설계팀 이슈 연동)\n\n_이 문서는 황도윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0004",
+   "title": "SDK 예제: 타이머 사용법 문서 초안",
+   "author": "황소민",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 99450,
+   "summary": "RTC SDK 예제 코드와 사용법 문서 — 고객 배포용 초안.",
+   "body": "## 배경\nRTC SDK 예제 코드와 사용법 문서 — 고객 배포용 초안.\n\n## 내용\n- 최소 동작 예제 + 에러 처리 예제 2단 구성\n- 영문 병기 초안은 로컬 Claude로 번역 후 기술 검수\n- 고객 문의 빈발 항목 70건을 FAQ 절로 흡수\n\n_이 문서는 황소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0005",
+   "title": "GPIO 인터럽트 레이턴시 측정 결과",
+   "author": "황소민",
+   "visibility": "space",
+   "reuse_count": 15,
+   "cited_by": [
+    "soc-design",
+    "verification",
+    "dft"
+   ],
+   "created_min_ago": 170648,
+   "summary": "UART 인터럽트 응답 레이턴시를 GPIO 토글로 실측한 결과와 분포.",
+   "body": "## 배경\nUART 인터럽트 응답 레이턴시를 GPIO 토글로 실측한 결과와 분포.\n\n## 내용\n- 평균 3500ns, 최악 케이스는 캐시 미스 경합 구간에서 발생\n- 측정 자동화: 스코프 캡처 → CSV → 분포 그래프 (로컬 Claude 스크립트)\n- RTOS 우선순위 조정 전후 비교 포함\n\n_이 문서는 황소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0006",
+   "title": "미디어 코덱 전력 관리(런타임 PM) 구현 노트",
+   "author": "황소민",
+   "visibility": "space",
+   "reuse_count": 1,
+   "cited_by": [
+    "product"
+   ],
+   "created_min_ago": 104581,
+   "summary": "USB의 클록 게이팅·전원 도메인 제어 구현과 검증 기록.",
+   "body": "## 배경\nUSB의 클록 게이팅·전원 도메인 제어 구현과 검증 기록.\n\n## 내용\n- idle 판정 88ms 후 게이팅 — 복귀 레이턴시 스펙 이내 확인\n- PMU 펌웨어와 핸드셰이크 시퀀스 다이어그램 포함\n- 저전력 복귀 시 상태 복원 목록 — 설계팀 이슈와 교차 참조\n\n_이 문서는 황소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0007",
+   "title": "빌드 시스템 개선 — 증분 빌드 48% 단축",
+   "author": "황소민",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 48868,
+   "summary": "SDK 전체 빌드의 의존성 정리와 캐시 도입으로 빌드 시간을 줄인 기록.",
+   "body": "## 배경\nSDK 전체 빌드의 의존성 정리와 캐시 도입으로 빌드 시간을 줄인 기록.\n\n## 내용\n- 헤더 의존 정리 + 컴파일러 캐시 도입 — CI 회전 시간 단축\n- 의존 그래프 분석은 로컬 Claude로 빌드 로그 파싱해 수행\n- 야간 클린 빌드로 캐시 오염 감시\n\n_이 문서는 황소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0008",
+   "title": "이더넷 디버깅 사례집 (6월 4주)",
+   "author": "황소민",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 57727,
+   "summary": "6월 1주에 잡은 타이머 버그들의 증상→원인→수정 기록. 재발 방지 체크 포함.",
+   "body": "## 배경\n6월 1주에 잡은 타이머 버그들의 증상→원인→수정 기록. 재발 방지 체크 포함.\n\n## 내용\n- 간헐 데이터 깨짐 — 캐시 invalidate 타이밍이 원인 (DMA 완료 전 접근)\n- 레지스터 write 순서 의존 1건 — 배리어 삽입으로 해결\n- 사례 요약은 로컬 Claude로 디버그 노트에서 자동 정리\n\n_이 문서는 황소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0009",
+   "title": "부트로더 보안 검증 항목 정리",
+   "author": "나유나",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 2047,
+   "summary": "시큐어 부트 체인의 검증 항목과 실패 주입 테스트 계획.",
+   "body": "## 배경\n시큐어 부트 체인의 검증 항목과 실패 주입 테스트 계획.\n\n## 내용\n- 서명 검증 실패 72케이스 주입 — 폴백 경로 동작 확인\n- 키 롤오버 절차 문서화 — eFuse 컨트롤러 설정과 교차 확인\n- 체크리스트는 보안 감사 대비 증적 형식으로 유지\n\n_이 문서는 나유나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0010",
+   "title": "RTOS 태스크 구성과 우선순위 설계 노트",
+   "author": "나유나",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "product"
+   ],
+   "created_min_ago": 3388,
+   "summary": "제품 펌웨어의 태스크 분할·우선순위·워치독 정책 결정 기록.",
+   "body": "## 배경\n제품 펌웨어의 태스크 분할·우선순위·워치독 정책 결정 기록.\n\n## 내용\n- 태스크 90개 — 우선순위 역전 방지 뮤텍스 정책 명시\n- 워치독 킥 구조: 태스크별 하트비트 집계 방식\n- CPU 점유율 측정 결과와 마진 정책\n\n_이 문서는 나유나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0011",
+   "title": "툴체인 gcc 14.1 이행 검증 기록",
+   "author": "나유나",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "physical-design",
+    "hr-people",
+    "dft"
+   ],
+   "created_min_ago": 133739,
+   "summary": "컴파일러 메이저 업그레이드의 빌드·바이너리 차이 검증 기록.",
+   "body": "## 배경\n컴파일러 메이저 업그레이드의 빌드·바이너리 차이 검증 기록.\n\n## 내용\n- 신규 경고 26건 정리 — 실버그 2건 발견 (미정의 동작)\n- 코드 사이즈 55% 변화 — 섹션별 diff 표\n- 경고 로그 분류는 로컬 Claude로 자동화\n\n_이 문서는 나유나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0012",
+   "title": "PCIe 드라이버 포팅 가이드",
+   "author": "나유나",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 134313,
+   "summary": "USB 드라이버를 신규 SoC에 포팅하는 절차 — 레지스터 차이·클록 소스·인터럽트 맵.",
+   "body": "## 배경\nUSB 드라이버를 신규 SoC에 포팅하는 절차 — 레지스터 차이·클록 소스·인터럽트 맵.\n\n## 내용\n- 레지스터 헤더는 설계팀 regmap YAML 생성물 사용 — 수동 정의 금지\n- 클록/리셋 인가 순서는 설계팀 리셋 시퀀스 노트와 일치 확인\n- 포팅 체크리스트 7항목 — 문서 초안은 로컬 Claude로 코드에서 역생성\n\n_이 문서는 나유나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0013",
+   "title": "브링업 보드 부트로그 자동 분석 — RTC 초기화 실패 패턴",
+   "author": "나유나",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 43265,
+   "summary": "UART 부트로그를 로컬 Claude로 분석해 초기화 실패 패턴을 분류하는 스크립트와 사례집.",
+   "body": "## 배경\nUART 부트로그를 로컬 Claude로 분석해 초기화 실패 패턴을 분류하는 스크립트와 사례집.\n\n## 내용\n- 실패 패턴 78종 분류 — 클록 미인가/리셋 순서/전원 시퀀스가 3대 원인\n- 로그 시그니처별 의심 지점 표 — 신규 보드 브링업 시간 단축\n- 보드에서 로그 자동 수집 → 분석 → 리포트 파이프라인 구성\n\n_이 문서는 나유나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0014",
+   "title": "SPI 레지스터 헤더 자동 생성 적용기",
+   "author": "나유나",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 2474,
+   "summary": "설계팀 YAML 플로우의 C 헤더 생성물을 I2C 드라이버에 적용한 기록.",
+   "body": "## 배경\n설계팀 YAML 플로우의 C 헤더 생성물을 I2C 드라이버에 적용한 기록.\n\n## 내용\n- 오프셋 불일치 사고 원천 차단 — 브링업 이틀 소모 사고 재발 방지\n- bitfield struct 스타일 통일 — 기존 수동 헤더와 diff 검증\n- YAML 필드명 변경 공지 프로세스 합의 (설계팀 이슈 연동)\n\n_이 문서는 나유나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0015",
+   "title": "SDK 예제: SPI 사용법 문서 초안",
+   "author": "손우진",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 2215,
+   "summary": "I2C SDK 예제 코드와 사용법 문서 — 고객 배포용 초안.",
+   "body": "## 배경\nI2C SDK 예제 코드와 사용법 문서 — 고객 배포용 초안.\n\n## 내용\n- 최소 동작 예제 + 에러 처리 예제 2단 구성\n- 영문 병기 초안은 로컬 Claude로 번역 후 기술 검수\n- 고객 문의 빈발 항목 53건을 FAQ 절로 흡수\n\n_이 문서는 손우진의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0016",
+   "title": "SD/eMMC 인터럽트 레이턴시 측정 결과",
+   "author": "손우진",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 82085,
+   "summary": "I2C 인터럽트 응답 레이턴시를 GPIO 토글로 실측한 결과와 분포.",
+   "body": "## 배경\nI2C 인터럽트 응답 레이턴시를 GPIO 토글로 실측한 결과와 분포.\n\n## 내용\n- 평균 2300ns, 최악 케이스는 캐시 미스 경합 구간에서 발생\n- 측정 자동화: 스코프 캡처 → CSV → 분포 그래프 (로컬 Claude 스크립트)\n- RTOS 우선순위 조정 전후 비교 포함\n\n_이 문서는 손우진의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0017",
+   "title": "PWM 전력 관리(런타임 PM) 구현 노트",
+   "author": "손우진",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1143,
+   "summary": "암호화 엔진의 클록 게이팅·전원 도메인 제어 구현과 검증 기록.",
+   "body": "## 배경\n암호화 엔진의 클록 게이팅·전원 도메인 제어 구현과 검증 기록.\n\n## 내용\n- idle 판정 30ms 후 게이팅 — 복귀 레이턴시 스펙 이내 확인\n- PMU 펌웨어와 핸드셰이크 시퀀스 다이어그램 포함\n- 저전력 복귀 시 상태 복원 목록 — 설계팀 이슈와 교차 참조\n\n_이 문서는 손우진의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0018",
+   "title": "빌드 시스템 개선 — 증분 빌드 12% 단축",
+   "author": "손우진",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 156725,
+   "summary": "SDK 전체 빌드의 의존성 정리와 캐시 도입으로 빌드 시간을 줄인 기록.",
+   "body": "## 배경\nSDK 전체 빌드의 의존성 정리와 캐시 도입으로 빌드 시간을 줄인 기록.\n\n## 내용\n- 헤더 의존 정리 + 컴파일러 캐시 도입 — CI 회전 시간 단축\n- 의존 그래프 분석은 로컬 Claude로 빌드 로그 파싱해 수행\n- 야간 클린 빌드로 캐시 오염 감시\n\n_이 문서는 손우진의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0019",
+   "title": "암호화 엔진 디버깅 사례집 (7월 3주)",
+   "author": "손우진",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 874,
+   "summary": "7월 1주에 잡은 GPIO 버그들의 증상→원인→수정 기록. 재발 방지 체크 포함.",
+   "body": "## 배경\n7월 1주에 잡은 GPIO 버그들의 증상→원인→수정 기록. 재발 방지 체크 포함.\n\n## 내용\n- 간헐 데이터 깨짐 — 캐시 invalidate 타이밍이 원인 (DMA 완료 전 접근)\n- 레지스터 write 순서 의존 1건 — 배리어 삽입으로 해결\n- 사례 요약은 로컬 Claude로 디버그 노트에서 자동 정리\n\n_이 문서는 손우진의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0020",
+   "title": "부트로더 보안 검증 항목 정리 — 6월 1주 갱신",
+   "author": "노지민",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 2833,
+   "summary": "시큐어 부트 체인의 검증 항목과 실패 주입 테스트 계획.",
+   "body": "## 배경\n시큐어 부트 체인의 검증 항목과 실패 주입 테스트 계획.\n\n## 내용\n- 서명 검증 실패 29케이스 주입 — 폴백 경로 동작 확인\n- 키 롤오버 절차 문서화 — eFuse 컨트롤러 설정과 교차 확인\n- 체크리스트는 보안 감사 대비 증적 형식으로 유지\n\n_이 문서는 노지민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0021",
+   "title": "RTOS 태스크 구성과 우선순위 설계 노트 — 6월 3주 갱신",
+   "author": "노지민",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "verification",
+    "dft"
+   ],
+   "created_min_ago": 2518,
+   "summary": "제품 펌웨어의 태스크 분할·우선순위·워치독 정책 결정 기록.",
+   "body": "## 배경\n제품 펌웨어의 태스크 분할·우선순위·워치독 정책 결정 기록.\n\n## 내용\n- 태스크 68개 — 우선순위 역전 방지 뮤텍스 정책 명시\n- 워치독 킥 구조: 태스크별 하트비트 집계 방식\n- CPU 점유율 측정 결과와 마진 정책\n\n_이 문서는 노지민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0022",
+   "title": "툴체인 gcc 12.0 이행 검증 기록",
+   "author": "노지민",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "verification"
+   ],
+   "created_min_ago": 1473,
+   "summary": "컴파일러 메이저 업그레이드의 빌드·바이너리 차이 검증 기록.",
+   "body": "## 배경\n컴파일러 메이저 업그레이드의 빌드·바이너리 차이 검증 기록.\n\n## 내용\n- 신규 경고 73건 정리 — 실버그 2건 발견 (미정의 동작)\n- 코드 사이즈 55% 변화 — 섹션별 diff 표\n- 경고 로그 분류는 로컬 Claude로 자동화\n\n_이 문서는 노지민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0023",
+   "title": "DMA 드라이버 포팅 가이드",
+   "author": "노지민",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "hr-people",
+    "analog",
+    "dft"
+   ],
+   "created_min_ago": 307,
+   "summary": "RTC 드라이버를 신규 SoC에 포팅하는 절차 — 레지스터 차이·클록 소스·인터럽트 맵.",
+   "body": "## 배경\nRTC 드라이버를 신규 SoC에 포팅하는 절차 — 레지스터 차이·클록 소스·인터럽트 맵.\n\n## 내용\n- 레지스터 헤더는 설계팀 regmap YAML 생성물 사용 — 수동 정의 금지\n- 클록/리셋 인가 순서는 설계팀 리셋 시퀀스 노트와 일치 확인\n- 포팅 체크리스트 75항목 — 문서 초안은 로컬 Claude로 코드에서 역생성\n\n_이 문서는 노지민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0024",
+   "title": "브링업 보드 부트로그 자동 분석 — 이더넷 초기화 실패 패턴",
+   "author": "노지민",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 46682,
+   "summary": "UART 부트로그를 로컬 Claude로 분석해 초기화 실패 패턴을 분류하는 스크립트와 사례집.",
+   "body": "## 배경\nUART 부트로그를 로컬 Claude로 분석해 초기화 실패 패턴을 분류하는 스크립트와 사례집.\n\n## 내용\n- 실패 패턴 34종 분류 — 클록 미인가/리셋 순서/전원 시퀀스가 3대 원인\n- 로그 시그니처별 의심 지점 표 — 신규 보드 브링업 시간 단축\n- 보드에서 로그 자동 수집 → 분석 → 리포트 파이프라인 구성\n\n_이 문서는 노지민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0025",
+   "title": "이더넷 레지스터 헤더 자동 생성 적용기",
+   "author": "손나은",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1360,
+   "summary": "설계팀 YAML 플로우의 C 헤더 생성물을 I2C 드라이버에 적용한 기록.",
+   "body": "## 배경\n설계팀 YAML 플로우의 C 헤더 생성물을 I2C 드라이버에 적용한 기록.\n\n## 내용\n- 오프셋 불일치 사고 원천 차단 — 브링업 이틀 소모 사고 재발 방지\n- bitfield struct 스타일 통일 — 기존 수동 헤더와 diff 검증\n- YAML 필드명 변경 공지 프로세스 합의 (설계팀 이슈 연동)\n\n_이 문서는 손나은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0026",
+   "title": "SDK 예제: UART 사용법 문서 초안",
+   "author": "손나은",
+   "visibility": "org",
+   "reuse_count": 6,
+   "cited_by": [
+    "analog",
+    "physical-design",
+    "verification"
+   ],
+   "created_min_ago": 169665,
+   "summary": "암호화 엔진 SDK 예제 코드와 사용법 문서 — 고객 배포용 초안.",
+   "body": "## 배경\n암호화 엔진 SDK 예제 코드와 사용법 문서 — 고객 배포용 초안.\n\n## 내용\n- 최소 동작 예제 + 에러 처리 예제 2단 구성\n- 영문 병기 초안은 로컬 Claude로 번역 후 기술 검수\n- 고객 문의 빈발 항목 47건을 FAQ 절로 흡수\n\n_이 문서는 손나은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0027",
+   "title": "미디어 코덱 인터럽트 레이턴시 측정 결과",
+   "author": "손나은",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 113053,
+   "summary": "SPI 인터럽트 응답 레이턴시를 GPIO 토글로 실측한 결과와 분포.",
+   "body": "## 배경\nSPI 인터럽트 응답 레이턴시를 GPIO 토글로 실측한 결과와 분포.\n\n## 내용\n- 평균 6800ns, 최악 케이스는 캐시 미스 경합 구간에서 발생\n- 측정 자동화: 스코프 캡처 → CSV → 분포 그래프 (로컬 Claude 스크립트)\n- RTOS 우선순위 조정 전후 비교 포함\n\n_이 문서는 손나은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0028",
+   "title": "이더넷 전력 관리(런타임 PM) 구현 노트",
+   "author": "손나은",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 533,
+   "summary": "이더넷의 클록 게이팅·전원 도메인 제어 구현과 검증 기록.",
+   "body": "## 배경\n이더넷의 클록 게이팅·전원 도메인 제어 구현과 검증 기록.\n\n## 내용\n- idle 판정 55ms 후 게이팅 — 복귀 레이턴시 스펙 이내 확인\n- PMU 펌웨어와 핸드셰이크 시퀀스 다이어그램 포함\n- 저전력 복귀 시 상태 복원 목록 — 설계팀 이슈와 교차 참조\n\n_이 문서는 손나은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0029",
+   "title": "빌드 시스템 개선 — 증분 빌드 49% 단축",
+   "author": "허정우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 69440,
+   "summary": "SDK 전체 빌드의 의존성 정리와 캐시 도입으로 빌드 시간을 줄인 기록.",
+   "body": "## 배경\nSDK 전체 빌드의 의존성 정리와 캐시 도입으로 빌드 시간을 줄인 기록.\n\n## 내용\n- 헤더 의존 정리 + 컴파일러 캐시 도입 — CI 회전 시간 단축\n- 의존 그래프 분석은 로컬 Claude로 빌드 로그 파싱해 수행\n- 야간 클린 빌드로 캐시 오염 감시\n\n_이 문서는 허정우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0030",
+   "title": "PCIe 디버깅 사례집 (7월 2주)",
+   "author": "허정우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 140,
+   "summary": "7월 3주에 잡은 USB 버그들의 증상→원인→수정 기록. 재발 방지 체크 포함.",
+   "body": "## 배경\n7월 3주에 잡은 USB 버그들의 증상→원인→수정 기록. 재발 방지 체크 포함.\n\n## 내용\n- 간헐 데이터 깨짐 — 캐시 invalidate 타이밍이 원인 (DMA 완료 전 접근)\n- 레지스터 write 순서 의존 1건 — 배리어 삽입으로 해결\n- 사례 요약은 로컬 Claude로 디버그 노트에서 자동 정리\n\n_이 문서는 허정우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0031",
+   "title": "부트로더 보안 검증 항목 정리 — 7월 3주 갱신",
+   "author": "허정우",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 2016,
+   "summary": "시큐어 부트 체인의 검증 항목과 실패 주입 테스트 계획.",
+   "body": "## 배경\n시큐어 부트 체인의 검증 항목과 실패 주입 테스트 계획.\n\n## 내용\n- 서명 검증 실패 70케이스 주입 — 폴백 경로 동작 확인\n- 키 롤오버 절차 문서화 — eFuse 컨트롤러 설정과 교차 확인\n- 체크리스트는 보안 감사 대비 증적 형식으로 유지\n\n_이 문서는 허정우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0032",
+   "title": "RTOS 태스크 구성과 우선순위 설계 노트 — 7월 3주 갱신",
+   "author": "오영훈",
+   "visibility": "space",
+   "reuse_count": 1,
+   "cited_by": [
+    "physical-design"
+   ],
+   "created_min_ago": 118163,
+   "summary": "제품 펌웨어의 태스크 분할·우선순위·워치독 정책 결정 기록.",
+   "body": "## 배경\n제품 펌웨어의 태스크 분할·우선순위·워치독 정책 결정 기록.\n\n## 내용\n- 태스크 11개 — 우선순위 역전 방지 뮤텍스 정책 명시\n- 워치독 킥 구조: 태스크별 하트비트 집계 방식\n- CPU 점유율 측정 결과와 마진 정책\n\n_이 문서는 오영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0033",
+   "title": "툴체인 gcc 10.2 이행 검증 기록",
+   "author": "오영훈",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 145151,
+   "summary": "컴파일러 메이저 업그레이드의 빌드·바이너리 차이 검증 기록.",
+   "body": "## 배경\n컴파일러 메이저 업그레이드의 빌드·바이너리 차이 검증 기록.\n\n## 내용\n- 신규 경고 44건 정리 — 실버그 2건 발견 (미정의 동작)\n- 코드 사이즈 15% 변화 — 섹션별 diff 표\n- 경고 로그 분류는 로컬 Claude로 자동화\n\n_이 문서는 오영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0034",
+   "title": "타이머 드라이버 포팅 가이드",
+   "author": "오영훈",
+   "visibility": "org",
+   "reuse_count": 6,
+   "cited_by": [
+    "verification",
+    "product",
+    "physical-design"
+   ],
+   "created_min_ago": 3712,
+   "summary": "미디어 코덱 드라이버를 신규 SoC에 포팅하는 절차 — 레지스터 차이·클록 소스·인터럽트 맵.",
+   "body": "## 배경\n미디어 코덱 드라이버를 신규 SoC에 포팅하는 절차 — 레지스터 차이·클록 소스·인터럽트 맵.\n\n## 내용\n- 레지스터 헤더는 설계팀 regmap YAML 생성물 사용 — 수동 정의 금지\n- 클록/리셋 인가 순서는 설계팀 리셋 시퀀스 노트와 일치 확인\n- 포팅 체크리스트 86항목 — 문서 초안은 로컬 Claude로 코드에서 역생성\n\n_이 문서는 오영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0035",
+   "title": "브링업 보드 부트로그 자동 분석 — 미디어 코덱 초기화 실패 패턴",
+   "author": "오영훈",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "hr-people"
+   ],
+   "created_min_ago": 3274,
+   "summary": "UART 부트로그를 로컬 Claude로 분석해 초기화 실패 패턴을 분류하는 스크립트와 사례집.",
+   "body": "## 배경\nUART 부트로그를 로컬 Claude로 분석해 초기화 실패 패턴을 분류하는 스크립트와 사례집.\n\n## 내용\n- 실패 패턴 31종 분류 — 클록 미인가/리셋 순서/전원 시퀀스가 3대 원인\n- 로그 시그니처별 의심 지점 표 — 신규 보드 브링업 시간 단축\n- 보드에서 로그 자동 수집 → 분석 → 리포트 파이프라인 구성\n\n_이 문서는 오영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0036",
+   "title": "GPIO 레지스터 헤더 자동 생성 적용기",
+   "author": "오영훈",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 27287,
+   "summary": "설계팀 YAML 플로우의 C 헤더 생성물을 SD/eMMC 드라이버에 적용한 기록.",
+   "body": "## 배경\n설계팀 YAML 플로우의 C 헤더 생성물을 SD/eMMC 드라이버에 적용한 기록.\n\n## 내용\n- 오프셋 불일치 사고 원천 차단 — 브링업 이틀 소모 사고 재발 방지\n- bitfield struct 스타일 통일 — 기존 수동 헤더와 diff 검증\n- YAML 필드명 변경 공지 프로세스 합의 (설계팀 이슈 연동)\n\n_이 문서는 오영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0037",
+   "title": "SDK 예제: 이더넷 사용법 문서 초안",
+   "author": "조영훈",
+   "visibility": "space",
+   "reuse_count": 3,
+   "cited_by": [
+    "dft",
+    "verification",
+    "analog"
+   ],
+   "created_min_ago": 3150,
+   "summary": "USB SDK 예제 코드와 사용법 문서 — 고객 배포용 초안.",
+   "body": "## 배경\nUSB SDK 예제 코드와 사용법 문서 — 고객 배포용 초안.\n\n## 내용\n- 최소 동작 예제 + 에러 처리 예제 2단 구성\n- 영문 병기 초안은 로컬 Claude로 번역 후 기술 검수\n- 고객 문의 빈발 항목 85건을 FAQ 절로 흡수\n\n_이 문서는 조영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0038",
+   "title": "RTC 인터럽트 레이턴시 측정 결과",
+   "author": "조영훈",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 168451,
+   "summary": "UART 인터럽트 응답 레이턴시를 GPIO 토글로 실측한 결과와 분포.",
+   "body": "## 배경\nUART 인터럽트 응답 레이턴시를 GPIO 토글로 실측한 결과와 분포.\n\n## 내용\n- 평균 8100ns, 최악 케이스는 캐시 미스 경합 구간에서 발생\n- 측정 자동화: 스코프 캡처 → CSV → 분포 그래프 (로컬 Claude 스크립트)\n- RTOS 우선순위 조정 전후 비교 포함\n\n_이 문서는 조영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0039",
+   "title": "PCIe 전력 관리(런타임 PM) 구현 노트",
+   "author": "조영훈",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "soc-design",
+    "hr-people",
+    "product"
+   ],
+   "created_min_ago": 28679,
+   "summary": "DMA의 클록 게이팅·전원 도메인 제어 구현과 검증 기록.",
+   "body": "## 배경\nDMA의 클록 게이팅·전원 도메인 제어 구현과 검증 기록.\n\n## 내용\n- idle 판정 2ms 후 게이팅 — 복귀 레이턴시 스펙 이내 확인\n- PMU 펌웨어와 핸드셰이크 시퀀스 다이어그램 포함\n- 저전력 복귀 시 상태 복원 목록 — 설계팀 이슈와 교차 참조\n\n_이 문서는 조영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0040",
+   "title": "빌드 시스템 개선 — 증분 빌드 5% 단축",
+   "author": "조영훈",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 3304,
+   "summary": "SDK 전체 빌드의 의존성 정리와 캐시 도입으로 빌드 시간을 줄인 기록.",
+   "body": "## 배경\nSDK 전체 빌드의 의존성 정리와 캐시 도입으로 빌드 시간을 줄인 기록.\n\n## 내용\n- 헤더 의존 정리 + 컴파일러 캐시 도입 — CI 회전 시간 단축\n- 의존 그래프 분석은 로컬 Claude로 빌드 로그 파싱해 수행\n- 야간 클린 빌드로 캐시 오염 감시\n\n_이 문서는 조영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0041",
+   "title": "타이머 디버깅 사례집 (7월 3주)",
+   "author": "조영훈",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 143101,
+   "summary": "6월 3주에 잡은 DMA 버그들의 증상→원인→수정 기록. 재발 방지 체크 포함.",
+   "body": "## 배경\n6월 3주에 잡은 DMA 버그들의 증상→원인→수정 기록. 재발 방지 체크 포함.\n\n## 내용\n- 간헐 데이터 깨짐 — 캐시 invalidate 타이밍이 원인 (DMA 완료 전 접근)\n- 레지스터 write 순서 의존 1건 — 배리어 삽입으로 해결\n- 사례 요약은 로컬 Claude로 디버그 노트에서 자동 정리\n\n_이 문서는 조영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0042",
+   "title": "부트로더 보안 검증 항목 정리 — 6월 2주 갱신",
+   "author": "조영훈",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "dft"
+   ],
+   "created_min_ago": 60308,
+   "summary": "시큐어 부트 체인의 검증 항목과 실패 주입 테스트 계획.",
+   "body": "## 배경\n시큐어 부트 체인의 검증 항목과 실패 주입 테스트 계획.\n\n## 내용\n- 서명 검증 실패 88케이스 주입 — 폴백 경로 동작 확인\n- 키 롤오버 절차 문서화 — eFuse 컨트롤러 설정과 교차 확인\n- 체크리스트는 보안 감사 대비 증적 형식으로 유지\n\n_이 문서는 조영훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0043",
+   "title": "RTOS 태스크 구성과 우선순위 설계 노트 — 7월 1주 갱신",
+   "author": "송주원",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 113974,
+   "summary": "제품 펌웨어의 태스크 분할·우선순위·워치독 정책 결정 기록.",
+   "body": "## 배경\n제품 펌웨어의 태스크 분할·우선순위·워치독 정책 결정 기록.\n\n## 내용\n- 태스크 62개 — 우선순위 역전 방지 뮤텍스 정책 명시\n- 워치독 킥 구조: 태스크별 하트비트 집계 방식\n- CPU 점유율 측정 결과와 마진 정책\n\n_이 문서는 송주원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0044",
+   "title": "툴체인 gcc 10.1 이행 검증 기록",
+   "author": "송주원",
+   "visibility": "org",
+   "reuse_count": 11,
+   "cited_by": [
+    "verification",
+    "physical-design",
+    "dft"
+   ],
+   "created_min_ago": 63881,
+   "summary": "컴파일러 메이저 업그레이드의 빌드·바이너리 차이 검증 기록.",
+   "body": "## 배경\n컴파일러 메이저 업그레이드의 빌드·바이너리 차이 검증 기록.\n\n## 내용\n- 신규 경고 69건 정리 — 실버그 2건 발견 (미정의 동작)\n- 코드 사이즈 38% 변화 — 섹션별 diff 표\n- 경고 로그 분류는 로컬 Claude로 자동화\n\n_이 문서는 송주원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0045",
+   "title": "SD/eMMC 드라이버 포팅 가이드",
+   "author": "송주원",
+   "visibility": "space",
+   "reuse_count": 14,
+   "cited_by": [
+    "hr-people",
+    "analog",
+    "product"
+   ],
+   "created_min_ago": 3349,
+   "summary": "PCIe 드라이버를 신규 SoC에 포팅하는 절차 — 레지스터 차이·클록 소스·인터럽트 맵.",
+   "body": "## 배경\nPCIe 드라이버를 신규 SoC에 포팅하는 절차 — 레지스터 차이·클록 소스·인터럽트 맵.\n\n## 내용\n- 레지스터 헤더는 설계팀 regmap YAML 생성물 사용 — 수동 정의 금지\n- 클록/리셋 인가 순서는 설계팀 리셋 시퀀스 노트와 일치 확인\n- 포팅 체크리스트 14항목 — 문서 초안은 로컬 Claude로 코드에서 역생성\n\n_이 문서는 송주원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0046",
+   "title": "브링업 보드 부트로그 자동 분석 — UART 초기화 실패 패턴",
+   "author": "송주원",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "analog",
+    "hr-people"
+   ],
+   "created_min_ago": 4297,
+   "summary": "UART 부트로그를 로컬 Claude로 분석해 초기화 실패 패턴을 분류하는 스크립트와 사례집.",
+   "body": "## 배경\nUART 부트로그를 로컬 Claude로 분석해 초기화 실패 패턴을 분류하는 스크립트와 사례집.\n\n## 내용\n- 실패 패턴 63종 분류 — 클록 미인가/리셋 순서/전원 시퀀스가 3대 원인\n- 로그 시그니처별 의심 지점 표 — 신규 보드 브링업 시간 단축\n- 보드에서 로그 자동 수집 → 분석 → 리포트 파이프라인 구성\n\n_이 문서는 송주원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0047",
+   "title": "암호화 엔진 레지스터 헤더 자동 생성 적용기",
+   "author": "송주원",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 40167,
+   "summary": "설계팀 YAML 플로우의 C 헤더 생성물을 미디어 코덱 드라이버에 적용한 기록.",
+   "body": "## 배경\n설계팀 YAML 플로우의 C 헤더 생성물을 미디어 코덱 드라이버에 적용한 기록.\n\n## 내용\n- 오프셋 불일치 사고 원천 차단 — 브링업 이틀 소모 사고 재발 방지\n- bitfield struct 스타일 통일 — 기존 수동 헤더와 diff 검증\n- YAML 필드명 변경 공지 프로세스 합의 (설계팀 이슈 연동)\n\n_이 문서는 송주원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "firmware-doc-0048",
+   "title": "SDK 예제: GPIO 사용법 문서 초안",
+   "author": "송주원",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "product"
+   ],
+   "created_min_ago": 95463,
+   "summary": "워치독 SDK 예제 코드와 사용법 문서 — 고객 배포용 초안.",
+   "body": "## 배경\n워치독 SDK 예제 코드와 사용법 문서 — 고객 배포용 초안.\n\n## 내용\n- 최소 동작 예제 + 에러 처리 예제 2단 구성\n- 영문 병기 초안은 로컬 Claude로 번역 후 기술 검수\n- 고객 문의 빈발 항목 72건을 FAQ 절로 흡수\n\n_이 문서는 송주원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  }
+ ],
+ "reuse_events": [
+  {
+   "doc_id": "firmware-doc-0002",
+   "source_space": "firmware",
+   "consumer_space": "dft",
+   "min_ago": 12382,
+   "summary": "펌웨어개발팀의 『브링업 보드 부트로그 자동 분석 — SD/eMMC 초기화 실패 패턴』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0005",
+   "source_space": "firmware",
+   "consumer_space": "soc-design",
+   "min_ago": 37839,
+   "summary": "펌웨어개발팀의 『GPIO 인터럽트 레이턴시 측정 결과』 지식이 SoC 설계팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0006",
+   "source_space": "firmware",
+   "consumer_space": "product",
+   "min_ago": 1123,
+   "summary": "펌웨어개발팀의 『미디어 코덱 전력 관리(런타임 PM) 구현 노트』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0010",
+   "source_space": "firmware",
+   "consumer_space": "product",
+   "min_ago": 13932,
+   "summary": "펌웨어개발팀의 『RTOS 태스크 구성과 우선순위 설계 노트』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0011",
+   "source_space": "firmware",
+   "consumer_space": "physical-design",
+   "min_ago": 9977,
+   "summary": "펌웨어개발팀의 『툴체인 gcc 14.1 이행 검증 기록』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0021",
+   "source_space": "firmware",
+   "consumer_space": "verification",
+   "min_ago": 42497,
+   "summary": "펌웨어개발팀의 『RTOS 태스크 구성과 우선순위 설계 노트 — 6월 3주 갱신』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0022",
+   "source_space": "firmware",
+   "consumer_space": "verification",
+   "min_ago": 33529,
+   "summary": "펌웨어개발팀의 『툴체인 gcc 12.0 이행 검증 기록』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0023",
+   "source_space": "firmware",
+   "consumer_space": "hr-people",
+   "min_ago": 899,
+   "summary": "펌웨어개발팀의 『DMA 드라이버 포팅 가이드』 지식이 인사팀 (People)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0026",
+   "source_space": "firmware",
+   "consumer_space": "analog",
+   "min_ago": 27991,
+   "summary": "펌웨어개발팀의 『SDK 예제: UART 사용법 문서 초안』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0032",
+   "source_space": "firmware",
+   "consumer_space": "physical-design",
+   "min_ago": 9798,
+   "summary": "펌웨어개발팀의 『RTOS 태스크 구성과 우선순위 설계 노트 — 7월 3주 갱신』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0034",
+   "source_space": "firmware",
+   "consumer_space": "verification",
+   "min_ago": 17541,
+   "summary": "펌웨어개발팀의 『타이머 드라이버 포팅 가이드』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0035",
+   "source_space": "firmware",
+   "consumer_space": "hr-people",
+   "min_ago": 19649,
+   "summary": "펌웨어개발팀의 『브링업 보드 부트로그 자동 분석 — 미디어 코덱 초기화 실패 패턴』 지식이 인사팀 (People)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0037",
+   "source_space": "firmware",
+   "consumer_space": "dft",
+   "min_ago": 35275,
+   "summary": "펌웨어개발팀의 『SDK 예제: 이더넷 사용법 문서 초안』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0039",
+   "source_space": "firmware",
+   "consumer_space": "soc-design",
+   "min_ago": 6901,
+   "summary": "펌웨어개발팀의 『PCIe 전력 관리(런타임 PM) 구현 노트』 지식이 SoC 설계팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0042",
+   "source_space": "firmware",
+   "consumer_space": "dft",
+   "min_ago": 24485,
+   "summary": "펌웨어개발팀의 『부트로더 보안 검증 항목 정리 — 6월 2주 갱신』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0044",
+   "source_space": "firmware",
+   "consumer_space": "verification",
+   "min_ago": 7465,
+   "summary": "펌웨어개발팀의 『툴체인 gcc 10.1 이행 검증 기록』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0045",
+   "source_space": "firmware",
+   "consumer_space": "hr-people",
+   "min_ago": 26743,
+   "summary": "펌웨어개발팀의 『SD/eMMC 드라이버 포팅 가이드』 지식이 인사팀 (People)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0046",
+   "source_space": "firmware",
+   "consumer_space": "analog",
+   "min_ago": 21574,
+   "summary": "펌웨어개발팀의 『브링업 보드 부트로그 자동 분석 — UART 초기화 실패 패턴』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "firmware-doc-0048",
+   "source_space": "firmware",
+   "consumer_space": "product",
+   "min_ago": 26595,
+   "summary": "펌웨어개발팀의 『SDK 예제: GPIO 사용법 문서 초안』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  }
+ ]
+}

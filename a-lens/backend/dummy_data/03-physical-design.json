@@ -1,0 +1,966 @@
+{
+ "space": {
+  "space_id": "physical-design",
+  "name": "백엔드 설계팀 (PD)"
+ },
+ "visits": {
+  "today": 13,
+  "total": 347
+ },
+ "members": [
+  {
+   "agent_id": "physical-design-cho-jaeyun",
+   "name": "조재윤",
+   "role": "PD 팀장",
+   "owner": "조재윤",
+   "last_active_min_ago": 2,
+   "activity": {
+    "kind": "knowledge",
+    "title": "전력 관리 유닛(PMU) CTS 전략 — 스큐 그룹 정의"
+   }
+  },
+  {
+   "agent_id": "physical-design-han-seungmin",
+   "name": "한승민",
+   "role": "전력 무결성(IR/EM)",
+   "owner": "한승민",
+   "last_active_min_ago": 19,
+   "activity": {
+    "kind": "knowledge",
+    "title": "HDMI 송신부 utilization·타이밍 트레이드오프 스윕"
+   }
+  },
+  {
+   "agent_id": "physical-design-noh-yeeun",
+   "name": "노예은",
+   "role": "플로어플랜",
+   "owner": "노예은",
+   "last_active_min_ago": 41,
+   "activity": {
+    "kind": "knowledge",
+    "title": "USB 3.1 컨트롤러 플로어플랜 v1.4 리뷰 노트"
+   }
+  },
+  {
+   "agent_id": "physical-design-son-taeoh",
+   "name": "손태오",
+   "role": "CTS",
+   "owner": "손태오",
+   "last_active_min_ago": 18396,
+   "activity": {
+    "kind": "knowledge",
+    "title": "STA 리포트 요약 파서 — ICC2 포맷 대응"
+   }
+  },
+  {
+   "agent_id": "physical-design-sim-hayun",
+   "name": "심하윤",
+   "role": "전력 무결성(IR/EM)",
+   "owner": "심하윤",
+   "last_active_min_ago": 29708,
+   "activity": {
+    "kind": "issue",
+    "title": "타이머/워치독 스캔 체인 재정렬 후 타이밍 재검증 요청"
+   }
+  },
+  {
+   "agent_id": "physical-design-jang-minseo",
+   "name": "장민서",
+   "role": "PnR",
+   "owner": "장민서",
+   "last_active_min_ago": 25470,
+   "activity": {
+    "kind": "knowledge",
+    "title": "파운드리 DRC 덱 v2.7 신규 룰 요약"
+   }
+  },
+  {
+   "agent_id": "physical-design-nam-jaeyun",
+   "name": "남재윤",
+   "role": "라이브러리/PDK 관리",
+   "owner": "남재윤",
+   "last_active_min_ago": 23501,
+   "activity": {
+    "kind": "knowledge",
+    "title": "필러/디캡 삽입 정책 정리 — 6월 4주 갱신"
+   }
+  },
+  {
+   "agent_id": "physical-design-cho-donghyun",
+   "name": "조동현",
+   "role": "플로어플랜",
+   "owner": "조동현",
+   "last_active_min_ago": 16946,
+   "activity": {
+    "kind": "knowledge",
+    "title": "L2 캐시 컨트롤러 congestion 완화 실험 기록"
+   }
+  },
+  {
+   "agent_id": "physical-design-jung-taeyun",
+   "name": "정태윤",
+   "role": "플로어플랜",
+   "owner": "정태윤",
+   "last_active_min_ago": 7818,
+   "activity": {
+    "kind": "knowledge",
+    "title": "IR drop 사전 점검 — 이미지 전처리 파이프라인(ISP) 히트맵 분석"
+   }
+  },
+  {
+   "agent_id": "physical-design-bae-jungwoo",
+   "name": "배정우",
+   "role": "STA/사인오프",
+   "owner": "배정우",
+   "last_active_min_ago": 10276,
+   "activity": {
+    "kind": "issue",
+    "title": "MIPI CSI-2 수신부 hold 위반 1822건 (ss_0p72v_125c)"
+   }
+  }
+ ],
+ "issues": [
+  {
+   "issue_id": "physical-design-issue-0001",
+   "title": "타이머/워치독 hold 위반 2073건 (tt_0p80v_25c)",
+   "status": "open",
+   "opened_by": "physical-design-cho-jaeyun",
+   "updated_min_ago": 8100
+  },
+  {
+   "issue_id": "physical-design-issue-0002",
+   "title": "MIPI CSI-2 수신부 라우팅 DRC 1675건 — 핀 액세스 문제",
+   "status": "resolved",
+   "opened_by": "physical-design-cho-jaeyun",
+   "updated_min_ago": 81464
+  },
+  {
+   "issue_id": "physical-design-issue-0003",
+   "title": "PrimeTime 버전업 후 사내 스크립트 비호환",
+   "status": "knowledge_linked",
+   "opened_by": "physical-design-cho-jaeyun",
+   "updated_min_ago": 11724
+  },
+  {
+   "issue_id": "physical-design-issue-0004",
+   "title": "SD/eMMC 호스트 IR drop 14% 초과 핫스팟",
+   "status": "open",
+   "opened_by": "physical-design-han-seungmin",
+   "updated_min_ago": 4726
+  },
+  {
+   "issue_id": "physical-design-issue-0005",
+   "title": "파워 스트랩과 매크로 핀 쇼트 위반",
+   "status": "resolved",
+   "opened_by": "physical-design-han-seungmin",
+   "updated_min_ago": 95184
+  },
+  {
+   "issue_id": "physical-design-issue-0006",
+   "title": "타이머/워치독 클록 트리 레이턴시 목표 초과",
+   "status": "resolved",
+   "opened_by": "physical-design-noh-yeeun",
+   "updated_min_ago": 61702
+  },
+  {
+   "issue_id": "physical-design-issue-0007",
+   "title": "라이브러리 셀 캐릭터라이제이션 데이터 이상 의심 (ss_0p72v_m40c)",
+   "status": "resolved",
+   "opened_by": "physical-design-noh-yeeun",
+   "updated_min_ago": 32573
+  },
+  {
+   "issue_id": "physical-design-issue-0008",
+   "title": "USB 3.1 컨트롤러 배치 후 congestion 오버플로우 재발",
+   "status": "knowledge_linked",
+   "opened_by": "physical-design-noh-yeeun",
+   "updated_min_ago": 209
+  },
+  {
+   "issue_id": "physical-design-issue-0009",
+   "title": "LVS 불일치 — 파워 네트 이름 충돌",
+   "status": "resolved",
+   "opened_by": "physical-design-noh-yeeun",
+   "updated_min_ago": 87226
+  },
+  {
+   "issue_id": "physical-design-issue-0010",
+   "title": "USB 3.1 컨트롤러 ECO 후 신규 hold 위반 유입",
+   "status": "resolved",
+   "opened_by": "physical-design-son-taeoh",
+   "updated_min_ago": 42306
+  },
+  {
+   "issue_id": "physical-design-issue-0011",
+   "title": "덱 v3.2 신규 밀도 룰로 필러 재삽입 필요",
+   "status": "knowledge_linked",
+   "opened_by": "physical-design-son-taeoh",
+   "updated_min_ago": 3734
+  },
+  {
+   "issue_id": "physical-design-issue-0012",
+   "title": "eFuse 컨트롤러 매크로 간 채널 폭 부족 — 플로어플랜 조정 요청",
+   "status": "resolved",
+   "opened_by": "physical-design-son-taeoh",
+   "updated_min_ago": 73268
+  },
+  {
+   "issue_id": "physical-design-issue-0013",
+   "title": "사인오프 코너 추가 요청(ff_0p88v_m40c) — 런타임 예산 초과",
+   "status": "open",
+   "opened_by": "physical-design-son-taeoh",
+   "updated_min_ago": 9629
+  },
+  {
+   "issue_id": "physical-design-issue-0014",
+   "title": "Tempus 라이선스 만료 임박 — 갱신 품의 필요",
+   "status": "resolved",
+   "opened_by": "physical-design-sim-hayun",
+   "updated_min_ago": 57430
+  },
+  {
+   "issue_id": "physical-design-issue-0015",
+   "title": "타이머/워치독 스캔 체인 재정렬 후 타이밍 재검증 요청",
+   "status": "resolved",
+   "opened_by": "physical-design-sim-hayun",
+   "updated_min_ago": 50201
+  },
+  {
+   "issue_id": "physical-design-issue-0016",
+   "title": "오디오 I2S 브리지 hold 위반 999건 (tt_0p80v_25c)",
+   "status": "knowledge_linked",
+   "opened_by": "physical-design-sim-hayun",
+   "updated_min_ago": 16714
+  },
+  {
+   "issue_id": "physical-design-issue-0017",
+   "title": "PCIe Gen4 컨트롤러 라우팅 DRC 463건 — 핀 액세스 문제",
+   "status": "resolved",
+   "opened_by": "physical-design-sim-hayun",
+   "updated_min_ago": 85569
+  },
+  {
+   "issue_id": "physical-design-issue-0018",
+   "title": "Calibre 버전업 후 사내 스크립트 비호환",
+   "status": "open",
+   "opened_by": "physical-design-jang-minseo",
+   "updated_min_ago": 229
+  },
+  {
+   "issue_id": "physical-design-issue-0019",
+   "title": "SD/eMMC 호스트 IR drop 5% 초과 핫스팟",
+   "status": "knowledge_linked",
+   "opened_by": "physical-design-jang-minseo",
+   "updated_min_ago": 6261
+  },
+  {
+   "issue_id": "physical-design-issue-0020",
+   "title": "파워 스트랩과 매크로 핀 쇼트 위반 — 7월 2주 갱신",
+   "status": "knowledge_linked",
+   "opened_by": "physical-design-nam-jaeyun",
+   "updated_min_ago": 11186
+  },
+  {
+   "issue_id": "physical-design-issue-0021",
+   "title": "DMA 컨트롤러 클록 트리 레이턴시 목표 초과",
+   "status": "knowledge_linked",
+   "opened_by": "physical-design-nam-jaeyun",
+   "updated_min_ago": 810
+  },
+  {
+   "issue_id": "physical-design-issue-0022",
+   "title": "라이브러리 셀 캐릭터라이제이션 데이터 이상 의심 (ss_0p72v_125c)",
+   "status": "knowledge_linked",
+   "opened_by": "physical-design-cho-donghyun",
+   "updated_min_ago": 13152
+  },
+  {
+   "issue_id": "physical-design-issue-0023",
+   "title": "DMA 컨트롤러 배치 후 congestion 오버플로우 재발",
+   "status": "resolved",
+   "opened_by": "physical-design-cho-donghyun",
+   "updated_min_ago": 109003
+  },
+  {
+   "issue_id": "physical-design-issue-0024",
+   "title": "LVS 불일치 — 파워 네트 이름 충돌 — 6월 1주 갱신",
+   "status": "knowledge_linked",
+   "opened_by": "physical-design-cho-donghyun",
+   "updated_min_ago": 13492
+  },
+  {
+   "issue_id": "physical-design-issue-0025",
+   "title": "타이머/워치독 ECO 후 신규 hold 위반 유입",
+   "status": "knowledge_linked",
+   "opened_by": "physical-design-cho-donghyun",
+   "updated_min_ago": 5901
+  },
+  {
+   "issue_id": "physical-design-issue-0026",
+   "title": "덱 v1.6 신규 밀도 룰로 필러 재삽입 필요",
+   "status": "open",
+   "opened_by": "physical-design-jung-taeyun",
+   "updated_min_ago": 9225
+  },
+  {
+   "issue_id": "physical-design-issue-0027",
+   "title": "SD/eMMC 호스트 매크로 간 채널 폭 부족 — 플로어플랜 조정 요청",
+   "status": "open",
+   "opened_by": "physical-design-jung-taeyun",
+   "updated_min_ago": 12463
+  },
+  {
+   "issue_id": "physical-design-issue-0028",
+   "title": "사인오프 코너 추가 요청(ss_0p72v_125c) — 런타임 예산 초과",
+   "status": "knowledge_linked",
+   "opened_by": "physical-design-jung-taeyun",
+   "updated_min_ago": 5612
+  },
+  {
+   "issue_id": "physical-design-issue-0029",
+   "title": "Innovus 라이선스 만료 임박 — 갱신 품의 필요",
+   "status": "resolved",
+   "opened_by": "physical-design-jung-taeyun",
+   "updated_min_ago": 84608
+  },
+  {
+   "issue_id": "physical-design-issue-0030",
+   "title": "eFuse 컨트롤러 스캔 체인 재정렬 후 타이밍 재검증 요청",
+   "status": "open",
+   "opened_by": "physical-design-bae-jungwoo",
+   "updated_min_ago": 12143
+  },
+  {
+   "issue_id": "physical-design-issue-0031",
+   "title": "MIPI CSI-2 수신부 hold 위반 1822건 (ss_0p72v_125c)",
+   "status": "resolved",
+   "opened_by": "physical-design-bae-jungwoo",
+   "updated_min_ago": 52363
+  }
+ ],
+ "knowledge": [
+  {
+   "doc_id": "physical-design-doc-0001",
+   "title": "오디오 I2S 브리지 플로어플랜 v3.7 리뷰 노트",
+   "author": "조재윤",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "product",
+    "hr-people"
+   ],
+   "created_min_ago": 73739,
+   "summary": "SD/eMMC 호스트 플로어플랜 개정판의 매크로 배치·핀 배치 결정과 리뷰 지적 반영 기록.",
+   "body": "## 배경\nSD/eMMC 호스트 플로어플랜 개정판의 매크로 배치·핀 배치 결정과 리뷰 지적 반영 기록.\n\n## 내용\n- 메모리 매크로 120개 재배치 — 데이터패스 방향과 정렬해 congestion 완화\n- IO 핀 그룹 재배열은 패키지팀 범프 맵 v1.0와 교차 확인 완료\n- 리뷰 지적 요약은 회의 녹취를 로컬 Claude로 정리\n\n_이 문서는 조재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0002",
+   "title": "전력 관리 유닛(PMU) CTS 전략 — 스큐 그룹 정의",
+   "author": "조재윤",
+   "visibility": "space",
+   "reuse_count": 3,
+   "cited_by": [
+    "dft",
+    "soc-design",
+    "product"
+   ],
+   "created_min_ago": 16719,
+   "summary": "오디오 I2S 브리지 클록 트리 합성의 스큐 그룹·타깃 레이턴시·예외 처리 결정 문서.",
+   "body": "## 배경\n오디오 I2S 브리지 클록 트리 합성의 스큐 그룹·타깃 레이턴시·예외 처리 결정 문서.\n\n## 내용\n- 스큐 그룹 2436개 — 메모리 인터페이스는 별도 그룹으로 분리\n- 게이팅 셀 위치 제약: 글리치 위험 경로는 소스 클록 가까이\n- 유용 스큐(useful skew) 적용 구간과 근거 기록\n\n_이 문서는 조재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0003",
+   "title": "tt_0p80v_25c 코너 STA 요약 (5월 4주)",
+   "author": "조재윤",
+   "visibility": "org",
+   "reuse_count": 8,
+   "cited_by": [
+    "product",
+    "soc-design",
+    "analog"
+   ],
+   "created_min_ago": 75864,
+   "summary": "6월 3주 사인오프 코너 STA 결과 — 위반 분포와 담당 배정.",
+   "body": "## 배경\n6월 3주 사인오프 코너 STA 결과 — 위반 분포와 담당 배정.\n\n## 내용\n- setup WNS/TNS 및 위반 끝점 모듈 Top10 — 파서 자동 생성 표\n- hold 위반 2732건은 CTS 후 재측정 예정, 마진 정책은 팀 위키 기준\n- 설계팀 전달용은 RTL 계층 경로 표기(--for-rtl)로 변환\n\n_이 문서는 조재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0004",
+   "title": "STA 리포트 요약 파서 — Calibre 포맷 대응",
+   "author": "조재윤",
+   "visibility": "space",
+   "reuse_count": 1,
+   "cited_by": [
+    "dft"
+   ],
+   "created_min_ago": 4232,
+   "summary": "수만 줄 STA 리포트를 클록 그룹·모듈별 한 페이지 요약으로 만드는 파서. 로컬 Claude로 작성.",
+   "body": "## 배경\n수만 줄 STA 리포트를 클록 그룹·모듈별 한 페이지 요약으로 만드는 파서. 로컬 Claude로 작성.\n\n## 내용\n- 클록 그룹별 WNS/TNS/위반 수 + 끝점 모듈 Top10 + 공통 경유점 추출\n- Innovus 신규 포맷 대응 — 리포트 샘플을 Claude에 주고 파서 수정\n- 아침 사인오프 회의 자료를 crontab으로 자동 생성\n\n_이 문서는 조재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0005",
+   "title": "NoC 라우터 congestion 완화 실험 기록",
+   "author": "조재윤",
+   "visibility": "space",
+   "reuse_count": 3,
+   "cited_by": [
+    "product",
+    "verification",
+    "hr-people"
+   ],
+   "created_min_ago": 3366,
+   "summary": "타이머/워치독 라우팅 혼잡 완화를 위한 배치 밀도·블로키지 스윕 실험.",
+   "body": "## 배경\n타이머/워치독 라우팅 혼잡 완화를 위한 배치 밀도·블로키지 스윕 실험.\n\n## 내용\n- 부분 밀도 스크린 14% 적용 시 오버플로우 2947건 → 두 자릿수로 감소\n- 셀 패딩은 클록 버퍼 주변만 — 전면 적용은 면적 손해가 더 컸음\n- 실험 매트릭스와 결과는 스크립트로 자동 수집\n\n_이 문서는 조재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0006",
+   "title": "IR drop 사전 점검 — DDR4 컨트롤러 히트맵 분석",
+   "author": "조재윤",
+   "visibility": "space",
+   "reuse_count": 3,
+   "cited_by": [
+    "firmware",
+    "hr-people",
+    "dft"
+   ],
+   "created_min_ago": 170963,
+   "summary": "QSPI 부트 컨트롤러 배치 후 전력 밀도 히트맵과 벡터리스 IR 분석 결과.",
+   "body": "## 배경\nQSPI 부트 컨트롤러 배치 후 전력 밀도 히트맵과 벡터리스 IR 분석 결과.\n\n## 내용\n- static 4% 초과 셀 883개 — 파워 스트랩 보강으로 해소 확인\n- 고활동 VCD는 검증팀 리그레션 토글률 상위 시나리오에서 요청\n- 히트맵 생성 스크립트는 로컬 Claude로 작성 (matplotlib)\n\n_이 문서는 조재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0007",
+   "title": "DMA 컨트롤러 ECO 라우팅 가이드",
+   "author": "한승민",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "product"
+   ],
+   "created_min_ago": 136042,
+   "summary": "테이프아웃 직전 전력 관리 유닛(PMU) ECO의 스페어 셀 활용·라우팅 제약 가이드.",
+   "body": "## 배경\n테이프아웃 직전 전력 관리 유닛(PMU) ECO의 스페어 셀 활용·라우팅 제약 가이드.\n\n## 내용\n- 스페어 셀 맵과 거리 기준 — 266um 초과 시 타이밍 재검증 필수\n- 메탈 변경 최소화 원칙: 상위 메탈 우회는 IR 재확인 조건\n- ECO 후 검증 체크리스트(LVS/DRC/STA 증분) 포함\n\n_이 문서는 한승민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0008",
+   "title": "파운드리 DRC 덱 v1.4 신규 룰 요약",
+   "author": "한승민",
+   "visibility": "org",
+   "reuse_count": 10,
+   "cited_by": [
+    "hr-people",
+    "product",
+    "soc-design"
+   ],
+   "created_min_ago": 39642,
+   "summary": "파운드리 덱 업데이트의 신규/강화 룰을 로컬 Claude로 diff 요약하고 영향 평가.",
+   "body": "## 배경\n파운드리 덱 업데이트의 신규/강화 룰을 로컬 Claude로 diff 요약하고 영향 평가.\n\n## 내용\n- 신규 룰 572개 중 현재 레이아웃 위반 유발 2개 — waiver 협의 시작\n- 밀도 룰 강화는 필러 정책 변경으로 흡수 가능\n- 덱-PDK 버전 조합은 공식 지원 매트릭스와 대조 완료\n\n_이 문서는 한승민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0009",
+   "title": "HDMI 송신부 utilization·타이밍 트레이드오프 스윕",
+   "author": "한승민",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "verification",
+    "analog"
+   ],
+   "created_min_ago": 2775,
+   "summary": "인터럽트 컨트롤러(GIC) 초기 배치의 utilization 스윕으로 타이밍·면적 균형점을 찾은 실험.",
+   "body": "## 배경\n인터럽트 컨트롤러(GIC) 초기 배치의 utilization 스윕으로 타이밍·면적 균형점을 찾은 실험.\n\n## 내용\n- util 60%대에서 WNS 최적 — 그 이상은 congestion 역효과\n- 런셋 자동화 스크립트로 1880개 조합 무인 실행\n- 결과 표와 추천 설정을 블록 담당자에게 전달\n\n_이 문서는 한승민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0010",
+   "title": "PrimeTime 로그 위반 요약 추출 스크립트",
+   "author": "노예은",
+   "visibility": "space",
+   "reuse_count": 1,
+   "cited_by": [
+    "analog"
+   ],
+   "created_min_ago": 91761,
+   "summary": "Innovus 런 로그에서 워닝·위반을 유형별 집계하는 스크립트 — 로컬 Claude로 초안 작성.",
+   "body": "## 배경\nInnovus 런 로그에서 워닝·위반을 유형별 집계하는 스크립트 — 로컬 Claude로 초안 작성.\n\n## 내용\n- 유형별 카운트 + 첫 발생 라인 링크로 원본 추적\n- 무해 워닝 필터 목록은 팀 리뷰로 관리 — 임의 추가 금지\n- 신규 툴 버전 포맷 변화에 대비해 파싱 실패 시 알림\n\n_이 문서는 노예은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0011",
+   "title": "필러/디캡 삽입 정책 정리",
+   "author": "노예은",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "verification",
+    "firmware",
+    "dft"
+   ],
+   "created_min_ago": 162039,
+   "summary": "필러 셀·디캡 비율과 삽입 순서의 팀 표준 정책 문서.",
+   "body": "## 배경\n필러 셀·디캡 비율과 삽입 순서의 팀 표준 정책 문서.\n\n## 내용\n- 디캡 비율 2% 기본 — IR 취약 영역은 상향, 밀도 룰과 균형\n- 삽입 순서: ECO 여유 확보를 위해 스페어 → 디캡 → 필러\n- 정책 근거가 된 이전 프로젝트 IR 사고 사례 링크\n\n_이 문서는 노예은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0012",
+   "title": "전력 관리 유닛(PMU) 안테나 위반 정리 기록",
+   "author": "노예은",
+   "visibility": "org",
+   "reuse_count": 6,
+   "cited_by": [
+    "verification",
+    "analog",
+    "dft"
+   ],
+   "created_min_ago": 3237,
+   "summary": "인터럽트 컨트롤러(GIC) 안테나 위반의 원인 분포와 다이오드 삽입/점퍼 처리 기록.",
+   "body": "## 배경\n인터럽트 컨트롤러(GIC) 안테나 위반의 원인 분포와 다이오드 삽입/점퍼 처리 기록.\n\n## 내용\n- 위반 1979건 — 장거리 상위 메탈 라우팅이 주원인\n- 자동 다이오드 삽입 후 잔여는 점퍼 처리, 재발 방지 라우팅 제약 추가\n- 위반 리스트 정리는 로그 파서 재사용\n\n_이 문서는 노예은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0013",
+   "title": "USB 3.1 컨트롤러 플로어플랜 v1.4 리뷰 노트",
+   "author": "노예은",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "product"
+   ],
+   "created_min_ago": 4213,
+   "summary": "MIPI CSI-2 수신부 플로어플랜 개정판의 매크로 배치·핀 배치 결정과 리뷰 지적 반영 기록.",
+   "body": "## 배경\nMIPI CSI-2 수신부 플로어플랜 개정판의 매크로 배치·핀 배치 결정과 리뷰 지적 반영 기록.\n\n## 내용\n- 메모리 매크로 1820개 재배치 — 데이터패스 방향과 정렬해 congestion 완화\n- IO 핀 그룹 재배열은 패키지팀 범프 맵 v3.3와 교차 확인 완료\n- 리뷰 지적 요약은 회의 녹취를 로컬 Claude로 정리\n\n_이 문서는 노예은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0014",
+   "title": "JTAG 디버그 브리지 CTS 전략 — 스큐 그룹 정의",
+   "author": "손태오",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 108702,
+   "summary": "오디오 I2S 브리지 클록 트리 합성의 스큐 그룹·타깃 레이턴시·예외 처리 결정 문서.",
+   "body": "## 배경\n오디오 I2S 브리지 클록 트리 합성의 스큐 그룹·타깃 레이턴시·예외 처리 결정 문서.\n\n## 내용\n- 스큐 그룹 924개 — 메모리 인터페이스는 별도 그룹으로 분리\n- 게이팅 셀 위치 제약: 글리치 위험 경로는 소스 클록 가까이\n- 유용 스큐(useful skew) 적용 구간과 근거 기록\n\n_이 문서는 손태오의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0015",
+   "title": "tt_0p80v_25c 코너 STA 요약 (6월 3주)",
+   "author": "손태오",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 143399,
+   "summary": "5월 3주 사인오프 코너 STA 결과 — 위반 분포와 담당 배정.",
+   "body": "## 배경\n5월 3주 사인오프 코너 STA 결과 — 위반 분포와 담당 배정.\n\n## 내용\n- setup WNS/TNS 및 위반 끝점 모듈 Top10 — 파서 자동 생성 표\n- hold 위반 898건은 CTS 후 재측정 예정, 마진 정책은 팀 위키 기준\n- 설계팀 전달용은 RTL 계층 경로 표기(--for-rtl)로 변환\n\n_이 문서는 손태오의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0016",
+   "title": "STA 리포트 요약 파서 — ICC2 포맷 대응",
+   "author": "손태오",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "verification"
+   ],
+   "created_min_ago": 3636,
+   "summary": "수만 줄 STA 리포트를 클록 그룹·모듈별 한 페이지 요약으로 만드는 파서. 로컬 Claude로 작성.",
+   "body": "## 배경\n수만 줄 STA 리포트를 클록 그룹·모듈별 한 페이지 요약으로 만드는 파서. 로컬 Claude로 작성.\n\n## 내용\n- 클록 그룹별 WNS/TNS/위반 수 + 끝점 모듈 Top10 + 공통 경유점 추출\n- ICC2 신규 포맷 대응 — 리포트 샘플을 Claude에 주고 파서 수정\n- 아침 사인오프 회의 자료를 crontab으로 자동 생성\n\n_이 문서는 손태오의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0017",
+   "title": "eFuse 컨트롤러 congestion 완화 실험 기록",
+   "author": "심하윤",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "hr-people",
+    "dft"
+   ],
+   "created_min_ago": 2118,
+   "summary": "L2 캐시 컨트롤러 라우팅 혼잡 완화를 위한 배치 밀도·블로키지 스윕 실험.",
+   "body": "## 배경\nL2 캐시 컨트롤러 라우팅 혼잡 완화를 위한 배치 밀도·블로키지 스윕 실험.\n\n## 내용\n- 부분 밀도 스크린 6% 적용 시 오버플로우 1431건 → 두 자릿수로 감소\n- 셀 패딩은 클록 버퍼 주변만 — 전면 적용은 면적 손해가 더 컸음\n- 실험 매트릭스와 결과는 스크립트로 자동 수집\n\n_이 문서는 심하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0018",
+   "title": "IR drop 사전 점검 — 타이머/워치독 히트맵 분석",
+   "author": "심하윤",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "analog"
+   ],
+   "created_min_ago": 160562,
+   "summary": "L2 캐시 컨트롤러 배치 후 전력 밀도 히트맵과 벡터리스 IR 분석 결과.",
+   "body": "## 배경\nL2 캐시 컨트롤러 배치 후 전력 밀도 히트맵과 벡터리스 IR 분석 결과.\n\n## 내용\n- static 6% 초과 셀 2083개 — 파워 스트랩 보강으로 해소 확인\n- 고활동 VCD는 검증팀 리그레션 토글률 상위 시나리오에서 요청\n- 히트맵 생성 스크립트는 로컬 Claude로 작성 (matplotlib)\n\n_이 문서는 심하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0019",
+   "title": "타이머/워치독 ECO 라우팅 가이드",
+   "author": "심하윤",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 2538,
+   "summary": "테이프아웃 직전 USB 3.1 컨트롤러 ECO의 스페어 셀 활용·라우팅 제약 가이드.",
+   "body": "## 배경\n테이프아웃 직전 USB 3.1 컨트롤러 ECO의 스페어 셀 활용·라우팅 제약 가이드.\n\n## 내용\n- 스페어 셀 맵과 거리 기준 — 773um 초과 시 타이밍 재검증 필수\n- 메탈 변경 최소화 원칙: 상위 메탈 우회는 IR 재확인 조건\n- ECO 후 검증 체크리스트(LVS/DRC/STA 증분) 포함\n\n_이 문서는 심하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0020",
+   "title": "파운드리 DRC 덱 v2.7 신규 룰 요약",
+   "author": "장민서",
+   "visibility": "org",
+   "reuse_count": 11,
+   "cited_by": [
+    "verification",
+    "firmware",
+    "analog"
+   ],
+   "created_min_ago": 58292,
+   "summary": "파운드리 덱 업데이트의 신규/강화 룰을 로컬 Claude로 diff 요약하고 영향 평가.",
+   "body": "## 배경\n파운드리 덱 업데이트의 신규/강화 룰을 로컬 Claude로 diff 요약하고 영향 평가.\n\n## 내용\n- 신규 룰 641개 중 현재 레이아웃 위반 유발 2개 — waiver 협의 시작\n- 밀도 룰 강화는 필러 정책 변경으로 흡수 가능\n- 덱-PDK 버전 조합은 공식 지원 매트릭스와 대조 완료\n\n_이 문서는 장민서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0021",
+   "title": "이미지 전처리 파이프라인(ISP) utilization·타이밍 트레이드오프 스윕",
+   "author": "장민서",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 49477,
+   "summary": "PCIe Gen4 컨트롤러 초기 배치의 utilization 스윕으로 타이밍·면적 균형점을 찾은 실험.",
+   "body": "## 배경\nPCIe Gen4 컨트롤러 초기 배치의 utilization 스윕으로 타이밍·면적 균형점을 찾은 실험.\n\n## 내용\n- util 110%대에서 WNS 최적 — 그 이상은 congestion 역효과\n- 런셋 자동화 스크립트로 2366개 조합 무인 실행\n- 결과 표와 추천 설정을 블록 담당자에게 전달\n\n_이 문서는 장민서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0022",
+   "title": "Calibre 로그 위반 요약 추출 스크립트",
+   "author": "장민서",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 585,
+   "summary": "PrimeTime 런 로그에서 워닝·위반을 유형별 집계하는 스크립트 — 로컬 Claude로 초안 작성.",
+   "body": "## 배경\nPrimeTime 런 로그에서 워닝·위반을 유형별 집계하는 스크립트 — 로컬 Claude로 초안 작성.\n\n## 내용\n- 유형별 카운트 + 첫 발생 라인 링크로 원본 추적\n- 무해 워닝 필터 목록은 팀 리뷰로 관리 — 임의 추가 금지\n- 신규 툴 버전 포맷 변화에 대비해 파싱 실패 시 알림\n\n_이 문서는 장민서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0023",
+   "title": "필러/디캡 삽입 정책 정리 — 6월 4주 갱신",
+   "author": "남재윤",
+   "visibility": "space",
+   "reuse_count": 14,
+   "cited_by": [
+    "product",
+    "hr-people",
+    "dft"
+   ],
+   "created_min_ago": 145486,
+   "summary": "필러 셀·디캡 비율과 삽입 순서의 팀 표준 정책 문서.",
+   "body": "## 배경\n필러 셀·디캡 비율과 삽입 순서의 팀 표준 정책 문서.\n\n## 내용\n- 디캡 비율 5% 기본 — IR 취약 영역은 상향, 밀도 룰과 균형\n- 삽입 순서: ECO 여유 확보를 위해 스페어 → 디캡 → 필러\n- 정책 근거가 된 이전 프로젝트 IR 사고 사례 링크\n\n_이 문서는 남재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0024",
+   "title": "HDMI 송신부 안테나 위반 정리 기록",
+   "author": "남재윤",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 110413,
+   "summary": "NPU 텐서 DMA 안테나 위반의 원인 분포와 다이오드 삽입/점퍼 처리 기록.",
+   "body": "## 배경\nNPU 텐서 DMA 안테나 위반의 원인 분포와 다이오드 삽입/점퍼 처리 기록.\n\n## 내용\n- 위반 1671건 — 장거리 상위 메탈 라우팅이 주원인\n- 자동 다이오드 삽입 후 잔여는 점퍼 처리, 재발 방지 라우팅 제약 추가\n- 위반 리스트 정리는 로그 파서 재사용\n\n_이 문서는 남재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0025",
+   "title": "이더넷 MAC 플로어플랜 v1.0 리뷰 노트",
+   "author": "남재윤",
+   "visibility": "space",
+   "reuse_count": 8,
+   "cited_by": [
+    "firmware",
+    "soc-design",
+    "hr-people"
+   ],
+   "created_min_ago": 82374,
+   "summary": "오디오 I2S 브리지 플로어플랜 개정판의 매크로 배치·핀 배치 결정과 리뷰 지적 반영 기록.",
+   "body": "## 배경\n오디오 I2S 브리지 플로어플랜 개정판의 매크로 배치·핀 배치 결정과 리뷰 지적 반영 기록.\n\n## 내용\n- 메모리 매크로 2720개 재배치 — 데이터패스 방향과 정렬해 congestion 완화\n- IO 핀 그룹 재배열은 패키지팀 범프 맵 v1.9와 교차 확인 완료\n- 리뷰 지적 요약은 회의 녹취를 로컬 Claude로 정리\n\n_이 문서는 남재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0026",
+   "title": "HDMI 송신부 CTS 전략 — 스큐 그룹 정의",
+   "author": "남재윤",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "soc-design"
+   ],
+   "created_min_ago": 116149,
+   "summary": "L2 캐시 컨트롤러 클록 트리 합성의 스큐 그룹·타깃 레이턴시·예외 처리 결정 문서.",
+   "body": "## 배경\nL2 캐시 컨트롤러 클록 트리 합성의 스큐 그룹·타깃 레이턴시·예외 처리 결정 문서.\n\n## 내용\n- 스큐 그룹 235개 — 메모리 인터페이스는 별도 그룹으로 분리\n- 게이팅 셀 위치 제약: 글리치 위험 경로는 소스 클록 가까이\n- 유용 스큐(useful skew) 적용 구간과 근거 기록\n\n_이 문서는 남재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0027",
+   "title": "ff_0p88v_m40c 코너 STA 요약 (7월 2주)",
+   "author": "조동현",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 3166,
+   "summary": "5월 3주 사인오프 코너 STA 결과 — 위반 분포와 담당 배정.",
+   "body": "## 배경\n5월 3주 사인오프 코너 STA 결과 — 위반 분포와 담당 배정.\n\n## 내용\n- setup WNS/TNS 및 위반 끝점 모듈 Top10 — 파서 자동 생성 표\n- hold 위반 2356건은 CTS 후 재측정 예정, 마진 정책은 팀 위키 기준\n- 설계팀 전달용은 RTL 계층 경로 표기(--for-rtl)로 변환\n\n_이 문서는 조동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0028",
+   "title": "STA 리포트 요약 파서 — Tempus 포맷 대응",
+   "author": "조동현",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 31598,
+   "summary": "수만 줄 STA 리포트를 클록 그룹·모듈별 한 페이지 요약으로 만드는 파서. 로컬 Claude로 작성.",
+   "body": "## 배경\n수만 줄 STA 리포트를 클록 그룹·모듈별 한 페이지 요약으로 만드는 파서. 로컬 Claude로 작성.\n\n## 내용\n- 클록 그룹별 WNS/TNS/위반 수 + 끝점 모듈 Top10 + 공통 경유점 추출\n- PrimeTime 신규 포맷 대응 — 리포트 샘플을 Claude에 주고 파서 수정\n- 아침 사인오프 회의 자료를 crontab으로 자동 생성\n\n_이 문서는 조동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0029",
+   "title": "L2 캐시 컨트롤러 congestion 완화 실험 기록",
+   "author": "조동현",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "soc-design",
+    "hr-people"
+   ],
+   "created_min_ago": 66675,
+   "summary": "PCIe Gen4 컨트롤러 라우팅 혼잡 완화를 위한 배치 밀도·블로키지 스윕 실험.",
+   "body": "## 배경\nPCIe Gen4 컨트롤러 라우팅 혼잡 완화를 위한 배치 밀도·블로키지 스윕 실험.\n\n## 내용\n- 부분 밀도 스크린 13% 적용 시 오버플로우 2889건 → 두 자릿수로 감소\n- 셀 패딩은 클록 버퍼 주변만 — 전면 적용은 면적 손해가 더 컸음\n- 실험 매트릭스와 결과는 스크립트로 자동 수집\n\n_이 문서는 조동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0030",
+   "title": "IR drop 사전 점검 — 이미지 전처리 파이프라인(ISP) 히트맵 분석",
+   "author": "정태윤",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "verification",
+    "hr-people",
+    "analog"
+   ],
+   "created_min_ago": 82361,
+   "summary": "SD/eMMC 호스트 배치 후 전력 밀도 히트맵과 벡터리스 IR 분석 결과.",
+   "body": "## 배경\nSD/eMMC 호스트 배치 후 전력 밀도 히트맵과 벡터리스 IR 분석 결과.\n\n## 내용\n- static 5% 초과 셀 2737개 — 파워 스트랩 보강으로 해소 확인\n- 고활동 VCD는 검증팀 리그레션 토글률 상위 시나리오에서 요청\n- 히트맵 생성 스크립트는 로컬 Claude로 작성 (matplotlib)\n\n_이 문서는 정태윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0031",
+   "title": "오디오 I2S 브리지 ECO 라우팅 가이드",
+   "author": "정태윤",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 150332,
+   "summary": "테이프아웃 직전 JTAG 디버그 브리지 ECO의 스페어 셀 활용·라우팅 제약 가이드.",
+   "body": "## 배경\n테이프아웃 직전 JTAG 디버그 브리지 ECO의 스페어 셀 활용·라우팅 제약 가이드.\n\n## 내용\n- 스페어 셀 맵과 거리 기준 — 2160um 초과 시 타이밍 재검증 필수\n- 메탈 변경 최소화 원칙: 상위 메탈 우회는 IR 재확인 조건\n- ECO 후 검증 체크리스트(LVS/DRC/STA 증분) 포함\n\n_이 문서는 정태윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0032",
+   "title": "파운드리 DRC 덱 v3.2 신규 룰 요약",
+   "author": "정태윤",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 49739,
+   "summary": "파운드리 덱 업데이트의 신규/강화 룰을 로컬 Claude로 diff 요약하고 영향 평가.",
+   "body": "## 배경\n파운드리 덱 업데이트의 신규/강화 룰을 로컬 Claude로 diff 요약하고 영향 평가.\n\n## 내용\n- 신규 룰 271개 중 현재 레이아웃 위반 유발 2개 — waiver 협의 시작\n- 밀도 룰 강화는 필러 정책 변경으로 흡수 가능\n- 덱-PDK 버전 조합은 공식 지원 매트릭스와 대조 완료\n\n_이 문서는 정태윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0033",
+   "title": "전력 관리 유닛(PMU) utilization·타이밍 트레이드오프 스윕",
+   "author": "배정우",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "analog"
+   ],
+   "created_min_ago": 89867,
+   "summary": "DMA 컨트롤러 초기 배치의 utilization 스윕으로 타이밍·면적 균형점을 찾은 실험.",
+   "body": "## 배경\nDMA 컨트롤러 초기 배치의 utilization 스윕으로 타이밍·면적 균형점을 찾은 실험.\n\n## 내용\n- util 140%대에서 WNS 최적 — 그 이상은 congestion 역효과\n- 런셋 자동화 스크립트로 1443개 조합 무인 실행\n- 결과 표와 추천 설정을 블록 담당자에게 전달\n\n_이 문서는 배정우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0034",
+   "title": "ICC2 로그 위반 요약 추출 스크립트",
+   "author": "배정우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1224,
+   "summary": "Innovus 런 로그에서 워닝·위반을 유형별 집계하는 스크립트 — 로컬 Claude로 초안 작성.",
+   "body": "## 배경\nInnovus 런 로그에서 워닝·위반을 유형별 집계하는 스크립트 — 로컬 Claude로 초안 작성.\n\n## 내용\n- 유형별 카운트 + 첫 발생 라인 링크로 원본 추적\n- 무해 워닝 필터 목록은 팀 리뷰로 관리 — 임의 추가 금지\n- 신규 툴 버전 포맷 변화에 대비해 파싱 실패 시 알림\n\n_이 문서는 배정우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0035",
+   "title": "필러/디캡 삽입 정책 정리 — 5월 3주 갱신",
+   "author": "배정우",
+   "visibility": "space",
+   "reuse_count": 1,
+   "cited_by": [
+    "analog"
+   ],
+   "created_min_ago": 2180,
+   "summary": "필러 셀·디캡 비율과 삽입 순서의 팀 표준 정책 문서.",
+   "body": "## 배경\n필러 셀·디캡 비율과 삽입 순서의 팀 표준 정책 문서.\n\n## 내용\n- 디캡 비율 11% 기본 — IR 취약 영역은 상향, 밀도 룰과 균형\n- 삽입 순서: ECO 여유 확보를 위해 스페어 → 디캡 → 필러\n- 정책 근거가 된 이전 프로젝트 IR 사고 사례 링크\n\n_이 문서는 배정우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0036",
+   "title": "오디오 I2S 브리지 안테나 위반 정리 기록",
+   "author": "배정우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 3521,
+   "summary": "보안 부트 모듈 안테나 위반의 원인 분포와 다이오드 삽입/점퍼 처리 기록.",
+   "body": "## 배경\n보안 부트 모듈 안테나 위반의 원인 분포와 다이오드 삽입/점퍼 처리 기록.\n\n## 내용\n- 위반 2689건 — 장거리 상위 메탈 라우팅이 주원인\n- 자동 다이오드 삽입 후 잔여는 점퍼 처리, 재발 방지 라우팅 제약 추가\n- 위반 리스트 정리는 로그 파서 재사용\n\n_이 문서는 배정우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "physical-design-doc-0037",
+   "title": "DDR4 컨트롤러 플로어플랜 v2.2 리뷰 노트",
+   "author": "배정우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 125884,
+   "summary": "DMA 컨트롤러 플로어플랜 개정판의 매크로 배치·핀 배치 결정과 리뷰 지적 반영 기록.",
+   "body": "## 배경\nDMA 컨트롤러 플로어플랜 개정판의 매크로 배치·핀 배치 결정과 리뷰 지적 반영 기록.\n\n## 내용\n- 메모리 매크로 39개 재배치 — 데이터패스 방향과 정렬해 congestion 완화\n- IO 핀 그룹 재배열은 패키지팀 범프 맵 v2.2와 교차 확인 완료\n- 리뷰 지적 요약은 회의 녹취를 로컬 Claude로 정리\n\n_이 문서는 배정우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  }
+ ],
+ "reuse_events": [
+  {
+   "doc_id": "physical-design-doc-0035",
+   "source_space": "physical-design",
+   "consumer_space": "analog",
+   "min_ago": 14861,
+   "summary": "백엔드 설계팀 (PD)의 『필러/디캡 삽입 정책 정리 — 5월 3주 갱신』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0003",
+   "source_space": "physical-design",
+   "consumer_space": "product",
+   "min_ago": 5017,
+   "summary": "백엔드 설계팀 (PD)의 『tt_0p80v_25c 코너 STA 요약 (5월 4주)』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0023",
+   "source_space": "physical-design",
+   "consumer_space": "product",
+   "min_ago": 28186,
+   "summary": "백엔드 설계팀 (PD)의 『필러/디캡 삽입 정책 정리 — 6월 4주 갱신』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0011",
+   "source_space": "physical-design",
+   "consumer_space": "verification",
+   "min_ago": 24584,
+   "summary": "백엔드 설계팀 (PD)의 『필러/디캡 삽입 정책 정리』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0012",
+   "source_space": "physical-design",
+   "consumer_space": "verification",
+   "min_ago": 32785,
+   "summary": "백엔드 설계팀 (PD)의 『전력 관리 유닛(PMU) 안테나 위반 정리 기록』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0016",
+   "source_space": "physical-design",
+   "consumer_space": "verification",
+   "min_ago": 10602,
+   "summary": "백엔드 설계팀 (PD)의 『STA 리포트 요약 파서 — ICC2 포맷 대응』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0017",
+   "source_space": "physical-design",
+   "consumer_space": "hr-people",
+   "min_ago": 31154,
+   "summary": "백엔드 설계팀 (PD)의 『eFuse 컨트롤러 congestion 완화 실험 기록』 지식이 인사팀 (People)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0001",
+   "source_space": "physical-design",
+   "consumer_space": "product",
+   "min_ago": 41547,
+   "summary": "백엔드 설계팀 (PD)의 『오디오 I2S 브리지 플로어플랜 v3.7 리뷰 노트』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0008",
+   "source_space": "physical-design",
+   "consumer_space": "hr-people",
+   "min_ago": 16882,
+   "summary": "백엔드 설계팀 (PD)의 『파운드리 DRC 덱 v1.4 신규 룰 요약』 지식이 인사팀 (People)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0013",
+   "source_space": "physical-design",
+   "consumer_space": "product",
+   "min_ago": 27323,
+   "summary": "백엔드 설계팀 (PD)의 『USB 3.1 컨트롤러 플로어플랜 v1.4 리뷰 노트』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0010",
+   "source_space": "physical-design",
+   "consumer_space": "analog",
+   "min_ago": 15720,
+   "summary": "백엔드 설계팀 (PD)의 『PrimeTime 로그 위반 요약 추출 스크립트』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0025",
+   "source_space": "physical-design",
+   "consumer_space": "firmware",
+   "min_ago": 4157,
+   "summary": "백엔드 설계팀 (PD)의 『이더넷 MAC 플로어플랜 v1.0 리뷰 노트』 지식이 펌웨어개발팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0029",
+   "source_space": "physical-design",
+   "consumer_space": "soc-design",
+   "min_ago": 2362,
+   "summary": "백엔드 설계팀 (PD)의 『L2 캐시 컨트롤러 congestion 완화 실험 기록』 지식이 SoC 설계팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0007",
+   "source_space": "physical-design",
+   "consumer_space": "product",
+   "min_ago": 29710,
+   "summary": "백엔드 설계팀 (PD)의 『DMA 컨트롤러 ECO 라우팅 가이드』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0033",
+   "source_space": "physical-design",
+   "consumer_space": "analog",
+   "min_ago": 38735,
+   "summary": "백엔드 설계팀 (PD)의 『전력 관리 유닛(PMU) utilization·타이밍 트레이드오프 스윕』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0004",
+   "source_space": "physical-design",
+   "consumer_space": "dft",
+   "min_ago": 35843,
+   "summary": "백엔드 설계팀 (PD)의 『STA 리포트 요약 파서 — Calibre 포맷 대응』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0026",
+   "source_space": "physical-design",
+   "consumer_space": "soc-design",
+   "min_ago": 25193,
+   "summary": "백엔드 설계팀 (PD)의 『HDMI 송신부 CTS 전략 — 스큐 그룹 정의』 지식이 SoC 설계팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0006",
+   "source_space": "physical-design",
+   "consumer_space": "firmware",
+   "min_ago": 40449,
+   "summary": "백엔드 설계팀 (PD)의 『IR drop 사전 점검 — DDR4 컨트롤러 히트맵 분석』 지식이 펌웨어개발팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0009",
+   "source_space": "physical-design",
+   "consumer_space": "verification",
+   "min_ago": 33698,
+   "summary": "백엔드 설계팀 (PD)의 『HDMI 송신부 utilization·타이밍 트레이드오프 스윕』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "physical-design-doc-0002",
+   "source_space": "physical-design",
+   "consumer_space": "dft",
+   "min_ago": 2755,
+   "summary": "백엔드 설계팀 (PD)의 『전력 관리 유닛(PMU) CTS 전략 — 스큐 그룹 정의』 지식이 DFT팀에서 재사용되었습니다"
+  }
+ ]
+}

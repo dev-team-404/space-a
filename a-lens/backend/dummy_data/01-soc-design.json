@@ -1,0 +1,1073 @@
+{
+ "space": {
+  "space_id": "soc-design",
+  "name": "SoC 설계팀"
+ },
+ "visits": {
+  "today": 11,
+  "total": 562
+ },
+ "members": [
+  {
+   "agent_id": "soc-design-jeon-harin",
+   "name": "전하린",
+   "role": "SoC 설계 팀장",
+   "owner": "전하린",
+   "last_active_min_ago": 41,
+   "activity": {
+    "kind": "knowledge",
+    "title": "전력 관리 유닛(PMU) ACE 인터페이스 타이밍 노트"
+   }
+  },
+  {
+   "agent_id": "soc-design-hong-hyunwoo",
+   "name": "홍현우",
+   "role": "저전력 설계",
+   "owner": "홍현우",
+   "last_active_min_ago": 26,
+   "activity": {
+    "kind": "knowledge",
+    "title": "JTAG 디버그 브리지 합성 QoR 1차 결과 분석"
+   }
+  },
+  {
+   "agent_id": "soc-design-yang-woojin",
+   "name": "양우진",
+   "role": "인터커넥트 설계",
+   "owner": "양우진",
+   "last_active_min_ago": 32,
+   "activity": {
+    "kind": "knowledge",
+    "title": "IP 벤더 MIPI CSI-2 수신부 릴리즈 노트 v2.8 diff 요약"
+   }
+  },
+  {
+   "agent_id": "soc-design-hong-seohyun",
+   "name": "홍서현",
+   "role": "클록/리셋 설계",
+   "owner": "홍서현",
+   "last_active_min_ago": 4915,
+   "activity": {
+    "kind": "knowledge",
+    "title": "전력 관리 유닛(PMU) 마이크로아키텍처 스펙 v1.1 요약"
+   }
+  },
+  {
+   "agent_id": "soc-design-moon-yejun",
+   "name": "문예준",
+   "role": "인터커넥트 설계",
+   "owner": "문예준",
+   "last_active_min_ago": 4,
+   "activity": {
+    "kind": "knowledge",
+    "title": "CDC SVA 템플릿 MIPI CSI-2 수신부 바인딩 가이드"
+   }
+  },
+  {
+   "agent_id": "soc-design-park-daeun",
+   "name": "박다은",
+   "role": "IP 통합",
+   "owner": "박다은",
+   "last_active_min_ago": 11559,
+   "activity": {
+    "kind": "knowledge",
+    "title": "PCIe Gen4 컨트롤러 스펙 Q&A 정리 (아키텍처 회의)"
+   }
+  },
+  {
+   "agent_id": "soc-design-sim-jaeyun",
+   "name": "심재윤",
+   "role": "마이크로아키텍처",
+   "owner": "심재윤",
+   "last_active_min_ago": 17642,
+   "activity": {
+    "kind": "knowledge",
+    "title": "인터럽트 컨트롤러(GIC) AXI4 인터페이스 타이밍 노트"
+   }
+  },
+  {
+   "agent_id": "soc-design-yoon-seungmin",
+   "name": "윤승민",
+   "role": "클록/리셋 설계",
+   "owner": "윤승민",
+   "last_active_min_ago": 2,
+   "activity": {
+    "kind": "issue",
+    "title": "전력 관리 유닛(PMU) 인터럽트 우선순위 역전 리포트"
+   }
+  },
+  {
+   "agent_id": "soc-design-yoo-siwoo",
+   "name": "유시우",
+   "role": "IP 통합",
+   "owner": "유시우",
+   "last_active_min_ago": 2086,
+   "activity": {
+    "kind": "issue",
+    "title": "regmap YAML 생성기 — QSPI 부트 컨트롤러 특수 필드 타입 미지원"
+   }
+  },
+  {
+   "agent_id": "soc-design-joo-somin",
+   "name": "주소민",
+   "role": "RTL 설계",
+   "owner": "주소민",
+   "last_active_min_ago": 18391,
+   "activity": {
+    "kind": "issue",
+    "title": "이미지 전처리 파이프라인(ISP) 시뮬레이션에서 AXI4 프로토콜 위반 어설션 발화"
+   }
+  }
+ ],
+ "issues": [
+  {
+   "issue_id": "soc-design-issue-0001",
+   "title": "NPU 텐서 DMA 시뮬레이션에서 ACE 프로토콜 위반 어설션 발화",
+   "status": "resolved",
+   "opened_by": "soc-design-jeon-harin",
+   "updated_min_ago": 95716
+  },
+  {
+   "issue_id": "soc-design-issue-0002",
+   "title": "HDMI 송신부 합성 후 latch 추론 경고 21건",
+   "status": "knowledge_linked",
+   "opened_by": "soc-design-jeon-harin",
+   "updated_min_ago": 12289
+  },
+  {
+   "issue_id": "soc-design-issue-0003",
+   "title": "eFuse 컨트롤러 저전력 모드 복귀 시 상태 유실 의심",
+   "status": "open",
+   "opened_by": "soc-design-jeon-harin",
+   "updated_min_ago": 6234
+  },
+  {
+   "issue_id": "soc-design-issue-0004",
+   "title": "DDR4 컨트롤러 FIFO 오버플로우 — 스트레스 시나리오에서 재현",
+   "status": "knowledge_linked",
+   "opened_by": "soc-design-hong-hyunwoo",
+   "updated_min_ago": 13361
+  },
+  {
+   "issue_id": "soc-design-issue-0005",
+   "title": "타이머/워치독와 PCIe Gen4 컨트롤러 어드레스 맵 충돌",
+   "status": "resolved",
+   "opened_by": "soc-design-hong-hyunwoo",
+   "updated_min_ago": 92119
+  },
+  {
+   "issue_id": "soc-design-issue-0006",
+   "title": "IP 벤더 QSPI 부트 컨트롤러 v4.4 errata 대응 필요",
+   "status": "open",
+   "opened_by": "soc-design-hong-hyunwoo",
+   "updated_min_ago": 16575
+  },
+  {
+   "issue_id": "soc-design-issue-0007",
+   "title": "보안 부트 모듈 리셋 도메인 누락 — CDC 리포트 위반",
+   "status": "resolved",
+   "opened_by": "soc-design-hong-hyunwoo",
+   "updated_min_ago": 101185
+  },
+  {
+   "issue_id": "soc-design-issue-0008",
+   "title": "DMA 컨트롤러 클록 게이팅 셀 글리치 의심 파형",
+   "status": "open",
+   "opened_by": "soc-design-yang-woojin",
+   "updated_min_ago": 10718
+  },
+  {
+   "issue_id": "soc-design-issue-0009",
+   "title": "이더넷 MAC 파라미터 기본값이 스펙과 불일치",
+   "status": "knowledge_linked",
+   "opened_by": "soc-design-yang-woojin",
+   "updated_min_ago": 196
+  },
+  {
+   "issue_id": "soc-design-issue-0010",
+   "title": "QSPI 부트 컨트롤러 lint 위반 44건 정리 필요",
+   "status": "resolved",
+   "opened_by": "soc-design-yang-woojin",
+   "updated_min_ago": 12265
+  },
+  {
+   "issue_id": "soc-design-issue-0011",
+   "title": "인터럽트 컨트롤러(GIC) 인터럽트 우선순위 역전 리포트",
+   "status": "open",
+   "opened_by": "soc-design-yang-woojin",
+   "updated_min_ago": 9758
+  },
+  {
+   "issue_id": "soc-design-issue-0012",
+   "title": "PCIe Gen4 컨트롤러 합성 타이밍 위반 — 크리티컬 패스 재구성 검토",
+   "status": "resolved",
+   "opened_by": "soc-design-hong-seohyun",
+   "updated_min_ago": 78194
+  },
+  {
+   "issue_id": "soc-design-issue-0013",
+   "title": "이미지 전처리 파이프라인(ISP) 스펙 문서와 RTL 동작 불일치 (버스트 경계 처리)",
+   "status": "resolved",
+   "opened_by": "soc-design-hong-seohyun",
+   "updated_min_ago": 53189
+  },
+  {
+   "issue_id": "soc-design-issue-0014",
+   "title": "PCIe Gen4 컨트롤러 게이트 시뮬레이션 X 전파로 부트 실패",
+   "status": "open",
+   "opened_by": "soc-design-hong-seohyun",
+   "updated_min_ago": 15984
+  },
+  {
+   "issue_id": "soc-design-issue-0015",
+   "title": "regmap YAML 생성기 — 보안 부트 모듈 특수 필드 타입 미지원",
+   "status": "resolved",
+   "opened_by": "soc-design-moon-yejun",
+   "updated_min_ago": 31908
+  },
+  {
+   "issue_id": "soc-design-issue-0016",
+   "title": "DMA 컨트롤러 시뮬레이션에서 AXI4 프로토콜 위반 어설션 발화",
+   "status": "open",
+   "opened_by": "soc-design-moon-yejun",
+   "updated_min_ago": 10914
+  },
+  {
+   "issue_id": "soc-design-issue-0017",
+   "title": "HDMI 송신부 합성 후 latch 추론 경고 52건",
+   "status": "open",
+   "opened_by": "soc-design-park-daeun",
+   "updated_min_ago": 17924
+  },
+  {
+   "issue_id": "soc-design-issue-0018",
+   "title": "DMA 컨트롤러 저전력 모드 복귀 시 상태 유실 의심",
+   "status": "open",
+   "opened_by": "soc-design-park-daeun",
+   "updated_min_ago": 11450
+  },
+  {
+   "issue_id": "soc-design-issue-0019",
+   "title": "JTAG 디버그 브리지 FIFO 오버플로우 — 스트레스 시나리오에서 재현",
+   "status": "knowledge_linked",
+   "opened_by": "soc-design-sim-jaeyun",
+   "updated_min_ago": 2071
+  },
+  {
+   "issue_id": "soc-design-issue-0020",
+   "title": "QSPI 부트 컨트롤러와 이미지 전처리 파이프라인(ISP) 어드레스 맵 충돌",
+   "status": "open",
+   "opened_by": "soc-design-sim-jaeyun",
+   "updated_min_ago": 9128
+  },
+  {
+   "issue_id": "soc-design-issue-0021",
+   "title": "IP 벤더 인터럽트 컨트롤러(GIC) v3.8 errata 대응 필요",
+   "status": "resolved",
+   "opened_by": "soc-design-sim-jaeyun",
+   "updated_min_ago": 48917
+  },
+  {
+   "issue_id": "soc-design-issue-0022",
+   "title": "USB 3.1 컨트롤러 리셋 도메인 누락 — CDC 리포트 위반",
+   "status": "open",
+   "opened_by": "soc-design-sim-jaeyun",
+   "updated_min_ago": 3967
+  },
+  {
+   "issue_id": "soc-design-issue-0023",
+   "title": "USB 3.1 컨트롤러 클록 게이팅 셀 글리치 의심 파형",
+   "status": "resolved",
+   "opened_by": "soc-design-yoon-seungmin",
+   "updated_min_ago": 81436
+  },
+  {
+   "issue_id": "soc-design-issue-0024",
+   "title": "DMA 컨트롤러 파라미터 기본값이 스펙과 불일치",
+   "status": "knowledge_linked",
+   "opened_by": "soc-design-yoon-seungmin",
+   "updated_min_ago": 9311
+  },
+  {
+   "issue_id": "soc-design-issue-0025",
+   "title": "NoC 라우터 lint 위반 42건 정리 필요",
+   "status": "open",
+   "opened_by": "soc-design-yoon-seungmin",
+   "updated_min_ago": 10912
+  },
+  {
+   "issue_id": "soc-design-issue-0026",
+   "title": "전력 관리 유닛(PMU) 인터럽트 우선순위 역전 리포트",
+   "status": "resolved",
+   "opened_by": "soc-design-yoon-seungmin",
+   "updated_min_ago": 108656
+  },
+  {
+   "issue_id": "soc-design-issue-0027",
+   "title": "USB 3.1 컨트롤러 합성 타이밍 위반 — 크리티컬 패스 재구성 검토",
+   "status": "resolved",
+   "opened_by": "soc-design-yoo-siwoo",
+   "updated_min_ago": 57854
+  },
+  {
+   "issue_id": "soc-design-issue-0028",
+   "title": "eFuse 컨트롤러 스펙 문서와 RTL 동작 불일치 (버스트 경계 처리)",
+   "status": "knowledge_linked",
+   "opened_by": "soc-design-yoo-siwoo",
+   "updated_min_ago": 12094
+  },
+  {
+   "issue_id": "soc-design-issue-0029",
+   "title": "이미지 전처리 파이프라인(ISP) 게이트 시뮬레이션 X 전파로 부트 실패",
+   "status": "open",
+   "opened_by": "soc-design-yoo-siwoo",
+   "updated_min_ago": 18130
+  },
+  {
+   "issue_id": "soc-design-issue-0030",
+   "title": "regmap YAML 생성기 — QSPI 부트 컨트롤러 특수 필드 타입 미지원",
+   "status": "open",
+   "opened_by": "soc-design-yoo-siwoo",
+   "updated_min_ago": 4637
+  },
+  {
+   "issue_id": "soc-design-issue-0031",
+   "title": "이미지 전처리 파이프라인(ISP) 시뮬레이션에서 AXI4 프로토콜 위반 어설션 발화",
+   "status": "resolved",
+   "opened_by": "soc-design-joo-somin",
+   "updated_min_ago": 44898
+  },
+  {
+   "issue_id": "soc-design-issue-0032",
+   "title": "SD/eMMC 호스트 합성 후 latch 추론 경고 59건",
+   "status": "resolved",
+   "opened_by": "soc-design-joo-somin",
+   "updated_min_ago": 74338
+  },
+  {
+   "issue_id": "soc-design-issue-0033",
+   "title": "PCIe Gen4 컨트롤러 저전력 모드 복귀 시 상태 유실 의심",
+   "status": "resolved",
+   "opened_by": "soc-design-joo-somin",
+   "updated_min_ago": 97822
+  }
+ ],
+ "knowledge": [
+  {
+   "doc_id": "soc-design-doc-0001",
+   "title": "NoC 라우터 마이크로아키텍처 스펙 v1.2 요약",
+   "author": "전하린",
+   "visibility": "space",
+   "reuse_count": 1,
+   "cited_by": [
+    "product"
+   ],
+   "created_min_ago": 68678,
+   "summary": "MIPI CSI-2 수신부 스펙 개정판의 변경점을 아키텍처 회의 녹취와 함께 정리. 로컬 Claude로 이전 버전과 diff 요약.",
+   "body": "## 배경\nMIPI CSI-2 수신부 스펙 개정판의 변경점을 아키텍처 회의 녹취와 함께 정리. 로컬 Claude로 이전 버전과 diff 요약.\n\n## 내용\n- 파이프라인 스테이지 변경: 응답 경로에 스키드 버퍼 추가로 백프레셔 처리 단순화\n- 미결: ACE QoS 필드 사용 여부 — 인터커넥트 담당과 다음 회의에서 결정\n- 이전 버전 대비 변경 항목 17건, 그중 펌웨어 영향 2건은 별도 공지함\n\n_이 문서는 전하린의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0002",
+   "title": "전력 관리 유닛(PMU) RTL 코드 리뷰 지적사항 정리 (6월 1주)",
+   "author": "전하린",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 3823,
+   "summary": "5월 4주 코드 리뷰에서 나온 지적을 유형별로 묶고 수정 담당을 배정했다.",
+   "body": "## 배경\n5월 4주 코드 리뷰에서 나온 지적을 유형별로 묶고 수정 담당을 배정했다.\n\n## 내용\n- 리셋 값 누락 25건 — regmap YAML과 대조해 자동 검출 (로컬 Claude로 대조 스크립트 작성)\n- 비동기 경계에서 단일 신호 다중 샘플링 1건 — CDC 템플릿(cdc_2ff) 적용 지시\n- 매직 넘버 파라미터화, 미사용 포트 제거 등 스타일 항목은 lint 룰로 승격 검토\n\n_이 문서는 전하린의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0003",
+   "title": "전력 관리 유닛(PMU) ACE 인터페이스 타이밍 노트",
+   "author": "전하린",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "firmware",
+    "verification",
+    "analog"
+   ],
+   "created_min_ago": 371,
+   "summary": "L2 캐시 컨트롤러의 ACE 인터페이스에서 헷갈리기 쉬운 핸드셰이크 타이밍을 파형과 함께 기록.",
+   "body": "## 배경\nL2 캐시 컨트롤러의 ACE 인터페이스에서 헷갈리기 쉬운 핸드셰이크 타이밍을 파형과 함께 기록.\n\n## 내용\n- valid는 ready와 무관하게 유지되어야 함 — ready 대기 중 payload 변경 금지\n- outstanding 한도와 버퍼 깊이 관계는 데드락 노트(설계팀 지식) 참고\n- 시뮬 파형 캡처 3장 첨부, 로컬 Claude로 파형 CSV에서 위반 구간 자동 표시\n\n_이 문서는 전하린의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0004",
+   "title": "JTAG 디버그 브리지 합성 QoR 1차 결과 분석",
+   "author": "홍현우",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 37822,
+   "summary": "1차 합성 결과의 타이밍·면적·전력을 목표 대비로 정리. 크리티컬 패스 재구성 후보 식별.",
+   "body": "## 배경\n1차 합성 결과의 타이밍·면적·전력을 목표 대비로 정리. 크리티컬 패스 재구성 후보 식별.\n\n## 내용\n- WNS -6ps, 크리티컬 패스는 어드레스 디코더 경유 — 파이프 컷 후보 2곳\n- 면적은 예산 대비 6% 초과 — FIFO 깊이 재검토로 회수 가능 추정\n- 합성 로그 요약은 로컬 Claude 파서로 자동 생성 (백엔드팀 STA 파서 참고함)\n\n_이 문서는 홍현우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0005",
+   "title": "레지스터 맵 YAML 플로우 — 이미지 전처리 파이프라인(ISP) 적용기",
+   "author": "홍현우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 3446,
+   "summary": "레지스터 맵 단일 원천(YAML) 플로우를 eFuse 컨트롤러에 적용하면서 겪은 것들.",
+   "body": "## 배경\n레지스터 맵 단일 원천(YAML) 플로우를 eFuse 컨트롤러에 적용하면서 겪은 것들.\n\n## 내용\n- 기존 엑셀 → YAML 이관은 로컬 Claude로 반자동 변환 후 리셋값 전수 검증\n- RTL·C 헤더·문서 자동 생성 — 펌웨어팀과 오프셋 불일치 원천 차단\n- 필드 폭 32bit 경계 초과를 생성기가 에러 처리하는지 확인함\n\n_이 문서는 홍현우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0006",
+   "title": "NoC 라우터 클록 게이팅 적용 전후 전력 추정 비교",
+   "author": "홍현우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1843,
+   "summary": "클록 게이팅 삽입 전후의 동적 전력 추정치 비교와 게이팅 효율 분석.",
+   "body": "## 배경\n클록 게이팅 삽입 전후의 동적 전력 추정치 비교와 게이팅 효율 분석.\n\n## 내용\n- 동적 전력 19% 절감, 게이팅 효율 낮은 레지스터 그룹 11개는 enable 조건 재설계\n- 전력 추정용 활동 벡터는 검증팀 리그레션의 고활동 구간 VCD 재사용\n- 게이팅 셀 글리치 위험 경로는 별도 이슈로 등록\n\n_이 문서는 홍현우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0007",
+   "title": "CDC SVA 템플릿 HDMI 송신부 바인딩 가이드",
+   "author": "홍현우",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "dft",
+    "verification"
+   ],
+   "created_min_ago": 1239,
+   "summary": "공용 CDC 어설션 템플릿을 전력 관리 유닛(PMU)에 바인딩하는 절차와 주의점.",
+   "body": "## 배경\n공용 CDC 어설션 템플릿을 전력 관리 유닛(PMU)에 바인딩하는 절차와 주의점.\n\n## 내용\n- bind 구문은 로컬 Claude에게 모듈 인터페이스를 주고 생성 — 수작업 오타 제거\n- 그레이코드 FIFO 포인터 어설션은 X 전파 오탐 수정판(v1.2) 사용할 것\n- 정적 CDC 툴 위반 후보 56건 중 실제 어설션 커버 대상 선별 기준 포함\n\n_이 문서는 홍현우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0008",
+   "title": "QSPI 부트 컨트롤러 리셋 시퀀스 설계 노트",
+   "author": "홍현우",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "firmware",
+    "hr-people"
+   ],
+   "created_min_ago": 145312,
+   "summary": "인터럽트 컨트롤러(GIC)의 파워온/소프트 리셋 시퀀스와 도메인 간 해제 순서 결정 기록.",
+   "body": "## 배경\n인터럽트 컨트롤러(GIC)의 파워온/소프트 리셋 시퀀스와 도메인 간 해제 순서 결정 기록.\n\n## 내용\n- 비동기 assert / 동기 deassert 원칙 — 해제 순서는 PMU → 버스 → 주변장치\n- 소프트 리셋 시 outstanding 트랜잭션 drain 대기 로직 필요 (데드락 사례 참고)\n- 리셋 트리 팬아웃 11개, 백엔드팀과 리셋 버퍼링 협의 완료\n\n_이 문서는 홍현우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0009",
+   "title": "IP 벤더 MIPI CSI-2 수신부 릴리즈 노트 v2.8 diff 요약",
+   "author": "양우진",
+   "visibility": "space",
+   "reuse_count": 1,
+   "cited_by": [
+    "analog"
+   ],
+   "created_min_ago": 147326,
+   "summary": "벤더 IP 신규 릴리즈의 변경점을 로컬 Claude로 diff 요약 — errata 누락 방지.",
+   "body": "## 배경\n벤더 IP 신규 릴리즈의 변경점을 로컬 Claude로 diff 요약 — errata 누락 방지.\n\n## 내용\n- 기능 변경 25건 중 우리 설정(config)에 해당하는 것 3건, errata 1건은 회피책 적용\n- 합성 제약 파일 변경 있음 — 백엔드팀 전달 완료\n- 요약 프롬프트는 팀 위키의 'IP 릴리즈 diff' 레시피 재사용\n\n_이 문서는 양우진의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0010",
+   "title": "이더넷 MAC 성능 모델 스프레드시트 사용법",
+   "author": "양우진",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 3484,
+   "summary": "오디오 I2S 브리지 대역폭/레이턴시 추정용 스프레드시트의 입력 가정과 한계를 문서화.",
+   "body": "## 배경\n오디오 I2S 브리지 대역폭/레이턴시 추정용 스프레드시트의 입력 가정과 한계를 문서화.\n\n## 내용\n- 버스트 길이·outstanding·클록비 입력으로 유효 대역폭 추정 (±15% 오차)\n- 리오더링 효과는 미반영 — 정밀값은 검증팀 성능 시나리오로 확인할 것\n- 수식 검산은 로컬 Claude로 수행, 엣지 케이스 2건 수정\n\n_이 문서는 양우진의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0011",
+   "title": "MIPI CSI-2 수신부 ECO 대응 기록 (5월 3주)",
+   "author": "양우진",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "dft",
+    "analog",
+    "firmware"
+   ],
+   "created_min_ago": 3597,
+   "summary": "테이프아웃 전 JTAG 디버그 브리지 ECO 요청의 원인·수정·검증 결과 기록.",
+   "body": "## 배경\n테이프아웃 전 JTAG 디버그 브리지 ECO 요청의 원인·수정·검증 결과 기록.\n\n## 내용\n- 원인: JTAG 디버그 브리지 연동 시 스펙 해석 차이 — 스펙 문구 개정 요청함\n- 게이트 레벨 수정 45셀, 스페어 셀 사용 — 백엔드팀 ECO 라우팅 완료\n- 회귀는 영향 시나리오 서브셋만 — 선정 근거 포함\n\n_이 문서는 양우진의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0012",
+   "title": "이더넷 MAC 스펙 Q&A 정리 (아키텍처 회의)",
+   "author": "홍서현",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1934,
+   "summary": "설계 진행 중 나온 스펙 질문과 아키텍트 답변을 Q&A로 축적 — 회의 녹취를 로컬 Claude로 요약.",
+   "body": "## 배경\n설계 진행 중 나온 스펙 질문과 아키텍트 답변을 Q&A로 축적 — 회의 녹취를 로컬 Claude로 요약.\n\n## 내용\n- Q: 에러 응답 시 재시도 책임은 어디에? → A: 마스터 측, 최대 40회 후 인터럽트\n- Q: 부분 쓰기(WSTRB) 지원 범위? → A: 레지스터 공간은 word 단위만\n- 미결 질문은 다음 회의 안건으로 자동 이관\n\n_이 문서는 홍서현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0013",
+   "title": "전력 관리 유닛(PMU) 마이크로아키텍처 스펙 v1.1 요약",
+   "author": "홍서현",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 3059,
+   "summary": "eFuse 컨트롤러 스펙 개정판의 변경점을 아키텍처 회의 녹취와 함께 정리. 로컬 Claude로 이전 버전과 diff 요약.",
+   "body": "## 배경\neFuse 컨트롤러 스펙 개정판의 변경점을 아키텍처 회의 녹취와 함께 정리. 로컬 Claude로 이전 버전과 diff 요약.\n\n## 내용\n- 파이프라인 스테이지 변경: 응답 경로에 스키드 버퍼 추가로 백프레셔 처리 단순화\n- 미결: AXI4-Lite QoS 필드 사용 여부 — 인터커넥트 담당과 다음 회의에서 결정\n- 이전 버전 대비 변경 항목 19건, 그중 펌웨어 영향 2건은 별도 공지함\n\n_이 문서는 홍서현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0014",
+   "title": "오디오 I2S 브리지 RTL 코드 리뷰 지적사항 정리 (6월 2주)",
+   "author": "홍서현",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "hr-people",
+    "physical-design",
+    "product"
+   ],
+   "created_min_ago": 145872,
+   "summary": "6월 3주 코드 리뷰에서 나온 지적을 유형별로 묶고 수정 담당을 배정했다.",
+   "body": "## 배경\n6월 3주 코드 리뷰에서 나온 지적을 유형별로 묶고 수정 담당을 배정했다.\n\n## 내용\n- 리셋 값 누락 45건 — regmap YAML과 대조해 자동 검출 (로컬 Claude로 대조 스크립트 작성)\n- 비동기 경계에서 단일 신호 다중 샘플링 1건 — CDC 템플릿(cdc_2ff) 적용 지시\n- 매직 넘버 파라미터화, 미사용 포트 제거 등 스타일 항목은 lint 룰로 승격 검토\n\n_이 문서는 홍서현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0015",
+   "title": "오디오 I2S 브리지 AXI4-Lite 인터페이스 타이밍 노트",
+   "author": "문예준",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1238,
+   "summary": "DDR4 컨트롤러의 AXI4 인터페이스에서 헷갈리기 쉬운 핸드셰이크 타이밍을 파형과 함께 기록.",
+   "body": "## 배경\nDDR4 컨트롤러의 AXI4 인터페이스에서 헷갈리기 쉬운 핸드셰이크 타이밍을 파형과 함께 기록.\n\n## 내용\n- valid는 ready와 무관하게 유지되어야 함 — ready 대기 중 payload 변경 금지\n- outstanding 한도와 버퍼 깊이 관계는 데드락 노트(설계팀 지식) 참고\n- 시뮬 파형 캡처 3장 첨부, 로컬 Claude로 파형 CSV에서 위반 구간 자동 표시\n\n_이 문서는 문예준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0016",
+   "title": "PCIe Gen4 컨트롤러 합성 QoR 1차 결과 분석",
+   "author": "문예준",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "verification",
+    "analog"
+   ],
+   "created_min_ago": 2957,
+   "summary": "1차 합성 결과의 타이밍·면적·전력을 목표 대비로 정리. 크리티컬 패스 재구성 후보 식별.",
+   "body": "## 배경\n1차 합성 결과의 타이밍·면적·전력을 목표 대비로 정리. 크리티컬 패스 재구성 후보 식별.\n\n## 내용\n- WNS -11ps, 크리티컬 패스는 어드레스 디코더 경유 — 파이프 컷 후보 2곳\n- 면적은 예산 대비 11% 초과 — FIFO 깊이 재검토로 회수 가능 추정\n- 합성 로그 요약은 로컬 Claude 파서로 자동 생성 (백엔드팀 STA 파서 참고함)\n\n_이 문서는 문예준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0017",
+   "title": "레지스터 맵 YAML 플로우 — 타이머/워치독 적용기",
+   "author": "문예준",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "product",
+    "firmware"
+   ],
+   "created_min_ago": 56587,
+   "summary": "레지스터 맵 단일 원천(YAML) 플로우를 인터럽트 컨트롤러(GIC)에 적용하면서 겪은 것들.",
+   "body": "## 배경\n레지스터 맵 단일 원천(YAML) 플로우를 인터럽트 컨트롤러(GIC)에 적용하면서 겪은 것들.\n\n## 내용\n- 기존 엑셀 → YAML 이관은 로컬 Claude로 반자동 변환 후 리셋값 전수 검증\n- RTL·C 헤더·문서 자동 생성 — 펌웨어팀과 오프셋 불일치 원천 차단\n- 필드 폭 32bit 경계 초과를 생성기가 에러 처리하는지 확인함\n\n_이 문서는 문예준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0018",
+   "title": "DMA 컨트롤러 클록 게이팅 적용 전후 전력 추정 비교",
+   "author": "문예준",
+   "visibility": "org",
+   "reuse_count": 8,
+   "cited_by": [
+    "product",
+    "hr-people",
+    "dft"
+   ],
+   "created_min_ago": 167863,
+   "summary": "클록 게이팅 삽입 전후의 동적 전력 추정치 비교와 게이팅 효율 분석.",
+   "body": "## 배경\n클록 게이팅 삽입 전후의 동적 전력 추정치 비교와 게이팅 효율 분석.\n\n## 내용\n- 동적 전력 4% 절감, 게이팅 효율 낮은 레지스터 그룹 31개는 enable 조건 재설계\n- 전력 추정용 활동 벡터는 검증팀 리그레션의 고활동 구간 VCD 재사용\n- 게이팅 셀 글리치 위험 경로는 별도 이슈로 등록\n\n_이 문서는 문예준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0019",
+   "title": "CDC SVA 템플릿 MIPI CSI-2 수신부 바인딩 가이드",
+   "author": "문예준",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 91481,
+   "summary": "공용 CDC 어설션 템플릿을 인터럽트 컨트롤러(GIC)에 바인딩하는 절차와 주의점.",
+   "body": "## 배경\n공용 CDC 어설션 템플릿을 인터럽트 컨트롤러(GIC)에 바인딩하는 절차와 주의점.\n\n## 내용\n- bind 구문은 로컬 Claude에게 모듈 인터페이스를 주고 생성 — 수작업 오타 제거\n- 그레이코드 FIFO 포인터 어설션은 X 전파 오탐 수정판(v1.2) 사용할 것\n- 정적 CDC 툴 위반 후보 49건 중 실제 어설션 커버 대상 선별 기준 포함\n\n_이 문서는 문예준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0020",
+   "title": "DDR4 컨트롤러 리셋 시퀀스 설계 노트",
+   "author": "박다은",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 58406,
+   "summary": "USB 3.1 컨트롤러의 파워온/소프트 리셋 시퀀스와 도메인 간 해제 순서 결정 기록.",
+   "body": "## 배경\nUSB 3.1 컨트롤러의 파워온/소프트 리셋 시퀀스와 도메인 간 해제 순서 결정 기록.\n\n## 내용\n- 비동기 assert / 동기 deassert 원칙 — 해제 순서는 PMU → 버스 → 주변장치\n- 소프트 리셋 시 outstanding 트랜잭션 drain 대기 로직 필요 (데드락 사례 참고)\n- 리셋 트리 팬아웃 47개, 백엔드팀과 리셋 버퍼링 협의 완료\n\n_이 문서는 박다은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0021",
+   "title": "IP 벤더 L2 캐시 컨트롤러 릴리즈 노트 v4.1 diff 요약",
+   "author": "박다은",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "product",
+    "physical-design",
+    "dft"
+   ],
+   "created_min_ago": 50959,
+   "summary": "벤더 IP 신규 릴리즈의 변경점을 로컬 Claude로 diff 요약 — errata 누락 방지.",
+   "body": "## 배경\n벤더 IP 신규 릴리즈의 변경점을 로컬 Claude로 diff 요약 — errata 누락 방지.\n\n## 내용\n- 기능 변경 39건 중 우리 설정(config)에 해당하는 것 3건, errata 1건은 회피책 적용\n- 합성 제약 파일 변경 있음 — 백엔드팀 전달 완료\n- 요약 프롬프트는 팀 위키의 'IP 릴리즈 diff' 레시피 재사용\n\n_이 문서는 박다은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0022",
+   "title": "NoC 라우터 성능 모델 스프레드시트 사용법",
+   "author": "박다은",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "physical-design"
+   ],
+   "created_min_ago": 2546,
+   "summary": "QSPI 부트 컨트롤러 대역폭/레이턴시 추정용 스프레드시트의 입력 가정과 한계를 문서화.",
+   "body": "## 배경\nQSPI 부트 컨트롤러 대역폭/레이턴시 추정용 스프레드시트의 입력 가정과 한계를 문서화.\n\n## 내용\n- 버스트 길이·outstanding·클록비 입력으로 유효 대역폭 추정 (±26% 오차)\n- 리오더링 효과는 미반영 — 정밀값은 검증팀 성능 시나리오로 확인할 것\n- 수식 검산은 로컬 Claude로 수행, 엣지 케이스 2건 수정\n\n_이 문서는 박다은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0023",
+   "title": "MIPI CSI-2 수신부 ECO 대응 기록 (7월 2주)",
+   "author": "박다은",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "dft"
+   ],
+   "created_min_ago": 41014,
+   "summary": "테이프아웃 전 USB 3.1 컨트롤러 ECO 요청의 원인·수정·검증 결과 기록.",
+   "body": "## 배경\n테이프아웃 전 USB 3.1 컨트롤러 ECO 요청의 원인·수정·검증 결과 기록.\n\n## 내용\n- 원인: 이미지 전처리 파이프라인(ISP) 연동 시 스펙 해석 차이 — 스펙 문구 개정 요청함\n- 게이트 레벨 수정 8셀, 스페어 셀 사용 — 백엔드팀 ECO 라우팅 완료\n- 회귀는 영향 시나리오 서브셋만 — 선정 근거 포함\n\n_이 문서는 박다은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0024",
+   "title": "PCIe Gen4 컨트롤러 스펙 Q&A 정리 (아키텍처 회의)",
+   "author": "박다은",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 3824,
+   "summary": "설계 진행 중 나온 스펙 질문과 아키텍트 답변을 Q&A로 축적 — 회의 녹취를 로컬 Claude로 요약.",
+   "body": "## 배경\n설계 진행 중 나온 스펙 질문과 아키텍트 답변을 Q&A로 축적 — 회의 녹취를 로컬 Claude로 요약.\n\n## 내용\n- Q: 에러 응답 시 재시도 책임은 어디에? → A: 마스터 측, 최대 16회 후 인터럽트\n- Q: 부분 쓰기(WSTRB) 지원 범위? → A: 레지스터 공간은 word 단위만\n- 미결 질문은 다음 회의 안건으로 자동 이관\n\n_이 문서는 박다은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0025",
+   "title": "DMA 컨트롤러 마이크로아키텍처 스펙 v3.7 요약",
+   "author": "박다은",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 161241,
+   "summary": "DMA 컨트롤러 스펙 개정판의 변경점을 아키텍처 회의 녹취와 함께 정리. 로컬 Claude로 이전 버전과 diff 요약.",
+   "body": "## 배경\nDMA 컨트롤러 스펙 개정판의 변경점을 아키텍처 회의 녹취와 함께 정리. 로컬 Claude로 이전 버전과 diff 요약.\n\n## 내용\n- 파이프라인 스테이지 변경: 응답 경로에 스키드 버퍼 추가로 백프레셔 처리 단순화\n- 미결: ACE QoS 필드 사용 여부 — 인터커넥트 담당과 다음 회의에서 결정\n- 이전 버전 대비 변경 항목 16건, 그중 펌웨어 영향 2건은 별도 공지함\n\n_이 문서는 박다은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0026",
+   "title": "HDMI 송신부 RTL 코드 리뷰 지적사항 정리 (6월 2주)",
+   "author": "심재윤",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "dft",
+    "verification"
+   ],
+   "created_min_ago": 126294,
+   "summary": "5월 4주 코드 리뷰에서 나온 지적을 유형별로 묶고 수정 담당을 배정했다.",
+   "body": "## 배경\n5월 4주 코드 리뷰에서 나온 지적을 유형별로 묶고 수정 담당을 배정했다.\n\n## 내용\n- 리셋 값 누락 42건 — regmap YAML과 대조해 자동 검출 (로컬 Claude로 대조 스크립트 작성)\n- 비동기 경계에서 단일 신호 다중 샘플링 1건 — CDC 템플릿(cdc_2ff) 적용 지시\n- 매직 넘버 파라미터화, 미사용 포트 제거 등 스타일 항목은 lint 룰로 승격 검토\n\n_이 문서는 심재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0027",
+   "title": "인터럽트 컨트롤러(GIC) AXI4 인터페이스 타이밍 노트",
+   "author": "심재윤",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 61952,
+   "summary": "HDMI 송신부의 AHB 인터페이스에서 헷갈리기 쉬운 핸드셰이크 타이밍을 파형과 함께 기록.",
+   "body": "## 배경\nHDMI 송신부의 AHB 인터페이스에서 헷갈리기 쉬운 핸드셰이크 타이밍을 파형과 함께 기록.\n\n## 내용\n- valid는 ready와 무관하게 유지되어야 함 — ready 대기 중 payload 변경 금지\n- outstanding 한도와 버퍼 깊이 관계는 데드락 노트(설계팀 지식) 참고\n- 시뮬 파형 캡처 3장 첨부, 로컬 Claude로 파형 CSV에서 위반 구간 자동 표시\n\n_이 문서는 심재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0028",
+   "title": "인터럽트 컨트롤러(GIC) 합성 QoR 1차 결과 분석",
+   "author": "심재윤",
+   "visibility": "space",
+   "reuse_count": 1,
+   "cited_by": [
+    "dft"
+   ],
+   "created_min_ago": 76632,
+   "summary": "1차 합성 결과의 타이밍·면적·전력을 목표 대비로 정리. 크리티컬 패스 재구성 후보 식별.",
+   "body": "## 배경\n1차 합성 결과의 타이밍·면적·전력을 목표 대비로 정리. 크리티컬 패스 재구성 후보 식별.\n\n## 내용\n- WNS -28ps, 크리티컬 패스는 어드레스 디코더 경유 — 파이프 컷 후보 2곳\n- 면적은 예산 대비 28% 초과 — FIFO 깊이 재검토로 회수 가능 추정\n- 합성 로그 요약은 로컬 Claude 파서로 자동 생성 (백엔드팀 STA 파서 참고함)\n\n_이 문서는 심재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0029",
+   "title": "레지스터 맵 YAML 플로우 — DDR4 컨트롤러 적용기",
+   "author": "심재윤",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "hr-people",
+    "verification",
+    "product"
+   ],
+   "created_min_ago": 423,
+   "summary": "레지스터 맵 단일 원천(YAML) 플로우를 QSPI 부트 컨트롤러에 적용하면서 겪은 것들.",
+   "body": "## 배경\n레지스터 맵 단일 원천(YAML) 플로우를 QSPI 부트 컨트롤러에 적용하면서 겪은 것들.\n\n## 내용\n- 기존 엑셀 → YAML 이관은 로컬 Claude로 반자동 변환 후 리셋값 전수 검증\n- RTL·C 헤더·문서 자동 생성 — 펌웨어팀과 오프셋 불일치 원천 차단\n- 필드 폭 32bit 경계 초과를 생성기가 에러 처리하는지 확인함\n\n_이 문서는 심재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0030",
+   "title": "HDMI 송신부 클록 게이팅 적용 전후 전력 추정 비교",
+   "author": "심재윤",
+   "visibility": "org",
+   "reuse_count": 3,
+   "cited_by": [
+    "product",
+    "analog",
+    "firmware"
+   ],
+   "created_min_ago": 71694,
+   "summary": "클록 게이팅 삽입 전후의 동적 전력 추정치 비교와 게이팅 효율 분석.",
+   "body": "## 배경\n클록 게이팅 삽입 전후의 동적 전력 추정치 비교와 게이팅 효율 분석.\n\n## 내용\n- 동적 전력 8% 절감, 게이팅 효율 낮은 레지스터 그룹 58개는 enable 조건 재설계\n- 전력 추정용 활동 벡터는 검증팀 리그레션의 고활동 구간 VCD 재사용\n- 게이팅 셀 글리치 위험 경로는 별도 이슈로 등록\n\n_이 문서는 심재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0031",
+   "title": "CDC SVA 템플릿 이더넷 MAC 바인딩 가이드",
+   "author": "심재윤",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 72053,
+   "summary": "공용 CDC 어설션 템플릿을 QSPI 부트 컨트롤러에 바인딩하는 절차와 주의점.",
+   "body": "## 배경\n공용 CDC 어설션 템플릿을 QSPI 부트 컨트롤러에 바인딩하는 절차와 주의점.\n\n## 내용\n- bind 구문은 로컬 Claude에게 모듈 인터페이스를 주고 생성 — 수작업 오타 제거\n- 그레이코드 FIFO 포인터 어설션은 X 전파 오탐 수정판(v1.2) 사용할 것\n- 정적 CDC 툴 위반 후보 44건 중 실제 어설션 커버 대상 선별 기준 포함\n\n_이 문서는 심재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0032",
+   "title": "MIPI CSI-2 수신부 리셋 시퀀스 설계 노트",
+   "author": "윤승민",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "hr-people",
+    "dft"
+   ],
+   "created_min_ago": 125106,
+   "summary": "전력 관리 유닛(PMU)의 파워온/소프트 리셋 시퀀스와 도메인 간 해제 순서 결정 기록.",
+   "body": "## 배경\n전력 관리 유닛(PMU)의 파워온/소프트 리셋 시퀀스와 도메인 간 해제 순서 결정 기록.\n\n## 내용\n- 비동기 assert / 동기 deassert 원칙 — 해제 순서는 PMU → 버스 → 주변장치\n- 소프트 리셋 시 outstanding 트랜잭션 drain 대기 로직 필요 (데드락 사례 참고)\n- 리셋 트리 팬아웃 58개, 백엔드팀과 리셋 버퍼링 협의 완료\n\n_이 문서는 윤승민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0033",
+   "title": "IP 벤더 전력 관리 유닛(PMU) 릴리즈 노트 v4.8 diff 요약",
+   "author": "윤승민",
+   "visibility": "org",
+   "reuse_count": 15,
+   "cited_by": [
+    "analog",
+    "product",
+    "firmware"
+   ],
+   "created_min_ago": 35853,
+   "summary": "벤더 IP 신규 릴리즈의 변경점을 로컬 Claude로 diff 요약 — errata 누락 방지.",
+   "body": "## 배경\n벤더 IP 신규 릴리즈의 변경점을 로컬 Claude로 diff 요약 — errata 누락 방지.\n\n## 내용\n- 기능 변경 27건 중 우리 설정(config)에 해당하는 것 3건, errata 1건은 회피책 적용\n- 합성 제약 파일 변경 있음 — 백엔드팀 전달 완료\n- 요약 프롬프트는 팀 위키의 'IP 릴리즈 diff' 레시피 재사용\n\n_이 문서는 윤승민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0034",
+   "title": "이미지 전처리 파이프라인(ISP) 성능 모델 스프레드시트 사용법",
+   "author": "윤승민",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "product",
+    "dft"
+   ],
+   "created_min_ago": 3550,
+   "summary": "NoC 라우터 대역폭/레이턴시 추정용 스프레드시트의 입력 가정과 한계를 문서화.",
+   "body": "## 배경\nNoC 라우터 대역폭/레이턴시 추정용 스프레드시트의 입력 가정과 한계를 문서화.\n\n## 내용\n- 버스트 길이·outstanding·클록비 입력으로 유효 대역폭 추정 (±20% 오차)\n- 리오더링 효과는 미반영 — 정밀값은 검증팀 성능 시나리오로 확인할 것\n- 수식 검산은 로컬 Claude로 수행, 엣지 케이스 2건 수정\n\n_이 문서는 윤승민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0035",
+   "title": "L2 캐시 컨트롤러 ECO 대응 기록 (7월 3주)",
+   "author": "유시우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 58935,
+   "summary": "테이프아웃 전 NoC 라우터 ECO 요청의 원인·수정·검증 결과 기록.",
+   "body": "## 배경\n테이프아웃 전 NoC 라우터 ECO 요청의 원인·수정·검증 결과 기록.\n\n## 내용\n- 원인: USB 3.1 컨트롤러 연동 시 스펙 해석 차이 — 스펙 문구 개정 요청함\n- 게이트 레벨 수정 11셀, 스페어 셀 사용 — 백엔드팀 ECO 라우팅 완료\n- 회귀는 영향 시나리오 서브셋만 — 선정 근거 포함\n\n_이 문서는 유시우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0036",
+   "title": "NoC 라우터 스펙 Q&A 정리 (아키텍처 회의)",
+   "author": "유시우",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 3990,
+   "summary": "설계 진행 중 나온 스펙 질문과 아키텍트 답변을 Q&A로 축적 — 회의 녹취를 로컬 Claude로 요약.",
+   "body": "## 배경\n설계 진행 중 나온 스펙 질문과 아키텍트 답변을 Q&A로 축적 — 회의 녹취를 로컬 Claude로 요약.\n\n## 내용\n- Q: 에러 응답 시 재시도 책임은 어디에? → A: 마스터 측, 최대 10회 후 인터럽트\n- Q: 부분 쓰기(WSTRB) 지원 범위? → A: 레지스터 공간은 word 단위만\n- 미결 질문은 다음 회의 안건으로 자동 이관\n\n_이 문서는 유시우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0037",
+   "title": "전력 관리 유닛(PMU) 마이크로아키텍처 스펙 v1.9 요약",
+   "author": "유시우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 869,
+   "summary": "전력 관리 유닛(PMU) 스펙 개정판의 변경점을 아키텍처 회의 녹취와 함께 정리. 로컬 Claude로 이전 버전과 diff 요약.",
+   "body": "## 배경\n전력 관리 유닛(PMU) 스펙 개정판의 변경점을 아키텍처 회의 녹취와 함께 정리. 로컬 Claude로 이전 버전과 diff 요약.\n\n## 내용\n- 파이프라인 스테이지 변경: 응답 경로에 스키드 버퍼 추가로 백프레셔 처리 단순화\n- 미결: AHB QoS 필드 사용 여부 — 인터커넥트 담당과 다음 회의에서 결정\n- 이전 버전 대비 변경 항목 49건, 그중 펌웨어 영향 2건은 별도 공지함\n\n_이 문서는 유시우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0038",
+   "title": "이미지 전처리 파이프라인(ISP) RTL 코드 리뷰 지적사항 정리 (6월 3주)",
+   "author": "유시우",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 167504,
+   "summary": "5월 3주 코드 리뷰에서 나온 지적을 유형별로 묶고 수정 담당을 배정했다.",
+   "body": "## 배경\n5월 3주 코드 리뷰에서 나온 지적을 유형별로 묶고 수정 담당을 배정했다.\n\n## 내용\n- 리셋 값 누락 24건 — regmap YAML과 대조해 자동 검출 (로컬 Claude로 대조 스크립트 작성)\n- 비동기 경계에서 단일 신호 다중 샘플링 1건 — CDC 템플릿(cdc_2ff) 적용 지시\n- 매직 넘버 파라미터화, 미사용 포트 제거 등 스타일 항목은 lint 룰로 승격 검토\n\n_이 문서는 유시우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0039",
+   "title": "이더넷 MAC AXI4 인터페이스 타이밍 노트",
+   "author": "유시우",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1143,
+   "summary": "L2 캐시 컨트롤러의 AHB 인터페이스에서 헷갈리기 쉬운 핸드셰이크 타이밍을 파형과 함께 기록.",
+   "body": "## 배경\nL2 캐시 컨트롤러의 AHB 인터페이스에서 헷갈리기 쉬운 핸드셰이크 타이밍을 파형과 함께 기록.\n\n## 내용\n- valid는 ready와 무관하게 유지되어야 함 — ready 대기 중 payload 변경 금지\n- outstanding 한도와 버퍼 깊이 관계는 데드락 노트(설계팀 지식) 참고\n- 시뮬 파형 캡처 3장 첨부, 로컬 Claude로 파형 CSV에서 위반 구간 자동 표시\n\n_이 문서는 유시우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0040",
+   "title": "L2 캐시 컨트롤러 합성 QoR 1차 결과 분석",
+   "author": "주소민",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "product",
+    "analog"
+   ],
+   "created_min_ago": 100903,
+   "summary": "1차 합성 결과의 타이밍·면적·전력을 목표 대비로 정리. 크리티컬 패스 재구성 후보 식별.",
+   "body": "## 배경\n1차 합성 결과의 타이밍·면적·전력을 목표 대비로 정리. 크리티컬 패스 재구성 후보 식별.\n\n## 내용\n- WNS -10ps, 크리티컬 패스는 어드레스 디코더 경유 — 파이프 컷 후보 2곳\n- 면적은 예산 대비 10% 초과 — FIFO 깊이 재검토로 회수 가능 추정\n- 합성 로그 요약은 로컬 Claude 파서로 자동 생성 (백엔드팀 STA 파서 참고함)\n\n_이 문서는 주소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0041",
+   "title": "레지스터 맵 YAML 플로우 — eFuse 컨트롤러 적용기",
+   "author": "주소민",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "verification",
+    "physical-design"
+   ],
+   "created_min_ago": 160422,
+   "summary": "레지스터 맵 단일 원천(YAML) 플로우를 타이머/워치독에 적용하면서 겪은 것들.",
+   "body": "## 배경\n레지스터 맵 단일 원천(YAML) 플로우를 타이머/워치독에 적용하면서 겪은 것들.\n\n## 내용\n- 기존 엑셀 → YAML 이관은 로컬 Claude로 반자동 변환 후 리셋값 전수 검증\n- RTL·C 헤더·문서 자동 생성 — 펌웨어팀과 오프셋 불일치 원천 차단\n- 필드 폭 32bit 경계 초과를 생성기가 에러 처리하는지 확인함\n\n_이 문서는 주소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0042",
+   "title": "이미지 전처리 파이프라인(ISP) 클록 게이팅 적용 전후 전력 추정 비교",
+   "author": "주소민",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1038,
+   "summary": "클록 게이팅 삽입 전후의 동적 전력 추정치 비교와 게이팅 효율 분석.",
+   "body": "## 배경\n클록 게이팅 삽입 전후의 동적 전력 추정치 비교와 게이팅 효율 분석.\n\n## 내용\n- 동적 전력 29% 절감, 게이팅 효율 낮은 레지스터 그룹 53개는 enable 조건 재설계\n- 전력 추정용 활동 벡터는 검증팀 리그레션의 고활동 구간 VCD 재사용\n- 게이팅 셀 글리치 위험 경로는 별도 이슈로 등록\n\n_이 문서는 주소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0043",
+   "title": "CDC SVA 템플릿 전력 관리 유닛(PMU) 바인딩 가이드",
+   "author": "주소민",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "analog",
+    "dft"
+   ],
+   "created_min_ago": 139273,
+   "summary": "공용 CDC 어설션 템플릿을 L2 캐시 컨트롤러에 바인딩하는 절차와 주의점.",
+   "body": "## 배경\n공용 CDC 어설션 템플릿을 L2 캐시 컨트롤러에 바인딩하는 절차와 주의점.\n\n## 내용\n- bind 구문은 로컬 Claude에게 모듈 인터페이스를 주고 생성 — 수작업 오타 제거\n- 그레이코드 FIFO 포인터 어설션은 X 전파 오탐 수정판(v1.2) 사용할 것\n- 정적 CDC 툴 위반 후보 60건 중 실제 어설션 커버 대상 선별 기준 포함\n\n_이 문서는 주소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0044",
+   "title": "타이머/워치독 리셋 시퀀스 설계 노트",
+   "author": "주소민",
+   "visibility": "space",
+   "reuse_count": 8,
+   "cited_by": [
+    "analog",
+    "verification",
+    "dft"
+   ],
+   "created_min_ago": 2501,
+   "summary": "이미지 전처리 파이프라인(ISP)의 파워온/소프트 리셋 시퀀스와 도메인 간 해제 순서 결정 기록.",
+   "body": "## 배경\n이미지 전처리 파이프라인(ISP)의 파워온/소프트 리셋 시퀀스와 도메인 간 해제 순서 결정 기록.\n\n## 내용\n- 비동기 assert / 동기 deassert 원칙 — 해제 순서는 PMU → 버스 → 주변장치\n- 소프트 리셋 시 outstanding 트랜잭션 drain 대기 로직 필요 (데드락 사례 참고)\n- 리셋 트리 팬아웃 15개, 백엔드팀과 리셋 버퍼링 협의 완료\n\n_이 문서는 주소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "soc-design-doc-0045",
+   "title": "IP 벤더 NPU 텐서 DMA 릴리즈 노트 v4.6 diff 요약",
+   "author": "주소민",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "analog",
+    "verification"
+   ],
+   "created_min_ago": 2343,
+   "summary": "벤더 IP 신규 릴리즈의 변경점을 로컬 Claude로 diff 요약 — errata 누락 방지.",
+   "body": "## 배경\n벤더 IP 신규 릴리즈의 변경점을 로컬 Claude로 diff 요약 — errata 누락 방지.\n\n## 내용\n- 기능 변경 41건 중 우리 설정(config)에 해당하는 것 3건, errata 1건은 회피책 적용\n- 합성 제약 파일 변경 있음 — 백엔드팀 전달 완료\n- 요약 프롬프트는 팀 위키의 'IP 릴리즈 diff' 레시피 재사용\n\n_이 문서는 주소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  }
+ ],
+ "reuse_events": [
+  {
+   "doc_id": "soc-design-doc-0043",
+   "source_space": "soc-design",
+   "consumer_space": "analog",
+   "min_ago": 41203,
+   "summary": "SoC 설계팀의 『CDC SVA 템플릿 전력 관리 유닛(PMU) 바인딩 가이드』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0022",
+   "source_space": "soc-design",
+   "consumer_space": "physical-design",
+   "min_ago": 38952,
+   "summary": "SoC 설계팀의 『NoC 라우터 성능 모델 스프레드시트 사용법』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0008",
+   "source_space": "soc-design",
+   "consumer_space": "firmware",
+   "min_ago": 42001,
+   "summary": "SoC 설계팀의 『QSPI 부트 컨트롤러 리셋 시퀀스 설계 노트』 지식이 펌웨어개발팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0026",
+   "source_space": "soc-design",
+   "consumer_space": "dft",
+   "min_ago": 8464,
+   "summary": "SoC 설계팀의 『HDMI 송신부 RTL 코드 리뷰 지적사항 정리 (6월 2주)』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0007",
+   "source_space": "soc-design",
+   "consumer_space": "dft",
+   "min_ago": 40914,
+   "summary": "SoC 설계팀의 『CDC SVA 템플릿 HDMI 송신부 바인딩 가이드』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0017",
+   "source_space": "soc-design",
+   "consumer_space": "product",
+   "min_ago": 1444,
+   "summary": "SoC 설계팀의 『레지스터 맵 YAML 플로우 — 타이머/워치독 적용기』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0009",
+   "source_space": "soc-design",
+   "consumer_space": "analog",
+   "min_ago": 34782,
+   "summary": "SoC 설계팀의 『IP 벤더 MIPI CSI-2 수신부 릴리즈 노트 v2.8 diff 요약』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0034",
+   "source_space": "soc-design",
+   "consumer_space": "product",
+   "min_ago": 11733,
+   "summary": "SoC 설계팀의 『이미지 전처리 파이프라인(ISP) 성능 모델 스프레드시트 사용법』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0011",
+   "source_space": "soc-design",
+   "consumer_space": "dft",
+   "min_ago": 15913,
+   "summary": "SoC 설계팀의 『MIPI CSI-2 수신부 ECO 대응 기록 (5월 3주)』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0028",
+   "source_space": "soc-design",
+   "consumer_space": "dft",
+   "min_ago": 20373,
+   "summary": "SoC 설계팀의 『인터럽트 컨트롤러(GIC) 합성 QoR 1차 결과 분석』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0018",
+   "source_space": "soc-design",
+   "consumer_space": "product",
+   "min_ago": 25001,
+   "summary": "SoC 설계팀의 『DMA 컨트롤러 클록 게이팅 적용 전후 전력 추정 비교』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0003",
+   "source_space": "soc-design",
+   "consumer_space": "firmware",
+   "min_ago": 34155,
+   "summary": "SoC 설계팀의 『전력 관리 유닛(PMU) ACE 인터페이스 타이밍 노트』 지식이 펌웨어개발팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0032",
+   "source_space": "soc-design",
+   "consumer_space": "hr-people",
+   "min_ago": 18815,
+   "summary": "SoC 설계팀의 『MIPI CSI-2 수신부 리셋 시퀀스 설계 노트』 지식이 인사팀 (People)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0023",
+   "source_space": "soc-design",
+   "consumer_space": "dft",
+   "min_ago": 40778,
+   "summary": "SoC 설계팀의 『MIPI CSI-2 수신부 ECO 대응 기록 (7월 2주)』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0021",
+   "source_space": "soc-design",
+   "consumer_space": "product",
+   "min_ago": 23892,
+   "summary": "SoC 설계팀의 『IP 벤더 L2 캐시 컨트롤러 릴리즈 노트 v4.1 diff 요약』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0029",
+   "source_space": "soc-design",
+   "consumer_space": "hr-people",
+   "min_ago": 32408,
+   "summary": "SoC 설계팀의 『레지스터 맵 YAML 플로우 — DDR4 컨트롤러 적용기』 지식이 인사팀 (People)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0044",
+   "source_space": "soc-design",
+   "consumer_space": "analog",
+   "min_ago": 9984,
+   "summary": "SoC 설계팀의 『타이머/워치독 리셋 시퀀스 설계 노트』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0030",
+   "source_space": "soc-design",
+   "consumer_space": "product",
+   "min_ago": 17868,
+   "summary": "SoC 설계팀의 『HDMI 송신부 클록 게이팅 적용 전후 전력 추정 비교』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0041",
+   "source_space": "soc-design",
+   "consumer_space": "verification",
+   "min_ago": 33530,
+   "summary": "SoC 설계팀의 『레지스터 맵 YAML 플로우 — eFuse 컨트롤러 적용기』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0014",
+   "source_space": "soc-design",
+   "consumer_space": "hr-people",
+   "min_ago": 30219,
+   "summary": "SoC 설계팀의 『오디오 I2S 브리지 RTL 코드 리뷰 지적사항 정리 (6월 2주)』 지식이 인사팀 (People)에서 재사용되었습니다"
+  }
+ ]
+}

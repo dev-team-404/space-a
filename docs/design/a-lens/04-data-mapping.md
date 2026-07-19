@@ -1,17 +1,17 @@
 # C2 데이터 → 화면 매핑
 
 > 상위: [사람 뷰](README.md) · 계약 원본: [`contracts/c2-rest-api.json`](../../../contracts/c2-rest-api.json) (v2) + [`contracts/fixtures/`](../../../contracts/fixtures/)
-> 구현: [`a-lens/c2-adapter.js`](../../../a-lens/c2-adapter.js)
+> 구현: [`a-lens/backend/alens/pipeline.py`](../../../a-lens/backend/alens/pipeline.py)
 
 a-hub가 C2로 내려주는 데이터가 **어느 화면 요소에, 어떤 번역(서사/집계/공간)을 거쳐**
-표시되는지를 필드 단위로 못 박는 문서. 어댑터(c2-adapter.js)의 스펙이며, C2 계약과
-어긋나면 계약 파일이 정답이다.
+표시되는지를 필드 단위로 못 박는 문서. 백엔드 pipeline(wire → 뷰모델 번역)의 스펙이며,
+C2 계약과 어긋나면 계약 파일이 정답이다.
 
 ## 원칙
 
-- **fake 데이터의 단일 원천은 C2 wire 형식.** 프로토타입의 가짜 데이터(`c2-data.js`)는
-  `contracts/fixtures/`와 같은 모양(snake_case, ISO 시각)으로 쓰고, 화면용 뷰모델로의
-  변환은 전부 어댑터가 맡는다. 백엔드가 생기면 `c2-data.js`만 fetch로 교체된다.
+- **fake 데이터의 단일 원천은 C2 wire 형식.** fake 데이터는 `contracts/fixtures/`와
+  같은 모양(snake_case, ISO 시각)으로 쓰고, 화면용 뷰모델로의 변환은 전부 백엔드
+  pipeline이 맡는다 — 원천(허브/픽스처)이 바뀌어도 프론트는 뷰모델만 본다.
 - **서사 필드는 "제안"이다** (계약 consumerAutonomy). C2는 구조 필드(id·type·시각·카운트)를
   항상 주고, 서사 필드(`highlight`, `status_line`, `chain[].label`, `summary`)는 완성문으로
   얹어준다. **MVP는 서버 제공 서사를 그대로 렌더**한다 — 서사 생성 주체(열린 질문 Q1)가
@@ -75,15 +75,15 @@ a-hub가 C2로 내려주는 데이터가 **어느 화면 요소에, 어떤 번�
 `knowledge_created` > `condensed` > `issue_opened`, 동점은 최신순. 선정은 구조
 필드(type·doc_id)로 **소비자가 직접** 하고(계약 consumerAutonomy가 보장), 문장은 서버
 summary를 그대로 쓴다 — LLM 불필요. 방 카드는 그 방 관련 이벤트(방에서 발생 or 방의
-지식이 재사용됨)로 좁히고, 게스트에겐 이슈성 이벤트를 제외한다. 실서비스는 "오늘"
-범위로 필터하고, 프로토타입은 스냅숏 전체에서 뽑는다.
+지식이 재사용됨)로 좁히고, 게스트에겐 이슈성 이벤트를 제외한다. 선정은 현재 스냅숏
+전체에서 뽑는다 — "오늘" 범위 필터는 실 시각 필드(#40) 이후.
 
 **권한 (2026-07-14 보강)** — 로비는 조직 공개 표면이므로 하이라이트·게시판의 노출 풀
 자체를 org-safe 이벤트(`reused`·`knowledge_created`·`skill_proposed`·`condensed`)로
 제한한다. `issue_opened`는 summary에 이슈 제목(멤버 전용 서사)이 담기므로 로비·게스트에
 내보내지 않는다. 이 정책의 결정권은 권한 모델 소유자인 시각화 쪽에 있고(계약도 "tier는
-Pillar 3 설계를 미러링"이라 명시), 프로토타입은 클라이언트 필터로 임시 처리 —
-서버 집행·계약 반영은 계약 소유자에게 전달한다 (G7).
+Pillar 3 설계를 미러링"이라 명시), 현재는 a-lens 백엔드(pipeline의 org-safe 필터)가
+임시 집행 — 허브 집행·계약 반영은 계약 소유자에게 전달한다 (G7).
 
 ### `GET /stats` → 대시보드 (로비 상단 버튼 → 모달)
 
@@ -112,12 +112,12 @@ Pillar 3 설계를 미러링"이라 명시), 프로토타입은 클라이언트 
 > 응답 트리밍이 그 2축으로 커버되는지 불명확 — **해커톤 데모에서는 유리벽이 클라이언트
 > 연출로 남을 수 있다.** 서버 집행 시점을 계약 소유자와 확인할 것. 원칙 자체는 유지.
 
-- **프로토타입의 현재 상태**: 게스트 연출(말풍선 일반화, 잠금 카드)을 클라이언트에서
-  수행 중. 라이브 연동 시 시점 토글은 "tier가 다른 응답 재요청"으로 교체한다.
+- **현재 상태**: tier별 트리밍은 a-lens 백엔드가 수행한다 (게스트 응답에서 이슈 제거 —
+  `collector.space_detail`). 시점 토글은 "tier가 다른 응답 재요청"으로 구현한다.
 - **해소된 충돌 (2026-07-14 결정)**: a-lens(구 space-view) 설계가 게스트에게 "서사는 제목만"이던
   것과 달리 C2는 `issues: []`(제목조차 안 내려감)였다. 이슈 제목도 작업 내용을 담는
-  서사이므로 **계약을 따르기로 결정** — 게스트에게 이슈는 비노출. 설계 문서(01, 02)와
-  프로토타입(잠금 카드 → 멤버 전용 안내)을 이에 맞춰 수정했고, 계약 변경은 불필요.
+  서사이므로 **계약을 따르기로 결정** — 게스트에게 이슈는 비노출. 설계 문서(01, 02)를
+  이에 맞춰 수정했고, 계약 변경은 불필요.
 - **지식 잠금 (2026-07-14 시나리오 실험)**: `visibility:'space'` 문서는 **로비 tier에서
   아예 미노출**한다 — 로비는 "집계 + 하이라이트 1줄"이 정의이고, 스페이스 전용 문서는
   제목부터가 내부 정보다(이슈 제목 비노출 결정과 같은 논리). G3의 org 지식 endpoint가
@@ -129,37 +129,31 @@ Pillar 3 설계를 미러링"이라 명시), 프로토타입은 클라이언트 
 
 | # | 뷰모델 필드 | 현재 출처 | 판정 |
 |---|---|---|---|
-| G1 | `currentUser`, 멤버십 | `client-data.js` | 인증 세션의 몫 (C2 밖이 맞음). 스페이스 멤버십은 `viewer_tier`로 유도 |
-| G2 | 매니저 코너 이벤트(`managerEvents`), RBAC 상태 | `client-data.js` | C2에 없음. #9에서 "매니저 에이전트 → 관리 API(C4)"로 재편됨 — **코너를 뭘로 채울지 재설계 필요** (C4 이벤트 노출? 코너 축소?) |
+| G1 | `currentUser`, 멤버십 | 없음 (미구현) | 인증 세션의 몫 (C2 밖이 맞음). 스페이스 멤버십은 `viewer_tier`로 유도 |
+| G2 | 매니저 코너 이벤트(`managerEvents`), RBAC 상태 | 없음 (미구현) | C2에 없음. #9에서 "매니저 에이전트 → 관리 API(C4)"로 재편됨 — **코너를 뭘로 채울지 재설계 필요** (C4 이벤트 노출? 코너 축소?) |
 | G3 | 로비 "공개 지식 신착" 목록 | 스페이스 상세를 합쳐서 유도 | org 전체 지식 목록 endpoint 없음 (`stats.top_knowledge`는 제목·카운트뿐). 스페이스가 늘면 N회 호출 — **C2에 `GET /knowledge?visibility=org` 추가 후보** |
-| G4 | 지식 문서 작성 시점 | `c2-data.js`의 `created_at` (선제 사용) | C2 `knowledge`에 시각 필드가 없다 — **`created_at` 추가 요청 후보** (계약은 추가 허용) |
+| G4 | 지식 문서 작성 시점 | 없음 (허브 #40 대기) | C2 `knowledge`에 시각 필드가 없다 — **`created_at` 추가 요청 후보** (계약은 추가 허용) |
 | G5 | 책상 좌표(`deskSlot`), 층 히트존, 씬 스케일 | 클라이언트 상수 | 레이아웃은 클라이언트 소유 — 계약에 올리지 않는 게 맞음 |
 | G6 | — | — | 픽스처 내부 불일치: `stats.json` totals(지식 128)와 `spaces.json` stats 합계(지식 75)가 안 맞음. 골든 데이터 정리 시 msalt와 함께 보정 |
-| G7 | `GET /activity`의 tier 트리밍 | 프로토타입 클라이언트 필터 (임시) | 계약에 /activity의 tier 규칙이 없었음. **정책은 결정됨(2026-07-14, 권한 모델 소유자=시각화)**: lobby/guest 응답에는 org-safe 이벤트(`reused`·`knowledge_created`·`skill_proposed`·`condensed`)만, `issue_opened`와 space 전용 문서 관련 summary는 제외. → 계약 반영·서버 집행을 계약 소유자에게 **전달** |
+| G7 | `GET /activity`의 tier 트리밍 | a-lens 백엔드 org-safe 필터 (임시) | 계약에 /activity의 tier 규칙이 없었음. **정책은 결정됨(2026-07-14, 권한 모델 소유자=시각화)**: lobby/guest 응답에는 org-safe 이벤트(`reused`·`knowledge_created`·`skill_proposed`·`condensed`)만, `issue_opened`와 space 전용 문서 관련 summary는 제외. → 계약 반영·서버 집행을 계약 소유자에게 **전달** |
 | G8 | 프레즌스성 필드의 원천 — `agents[].status`(working/idle) · `last_active_at` · `members_online` · `visits` | C2 계약이 로비·방 상세 응답에 포함 | **확정 (2026-07-17)**: 이 값들의 원천은 a-hub-**life**(room server — a-mate 하트비트·방 방문)이므로 **a-lens가 work(C2)와 life를 직접 조회해 조인**한다. C2의 프레즌스성 필드는 사용하지 않음 — 계약 정리는 소유자 몫(#40 통보). 프레즌스는 org-safe(상태 종류만)라 tier 트리밍 불필요. life 하트비트·조회 API 요청: #39 (담당 허준녕) |
 
 ## 데이터 흐름
 
-**구현 (`a-lens/backend/`, ADR 0003)** — 이 문서의 번역이 서버 pipeline로 올라간다:
+**구현 (`a-lens/backend/`, ADR 0003)** — 이 문서의 번역은 서버 pipeline이 수행한다:
 
 ```
-collector (원천: contracts/fixtures → 추후 work·life 실서버)
-    │
+collector (원천 auto: a-hub 실서버 + backend/dummy_data 병합, 허브 실패 시 dummy만)
+    │      더미 스페이스는 demo=True 마킹 → 프론트가 FAKE 배지로 구분
 pipeline   wire → 뷰모델 번역 (이 문서가 스펙 — 하이라이트 랭킹·G8 조인 포함)
     ▼
 /api/lobby · /api/spaces/{id}  →  frontend는 받은 뷰모델을 그대로 그림
 ```
 
-**프로토타입 (`a-lens/prototype/`, 참조 구현)**:
+더미 데이터(`a-lens/backend/dummy_data/`)는 fabless 반도체 회사 8개 팀을 모델링한
+데모 데이터다 — 각자 **로컬 Claude(a-mate)로 하는 일상 업무**(로그 분석·스크립트·문서
+초안·회의록 요약)에서 수집된 기록이라는 설정. `_generate.py`로 결정론 재생성한다.
+`contracts/fixtures/`는 C2 계약 골든 데이터로 계약 검증 용도(`A_LENS_SOURCE=fixtures`)로만 남는다.
 
-```
-contracts/fixtures/*.json  ←(모양·시나리오 정합)→  c2-data.js   "가짜 C2 서버 응답"
-                                                     │
-                                              c2-adapter.js     wire → 뷰모델 번역
-                                                     │
-client-data.js (C2 밖: 인증·레이아웃·G2) ──────────→ DB (뷰모델)
-                                                     ▼
-                                                  app.js 렌더
-```
-
-(GitHub PR 라이브 스냅숏 경로(live-data/live-adapter)는 임시 확인용이어서 제거됨, 2026-07-17)
+(vanilla JS 프로토타입(`a-lens/prototype/`)은 frontend/backend 이관 완료로 제거됨, 2026-07-19.
+GitHub PR 라이브 스냅숏 경로(live-data/live-adapter)도 임시 확인용이어서 제거됨, 2026-07-17)
