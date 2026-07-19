@@ -22,9 +22,21 @@ pub fn sanitize_pos(
     })
 }
 
+/// 모니터 배치와 DPI 배율을 안정적으로 비교하기 위한 지문.
+/// 열거 순서가 달라져도 같은 구성이 되도록 정렬한다.
+pub fn display_layout_signature(monitors: &[(i32, i32, i32, i32, u32)]) -> String {
+    let mut displays = monitors.to_vec();
+    displays.sort_unstable();
+    displays
+        .iter()
+        .map(|(x, y, w, h, scale_milli)| format!("{x},{y},{w},{h},{scale_milli}"))
+        .collect::<Vec<_>>()
+        .join(";")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::sanitize_pos;
+    use super::{display_layout_signature, sanitize_pos};
 
     // 실제 상수와 동일: 창 320×230, 로봇 160.
     const W: i32 = 320;
@@ -54,13 +66,49 @@ mod tests {
 
     #[test]
     fn secondary_monitor_still_ok() {
-        assert!(sanitize_pos(2200, 300, W, H, R, &[(0, 0, 1920, 1080), (1920, 0, 1920, 1080)]));
+        assert!(sanitize_pos(
+            2200,
+            300,
+            W,
+            H,
+            R,
+            &[(0, 0, 1920, 1080), (1920, 0, 1920, 1080)]
+        ));
     }
 
     #[test]
     fn extreme_coords_do_not_overflow_panic() {
         // 손상된 저장 좌표(i32 극단값)에도 패닉 없이 거부해야 한다 — sanitize는 방어 함수다.
-        assert!(!sanitize_pos(i32::MAX, i32::MAX, W, H, R, &[(0, 0, 3440, 1440)]));
-        assert!(!sanitize_pos(i32::MIN, i32::MIN, W, H, R, &[(0, 0, 3440, 1440)]));
+        assert!(!sanitize_pos(
+            i32::MAX,
+            i32::MAX,
+            W,
+            H,
+            R,
+            &[(0, 0, 3440, 1440)]
+        ));
+        assert!(!sanitize_pos(
+            i32::MIN,
+            i32::MIN,
+            W,
+            H,
+            R,
+            &[(0, 0, 3440, 1440)]
+        ));
+    }
+
+    #[test]
+    fn display_layout_signature_is_order_independent() {
+        let a = [(0, 0, 1920, 1080, 1000), (1920, 0, 2560, 1440, 1250)];
+        let b = [(1920, 0, 2560, 1440, 1250), (0, 0, 1920, 1080, 1000)];
+        assert_eq!(display_layout_signature(&a), display_layout_signature(&b));
+    }
+
+    #[test]
+    fn display_layout_signature_changes_with_scale() {
+        assert_ne!(
+            display_layout_signature(&[(0, 0, 1920, 1080, 1000)]),
+            display_layout_signature(&[(0, 0, 1920, 1080, 1250)])
+        );
     }
 }
