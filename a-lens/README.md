@@ -38,6 +38,7 @@ npm run build   # → frontend/dist, 이후 backend만 띄우면 됨
 | `A_LENS_SOURCE` | `auto` | `hub`(실서버) / `fixtures`(골든 데이터) / `auto`(허브 실패 시 픽스처 폴백) |
 | `A_LENS_WORK_URL` | `https://spacea.msalt.net` | a-hub-work base URL |
 | `A_LENS_WORK_TOKEN` | (없음) | 허브 Bearer 토큰 — 없으면 인증 필요한 상세는 빈 값으로 강등 |
+| `A_LENS_WORK_API_KEY` | (없음) | 허브 `x-api-key` 헤더 값 (2026-07-19 허브 인증 전환) |
 | `A_LENS_LIFE_URL` | (없음) | room-server(프레즌스, #39 대기) — 비면 프레즌스 생략 |
 | `A_LENS_CACHE_TTL` | `30` | 허브 폴링 캐시(초) |
 
