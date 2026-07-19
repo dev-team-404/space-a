@@ -26,6 +26,8 @@ description: Use when asked to sweep, tidy, review, or health-check the repo's w
    - handoff/continuation 문서는 후속 문서가 존재하면 superseded 후보
 3. **구조 위반 검사**:
    - `docs/archive/` 밖에 있는데 frontmatter가 `status: done|superseded`인 문서
+     (**파일 맨 앞에서 시작하는 frontmatter 블록만** 해당 — 본문 코드 블록 안의
+     `status:` 예시는 오탐이므로 제외)
    - 문서 간 깨진 상대 링크 (링크 대상 파일 부재)
    - `docs/archive/` 아래인데 원 루트 구조와 미러가 어긋난 경로
 4. **보고서 출력**:
