@@ -505,8 +505,15 @@ use agent_mentor::rooms_client::{self, RoomsClient};
 pub struct HubSettings {
     pub url: String,
     pub user: String,
+    pub api_key: String,
     pub connected: bool,
     pub room_id: String,
+}
+
+/// 빈 문자열이면 None — 관문 없는 서버는 x-api-key를 안 붙인다 (하위호환).
+fn opt_key(key: String) -> Option<String> {
+    let k = key.trim();
+    if k.is_empty() { None } else { Some(k.to_string()) }
 }
 
 fn hub_client(state: &State<AppState>) -> Result<Option<RoomsClient>, String> {
@@ -517,7 +524,7 @@ fn hub_client(state: &State<AppState>) -> Result<Option<RoomsClient>, String> {
     if url.trim().is_empty() || token.is_empty() {
         return Ok(None);
     }
-    Ok(Some(RoomsClient { base_url: url, token }))
+    Ok(Some(RoomsClient { base_url: url, token, api_key: opt_key(get("hub_api_key")) }))
 }
 
 #[tauri::command(async)]
@@ -527,6 +534,7 @@ pub fn hub_settings_get(state: State<AppState>) -> Result<HubSettings, String> {
     Ok(HubSettings {
         url: get("hub_url"),
         user: get("hub_user"),
+        api_key: get("hub_api_key"),
         connected: !get("hub_token").is_empty(),
         room_id: get("hub_room_id"),
     })
@@ -540,13 +548,16 @@ pub fn hub_connect(
     state: State<AppState>,
     url: String,
     user: String,
+    api_key: String,
 ) -> Result<HubSettings, String> {
     use tauri::Emitter;
     let url = url.trim().to_string();
     let user = user.trim().to_string();
+    let api_key = api_key.trim().to_string();
     if url.is_empty() || user.is_empty() {
         return Err("서버 URL과 이름을 입력하세요".into());
     }
+    let key_opt = opt_key(api_key.clone());
     // 기존 연결 확인 (락은 읽기 동안만)
     let existing = {
         let guard = lock(&state)?;
@@ -554,10 +565,11 @@ pub fn hub_connect(
         (get("hub_url"), get("hub_token"))
     };
     if existing.0 == url && !existing.1.is_empty() {
-        let client = RoomsClient { base_url: url.clone(), token: existing.1 };
+        let client = RoomsClient { base_url: url.clone(), token: existing.1, api_key: key_opt.clone() };
         if client.rename(&user).is_ok() {
             let guard = lock(&state)?;
             guard.set_setting("hub_user", &user).map_err(|e| e.to_string())?;
+            guard.set_setting("hub_api_key", &api_key).map_err(|e| e.to_string())?;
             drop(guard);
             let _ = app.emit("settings:changed", ());
             return hub_settings_get(state);
@@ -566,7 +578,7 @@ pub fn hub_connect(
     }
     // 네트워크는 락 밖
     let seed = agent_mentor::mascot::stable_identity();
-    let v = rooms_client::register(&url, &user, &seed).map_err(|e| e.to_string())?;
+    let v = rooms_client::register(&url, key_opt.as_deref(), &user, &seed).map_err(|e| e.to_string())?;
     let token = v["token"].as_str().unwrap_or_default().to_string();
     let agent_id = v["agent_id"].as_str().unwrap_or_default().to_string();
     let room_id = v["room_id"].as_str().unwrap_or_default().to_string();
@@ -578,6 +590,7 @@ pub fn hub_connect(
         for (k, val) in [
             ("hub_url", url.as_str()),
             ("hub_user", user.as_str()),
+            ("hub_api_key", api_key.as_str()),
             ("hub_token", token.as_str()),
             ("hub_agent_id", agent_id.as_str()),
             ("hub_room_id", room_id.as_str()),
@@ -603,14 +616,15 @@ pub fn room_view(state: State<AppState>) -> Result<serde_json::Value, String> {
 
 #[tauri::command(async)]
 pub fn rooms_list(state: State<AppState>) -> Result<serde_json::Value, String> {
-    let url = {
+    let (url, api_key) = {
         let guard = lock(&state)?;
-        guard.get_setting("hub_url").ok().flatten().unwrap_or_default()
+        let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
+        (get("hub_url"), get("hub_api_key"))
     };
     if url.trim().is_empty() {
         return Err("hub_not_connected".into());
     }
-    rooms_client::list_rooms(&url).map_err(|e| e.to_string())
+    rooms_client::list_rooms(&url, opt_key(api_key).as_deref()).map_err(|e| e.to_string())
 }
 
 /// 방 이동(우클릭 메뉴). cell 없이 입장 — 서버가 빈 셀 배정.

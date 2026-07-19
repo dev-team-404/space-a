@@ -50,10 +50,11 @@
   }
 
   // --- Space A 서버 (방 방문) ---
-  interface HubSettings { url: string; user: string; connected: boolean; room_id: string }
+  interface HubSettings { url: string; user: string; api_key: string; connected: boolean; room_id: string }
   let hub = $state<HubSettings | null>(null);
   let hubUrl = $state('');
   let hubUser = $state('');
+  let hubApiKey = $state('');
   let hubStatus = $state<{ kind: 'idle' | 'ok' | 'err' | 'busy'; text: string }>({ kind: 'idle', text: '' });
 
   async function loadHub() {
@@ -61,6 +62,7 @@
       hub = await invoke<HubSettings>('hub_settings_get');
       hubUrl = hub.url;
       hubUser = hub.user;
+      hubApiKey = hub.api_key;
     } catch { /* 미설정 */ }
   }
   loadHub();
@@ -68,7 +70,7 @@
   async function connectHub() {
     hubStatus = { kind: 'busy', text: '연결 중…' };
     try {
-      hub = await invoke<HubSettings>('hub_connect', { url: hubUrl, user: hubUser });
+      hub = await invoke<HubSettings>('hub_connect', { url: hubUrl, user: hubUser, apiKey: hubApiKey });
       hubStatus = { kind: 'ok', text: `연결 완료 — 개인 방이 만들어졌어요 (${hub.room_id})` };
     } catch (e) {
       hubStatus = { kind: 'err', text: `${e}` };
@@ -128,6 +130,10 @@
   <label>
     <span>내 이름</span>
     <input type="text" bind:value={hubUser} placeholder="예: 준녕" spellcheck="false" />
+  </label>
+  <label>
+    <span>API 키 <em>(선택)</em></span>
+    <input type="password" bind:value={hubApiKey} placeholder="비워두면 인증 없이 (관문 켜진 서버만 필요)" spellcheck="false" />
   </label>
   <div class="actions">
     <button class="primary" onclick={connectHub} disabled={hubStatus.kind === 'busy'}>연결</button>

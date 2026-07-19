@@ -125,12 +125,16 @@ pub fn run() {
                     let state = app.state::<AppState>();
                     let cfg = state.store.lock().ok().map(|s| {
                         let get = |k: &str| s.get_setting(k).ok().flatten().unwrap_or_default();
-                        (get("hub_url"), get("hub_token"), get("hub_room_id"))
+                        (get("hub_url"), get("hub_token"), get("hub_room_id"), get("hub_api_key"))
                     });
-                    if let Some((url, token, room_id)) = cfg {
+                    if let Some((url, token, room_id, api_key)) = cfg {
                         if !url.trim().is_empty() && !token.is_empty() && !room_id.is_empty() {
+                            let api_key = {
+                                let k = api_key.trim();
+                                if k.is_empty() { None } else { Some(k.to_string()) }
+                            };
                             std::thread::spawn(move || {
-                                let client = agent_mentor::rooms_client::RoomsClient { base_url: url, token };
+                                let client = agent_mentor::rooms_client::RoomsClient { base_url: url, token, api_key };
                                 if let Err(e) = client.enter(&room_id, None) {
                                     log::warn!("시작 시 내 방 입장 실패(무시): {e}");
                                 }
