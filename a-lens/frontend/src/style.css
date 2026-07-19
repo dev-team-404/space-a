@@ -376,3 +376,8 @@ button { font: inherit; cursor: pointer; }
 /* 홈 상단 FAKE 표시/숨김 토글 */
 .fake-toggle { margin-left: 8px; }
 .fake-toggle.on { border-color: #d9a441; color: #d9a441; }
+/* 칠판 클릭 → 관련 이슈/재사용 카드 강조 */
+.feed-card.hl-related, .doc-item.hl-related {
+  border-color: #d9a441;
+  box-shadow: 0 0 0 1px #d9a441, 0 0 14px rgba(217, 164, 65, 0.35);
+}

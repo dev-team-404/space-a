@@ -3,1062 +3,885 @@
   "space_id": "product",
   "name": "제품기획·마케팅팀"
  },
- "highlight": "『CES 전시 준비 체크리스트 (6월 4주)』 지식이 아날로그 설계팀 (AMS)에서 재사용됐어요 (누적 15회)",
+ "highlight": {
+  "kind": "reuse",
+  "doc_id": "product-doc-0006",
+  "text": "『중국 시장 동향 브리프 (5월 3주)』 지식이 인사팀 (People)에서 재사용됐어요 (누적 12회)"
+ },
  "visits": {
-  "today": 5,
-  "total": 335
+  "today": 9,
+  "total": 379
  },
  "members": [
   {
-   "agent_id": "product-woo-jiho",
-   "name": "우지호",
+   "agent_id": "product-yoo-daeun",
+   "name": "유다은",
    "role": "제품기획 팀장",
-   "owner": "우지호",
-   "last_active_min_ago": 32,
+   "owner": "유다은",
+   "last_active_min_ago": 45,
    "activity": {
-    "kind": "issue",
-    "title": "국내 고객 샘플 배송 지연 — 물류 이슈"
+    "kind": "knowledge",
+    "title": "경쟁사 벤치마크 비교표 — 엣지 NPU(AX-100) 포지셔닝"
    }
   },
   {
-   "agent_id": "product-lee-dain",
-   "name": "이다인",
-   "role": "테크니컬 마케팅",
-   "owner": "이다인",
-   "last_active_min_ago": 38,
+   "agent_id": "product-oh-hyunseo",
+   "name": "오현서",
+   "role": "가격/수급 기획",
+   "owner": "오현서",
+   "last_active_min_ago": 23,
    "activity": {
     "kind": "issue",
-    "title": "MWC 데모 빌드 일정 펌웨어팀과 충돌"
+    "title": "네트워크 스위치(AN-400) 제품명 상표 검토 결과 대기"
    }
   },
   {
-   "agent_id": "product-hong-hayun",
-   "name": "홍하윤",
-   "role": "테크니컬 마케팅",
-   "owner": "홍하윤",
-   "last_active_min_ago": 44,
+   "agent_id": "product-song-yerin",
+   "name": "송예린",
+   "role": "제품 기획",
+   "owner": "송예린",
+   "last_active_min_ago": 12,
    "activity": {
     "kind": "knowledge",
     "title": "앱노트 기획: 차량용 MCU(AV-30) 저전력 모드 활용"
    }
   },
   {
-   "agent_id": "product-kang-gaeun",
-   "name": "강가은",
+   "agent_id": "product-hong-eunwoo",
+   "name": "홍은우",
    "role": "가격/수급 기획",
-   "owner": "강가은",
-   "last_active_min_ago": 16,
+   "owner": "홍은우",
+   "last_active_min_ago": 20610,
    "activity": {
     "kind": "issue",
-    "title": "고객 문의 응답 SLA 21% 미달 (6월 3주)"
+    "title": "웹사이트 제품 페이지 스펙 오기 신고"
    }
   },
   {
-   "agent_id": "product-hwang-jiho",
-   "name": "황지호",
+   "agent_id": "product-heo-yejun",
+   "name": "허예준",
+   "role": "제품 기획",
+   "owner": "허예준",
+   "last_active_min_ago": 18972,
+   "activity": {
+    "kind": "knowledge",
+    "title": "가격 정책 시나리오 분석 — 엣지 NPU(AX-100)"
+   }
+  },
+  {
+   "agent_id": "product-hong-donghyun",
+   "name": "홍동현",
+   "role": "제품 기획",
+   "owner": "홍동현",
+   "last_active_min_ago": 5205,
+   "activity": {
+    "kind": "issue",
+    "title": "유럽 고객 샘플 배송 지연 — 물류 이슈"
+   }
+  },
+  {
+   "agent_id": "product-han-jihoon",
+   "name": "한지훈",
+   "role": "가격/수급 기획",
+   "owner": "한지훈",
+   "last_active_min_ago": 4,
+   "activity": {
+    "kind": "knowledge",
+    "title": "CES 전시 준비 체크리스트 (7월 2주)"
+   }
+  },
+  {
+   "agent_id": "product-park-hayun",
+   "name": "박하윤",
    "role": "테크니컬 마케팅",
-   "owner": "황지호",
-   "last_active_min_ago": 12525,
+   "owner": "박하윤",
+   "last_active_min_ago": 11081,
+   "activity": {
+    "kind": "knowledge",
+    "title": "고객 방문 회의록 요약 (중국, 5월 3주)"
+   }
+  },
+  {
+   "agent_id": "product-jung-siwoo",
+   "name": "정시우",
+   "role": "가격/수급 기획",
+   "owner": "정시우",
+   "last_active_min_ago": 27436,
    "activity": {
     "kind": "knowledge",
     "title": "고객 기술 문의 FAQ v0.9 (유럽)"
    }
   },
   {
-   "agent_id": "product-kwak-somin",
-   "name": "곽소민",
-   "role": "테크니컬 마케팅",
-   "owner": "곽소민",
-   "last_active_min_ago": 39,
-   "activity": {
-    "kind": "issue",
-    "title": "embedded world 데모 빌드 일정 펌웨어팀과 충돌"
-   }
-  },
-  {
-   "agent_id": "product-kang-doyun",
-   "name": "강도윤",
-   "role": "테크니컬 마케팅",
-   "owner": "강도윤",
-   "last_active_min_ago": 31,
-   "activity": {
-    "kind": "issue",
-    "title": "고객 NDA 갱신 33건 만료 임박"
-   }
-  },
-  {
-   "agent_id": "product-park-yuna",
-   "name": "박유나",
+   "agent_id": "product-park-dain",
+   "name": "박다인",
    "role": "제품 기획",
-   "owner": "박유나",
-   "last_active_min_ago": 5023,
+   "owner": "박다인",
+   "last_active_min_ago": 12,
    "activity": {
-    "kind": "issue",
-    "title": "FAQ 영문판 기술 용어 통일 필요 — 5월 4주 갱신"
-   }
-  },
-  {
-   "agent_id": "product-park-sumin",
-   "name": "박수민",
-   "role": "가격/수급 기획",
-   "owner": "박수민",
-   "last_active_min_ago": 41,
-   "activity": {
-    "kind": "issue",
-    "title": "웹사이트 제품 페이지 스펙 오기 신고 — 7월 1주 갱신"
-   }
-  },
-  {
-   "agent_id": "product-kwak-sungmin",
-   "name": "곽성민",
-   "role": "가격/수급 기획",
-   "owner": "곽성민",
-   "last_active_min_ago": 27220,
-   "activity": {
-    "kind": "issue",
-    "title": "센서 허브(AS-20) 로드맵 슬라이드 대외 공개 범위 결정 필요"
+    "kind": "knowledge",
+    "title": "고객 방문 회의록 요약 (일본, 5월 4주)"
    }
   }
  ],
  "issues": [
   {
    "issue_id": "product-issue-0001",
-   "title": "엣지 NPU(AX-100) 데이터시트 rev 0.8 전기 특성 수치 확인 지연",
-   "status": "open",
-   "opened_by": "product-woo-jiho",
-   "updated_min_ago": 7828
+   "title": "엣지 NPU(AX-100) 데이터시트 rev 0.9 전기 특성 수치 확인 지연",
+   "status": "resolved",
+   "opened_by": "product-yoo-daeun",
+   "updated_min_ago": 49818
   },
   {
    "issue_id": "product-issue-0002",
    "title": "국내 고객 샘플 배송 지연 — 물류 이슈",
    "status": "resolved",
-   "opened_by": "product-woo-jiho",
-   "updated_min_ago": 27776
+   "opened_by": "product-yoo-daeun",
+   "updated_min_ago": 72963
   },
   {
    "issue_id": "product-issue-0003",
-   "title": "네트워크 스위치(AN-400) 벤치마크 결과 재측정 요청 (경쟁사 신제품 대응)",
+   "title": "센서 허브(AS-20) 벤치마크 결과 재측정 요청 (경쟁사 신제품 대응)",
    "status": "knowledge_linked",
-   "opened_by": "product-woo-jiho",
-   "updated_min_ago": 320
+   "opened_by": "product-yoo-daeun",
+   "updated_min_ago": 8690
   },
   {
    "issue_id": "product-issue-0004",
    "title": "MWC 데모 빌드 일정 펌웨어팀과 충돌",
    "status": "open",
-   "opened_by": "product-lee-dain",
-   "updated_min_ago": 677
+   "opened_by": "product-yoo-daeun",
+   "updated_min_ago": 5615
   },
   {
    "issue_id": "product-issue-0005",
-   "title": "고객 NDA 갱신 30건 만료 임박",
+   "title": "고객 NDA 갱신 36건 만료 임박",
    "status": "resolved",
-   "opened_by": "product-lee-dain",
-   "updated_min_ago": 85052
+   "opened_by": "product-oh-hyunseo",
+   "updated_min_ago": 104892
   },
   {
    "issue_id": "product-issue-0006",
    "title": "네트워크 스위치(AN-400) 제품명 상표 검토 결과 대기",
    "status": "resolved",
-   "opened_by": "product-lee-dain",
-   "updated_min_ago": 73490
+   "opened_by": "product-oh-hyunseo",
+   "updated_min_ago": 46325
   },
   {
    "issue_id": "product-issue-0007",
-   "title": "가격 승인 프로세스 지연 — 국내 딜 블로킹",
-   "status": "resolved",
-   "opened_by": "product-hong-hayun",
-   "updated_min_ago": 50685
+   "title": "가격 승인 프로세스 지연 — 일본 딜 블로킹",
+   "status": "open",
+   "opened_by": "product-oh-hyunseo",
+   "updated_min_ago": 8759
   },
   {
    "issue_id": "product-issue-0008",
    "title": "FAQ 영문판 기술 용어 통일 필요",
    "status": "resolved",
-   "opened_by": "product-hong-hayun",
-   "updated_min_ago": 22054
+   "opened_by": "product-oh-hyunseo",
+   "updated_min_ago": 68654
   },
   {
    "issue_id": "product-issue-0009",
    "title": "레퍼런스 보드 재고 소진 — 재발주 필요",
    "status": "resolved",
-   "opened_by": "product-hong-hayun",
-   "updated_min_ago": 62186
+   "opened_by": "product-song-yerin",
+   "updated_min_ago": 117151
   },
   {
    "issue_id": "product-issue-0010",
    "title": "중국 인증(규격) 요구사항 조사 요청",
    "status": "open",
-   "opened_by": "product-hong-hayun",
-   "updated_min_ago": 1235
+   "opened_by": "product-song-yerin",
+   "updated_min_ago": 12545
   },
   {
    "issue_id": "product-issue-0011",
-   "title": "고객 문의 응답 SLA 21% 미달 (6월 3주)",
-   "status": "knowledge_linked",
-   "opened_by": "product-kang-gaeun",
-   "updated_min_ago": 16959
+   "title": "고객 문의 응답 SLA 22% 미달 (6월 3주)",
+   "status": "open",
+   "opened_by": "product-hong-eunwoo",
+   "updated_min_ago": 3781
   },
   {
    "issue_id": "product-issue-0012",
    "title": "웹사이트 제품 페이지 스펙 오기 신고",
-   "status": "open",
-   "opened_by": "product-kang-gaeun",
-   "updated_min_ago": 2541
+   "status": "knowledge_linked",
+   "opened_by": "product-hong-eunwoo",
+   "updated_min_ago": 11406
   },
   {
    "issue_id": "product-issue-0013",
    "title": "차량용 MCU(AV-30) 로드맵 슬라이드 대외 공개 범위 결정 필요",
-   "status": "knowledge_linked",
-   "opened_by": "product-hwang-jiho",
-   "updated_min_ago": 6172
+   "status": "resolved",
+   "opened_by": "product-heo-yejun",
+   "updated_min_ago": 55447
   },
   {
    "issue_id": "product-issue-0014",
    "title": "전시회 데모 장비 통관 서류 미비",
-   "status": "knowledge_linked",
-   "opened_by": "product-hwang-jiho",
-   "updated_min_ago": 16875
+   "status": "resolved",
+   "opened_by": "product-heo-yejun",
+   "updated_min_ago": 43047
   },
   {
    "issue_id": "product-issue-0015",
-   "title": "네트워크 스위치(AN-400) 데이터시트 rev 0.9 전기 특성 수치 확인 지연",
-   "status": "knowledge_linked",
-   "opened_by": "product-hwang-jiho",
-   "updated_min_ago": 2707
+   "title": "네트워크 스위치(AN-400) 데이터시트 rev 0.8 전기 특성 수치 확인 지연",
+   "status": "open",
+   "opened_by": "product-hong-donghyun",
+   "updated_min_ago": 3274
   },
   {
    "issue_id": "product-issue-0016",
-   "title": "일본 고객 샘플 배송 지연 — 물류 이슈",
-   "status": "knowledge_linked",
-   "opened_by": "product-kwak-somin",
-   "updated_min_ago": 847
+   "title": "유럽 고객 샘플 배송 지연 — 물류 이슈",
+   "status": "resolved",
+   "opened_by": "product-hong-donghyun",
+   "updated_min_ago": 125812
   },
   {
    "issue_id": "product-issue-0017",
-   "title": "센서 허브(AS-20) 벤치마크 결과 재측정 요청 (경쟁사 신제품 대응)",
-   "status": "knowledge_linked",
-   "opened_by": "product-kwak-somin",
-   "updated_min_ago": 2816
+   "title": "엣지 NPU(AX-100) 벤치마크 결과 재측정 요청 (경쟁사 신제품 대응)",
+   "status": "resolved",
+   "opened_by": "product-han-jihoon",
+   "updated_min_ago": 63418
   },
   {
    "issue_id": "product-issue-0018",
    "title": "embedded world 데모 빌드 일정 펌웨어팀과 충돌",
    "status": "resolved",
-   "opened_by": "product-kwak-somin",
-   "updated_min_ago": 129260
+   "opened_by": "product-han-jihoon",
+   "updated_min_ago": 111119
   },
   {
    "issue_id": "product-issue-0019",
-   "title": "고객 NDA 갱신 33건 만료 임박",
-   "status": "open",
-   "opened_by": "product-kang-doyun",
-   "updated_min_ago": 2642
+   "title": "고객 NDA 갱신 19건 만료 임박",
+   "status": "resolved",
+   "opened_by": "product-han-jihoon",
+   "updated_min_ago": 4576
   },
   {
    "issue_id": "product-issue-0020",
-   "title": "센서 허브(AS-20) 제품명 상표 검토 결과 대기",
+   "title": "차량용 MCU(AV-30) 제품명 상표 검토 결과 대기",
    "status": "knowledge_linked",
-   "opened_by": "product-kang-doyun",
-   "updated_min_ago": 5080
+   "opened_by": "product-park-hayun",
+   "updated_min_ago": 14435
   },
   {
    "issue_id": "product-issue-0021",
-   "title": "가격 승인 프로세스 지연 — 일본 딜 블로킹",
-   "status": "open",
-   "opened_by": "product-kang-doyun",
-   "updated_min_ago": 4961
+   "title": "가격 승인 프로세스 지연 — 국내 딜 블로킹",
+   "status": "resolved",
+   "opened_by": "product-park-hayun",
+   "updated_min_ago": 87632
   },
   {
    "issue_id": "product-issue-0022",
-   "title": "FAQ 영문판 기술 용어 통일 필요 — 5월 4주 갱신",
-   "status": "knowledge_linked",
-   "opened_by": "product-park-yuna",
-   "updated_min_ago": 19666
+   "title": "FAQ 영문판 기술 용어 통일 필요 — 6월 4주 갱신",
+   "status": "resolved",
+   "opened_by": "product-jung-siwoo",
+   "updated_min_ago": 11828
   },
   {
    "issue_id": "product-issue-0023",
    "title": "레퍼런스 보드 재고 소진 — 재발주 필요 — 5월 3주 갱신",
    "status": "resolved",
-   "opened_by": "product-park-yuna",
-   "updated_min_ago": 91940
+   "opened_by": "product-jung-siwoo",
+   "updated_min_ago": 95127
   },
   {
    "issue_id": "product-issue-0024",
-   "title": "일본 인증(규격) 요구사항 조사 요청",
-   "status": "resolved",
-   "opened_by": "product-park-yuna",
-   "updated_min_ago": 126239
+   "title": "북미 인증(규격) 요구사항 조사 요청",
+   "status": "knowledge_linked",
+   "opened_by": "product-park-dain",
+   "updated_min_ago": 2347
   },
   {
    "issue_id": "product-issue-0025",
-   "title": "고객 문의 응답 SLA 15% 미달 (5월 3주)",
-   "status": "open",
-   "opened_by": "product-park-sumin",
-   "updated_min_ago": 4911
+   "title": "고객 문의 응답 SLA 5% 미달 (5월 4주)",
+   "status": "knowledge_linked",
+   "opened_by": "product-park-dain",
+   "updated_min_ago": 10620
   },
   {
    "issue_id": "product-issue-0026",
-   "title": "웹사이트 제품 페이지 스펙 오기 신고 — 7월 1주 갱신",
+   "title": "웹사이트 제품 페이지 스펙 오기 신고 — 5월 3주 갱신",
    "status": "open",
-   "opened_by": "product-park-sumin",
-   "updated_min_ago": 3127
-  },
-  {
-   "issue_id": "product-issue-0027",
-   "title": "센서 허브(AS-20) 로드맵 슬라이드 대외 공개 범위 결정 필요",
-   "status": "knowledge_linked",
-   "opened_by": "product-kwak-sungmin",
-   "updated_min_ago": 4836
-  },
-  {
-   "issue_id": "product-issue-0028",
-   "title": "전시회 데모 장비 통관 서류 미비 — 6월 3주 갱신",
-   "status": "open",
-   "opened_by": "product-kwak-sungmin",
-   "updated_min_ago": 17044
-  },
-  {
-   "issue_id": "product-issue-0029",
-   "title": "엣지 NPU(AX-100) 데이터시트 rev 0.9 전기 특성 수치 확인 지연",
-   "status": "resolved",
-   "opened_by": "product-kwak-sungmin",
-   "updated_min_ago": 123162
+   "opened_by": "product-park-dain",
+   "updated_min_ago": 4912
   }
  ],
  "knowledge": [
   {
    "doc_id": "product-doc-0001",
-   "title": "경쟁사 벤치마크 비교표 — 네트워크 스위치(AN-400) 포지셔닝",
-   "author": "우지호",
-   "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 18161,
+   "title": "경쟁사 벤치마크 비교표 — 엣지 NPU(AX-100) 포지셔닝",
+   "author": "유다은",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "hr-people",
+    "analog"
+   ],
+   "created_min_ago": 157522,
    "summary": "경쟁 제품 데이터시트를 로컬 Claude로 요약해 만든 스펙 비교표와 포지셔닝 분석.",
-   "body": "## 배경\n경쟁 제품 데이터시트를 로컬 Claude로 요약해 만든 스펙 비교표와 포지셔닝 분석.\n\n## 내용\n- 성능/전력/가격 3축 비교 — 경쟁 4개 제품 데이터시트 요약\n- 우위 항목은 전성비, 열위는 소프트웨어 생태계 — 메시지 전략 반영\n- 출처는 공개 자료만 사용 (컨피덴셜 유입 금지 원칙)\n\n_이 문서는 우지호의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n경쟁 제품 데이터시트를 로컬 Claude로 요약해 만든 스펙 비교표와 포지셔닝 분석.\n\n## 내용\n- 성능/전력/가격 3축 비교 — 경쟁 20개 제품 데이터시트 요약\n- 우위 항목은 전성비, 열위는 소프트웨어 생태계 — 메시지 전략 반영\n- 출처는 공개 자료만 사용 (컨피덴셜 유입 금지 원칙)\n\n_이 문서는 유다은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0002",
-   "title": "네트워크 스위치(AN-400) 데이터시트 rev 0.7 검수 기록",
-   "author": "우지호",
-   "visibility": "org",
+   "title": "차량용 MCU(AV-30) 데이터시트 rev 0.7 검수 기록",
+   "author": "유다은",
+   "visibility": "space",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 64568,
+   "created_min_ago": 36735,
    "summary": "데이터시트 개정판의 전기 특성 표·핀 설명 검수와 부서 확인 현황.",
-   "body": "## 배경\n데이터시트 개정판의 전기 특성 표·핀 설명 검수와 부서 확인 현황.\n\n## 내용\n- 전기 특성 3개 항목 — 설계·아날로그팀 수치 확인 완료 여부 표\n- 오탈자·단위 오류는 로컬 Claude 교정 패스로 1차 검출\n- 미확인 항목은 릴리즈 블로커로 표시\n\n_이 문서는 우지호의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n데이터시트 개정판의 전기 특성 표·핀 설명 검수와 부서 확인 현황.\n\n## 내용\n- 전기 특성 28개 항목 — 설계·아날로그팀 수치 확인 완료 여부 표\n- 오탈자·단위 오류는 로컬 Claude 교정 패스로 1차 검출\n- 미확인 항목은 릴리즈 블로커로 표시\n\n_이 문서는 유다은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0003",
-   "title": "고객 기술 문의 FAQ v0.7 (유럽)",
-   "author": "우지호",
+   "title": "고객 기술 문의 FAQ v0.7 (북미)",
+   "author": "유다은",
    "visibility": "org",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 170075,
-   "summary": "일본 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.",
-   "body": "## 배경\n일본 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.\n\n## 내용\n- 문의 30건 분류: 전력 모드 관련이 최다 — 앱노트 신규 작성 제안\n- 답변 초안은 로컬 Claude로 작성 후 펌웨어팀 기술 검수\n- 재발 문의는 데이터시트 개정 요청으로 연결\n\n_이 문서는 우지호의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 99352,
+   "summary": "북미 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.",
+   "body": "## 배경\n북미 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.\n\n## 내용\n- 문의 34건 분류: 전력 모드 관련이 최다 — 앱노트 신규 작성 제안\n- 답변 초안은 로컬 Claude로 작성 후 펌웨어팀 기술 검수\n- 재발 문의는 데이터시트 개정 요청으로 연결\n\n_이 문서는 유다은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0004",
-   "title": "센서 허브(AS-20) 제품 브리프 초안",
-   "author": "우지호",
+   "title": "차량용 MCU(AV-30) 제품 브리프 초안",
+   "author": "유다은",
    "visibility": "org",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 23568,
-   "summary": "센서 허브(AS-20) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.",
-   "body": "## 배경\n센서 허브(AS-20) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.\n\n## 내용\n- 타깃 응용 3개와 레퍼런스 디자인 링크\n- 차별점 문구는 벤치마크 비교표 근거로 작성\n- 초안 카피는 로컬 Claude로 생성 후 브랜드 톤 교정\n\n_이 문서는 우지호의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 622,
+   "summary": "네트워크 스위치(AN-400) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.",
+   "body": "## 배경\n네트워크 스위치(AN-400) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.\n\n## 내용\n- 타깃 응용 3개와 레퍼런스 디자인 링크\n- 차별점 문구는 벤치마크 비교표 근거로 작성\n- 초안 카피는 로컬 Claude로 생성 후 브랜드 톤 교정\n\n_이 문서는 유다은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0005",
-   "title": "CES 전시 준비 체크리스트 (6월 4주)",
-   "author": "이다인",
-   "visibility": "org",
-   "reuse_count": 15,
-   "cited_by": [
-    "analog",
-    "dft",
-    "verification"
-   ],
-   "created_min_ago": 88112,
-   "summary": "MWC 부스 데모·미팅·자료 준비 현황과 담당 배정.",
-   "body": "## 배경\nMWC 부스 데모·미팅·자료 준비 현황과 담당 배정.\n\n## 내용\n- 데모 시나리오 12종 — 펌웨어팀 데모 빌드 일정 확인\n- 미팅 슬롯 배정표와 사전 브리핑 자료 링크\n- 전시 후 리드 정리 프로세스(CRM 입력 규칙) 포함\n\n_이 문서는 이다인의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "title": "MWC 전시 준비 체크리스트 (6월 2주)",
+   "author": "유다은",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 107799,
+   "summary": "SEMICON Korea 부스 데모·미팅·자료 준비 현황과 담당 배정.",
+   "body": "## 배경\nSEMICON Korea 부스 데모·미팅·자료 준비 현황과 담당 배정.\n\n## 내용\n- 데모 시나리오 23종 — 펌웨어팀 데모 빌드 일정 확인\n- 미팅 슬롯 배정표와 사전 브리핑 자료 링크\n- 전시 후 리드 정리 프로세스(CRM 입력 규칙) 포함\n\n_이 문서는 유다은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0006",
-   "title": "중국 시장 동향 브리프 (6월 2주)",
-   "author": "이다인",
+   "title": "중국 시장 동향 브리프 (5월 3주)",
+   "author": "오현서",
    "visibility": "org",
-   "reuse_count": 3,
+   "reuse_count": 12,
    "cited_by": [
     "hr-people",
-    "dft",
-    "physical-design"
+    "verification",
+    "dft"
    ],
-   "created_min_ago": 2871,
-   "summary": "국내 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.",
-   "body": "## 배경\n국내 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.\n\n## 내용\n- 뉴스·공시·리포트 33건을 로컬 Claude로 요약 — 출처 링크 필수\n- 수요 시그널: 재고 조정 마무리 관측 — 하반기 발주 회복 전망\n- 경쟁사 신제품 발표 1건 — 스펙 비교표 업데이트 예정\n\n_이 문서는 이다인의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 72554,
+   "summary": "중국 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.",
+   "body": "## 배경\n중국 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.\n\n## 내용\n- 뉴스·공시·리포트 28건을 로컬 Claude로 요약 — 출처 링크 필수\n- 수요 시그널: 재고 조정 마무리 관측 — 하반기 발주 회복 전망\n- 경쟁사 신제품 발표 1건 — 스펙 비교표 업데이트 예정\n\n_이 문서는 오현서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0007",
    "title": "가격 정책 시나리오 분석 — 차량용 MCU(AV-30)",
-   "author": "이다인",
-   "visibility": "space",
+   "author": "오현서",
+   "visibility": "org",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 155464,
-   "summary": "차량용 MCU(AV-30) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.",
-   "body": "## 배경\n차량용 MCU(AV-30) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.\n\n## 내용\n- 시나리오 3종 — 볼륨 디스카운트 구간과 마진 10% 방어선\n- 수율·웨이퍼 가격 가정은 운영팀 최신 수치 사용\n- 시뮬 시트 검산은 로컬 Claude로 수행\n\n_이 문서는 이다인의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 1109,
+   "summary": "네트워크 스위치(AN-400) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.",
+   "body": "## 배경\n네트워크 스위치(AN-400) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.\n\n## 내용\n- 시나리오 3종 — 볼륨 디스카운트 구간과 마진 26% 방어선\n- 수율·웨이퍼 가격 가정은 운영팀 최신 수치 사용\n- 시뮬 시트 검산은 로컬 Claude로 수행\n\n_이 문서는 오현서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0008",
-   "title": "레퍼런스 디자인 요구사항 정리 — 센서 허브(AS-20)",
-   "author": "이다인",
-   "visibility": "org",
-   "reuse_count": 14,
-   "cited_by": [
-    "soc-design",
-    "verification",
-    "hr-people"
-   ],
-   "created_min_ago": 59661,
+   "title": "레퍼런스 디자인 요구사항 정리 — 엣지 NPU(AX-100)",
+   "author": "오현서",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 11236,
    "summary": "고객 평가 보드/레퍼런스 디자인의 요구사항을 펌웨어·하드웨어팀에 전달용으로 정리.",
-   "body": "## 배경\n고객 평가 보드/레퍼런스 디자인의 요구사항을 펌웨어·하드웨어팀에 전달용으로 정리.\n\n## 내용\n- 필수 인터페이스 7종과 데모 앱 목록\n- 고객 피드백 상위 요구: 전력 측정 포인트 노출\n- 일정 역산: 샘플 배포 시점 기준 보드 발주 마감 명시\n\n_이 문서는 이다인의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n고객 평가 보드/레퍼런스 디자인의 요구사항을 펌웨어·하드웨어팀에 전달용으로 정리.\n\n## 내용\n- 필수 인터페이스 4종과 데모 앱 목록\n- 고객 피드백 상위 요구: 전력 측정 포인트 노출\n- 일정 역산: 샘플 배포 시점 기준 보드 발주 마감 명시\n\n_이 문서는 오현서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0009",
-   "title": "고객 방문 회의록 요약 (국내, 6월 1주)",
-   "author": "이다인",
+   "title": "고객 방문 회의록 요약 (일본, 6월 2주)",
+   "author": "오현서",
    "visibility": "org",
-   "reuse_count": 1,
-   "cited_by": [
-    "soc-design"
-   ],
-   "created_min_ago": 68983,
-   "summary": "유럽 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.",
-   "body": "## 배경\n유럽 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.\n\n## 내용\n- 요구사항 24건 접수 — 실현 가능성 1차 분류해 개발팀 전달\n- 경쟁 상황 인텔리전스는 별도 보안 등급으로 분리 기록\n- 후속 액션: 샘플 24개 발송, NDA 갱신\n\n_이 문서는 이다인의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 10254,
+   "summary": "중국 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.",
+   "body": "## 배경\n중국 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.\n\n## 내용\n- 요구사항 30건 접수 — 실현 가능성 1차 분류해 개발팀 전달\n- 경쟁 상황 인텔리전스는 별도 보안 등급으로 분리 기록\n- 후속 액션: 샘플 13개 발송, NDA 갱신\n\n_이 문서는 오현서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0010",
    "title": "앱노트 기획: 차량용 MCU(AV-30) 저전력 모드 활용",
-   "author": "홍하윤",
+   "author": "송예린",
    "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 9682,
+   "reuse_count": 6,
+   "cited_by": [
+    "firmware",
+    "physical-design",
+    "analog"
+   ],
+   "created_min_ago": 166411,
    "summary": "고객 문의 최다 주제인 저전력 모드 활용 앱노트의 목차와 집필 분담.",
-   "body": "## 배경\n고객 문의 최다 주제인 저전력 모드 활용 앱노트의 목차와 집필 분담.\n\n## 내용\n- FAQ 빈발 질문 32건을 목차로 재구성\n- 측정 데이터는 펌웨어팀 전력 측정 결과 재사용\n- 초안 집필은 로컬 Claude 보조 — 기술 검수 2단계\n\n_이 문서는 홍하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n고객 문의 최다 주제인 저전력 모드 활용 앱노트의 목차와 집필 분담.\n\n## 내용\n- FAQ 빈발 질문 14건을 목차로 재구성\n- 측정 데이터는 펌웨어팀 전력 측정 결과 재사용\n- 초안 집필은 로컬 Claude 보조 — 기술 검수 2단계\n\n_이 문서는 송예린의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0011",
-   "title": "경쟁사 벤치마크 비교표 — 엣지 NPU(AX-100) 포지셔닝",
-   "author": "홍하윤",
+   "title": "경쟁사 벤치마크 비교표 — 차량용 MCU(AV-30) 포지셔닝",
+   "author": "송예린",
    "visibility": "space",
-   "reuse_count": 1,
-   "cited_by": [
-    "analog"
-   ],
-   "created_min_ago": 1759,
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 148766,
    "summary": "경쟁 제품 데이터시트를 로컬 Claude로 요약해 만든 스펙 비교표와 포지셔닝 분석.",
-   "body": "## 배경\n경쟁 제품 데이터시트를 로컬 Claude로 요약해 만든 스펙 비교표와 포지셔닝 분석.\n\n## 내용\n- 성능/전력/가격 3축 비교 — 경쟁 2개 제품 데이터시트 요약\n- 우위 항목은 전성비, 열위는 소프트웨어 생태계 — 메시지 전략 반영\n- 출처는 공개 자료만 사용 (컨피덴셜 유입 금지 원칙)\n\n_이 문서는 홍하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n경쟁 제품 데이터시트를 로컬 Claude로 요약해 만든 스펙 비교표와 포지셔닝 분석.\n\n## 내용\n- 성능/전력/가격 3축 비교 — 경쟁 5개 제품 데이터시트 요약\n- 우위 항목은 전성비, 열위는 소프트웨어 생태계 — 메시지 전략 반영\n- 출처는 공개 자료만 사용 (컨피덴셜 유입 금지 원칙)\n\n_이 문서는 송예린의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0012",
-   "title": "센서 허브(AS-20) 데이터시트 rev 0.7 검수 기록",
-   "author": "홍하윤",
-   "visibility": "org",
+   "title": "차량용 MCU(AV-30) 데이터시트 rev 0.9 검수 기록",
+   "author": "송예린",
+   "visibility": "space",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 14825,
+   "created_min_ago": 2943,
    "summary": "데이터시트 개정판의 전기 특성 표·핀 설명 검수와 부서 확인 현황.",
-   "body": "## 배경\n데이터시트 개정판의 전기 특성 표·핀 설명 검수와 부서 확인 현황.\n\n## 내용\n- 전기 특성 34개 항목 — 설계·아날로그팀 수치 확인 완료 여부 표\n- 오탈자·단위 오류는 로컬 Claude 교정 패스로 1차 검출\n- 미확인 항목은 릴리즈 블로커로 표시\n\n_이 문서는 홍하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n데이터시트 개정판의 전기 특성 표·핀 설명 검수와 부서 확인 현황.\n\n## 내용\n- 전기 특성 23개 항목 — 설계·아날로그팀 수치 확인 완료 여부 표\n- 오탈자·단위 오류는 로컬 Claude 교정 패스로 1차 검출\n- 미확인 항목은 릴리즈 블로커로 표시\n\n_이 문서는 송예린의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0013",
-   "title": "고객 기술 문의 FAQ v0.8 (중국)",
-   "author": "홍하윤",
+   "title": "고객 기술 문의 FAQ v0.9 (국내)",
+   "author": "송예린",
    "visibility": "org",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 777,
-   "summary": "북미 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.",
-   "body": "## 배경\n북미 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.\n\n## 내용\n- 문의 10건 분류: 전력 모드 관련이 최다 — 앱노트 신규 작성 제안\n- 답변 초안은 로컬 Claude로 작성 후 펌웨어팀 기술 검수\n- 재발 문의는 데이터시트 개정 요청으로 연결\n\n_이 문서는 홍하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 3741,
+   "summary": "중국 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.",
+   "body": "## 배경\n중국 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.\n\n## 내용\n- 문의 26건 분류: 전력 모드 관련이 최다 — 앱노트 신규 작성 제안\n- 답변 초안은 로컬 Claude로 작성 후 펌웨어팀 기술 검수\n- 재발 문의는 데이터시트 개정 요청으로 연결\n\n_이 문서는 송예린의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0014",
-   "title": "차량용 MCU(AV-30) 제품 브리프 초안",
-   "author": "홍하윤",
-   "visibility": "space",
+   "title": "센서 허브(AS-20) 제품 브리프 초안",
+   "author": "홍은우",
+   "visibility": "org",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 2374,
-   "summary": "차량용 MCU(AV-30) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.",
-   "body": "## 배경\n차량용 MCU(AV-30) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.\n\n## 내용\n- 타깃 응용 3개와 레퍼런스 디자인 링크\n- 차별점 문구는 벤치마크 비교표 근거로 작성\n- 초안 카피는 로컬 Claude로 생성 후 브랜드 톤 교정\n\n_이 문서는 홍하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 58718,
+   "summary": "네트워크 스위치(AN-400) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.",
+   "body": "## 배경\n네트워크 스위치(AN-400) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.\n\n## 내용\n- 타깃 응용 3개와 레퍼런스 디자인 링크\n- 차별점 문구는 벤치마크 비교표 근거로 작성\n- 초안 카피는 로컬 Claude로 생성 후 브랜드 톤 교정\n\n_이 문서는 홍은우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0015",
-   "title": "embedded world 전시 준비 체크리스트 (7월 3주)",
-   "author": "강가은",
+   "title": "SEMICON Korea 전시 준비 체크리스트 (5월 4주)",
+   "author": "홍은우",
    "visibility": "org",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 25568,
-   "summary": "MWC 부스 데모·미팅·자료 준비 현황과 담당 배정.",
-   "body": "## 배경\nMWC 부스 데모·미팅·자료 준비 현황과 담당 배정.\n\n## 내용\n- 데모 시나리오 3종 — 펌웨어팀 데모 빌드 일정 확인\n- 미팅 슬롯 배정표와 사전 브리핑 자료 링크\n- 전시 후 리드 정리 프로세스(CRM 입력 규칙) 포함\n\n_이 문서는 강가은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 2049,
+   "summary": "embedded world 부스 데모·미팅·자료 준비 현황과 담당 배정.",
+   "body": "## 배경\nembedded world 부스 데모·미팅·자료 준비 현황과 담당 배정.\n\n## 내용\n- 데모 시나리오 2종 — 펌웨어팀 데모 빌드 일정 확인\n- 미팅 슬롯 배정표와 사전 브리핑 자료 링크\n- 전시 후 리드 정리 프로세스(CRM 입력 규칙) 포함\n\n_이 문서는 홍은우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0016",
-   "title": "국내 시장 동향 브리프 (7월 3주)",
-   "author": "강가은",
+   "title": "중국 시장 동향 브리프 (7월 3주)",
+   "author": "홍은우",
    "visibility": "space",
-   "reuse_count": 2,
-   "cited_by": [
-    "hr-people",
-    "dft"
-   ],
-   "created_min_ago": 2746,
-   "summary": "북미 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.",
-   "body": "## 배경\n북미 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.\n\n## 내용\n- 뉴스·공시·리포트 35건을 로컬 Claude로 요약 — 출처 링크 필수\n- 수요 시그널: 재고 조정 마무리 관측 — 하반기 발주 회복 전망\n- 경쟁사 신제품 발표 1건 — 스펙 비교표 업데이트 예정\n\n_이 문서는 강가은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1499,
+   "summary": "국내 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.",
+   "body": "## 배경\n국내 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.\n\n## 내용\n- 뉴스·공시·리포트 27건을 로컬 Claude로 요약 — 출처 링크 필수\n- 수요 시그널: 재고 조정 마무리 관측 — 하반기 발주 회복 전망\n- 경쟁사 신제품 발표 1건 — 스펙 비교표 업데이트 예정\n\n_이 문서는 홍은우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0017",
-   "title": "가격 정책 시나리오 분석 — 센서 허브(AS-20)",
-   "author": "강가은",
-   "visibility": "space",
-   "reuse_count": 1,
-   "cited_by": [
-    "analog"
-   ],
-   "created_min_ago": 56110,
-   "summary": "엣지 NPU(AX-100) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.",
-   "body": "## 배경\n엣지 NPU(AX-100) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.\n\n## 내용\n- 시나리오 3종 — 볼륨 디스카운트 구간과 마진 5% 방어선\n- 수율·웨이퍼 가격 가정은 운영팀 최신 수치 사용\n- 시뮬 시트 검산은 로컬 Claude로 수행\n\n_이 문서는 강가은의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "title": "가격 정책 시나리오 분석 — 엣지 NPU(AX-100)",
+   "author": "허예준",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 115910,
+   "summary": "차량용 MCU(AV-30) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.",
+   "body": "## 배경\n차량용 MCU(AV-30) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.\n\n## 내용\n- 시나리오 3종 — 볼륨 디스카운트 구간과 마진 30% 방어선\n- 수율·웨이퍼 가격 가정은 운영팀 최신 수치 사용\n- 시뮬 시트 검산은 로컬 Claude로 수행\n\n_이 문서는 허예준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0018",
-   "title": "레퍼런스 디자인 요구사항 정리 — 네트워크 스위치(AN-400)",
-   "author": "황지호",
-   "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 3275,
-   "summary": "고객 평가 보드/레퍼런스 디자인의 요구사항을 펌웨어·하드웨어팀에 전달용으로 정리.",
-   "body": "## 배경\n고객 평가 보드/레퍼런스 디자인의 요구사항을 펌웨어·하드웨어팀에 전달용으로 정리.\n\n## 내용\n- 필수 인터페이스 31종과 데모 앱 목록\n- 고객 피드백 상위 요구: 전력 측정 포인트 노출\n- 일정 역산: 샘플 배포 시점 기준 보드 발주 마감 명시\n\n_이 문서는 황지호의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0019",
-   "title": "고객 방문 회의록 요약 (국내, 5월 3주)",
-   "author": "황지호",
-   "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 39215,
-   "summary": "유럽 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.",
-   "body": "## 배경\n유럽 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.\n\n## 내용\n- 요구사항 26건 접수 — 실현 가능성 1차 분류해 개발팀 전달\n- 경쟁 상황 인텔리전스는 별도 보안 등급으로 분리 기록\n- 후속 액션: 샘플 18개 발송, NDA 갱신\n\n_이 문서는 황지호의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0020",
-   "title": "앱노트 기획: 네트워크 스위치(AN-400) 저전력 모드 활용",
-   "author": "황지호",
+   "title": "레퍼런스 디자인 요구사항 정리 — 센서 허브(AS-20)",
+   "author": "허예준",
    "visibility": "org",
    "reuse_count": 2,
    "cited_by": [
-    "analog",
-    "hr-people"
-   ],
-   "created_min_ago": 2311,
-   "summary": "고객 문의 최다 주제인 저전력 모드 활용 앱노트의 목차와 집필 분담.",
-   "body": "## 배경\n고객 문의 최다 주제인 저전력 모드 활용 앱노트의 목차와 집필 분담.\n\n## 내용\n- FAQ 빈발 질문 22건을 목차로 재구성\n- 측정 데이터는 펌웨어팀 전력 측정 결과 재사용\n- 초안 집필은 로컬 Claude 보조 — 기술 검수 2단계\n\n_이 문서는 황지호의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0021",
-   "title": "경쟁사 벤치마크 비교표 — 센서 허브(AS-20) 포지셔닝",
-   "author": "황지호",
-   "visibility": "org",
-   "reuse_count": 9,
-   "cited_by": [
-    "verification",
     "firmware",
     "soc-design"
    ],
-   "created_min_ago": 33974,
+   "created_min_ago": 24838,
+   "summary": "고객 평가 보드/레퍼런스 디자인의 요구사항을 펌웨어·하드웨어팀에 전달용으로 정리.",
+   "body": "## 배경\n고객 평가 보드/레퍼런스 디자인의 요구사항을 펌웨어·하드웨어팀에 전달용으로 정리.\n\n## 내용\n- 필수 인터페이스 14종과 데모 앱 목록\n- 고객 피드백 상위 요구: 전력 측정 포인트 노출\n- 일정 역산: 샘플 배포 시점 기준 보드 발주 마감 명시\n\n_이 문서는 허예준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "product-doc-0019",
+   "title": "고객 방문 회의록 요약 (중국, 6월 4주)",
+   "author": "허예준",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 133578,
+   "summary": "북미 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.",
+   "body": "## 배경\n북미 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.\n\n## 내용\n- 요구사항 11건 접수 — 실현 가능성 1차 분류해 개발팀 전달\n- 경쟁 상황 인텔리전스는 별도 보안 등급으로 분리 기록\n- 후속 액션: 샘플 9개 발송, NDA 갱신\n\n_이 문서는 허예준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "product-doc-0020",
+   "title": "앱노트 기획: 센서 허브(AS-20) 저전력 모드 활용",
+   "author": "홍동현",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "physical-design",
+    "soc-design"
+   ],
+   "created_min_ago": 167664,
+   "summary": "고객 문의 최다 주제인 저전력 모드 활용 앱노트의 목차와 집필 분담.",
+   "body": "## 배경\n고객 문의 최다 주제인 저전력 모드 활용 앱노트의 목차와 집필 분담.\n\n## 내용\n- FAQ 빈발 질문 27건을 목차로 재구성\n- 측정 데이터는 펌웨어팀 전력 측정 결과 재사용\n- 초안 집필은 로컬 Claude 보조 — 기술 검수 2단계\n\n_이 문서는 홍동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "product-doc-0021",
+   "title": "경쟁사 벤치마크 비교표 — 네트워크 스위치(AN-400) 포지셔닝",
+   "author": "홍동현",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 20946,
    "summary": "경쟁 제품 데이터시트를 로컬 Claude로 요약해 만든 스펙 비교표와 포지셔닝 분석.",
-   "body": "## 배경\n경쟁 제품 데이터시트를 로컬 Claude로 요약해 만든 스펙 비교표와 포지셔닝 분석.\n\n## 내용\n- 성능/전력/가격 3축 비교 — 경쟁 38개 제품 데이터시트 요약\n- 우위 항목은 전성비, 열위는 소프트웨어 생태계 — 메시지 전략 반영\n- 출처는 공개 자료만 사용 (컨피덴셜 유입 금지 원칙)\n\n_이 문서는 황지호의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n경쟁 제품 데이터시트를 로컬 Claude로 요약해 만든 스펙 비교표와 포지셔닝 분석.\n\n## 내용\n- 성능/전력/가격 3축 비교 — 경쟁 2개 제품 데이터시트 요약\n- 우위 항목은 전성비, 열위는 소프트웨어 생태계 — 메시지 전략 반영\n- 출처는 공개 자료만 사용 (컨피덴셜 유입 금지 원칙)\n\n_이 문서는 홍동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0022",
    "title": "센서 허브(AS-20) 데이터시트 rev 0.9 검수 기록",
-   "author": "황지호",
+   "author": "홍동현",
    "visibility": "space",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 162368,
+   "created_min_ago": 156660,
    "summary": "데이터시트 개정판의 전기 특성 표·핀 설명 검수와 부서 확인 현황.",
-   "body": "## 배경\n데이터시트 개정판의 전기 특성 표·핀 설명 검수와 부서 확인 현황.\n\n## 내용\n- 전기 특성 25개 항목 — 설계·아날로그팀 수치 확인 완료 여부 표\n- 오탈자·단위 오류는 로컬 Claude 교정 패스로 1차 검출\n- 미확인 항목은 릴리즈 블로커로 표시\n\n_이 문서는 황지호의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n데이터시트 개정판의 전기 특성 표·핀 설명 검수와 부서 확인 현황.\n\n## 내용\n- 전기 특성 8개 항목 — 설계·아날로그팀 수치 확인 완료 여부 표\n- 오탈자·단위 오류는 로컬 Claude 교정 패스로 1차 검출\n- 미확인 항목은 릴리즈 블로커로 표시\n\n_이 문서는 홍동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0023",
-   "title": "고객 기술 문의 FAQ v0.9 (유럽)",
-   "author": "황지호",
-   "visibility": "space",
-   "reuse_count": 1,
-   "cited_by": [
-    "dft"
-   ],
-   "created_min_ago": 5564,
-   "summary": "국내 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.",
-   "body": "## 배경\n국내 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.\n\n## 내용\n- 문의 36건 분류: 전력 모드 관련이 최다 — 앱노트 신규 작성 제안\n- 답변 초안은 로컬 Claude로 작성 후 펌웨어팀 기술 검수\n- 재발 문의는 데이터시트 개정 요청으로 연결\n\n_이 문서는 황지호의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "title": "고객 기술 문의 FAQ v0.9 (일본)",
+   "author": "홍동현",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 22316,
+   "summary": "중국 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.",
+   "body": "## 배경\n중국 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.\n\n## 내용\n- 문의 39건 분류: 전력 모드 관련이 최다 — 앱노트 신규 작성 제안\n- 답변 초안은 로컬 Claude로 작성 후 펌웨어팀 기술 검수\n- 재발 문의는 데이터시트 개정 요청으로 연결\n\n_이 문서는 홍동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0024",
-   "title": "엣지 NPU(AX-100) 제품 브리프 초안",
-   "author": "곽소민",
+   "title": "네트워크 스위치(AN-400) 제품 브리프 초안",
+   "author": "홍동현",
    "visibility": "org",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 371,
-   "summary": "차량용 MCU(AV-30) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.",
-   "body": "## 배경\n차량용 MCU(AV-30) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.\n\n## 내용\n- 타깃 응용 3개와 레퍼런스 디자인 링크\n- 차별점 문구는 벤치마크 비교표 근거로 작성\n- 초안 카피는 로컬 Claude로 생성 후 브랜드 톤 교정\n\n_이 문서는 곽소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 128311,
+   "summary": "센서 허브(AS-20) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.",
+   "body": "## 배경\n센서 허브(AS-20) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.\n\n## 내용\n- 타깃 응용 3개와 레퍼런스 디자인 링크\n- 차별점 문구는 벤치마크 비교표 근거로 작성\n- 초안 카피는 로컬 Claude로 생성 후 브랜드 톤 교정\n\n_이 문서는 홍동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0025",
-   "title": "embedded world 전시 준비 체크리스트 (7월 2주)",
-   "author": "곽소민",
-   "visibility": "space",
-   "reuse_count": 3,
-   "cited_by": [
-    "soc-design",
-    "firmware",
-    "hr-people"
-   ],
-   "created_min_ago": 48522,
-   "summary": "embedded world 부스 데모·미팅·자료 준비 현황과 담당 배정.",
-   "body": "## 배경\nembedded world 부스 데모·미팅·자료 준비 현황과 담당 배정.\n\n## 내용\n- 데모 시나리오 12종 — 펌웨어팀 데모 빌드 일정 확인\n- 미팅 슬롯 배정표와 사전 브리핑 자료 링크\n- 전시 후 리드 정리 프로세스(CRM 입력 규칙) 포함\n\n_이 문서는 곽소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "title": "CES 전시 준비 체크리스트 (7월 2주)",
+   "author": "한지훈",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 955,
+   "summary": "MWC 부스 데모·미팅·자료 준비 현황과 담당 배정.",
+   "body": "## 배경\nMWC 부스 데모·미팅·자료 준비 현황과 담당 배정.\n\n## 내용\n- 데모 시나리오 18종 — 펌웨어팀 데모 빌드 일정 확인\n- 미팅 슬롯 배정표와 사전 브리핑 자료 링크\n- 전시 후 리드 정리 프로세스(CRM 입력 규칙) 포함\n\n_이 문서는 한지훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0026",
-   "title": "국내 시장 동향 브리프 (7월 1주)",
-   "author": "곽소민",
+   "title": "국내 시장 동향 브리프 (6월 4주)",
+   "author": "한지훈",
    "visibility": "org",
-   "reuse_count": 3,
-   "cited_by": [
-    "firmware",
-    "hr-people",
-    "soc-design"
-   ],
-   "created_min_ago": 878,
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 91841,
    "summary": "북미 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.",
-   "body": "## 배경\n북미 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.\n\n## 내용\n- 뉴스·공시·리포트 34건을 로컬 Claude로 요약 — 출처 링크 필수\n- 수요 시그널: 재고 조정 마무리 관측 — 하반기 발주 회복 전망\n- 경쟁사 신제품 발표 1건 — 스펙 비교표 업데이트 예정\n\n_이 문서는 곽소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n북미 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.\n\n## 내용\n- 뉴스·공시·리포트 24건을 로컬 Claude로 요약 — 출처 링크 필수\n- 수요 시그널: 재고 조정 마무리 관측 — 하반기 발주 회복 전망\n- 경쟁사 신제품 발표 1건 — 스펙 비교표 업데이트 예정\n\n_이 문서는 한지훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0027",
-   "title": "가격 정책 시나리오 분석 — 엣지 NPU(AX-100)",
-   "author": "곽소민",
+   "title": "가격 정책 시나리오 분석 — 네트워크 스위치(AN-400)",
+   "author": "한지훈",
    "visibility": "org",
-   "reuse_count": 1,
-   "cited_by": [
-    "physical-design"
-   ],
-   "created_min_ago": 73964,
-   "summary": "센서 허브(AS-20) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.",
-   "body": "## 배경\n센서 허브(AS-20) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.\n\n## 내용\n- 시나리오 3종 — 볼륨 디스카운트 구간과 마진 27% 방어선\n- 수율·웨이퍼 가격 가정은 운영팀 최신 수치 사용\n- 시뮬 시트 검산은 로컬 Claude로 수행\n\n_이 문서는 곽소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 142287,
+   "summary": "네트워크 스위치(AN-400) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.",
+   "body": "## 배경\n네트워크 스위치(AN-400) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.\n\n## 내용\n- 시나리오 3종 — 볼륨 디스카운트 구간과 마진 7% 방어선\n- 수율·웨이퍼 가격 가정은 운영팀 최신 수치 사용\n- 시뮬 시트 검산은 로컬 Claude로 수행\n\n_이 문서는 한지훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0028",
-   "title": "레퍼런스 디자인 요구사항 정리 — 엣지 NPU(AX-100)",
-   "author": "곽소민",
-   "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 3786,
-   "summary": "고객 평가 보드/레퍼런스 디자인의 요구사항을 펌웨어·하드웨어팀에 전달용으로 정리.",
-   "body": "## 배경\n고객 평가 보드/레퍼런스 디자인의 요구사항을 펌웨어·하드웨어팀에 전달용으로 정리.\n\n## 내용\n- 필수 인터페이스 32종과 데모 앱 목록\n- 고객 피드백 상위 요구: 전력 측정 포인트 노출\n- 일정 역산: 샘플 배포 시점 기준 보드 발주 마감 명시\n\n_이 문서는 곽소민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0029",
-   "title": "고객 방문 회의록 요약 (유럽, 5월 4주)",
-   "author": "강도윤",
-   "visibility": "space",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 3758,
-   "summary": "북미 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.",
-   "body": "## 배경\n북미 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.\n\n## 내용\n- 요구사항 4건 접수 — 실현 가능성 1차 분류해 개발팀 전달\n- 경쟁 상황 인텔리전스는 별도 보안 등급으로 분리 기록\n- 후속 액션: 샘플 6개 발송, NDA 갱신\n\n_이 문서는 강도윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0030",
-   "title": "앱노트 기획: 센서 허브(AS-20) 저전력 모드 활용",
-   "author": "강도윤",
-   "visibility": "space",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 121277,
-   "summary": "고객 문의 최다 주제인 저전력 모드 활용 앱노트의 목차와 집필 분담.",
-   "body": "## 배경\n고객 문의 최다 주제인 저전력 모드 활용 앱노트의 목차와 집필 분담.\n\n## 내용\n- FAQ 빈발 질문 5건을 목차로 재구성\n- 측정 데이터는 펌웨어팀 전력 측정 결과 재사용\n- 초안 집필은 로컬 Claude 보조 — 기술 검수 2단계\n\n_이 문서는 강도윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0031",
-   "title": "경쟁사 벤치마크 비교표 — 차량용 MCU(AV-30) 포지셔닝",
-   "author": "강도윤",
-   "visibility": "space",
-   "reuse_count": 15,
-   "cited_by": [
-    "firmware",
-    "soc-design",
-    "hr-people"
-   ],
-   "created_min_ago": 164805,
-   "summary": "경쟁 제품 데이터시트를 로컬 Claude로 요약해 만든 스펙 비교표와 포지셔닝 분석.",
-   "body": "## 배경\n경쟁 제품 데이터시트를 로컬 Claude로 요약해 만든 스펙 비교표와 포지셔닝 분석.\n\n## 내용\n- 성능/전력/가격 3축 비교 — 경쟁 6개 제품 데이터시트 요약\n- 우위 항목은 전성비, 열위는 소프트웨어 생태계 — 메시지 전략 반영\n- 출처는 공개 자료만 사용 (컨피덴셜 유입 금지 원칙)\n\n_이 문서는 강도윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0032",
-   "title": "차량용 MCU(AV-30) 데이터시트 rev 0.9 검수 기록",
-   "author": "강도윤",
-   "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 4639,
-   "summary": "데이터시트 개정판의 전기 특성 표·핀 설명 검수와 부서 확인 현황.",
-   "body": "## 배경\n데이터시트 개정판의 전기 특성 표·핀 설명 검수와 부서 확인 현황.\n\n## 내용\n- 전기 특성 5개 항목 — 설계·아날로그팀 수치 확인 완료 여부 표\n- 오탈자·단위 오류는 로컬 Claude 교정 패스로 1차 검출\n- 미확인 항목은 릴리즈 블로커로 표시\n\n_이 문서는 강도윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0033",
-   "title": "고객 기술 문의 FAQ v0.7 (국내)",
-   "author": "박유나",
-   "visibility": "space",
-   "reuse_count": 1,
-   "cited_by": [
-    "analog"
-   ],
-   "created_min_ago": 38234,
-   "summary": "중국 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.",
-   "body": "## 배경\n중국 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.\n\n## 내용\n- 문의 10건 분류: 전력 모드 관련이 최다 — 앱노트 신규 작성 제안\n- 답변 초안은 로컬 Claude로 작성 후 펌웨어팀 기술 검수\n- 재발 문의는 데이터시트 개정 요청으로 연결\n\n_이 문서는 박유나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0034",
-   "title": "네트워크 스위치(AN-400) 제품 브리프 초안",
-   "author": "박유나",
+   "title": "레퍼런스 디자인 요구사항 정리 — 네트워크 스위치(AN-400)",
+   "author": "한지훈",
    "visibility": "org",
    "reuse_count": 6,
    "cited_by": [
-    "soc-design",
-    "hr-people",
-    "firmware"
-   ],
-   "created_min_ago": 1426,
-   "summary": "네트워크 스위치(AN-400) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.",
-   "body": "## 배경\n네트워크 스위치(AN-400) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.\n\n## 내용\n- 타깃 응용 3개와 레퍼런스 디자인 링크\n- 차별점 문구는 벤치마크 비교표 근거로 작성\n- 초안 카피는 로컬 Claude로 생성 후 브랜드 톤 교정\n\n_이 문서는 박유나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0035",
-   "title": "CES 전시 준비 체크리스트 (6월 2주)",
-   "author": "박유나",
-   "visibility": "space",
-   "reuse_count": 3,
-   "cited_by": [
+    "verification",
     "physical-design",
-    "analog",
     "hr-people"
    ],
-   "created_min_ago": 83476,
-   "summary": "CES 부스 데모·미팅·자료 준비 현황과 담당 배정.",
-   "body": "## 배경\nCES 부스 데모·미팅·자료 준비 현황과 담당 배정.\n\n## 내용\n- 데모 시나리오 5종 — 펌웨어팀 데모 빌드 일정 확인\n- 미팅 슬롯 배정표와 사전 브리핑 자료 링크\n- 전시 후 리드 정리 프로세스(CRM 입력 규칙) 포함\n\n_이 문서는 박유나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 72140,
+   "summary": "고객 평가 보드/레퍼런스 디자인의 요구사항을 펌웨어·하드웨어팀에 전달용으로 정리.",
+   "body": "## 배경\n고객 평가 보드/레퍼런스 디자인의 요구사항을 펌웨어·하드웨어팀에 전달용으로 정리.\n\n## 내용\n- 필수 인터페이스 22종과 데모 앱 목록\n- 고객 피드백 상위 요구: 전력 측정 포인트 노출\n- 일정 역산: 샘플 배포 시점 기준 보드 발주 마감 명시\n\n_이 문서는 한지훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
-   "doc_id": "product-doc-0036",
-   "title": "유럽 시장 동향 브리프 (6월 1주)",
-   "author": "박유나",
+   "doc_id": "product-doc-0029",
+   "title": "고객 방문 회의록 요약 (중국, 5월 3주)",
+   "author": "박하윤",
+   "visibility": "org",
+   "reuse_count": 5,
+   "cited_by": [
+    "dft",
+    "soc-design",
+    "analog"
+   ],
+   "created_min_ago": 13419,
+   "summary": "중국 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.",
+   "body": "## 배경\n중국 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.\n\n## 내용\n- 요구사항 38건 접수 — 실현 가능성 1차 분류해 개발팀 전달\n- 경쟁 상황 인텔리전스는 별도 보안 등급으로 분리 기록\n- 후속 액션: 샘플 14개 발송, NDA 갱신\n\n_이 문서는 박하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "product-doc-0030",
+   "title": "앱노트 기획: 네트워크 스위치(AN-400) 저전력 모드 활용",
+   "author": "박하윤",
    "visibility": "space",
    "reuse_count": 2,
    "cited_by": [
-    "physical-design",
-    "firmware"
+    "hr-people",
+    "dft"
    ],
-   "created_min_ago": 60277,
-   "summary": "중국 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.",
-   "body": "## 배경\n중국 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.\n\n## 내용\n- 뉴스·공시·리포트 11건을 로컬 Claude로 요약 — 출처 링크 필수\n- 수요 시그널: 재고 조정 마무리 관측 — 하반기 발주 회복 전망\n- 경쟁사 신제품 발표 1건 — 스펙 비교표 업데이트 예정\n\n_이 문서는 박유나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 1724,
+   "summary": "고객 문의 최다 주제인 저전력 모드 활용 앱노트의 목차와 집필 분담.",
+   "body": "## 배경\n고객 문의 최다 주제인 저전력 모드 활용 앱노트의 목차와 집필 분담.\n\n## 내용\n- FAQ 빈발 질문 27건을 목차로 재구성\n- 측정 데이터는 펌웨어팀 전력 측정 결과 재사용\n- 초안 집필은 로컬 Claude 보조 — 기술 검수 2단계\n\n_이 문서는 박하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "product-doc-0031",
+   "title": "경쟁사 벤치마크 비교표 — 센서 허브(AS-20) 포지셔닝",
+   "author": "박하윤",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1562,
+   "summary": "경쟁 제품 데이터시트를 로컬 Claude로 요약해 만든 스펙 비교표와 포지셔닝 분석.",
+   "body": "## 배경\n경쟁 제품 데이터시트를 로컬 Claude로 요약해 만든 스펙 비교표와 포지셔닝 분석.\n\n## 내용\n- 성능/전력/가격 3축 비교 — 경쟁 7개 제품 데이터시트 요약\n- 우위 항목은 전성비, 열위는 소프트웨어 생태계 — 메시지 전략 반영\n- 출처는 공개 자료만 사용 (컨피덴셜 유입 금지 원칙)\n\n_이 문서는 박하윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "product-doc-0032",
+   "title": "네트워크 스위치(AN-400) 데이터시트 rev 0.7 검수 기록",
+   "author": "정시우",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1541,
+   "summary": "데이터시트 개정판의 전기 특성 표·핀 설명 검수와 부서 확인 현황.",
+   "body": "## 배경\n데이터시트 개정판의 전기 특성 표·핀 설명 검수와 부서 확인 현황.\n\n## 내용\n- 전기 특성 26개 항목 — 설계·아날로그팀 수치 확인 완료 여부 표\n- 오탈자·단위 오류는 로컬 Claude 교정 패스로 1차 검출\n- 미확인 항목은 릴리즈 블로커로 표시\n\n_이 문서는 정시우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "product-doc-0033",
+   "title": "고객 기술 문의 FAQ v0.9 (유럽)",
+   "author": "정시우",
+   "visibility": "space",
+   "reuse_count": 1,
+   "cited_by": [
+    "physical-design"
+   ],
+   "created_min_ago": 76818,
+   "summary": "유럽 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.",
+   "body": "## 배경\n유럽 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.\n\n## 내용\n- 문의 25건 분류: 전력 모드 관련이 최다 — 앱노트 신규 작성 제안\n- 답변 초안은 로컬 Claude로 작성 후 펌웨어팀 기술 검수\n- 재발 문의는 데이터시트 개정 요청으로 연결\n\n_이 문서는 정시우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "product-doc-0034",
+   "title": "엣지 NPU(AX-100) 제품 브리프 초안",
+   "author": "정시우",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "physical-design"
+   ],
+   "created_min_ago": 170248,
+   "summary": "센서 허브(AS-20) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.",
+   "body": "## 배경\n센서 허브(AS-20) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.\n\n## 내용\n- 타깃 응용 3개와 레퍼런스 디자인 링크\n- 차별점 문구는 벤치마크 비교표 근거로 작성\n- 초안 카피는 로컬 Claude로 생성 후 브랜드 톤 교정\n\n_이 문서는 정시우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "product-doc-0035",
+   "title": "SEMICON Korea 전시 준비 체크리스트 (7월 1주)",
+   "author": "박다인",
+   "visibility": "space",
+   "reuse_count": 1,
+   "cited_by": [
+    "physical-design"
+   ],
+   "created_min_ago": 37083,
+   "summary": "CES 부스 데모·미팅·자료 준비 현황과 담당 배정.",
+   "body": "## 배경\nCES 부스 데모·미팅·자료 준비 현황과 담당 배정.\n\n## 내용\n- 데모 시나리오 20종 — 펌웨어팀 데모 빌드 일정 확인\n- 미팅 슬롯 배정표와 사전 브리핑 자료 링크\n- 전시 후 리드 정리 프로세스(CRM 입력 규칙) 포함\n\n_이 문서는 박다인의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "product-doc-0036",
+   "title": "북미 시장 동향 브리프 (7월 3주)",
+   "author": "박다인",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 25989,
+   "summary": "유럽 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.",
+   "body": "## 배경\n유럽 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.\n\n## 내용\n- 뉴스·공시·리포트 11건을 로컬 Claude로 요약 — 출처 링크 필수\n- 수요 시그널: 재고 조정 마무리 관측 — 하반기 발주 회복 전망\n- 경쟁사 신제품 발표 1건 — 스펙 비교표 업데이트 예정\n\n_이 문서는 박다인의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0037",
-   "title": "가격 정책 시나리오 분석 — 네트워크 스위치(AN-400)",
-   "author": "박유나",
-   "visibility": "org",
-   "reuse_count": 3,
-   "cited_by": [
-    "firmware",
-    "analog",
-    "physical-design"
-   ],
-   "created_min_ago": 139197,
-   "summary": "엣지 NPU(AX-100) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.",
-   "body": "## 배경\n엣지 NPU(AX-100) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.\n\n## 내용\n- 시나리오 3종 — 볼륨 디스카운트 구간과 마진 9% 방어선\n- 수율·웨이퍼 가격 가정은 운영팀 최신 수치 사용\n- 시뮬 시트 검산은 로컬 Claude로 수행\n\n_이 문서는 박유나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "title": "가격 정책 시나리오 분석 — 센서 허브(AS-20)",
+   "author": "박다인",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 115495,
+   "summary": "센서 허브(AS-20) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.",
+   "body": "## 배경\n센서 허브(AS-20) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.\n\n## 내용\n- 시나리오 3종 — 볼륨 디스카운트 구간과 마진 10% 방어선\n- 수율·웨이퍼 가격 가정은 운영팀 최신 수치 사용\n- 시뮬 시트 검산은 로컬 Claude로 수행\n\n_이 문서는 박다인의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0038",
    "title": "레퍼런스 디자인 요구사항 정리 — 차량용 MCU(AV-30)",
-   "author": "박유나",
-   "visibility": "org",
-   "reuse_count": 3,
+   "author": "박다인",
+   "visibility": "space",
+   "reuse_count": 8,
    "cited_by": [
-    "hr-people",
+    "dft",
     "soc-design",
-    "dft"
+    "physical-design"
    ],
-   "created_min_ago": 114300,
+   "created_min_ago": 41400,
    "summary": "고객 평가 보드/레퍼런스 디자인의 요구사항을 펌웨어·하드웨어팀에 전달용으로 정리.",
-   "body": "## 배경\n고객 평가 보드/레퍼런스 디자인의 요구사항을 펌웨어·하드웨어팀에 전달용으로 정리.\n\n## 내용\n- 필수 인터페이스 10종과 데모 앱 목록\n- 고객 피드백 상위 요구: 전력 측정 포인트 노출\n- 일정 역산: 샘플 배포 시점 기준 보드 발주 마감 명시\n\n_이 문서는 박유나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n고객 평가 보드/레퍼런스 디자인의 요구사항을 펌웨어·하드웨어팀에 전달용으로 정리.\n\n## 내용\n- 필수 인터페이스 10종과 데모 앱 목록\n- 고객 피드백 상위 요구: 전력 측정 포인트 노출\n- 일정 역산: 샘플 배포 시점 기준 보드 발주 마감 명시\n\n_이 문서는 박다인의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0039",
-   "title": "고객 방문 회의록 요약 (일본, 6월 3주)",
-   "author": "박수민",
-   "visibility": "space",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 130886,
-   "summary": "중국 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.",
-   "body": "## 배경\n중국 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.\n\n## 내용\n- 요구사항 32건 접수 — 실현 가능성 1차 분류해 개발팀 전달\n- 경쟁 상황 인텔리전스는 별도 보안 등급으로 분리 기록\n- 후속 액션: 샘플 19개 발송, NDA 갱신\n\n_이 문서는 박수민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "title": "고객 방문 회의록 요약 (일본, 5월 4주)",
+   "author": "박다인",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "dft",
+    "soc-design"
+   ],
+   "created_min_ago": 18335,
+   "summary": "일본 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.",
+   "body": "## 배경\n일본 주요 고객 방문 미팅의 논의·액션 아이템 요약 — 녹취를 로컬 Claude로 정리.\n\n## 내용\n- 요구사항 30건 접수 — 실현 가능성 1차 분류해 개발팀 전달\n- 경쟁 상황 인텔리전스는 별도 보안 등급으로 분리 기록\n- 후속 액션: 샘플 23개 발송, NDA 갱신\n\n_이 문서는 박다인의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "product-doc-0040",
    "title": "앱노트 기획: 엣지 NPU(AX-100) 저전력 모드 활용",
-   "author": "박수민",
+   "author": "박다인",
    "visibility": "org",
-   "reuse_count": 1,
-   "cited_by": [
-    "physical-design"
-   ],
-   "created_min_ago": 7112,
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 1896,
    "summary": "고객 문의 최다 주제인 저전력 모드 활용 앱노트의 목차와 집필 분담.",
-   "body": "## 배경\n고객 문의 최다 주제인 저전력 모드 활용 앱노트의 목차와 집필 분담.\n\n## 내용\n- FAQ 빈발 질문 39건을 목차로 재구성\n- 측정 데이터는 펌웨어팀 전력 측정 결과 재사용\n- 초안 집필은 로컬 Claude 보조 — 기술 검수 2단계\n\n_이 문서는 박수민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0041",
-   "title": "경쟁사 벤치마크 비교표 — 네트워크 스위치(AN-400) 포지셔닝 — 5월 3주 갱신",
-   "author": "박수민",
-   "visibility": "org",
-   "reuse_count": 9,
-   "cited_by": [
-    "soc-design",
-    "firmware",
-    "dft"
-   ],
-   "created_min_ago": 2773,
-   "summary": "경쟁 제품 데이터시트를 로컬 Claude로 요약해 만든 스펙 비교표와 포지셔닝 분석.",
-   "body": "## 배경\n경쟁 제품 데이터시트를 로컬 Claude로 요약해 만든 스펙 비교표와 포지셔닝 분석.\n\n## 내용\n- 성능/전력/가격 3축 비교 — 경쟁 8개 제품 데이터시트 요약\n- 우위 항목은 전성비, 열위는 소프트웨어 생태계 — 메시지 전략 반영\n- 출처는 공개 자료만 사용 (컨피덴셜 유입 금지 원칙)\n\n_이 문서는 박수민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0042",
-   "title": "엣지 NPU(AX-100) 데이터시트 rev 0.8 검수 기록",
-   "author": "박수민",
-   "visibility": "space",
-   "reuse_count": 3,
-   "cited_by": [
-    "dft",
-    "analog",
-    "soc-design"
-   ],
-   "created_min_ago": 155862,
-   "summary": "데이터시트 개정판의 전기 특성 표·핀 설명 검수와 부서 확인 현황.",
-   "body": "## 배경\n데이터시트 개정판의 전기 특성 표·핀 설명 검수와 부서 확인 현황.\n\n## 내용\n- 전기 특성 8개 항목 — 설계·아날로그팀 수치 확인 완료 여부 표\n- 오탈자·단위 오류는 로컬 Claude 교정 패스로 1차 검출\n- 미확인 항목은 릴리즈 블로커로 표시\n\n_이 문서는 박수민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0043",
-   "title": "고객 기술 문의 FAQ v0.9 (중국)",
-   "author": "박수민",
-   "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 1164,
-   "summary": "북미 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.",
-   "body": "## 배경\n북미 고객 문의를 유형별로 묶은 FAQ — 영문 병기, FAE 배포용.\n\n## 내용\n- 문의 18건 분류: 전력 모드 관련이 최다 — 앱노트 신규 작성 제안\n- 답변 초안은 로컬 Claude로 작성 후 펌웨어팀 기술 검수\n- 재발 문의는 데이터시트 개정 요청으로 연결\n\n_이 문서는 박수민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0044",
-   "title": "센서 허브(AS-20) 제품 브리프 초안 — 5월 4주 갱신",
-   "author": "박수민",
-   "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 155348,
-   "summary": "네트워크 스위치(AN-400) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.",
-   "body": "## 배경\n네트워크 스위치(AN-400) 영업용 1장 브리프 — 타깃 응용·차별점·로드맵 요약.\n\n## 내용\n- 타깃 응용 3개와 레퍼런스 디자인 링크\n- 차별점 문구는 벤치마크 비교표 근거로 작성\n- 초안 카피는 로컬 Claude로 생성 후 브랜드 톤 교정\n\n_이 문서는 박수민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0045",
-   "title": "embedded world 전시 준비 체크리스트 (6월 4주)",
-   "author": "곽성민",
-   "visibility": "space",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 54061,
-   "summary": "MWC 부스 데모·미팅·자료 준비 현황과 담당 배정.",
-   "body": "## 배경\nMWC 부스 데모·미팅·자료 준비 현황과 담당 배정.\n\n## 내용\n- 데모 시나리오 26종 — 펌웨어팀 데모 빌드 일정 확인\n- 미팅 슬롯 배정표와 사전 브리핑 자료 링크\n- 전시 후 리드 정리 프로세스(CRM 입력 규칙) 포함\n\n_이 문서는 곽성민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0046",
-   "title": "국내 시장 동향 브리프 (6월 3주)",
-   "author": "곽성민",
-   "visibility": "space",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 76818,
-   "summary": "국내 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.",
-   "body": "## 배경\n국내 시장의 수요·경쟁 동향을 공개 자료 기반으로 요약한 주간 브리프.\n\n## 내용\n- 뉴스·공시·리포트 20건을 로컬 Claude로 요약 — 출처 링크 필수\n- 수요 시그널: 재고 조정 마무리 관측 — 하반기 발주 회복 전망\n- 경쟁사 신제품 발표 1건 — 스펙 비교표 업데이트 예정\n\n_이 문서는 곽성민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "product-doc-0047",
-   "title": "가격 정책 시나리오 분석 — 네트워크 스위치(AN-400) — 6월 3주 갱신",
-   "author": "곽성민",
-   "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 83913,
-   "summary": "센서 허브(AS-20) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.",
-   "body": "## 배경\n센서 허브(AS-20) 볼륨 구간별 가격 시나리오와 마진 시뮬레이션.\n\n## 내용\n- 시나리오 3종 — 볼륨 디스카운트 구간과 마진 7% 방어선\n- 수율·웨이퍼 가격 가정은 운영팀 최신 수치 사용\n- 시뮬 시트 검산은 로컬 Claude로 수행\n\n_이 문서는 곽성민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n고객 문의 최다 주제인 저전력 모드 활용 앱노트의 목차와 집필 분담.\n\n## 내용\n- FAQ 빈발 질문 32건을 목차로 재구성\n- 측정 데이터는 펌웨어팀 전력 측정 결과 재사용\n- 초안 집필은 로컬 Claude 보조 — 기술 검수 2단계\n\n_이 문서는 박다인의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   }
  ],
  "reuse_events": [
   {
-   "doc_id": "product-doc-0035",
-   "source_space": "product",
-   "consumer_space": "physical-design",
-   "min_ago": 19180,
-   "summary": "제품기획·마케팅팀의 『CES 전시 준비 체크리스트 (6월 2주)』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "product-doc-0023",
-   "source_space": "product",
-   "consumer_space": "dft",
-   "min_ago": 25372,
-   "summary": "제품기획·마케팅팀의 『고객 기술 문의 FAQ v0.9 (유럽)』 지식이 DFT팀에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "product-doc-0033",
-   "source_space": "product",
-   "consumer_space": "analog",
-   "min_ago": 33082,
-   "summary": "제품기획·마케팅팀의 『고객 기술 문의 FAQ v0.7 (국내)』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
-  },
-  {
    "doc_id": "product-doc-0006",
    "source_space": "product",
    "consumer_space": "hr-people",
-   "min_ago": 34305,
-   "summary": "제품기획·마케팅팀의 『중국 시장 동향 브리프 (6월 2주)』 지식이 인사팀 (People)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "product-doc-0020",
-   "source_space": "product",
-   "consumer_space": "analog",
-   "min_ago": 17325,
-   "summary": "제품기획·마케팅팀의 『앱노트 기획: 네트워크 스위치(AN-400) 저전력 모드 활용』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "product-doc-0040",
-   "source_space": "product",
-   "consumer_space": "physical-design",
-   "min_ago": 2294,
-   "summary": "제품기획·마케팅팀의 『앱노트 기획: 엣지 NPU(AX-100) 저전력 모드 활용』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
+   "min_ago": 32021,
+   "summary": "제품기획·마케팅팀의 『중국 시장 동향 브리프 (5월 3주)』 지식이 인사팀 (People)에서 재사용되었습니다"
   },
   {
    "doc_id": "product-doc-0038",
    "source_space": "product",
-   "consumer_space": "hr-people",
-   "min_ago": 24231,
-   "summary": "제품기획·마케팅팀의 『레퍼런스 디자인 요구사항 정리 — 차량용 MCU(AV-30)』 지식이 인사팀 (People)에서 재사용되었습니다"
+   "consumer_space": "dft",
+   "min_ago": 13854,
+   "summary": "제품기획·마케팅팀의 『레퍼런스 디자인 요구사항 정리 — 차량용 MCU(AV-30)』 지식이 DFT팀에서 재사용되었습니다"
   },
   {
-   "doc_id": "product-doc-0037",
+   "doc_id": "product-doc-0010",
    "source_space": "product",
    "consumer_space": "firmware",
-   "min_ago": 12362,
-   "summary": "제품기획·마케팅팀의 『가격 정책 시나리오 분석 — 네트워크 스위치(AN-400)』 지식이 펌웨어개발팀에서 재사용되었습니다"
+   "min_ago": 19595,
+   "summary": "제품기획·마케팅팀의 『앱노트 기획: 차량용 MCU(AV-30) 저전력 모드 활용』 지식이 펌웨어개발팀에서 재사용되었습니다"
   },
   {
-   "doc_id": "product-doc-0016",
+   "doc_id": "product-doc-0028",
+   "source_space": "product",
+   "consumer_space": "verification",
+   "min_ago": 24747,
+   "summary": "제품기획·마케팅팀의 『레퍼런스 디자인 요구사항 정리 — 네트워크 스위치(AN-400)』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "product-doc-0029",
+   "source_space": "product",
+   "consumer_space": "dft",
+   "min_ago": 28914,
+   "summary": "제품기획·마케팅팀의 『고객 방문 회의록 요약 (중국, 5월 3주)』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "product-doc-0001",
    "source_space": "product",
    "consumer_space": "hr-people",
-   "min_ago": 25522,
-   "summary": "제품기획·마케팅팀의 『국내 시장 동향 브리프 (7월 3주)』 지식이 인사팀 (People)에서 재사용되었습니다"
+   "min_ago": 23311,
+   "summary": "제품기획·마케팅팀의 『경쟁사 벤치마크 비교표 — 엣지 NPU(AX-100) 포지셔닝』 지식이 인사팀 (People)에서 재사용되었습니다"
   },
   {
-   "doc_id": "product-doc-0031",
+   "doc_id": "product-doc-0018",
    "source_space": "product",
    "consumer_space": "firmware",
-   "min_ago": 5239,
-   "summary": "제품기획·마케팅팀의 『경쟁사 벤치마크 비교표 — 차량용 MCU(AV-30) 포지셔닝』 지식이 펌웨어개발팀에서 재사용되었습니다"
+   "min_ago": 16221,
+   "summary": "제품기획·마케팅팀의 『레퍼런스 디자인 요구사항 정리 — 센서 허브(AS-20)』 지식이 펌웨어개발팀에서 재사용되었습니다"
   },
   {
-   "doc_id": "product-doc-0027",
+   "doc_id": "product-doc-0020",
    "source_space": "product",
    "consumer_space": "physical-design",
-   "min_ago": 17997,
-   "summary": "제품기획·마케팅팀의 『가격 정책 시나리오 분석 — 엣지 NPU(AX-100)』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
+   "min_ago": 8404,
+   "summary": "제품기획·마케팅팀의 『앱노트 기획: 센서 허브(AS-20) 저전력 모드 활용』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "product-doc-0030",
+   "source_space": "product",
+   "consumer_space": "hr-people",
+   "min_ago": 37598,
+   "summary": "제품기획·마케팅팀의 『앱노트 기획: 네트워크 스위치(AN-400) 저전력 모드 활용』 지식이 인사팀 (People)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "product-doc-0039",
+   "source_space": "product",
+   "consumer_space": "dft",
+   "min_ago": 34400,
+   "summary": "제품기획·마케팅팀의 『고객 방문 회의록 요약 (일본, 5월 4주)』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "product-doc-0033",
+   "source_space": "product",
+   "consumer_space": "physical-design",
+   "min_ago": 19920,
+   "summary": "제품기획·마케팅팀의 『고객 기술 문의 FAQ v0.9 (유럽)』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
   },
   {
    "doc_id": "product-doc-0034",
    "source_space": "product",
-   "consumer_space": "soc-design",
-   "min_ago": 2914,
-   "summary": "제품기획·마케팅팀의 『네트워크 스위치(AN-400) 제품 브리프 초안』 지식이 SoC 설계팀에서 재사용되었습니다"
+   "consumer_space": "physical-design",
+   "min_ago": 23246,
+   "summary": "제품기획·마케팅팀의 『엣지 NPU(AX-100) 제품 브리프 초안』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
   },
   {
-   "doc_id": "product-doc-0009",
-   "source_space": "product",
-   "consumer_space": "soc-design",
-   "min_ago": 8468,
-   "summary": "제품기획·마케팅팀의 『고객 방문 회의록 요약 (국내, 6월 1주)』 지식이 SoC 설계팀에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "product-doc-0026",
-   "source_space": "product",
-   "consumer_space": "firmware",
-   "min_ago": 24063,
-   "summary": "제품기획·마케팅팀의 『국내 시장 동향 브리프 (7월 1주)』 지식이 펌웨어개발팀에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "product-doc-0011",
-   "source_space": "product",
-   "consumer_space": "analog",
-   "min_ago": 15538,
-   "summary": "제품기획·마케팅팀의 『경쟁사 벤치마크 비교표 — 엣지 NPU(AX-100) 포지셔닝』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "product-doc-0017",
-   "source_space": "product",
-   "consumer_space": "analog",
-   "min_ago": 23057,
-   "summary": "제품기획·마케팅팀의 『가격 정책 시나리오 분석 — 센서 허브(AS-20)』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "product-doc-0042",
-   "source_space": "product",
-   "consumer_space": "dft",
-   "min_ago": 3821,
-   "summary": "제품기획·마케팅팀의 『엣지 NPU(AX-100) 데이터시트 rev 0.8 검수 기록』 지식이 DFT팀에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "product-doc-0025",
-   "source_space": "product",
-   "consumer_space": "soc-design",
-   "min_ago": 26145,
-   "summary": "제품기획·마케팅팀의 『embedded world 전시 준비 체크리스트 (7월 2주)』 지식이 SoC 설계팀에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "product-doc-0041",
-   "source_space": "product",
-   "consumer_space": "soc-design",
-   "min_ago": 27961,
-   "summary": "제품기획·마케팅팀의 『경쟁사 벤치마크 비교표 — 네트워크 스위치(AN-400) 포지셔닝 — 5월 3주 갱신』 지식이 SoC 설계팀에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "product-doc-0036",
+   "doc_id": "product-doc-0035",
    "source_space": "product",
    "consumer_space": "physical-design",
-   "min_ago": 23444,
-   "summary": "제품기획·마케팅팀의 『유럽 시장 동향 브리프 (6월 1주)』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
+   "min_ago": 4153,
+   "summary": "제품기획·마케팅팀의 『SEMICON Korea 전시 준비 체크리스트 (7월 1주)』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
   }
  ]
 }

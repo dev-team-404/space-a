@@ -60,6 +60,13 @@ export type KnowledgeDoc = {
   reuse_count: number
 }
 
+export type SpaceHighlight = {
+  text: string // 칠판에 분필로 적히는 한 줄
+  kind?: 'reuse' | 'issue' | string
+  doc_id?: string // kind=reuse — 재사용된 지식 문서
+  issue_id?: string // kind=issue — 해결된 이슈
+}
+
 export type ReuseEvent = {
   doc_id?: string
   source_space?: string
@@ -77,7 +84,7 @@ export type SpaceView = {
   knowledge: KnowledgeDoc[]
   visits: { today: number; total: number } | null
   reuse_events?: ReuseEvent[] // 이 방이 원천/소비자인 재사용 이벤트 (Hub '지식 재사용' 탭)
-  highlight?: string | null // 오늘의 하이라이트 한 줄 — 방 칠판에 표시
+  highlight?: SpaceHighlight | null // 오늘의 하이라이트 — 방 칠판 표시 + 클릭 시 관련 항목 연동
   demo?: boolean // 더미(fake) 스페이스 — 화면에서 FAKE 배지로 구분
 }
 

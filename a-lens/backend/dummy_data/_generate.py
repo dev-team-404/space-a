@@ -935,9 +935,8 @@ def gen_issues(team: dict, members: list[dict]) -> list[dict]:
 
 def gen_reuse_events(team: dict, docs: list[dict]) -> list[dict]:
     events = []
-    cands = [d for d in docs if d["cited_by"]]
-    if len(cands) > MAX_REUSE_EVENTS:
-        cands = rng.sample(cands, MAX_REUSE_EVENTS)
+    # 재사용 많은 순 상위만 — 하이라이트(최다 재사용 지식)가 피드에 반드시 포함되게.
+    cands = sorted((d for d in docs if d["cited_by"]), key=lambda d: -d["reuse_count"])[:MAX_REUSE_EVENTS]
     for d in cands:
         consumer = d["cited_by"][0]
         events.append({
@@ -972,16 +971,25 @@ def main() -> None:
                 m["activity"] = {"kind": "issue", "title": p(mine_issues)["title"]}
 
         # 오늘의 하이라이트 — 하루치 raw data 중 가장 핵심인 사건 한 줄 (칠판에 표시).
-        # 가장 많이 재사용된 지식 > 최근 해결 이슈 순으로 뽑는다.
+        # 가장 많이 재사용된 지식 > 최근 해결 이슈 순. kind+참조 id를 함께 실어
+        # 칠판 클릭 시 사이드바에서 관련 항목을 하이라이트할 수 있게 한다.
         top = max(docs, key=lambda d: d["reuse_count"])
         resolved = [i for i in issues if i["status"] == "resolved"]
         if top["reuse_count"] > 0 and top["cited_by"]:
-            highlight = (
-                f"『{top['title']}』 지식이 {TEAM_NAME[top['cited_by'][0]]}에서 재사용됐어요"
-                f" (누적 {top['reuse_count']}회)"
-            )
+            highlight = {
+                "kind": "reuse",
+                "doc_id": top["doc_id"],
+                "text": (
+                    f"『{top['title']}』 지식이 {TEAM_NAME[top['cited_by'][0]]}에서 재사용됐어요"
+                    f" (누적 {top['reuse_count']}회)"
+                ),
+            }
         elif resolved:
-            highlight = f"‘{resolved[0]['title']}’ 이슈가 해결됐어요"
+            highlight = {
+                "kind": "issue",
+                "issue_id": resolved[0]["issue_id"],
+                "text": f"‘{resolved[0]['title']}’ 이슈가 해결됐어요",
+            }
         else:
             highlight = None
 

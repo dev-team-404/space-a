@@ -346,7 +346,7 @@ const byRecent = (a: SpaceIssue, b: SpaceIssue) => issueAt(b).localeCompare(issu
 
 function issueCardHTML(i: SpaceIssue): string {
   return `
-    <div class="feed-card">
+    <div class="feed-card" data-issue="${esc(i.issue_id)}">
       <div class="fc-title">${statusBadge(i.status)} ${esc(i.title)}</div>
       <div class="timeline">
         ${i.timeline
@@ -408,7 +408,7 @@ function hubReuseHTML(data: SpaceView): string {
           const dir = e.source_space === data.space_id ? '이 방의 지식이 재사용됨' : '타팀 지식을 재사용'
           const at = kstTime(e.at)
           return `
-        <div class="feed-card">
+        <div class="feed-card" data-reuse-doc="${esc(e.doc_id ?? '')}">
           <div class="fc-title">🔄 ${dir}${at ? ` <span class="tl-at">${at}</span>` : ''}</div>
           <div class="doc-summary">${esc(e.summary)}</div>
         </div>`
@@ -429,7 +429,7 @@ function hubReuseHTML(data: SpaceView): string {
     ? docs
         .map(
           ({ d, i }) => `
-        <div class="doc-item" data-doc="${i}">
+        <div class="doc-item" data-doc="${i}" data-docid="${esc(d.doc_id)}">
           <b>${esc(d.title)}</b>
           <div class="muted">${esc(d.author_agent)}${d.visibility === 'org' ? ' · 조직 공개' : ''} · 재사용 ${d.reuse_count}</div>
           <div class="doc-summary">${esc(d.summary)}</div>
@@ -543,6 +543,13 @@ function renderHub(data: SpaceView) {
   applyHubCollapsed(true)
 }
 
+/** 사이드바에서 selector에 걸리는 카드들을 금색 테두리로 강조하고 첫 항목으로 스크롤. */
+function flashRelated(selector: string) {
+  const els = hubBody.querySelectorAll<HTMLElement>(selector)
+  els.forEach((el) => el.classList.add('hl-related'))
+  els[0]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+}
+
 function renderHubActivity(data: SpaceView) {
   hubActivity.innerHTML = hubActivityHTML(data)
   hubActivity.querySelectorAll<HTMLElement>('.sub-tab').forEach((btn) => {
@@ -623,10 +630,26 @@ async function renderRoom(spaceId: string) {
     .slice(0, SCENE_MAX_AGENTS)
   currentScene = buildRoomScene(
     config,
-    { agents: sceneAgents, issues: data.issues, knowledgeCount: data.knowledge.length, highlight: data.highlight },
+    { agents: sceneAgents, issues: data.issues, knowledgeCount: data.knowledge.length, highlight: data.highlight?.text },
     {
       onAgentTap: (agent) => showAgentPanel(agent),
-      // 칠판(이슈)은 오른쪽 Hub "이슈 흐름"으로 흡수 — 클릭 팝업 제거 (2026-07-19).
+      // 칠판 클릭 → 하이라이트와 관련된 이슈/재사용 항목을 해당 탭에서 강조 (2026-07-19).
+      onBoardTap: () => {
+        if (hubCollapsed) toggleHub(false)
+        const h = data.highlight
+        if (h?.kind === 'reuse' && h.doc_id) {
+          hubTab = 'reuse'
+          renderHub(data)
+          flashRelated(`[data-reuse-doc="${h.doc_id}"], [data-docid="${h.doc_id}"]`)
+        } else if (h?.kind === 'issue' && h.issue_id) {
+          hubTab = 'issues'
+          renderHub(data)
+          flashRelated(`[data-issue="${h.issue_id}"]`)
+        } else {
+          hubTab = 'issues' // 하이라이트 없으면(허브 실데이터 등) 이슈 흐름만 연다
+          renderHub(data)
+        }
+      },
       // 책장 클릭 → Hub '지식 재사용' 탭 열기 (접혀 있으면 펼침).
       onShelfTap: () => {
         if (hubCollapsed) toggleHub(false)

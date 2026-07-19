@@ -317,6 +317,9 @@ def _dummy_snapshot() -> dict:
         raw = json.loads(f.read_text(encoding="utf-8"))
         sp = raw["space"]
         sid = sp["space_id"]
+        # 하이라이트: 방 상세엔 구조체(kind+참조 id — 칠판 클릭 연동), 층 목록엔 문자열만
+        hl = raw.get("highlight")
+        hl_text = hl.get("text") if isinstance(hl, dict) else hl
         member_name = {m["agent_id"]: m["name"] for m in raw.get("members", [])}
 
         agents = []
@@ -411,7 +414,7 @@ def _dummy_snapshot() -> dict:
                 "floor": i + 1,
                 "activity": activity,
                 "stats": {"knowledge": len(docs), "resolved": resolved, "reuse": reuses},
-                "highlight": raw.get("highlight"),
+                "highlight": hl_text,
                 "demo": True,
             }
         )
@@ -421,8 +424,8 @@ def _dummy_snapshot() -> dict:
             "issues": issues,
             "knowledge": docs,
             "visits": raw.get("visits"),
-            # 오늘의 하이라이트 — 방 칠판에 표시할 한 줄
-            "highlight": raw.get("highlight"),
+            # 오늘의 하이라이트 — 방 칠판 표시 + 클릭 시 사이드바 관련 항목 연동
+            "highlight": hl,
             "demo": True,
         }
 

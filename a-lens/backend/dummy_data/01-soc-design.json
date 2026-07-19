@@ -3,7 +3,11 @@
   "space_id": "soc-design",
   "name": "SoC 설계팀"
  },
- "highlight": "『IP 벤더 전력 관리 유닛(PMU) 릴리즈 노트 v4.8 diff 요약』 지식이 아날로그 설계팀 (AMS)에서 재사용됐어요 (누적 15회)",
+ "highlight": {
+  "kind": "reuse",
+  "doc_id": "soc-design-doc-0033",
+  "text": "『IP 벤더 전력 관리 유닛(PMU) 릴리즈 노트 v4.8 diff 요약』 지식이 아날로그 설계팀 (AMS)에서 재사용됐어요 (누적 15회)"
+ },
  "visits": {
   "today": 11,
   "total": 562
@@ -931,144 +935,144 @@
  ],
  "reuse_events": [
   {
-   "doc_id": "soc-design-doc-0043",
+   "doc_id": "soc-design-doc-0033",
    "source_space": "soc-design",
    "consumer_space": "analog",
-   "min_ago": 41203,
-   "summary": "SoC 설계팀의 『CDC SVA 템플릿 전력 관리 유닛(PMU) 바인딩 가이드』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "soc-design-doc-0022",
-   "source_space": "soc-design",
-   "consumer_space": "physical-design",
-   "min_ago": 38952,
-   "summary": "SoC 설계팀의 『NoC 라우터 성능 모델 스프레드시트 사용법』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "soc-design-doc-0008",
-   "source_space": "soc-design",
-   "consumer_space": "firmware",
-   "min_ago": 42001,
-   "summary": "SoC 설계팀의 『QSPI 부트 컨트롤러 리셋 시퀀스 설계 노트』 지식이 펌웨어개발팀에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "soc-design-doc-0026",
-   "source_space": "soc-design",
-   "consumer_space": "dft",
-   "min_ago": 8464,
-   "summary": "SoC 설계팀의 『HDMI 송신부 RTL 코드 리뷰 지적사항 정리 (6월 2주)』 지식이 DFT팀에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "soc-design-doc-0007",
-   "source_space": "soc-design",
-   "consumer_space": "dft",
-   "min_ago": 40914,
-   "summary": "SoC 설계팀의 『CDC SVA 템플릿 HDMI 송신부 바인딩 가이드』 지식이 DFT팀에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "soc-design-doc-0017",
-   "source_space": "soc-design",
-   "consumer_space": "product",
-   "min_ago": 1444,
-   "summary": "SoC 설계팀의 『레지스터 맵 YAML 플로우 — 타이머/워치독 적용기』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "soc-design-doc-0009",
-   "source_space": "soc-design",
-   "consumer_space": "analog",
-   "min_ago": 34782,
-   "summary": "SoC 설계팀의 『IP 벤더 MIPI CSI-2 수신부 릴리즈 노트 v2.8 diff 요약』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "soc-design-doc-0034",
-   "source_space": "soc-design",
-   "consumer_space": "product",
-   "min_ago": 11733,
-   "summary": "SoC 설계팀의 『이미지 전처리 파이프라인(ISP) 성능 모델 스프레드시트 사용법』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "soc-design-doc-0011",
-   "source_space": "soc-design",
-   "consumer_space": "dft",
-   "min_ago": 15913,
-   "summary": "SoC 설계팀의 『MIPI CSI-2 수신부 ECO 대응 기록 (5월 3주)』 지식이 DFT팀에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "soc-design-doc-0028",
-   "source_space": "soc-design",
-   "consumer_space": "dft",
-   "min_ago": 20373,
-   "summary": "SoC 설계팀의 『인터럽트 컨트롤러(GIC) 합성 QoR 1차 결과 분석』 지식이 DFT팀에서 재사용되었습니다"
+   "min_ago": 24515,
+   "summary": "SoC 설계팀의 『IP 벤더 전력 관리 유닛(PMU) 릴리즈 노트 v4.8 diff 요약』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
   },
   {
    "doc_id": "soc-design-doc-0018",
    "source_space": "soc-design",
    "consumer_space": "product",
-   "min_ago": 25001,
+   "min_ago": 8062,
    "summary": "SoC 설계팀의 『DMA 컨트롤러 클록 게이팅 적용 전후 전력 추정 비교』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0044",
+   "source_space": "soc-design",
+   "consumer_space": "analog",
+   "min_ago": 28332,
+   "summary": "SoC 설계팀의 『타이머/워치독 리셋 시퀀스 설계 노트』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
   },
   {
    "doc_id": "soc-design-doc-0003",
    "source_space": "soc-design",
    "consumer_space": "firmware",
-   "min_ago": 34155,
+   "min_ago": 4238,
    "summary": "SoC 설계팀의 『전력 관리 유닛(PMU) ACE 인터페이스 타이밍 노트』 지식이 펌웨어개발팀에서 재사용되었습니다"
   },
   {
-   "doc_id": "soc-design-doc-0032",
-   "source_space": "soc-design",
-   "consumer_space": "hr-people",
-   "min_ago": 18815,
-   "summary": "SoC 설계팀의 『MIPI CSI-2 수신부 리셋 시퀀스 설계 노트』 지식이 인사팀 (People)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "soc-design-doc-0023",
+   "doc_id": "soc-design-doc-0011",
    "source_space": "soc-design",
    "consumer_space": "dft",
-   "min_ago": 40778,
-   "summary": "SoC 설계팀의 『MIPI CSI-2 수신부 ECO 대응 기록 (7월 2주)』 지식이 DFT팀에서 재사용되었습니다"
+   "min_ago": 17078,
+   "summary": "SoC 설계팀의 『MIPI CSI-2 수신부 ECO 대응 기록 (5월 3주)』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0014",
+   "source_space": "soc-design",
+   "consumer_space": "hr-people",
+   "min_ago": 9226,
+   "summary": "SoC 설계팀의 『오디오 I2S 브리지 RTL 코드 리뷰 지적사항 정리 (6월 2주)』 지식이 인사팀 (People)에서 재사용되었습니다"
   },
   {
    "doc_id": "soc-design-doc-0021",
    "source_space": "soc-design",
    "consumer_space": "product",
-   "min_ago": 23892,
+   "min_ago": 17200,
    "summary": "SoC 설계팀의 『IP 벤더 L2 캐시 컨트롤러 릴리즈 노트 v4.1 diff 요약』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
   },
   {
    "doc_id": "soc-design-doc-0029",
    "source_space": "soc-design",
    "consumer_space": "hr-people",
-   "min_ago": 32408,
+   "min_ago": 11032,
    "summary": "SoC 설계팀의 『레지스터 맵 YAML 플로우 — DDR4 컨트롤러 적용기』 지식이 인사팀 (People)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "soc-design-doc-0044",
-   "source_space": "soc-design",
-   "consumer_space": "analog",
-   "min_ago": 9984,
-   "summary": "SoC 설계팀의 『타이머/워치독 리셋 시퀀스 설계 노트』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
   },
   {
    "doc_id": "soc-design-doc-0030",
    "source_space": "soc-design",
    "consumer_space": "product",
-   "min_ago": 17868,
+   "min_ago": 30177,
    "summary": "SoC 설계팀의 『HDMI 송신부 클록 게이팅 적용 전후 전력 추정 비교』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0007",
+   "source_space": "soc-design",
+   "consumer_space": "dft",
+   "min_ago": 38120,
+   "summary": "SoC 설계팀의 『CDC SVA 템플릿 HDMI 송신부 바인딩 가이드』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0008",
+   "source_space": "soc-design",
+   "consumer_space": "firmware",
+   "min_ago": 6711,
+   "summary": "SoC 설계팀의 『QSPI 부트 컨트롤러 리셋 시퀀스 설계 노트』 지식이 펌웨어개발팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0016",
+   "source_space": "soc-design",
+   "consumer_space": "verification",
+   "min_ago": 35331,
+   "summary": "SoC 설계팀의 『PCIe Gen4 컨트롤러 합성 QoR 1차 결과 분석』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0017",
+   "source_space": "soc-design",
+   "consumer_space": "product",
+   "min_ago": 33030,
+   "summary": "SoC 설계팀의 『레지스터 맵 YAML 플로우 — 타이머/워치독 적용기』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0026",
+   "source_space": "soc-design",
+   "consumer_space": "dft",
+   "min_ago": 39146,
+   "summary": "SoC 설계팀의 『HDMI 송신부 RTL 코드 리뷰 지적사항 정리 (6월 2주)』 지식이 DFT팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0032",
+   "source_space": "soc-design",
+   "consumer_space": "hr-people",
+   "min_ago": 36731,
+   "summary": "SoC 설계팀의 『MIPI CSI-2 수신부 리셋 시퀀스 설계 노트』 지식이 인사팀 (People)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0034",
+   "source_space": "soc-design",
+   "consumer_space": "product",
+   "min_ago": 42967,
+   "summary": "SoC 설계팀의 『이미지 전처리 파이프라인(ISP) 성능 모델 스프레드시트 사용법』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0040",
+   "source_space": "soc-design",
+   "consumer_space": "product",
+   "min_ago": 23666,
+   "summary": "SoC 설계팀의 『L2 캐시 컨트롤러 합성 QoR 1차 결과 분석』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
   },
   {
    "doc_id": "soc-design-doc-0041",
    "source_space": "soc-design",
    "consumer_space": "verification",
-   "min_ago": 33530,
+   "min_ago": 9242,
    "summary": "SoC 설계팀의 『레지스터 맵 YAML 플로우 — eFuse 컨트롤러 적용기』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
   },
   {
-   "doc_id": "soc-design-doc-0014",
+   "doc_id": "soc-design-doc-0043",
    "source_space": "soc-design",
-   "consumer_space": "hr-people",
-   "min_ago": 30219,
-   "summary": "SoC 설계팀의 『오디오 I2S 브리지 RTL 코드 리뷰 지적사항 정리 (6월 2주)』 지식이 인사팀 (People)에서 재사용되었습니다"
+   "consumer_space": "analog",
+   "min_ago": 15389,
+   "summary": "SoC 설계팀의 『CDC SVA 템플릿 전력 관리 유닛(PMU) 바인딩 가이드』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "soc-design-doc-0045",
+   "source_space": "soc-design",
+   "consumer_space": "analog",
+   "min_ago": 41203,
+   "summary": "SoC 설계팀의 『IP 벤더 NPU 텐서 DMA 릴리즈 노트 v4.6 diff 요약』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
   }
  ]
 }
