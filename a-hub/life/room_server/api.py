@@ -4,6 +4,8 @@ hub(Space/Page)와 별개의 프로세스. 엔드포인트 계약: docs/design/r
 도메인 에러를 HTTP 상태로 매핑한다.
 """
 
+import os
+
 from fastapi import FastAPI, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -19,6 +21,23 @@ _STATUS = {
     errors.NotFound: 404,
     errors.CellTaken: 409,
 }
+
+# x-api-key 관문을 면제할 경로 (로드밸런서·모니터링용). hub의 API_KEY_EXEMPT_PATHS와 동일 패턴.
+_API_KEY_EXEMPT_PATHS = {"/healthz", "/readyz"}
+
+
+def _api_key_ok(path: str, provided: str | None) -> bool:
+    """고정 공유키 x-api-key 검증 — hub의 SPACE_A_API_KEY와 같은 opt-in 패턴.
+
+    ROOM_SERVER_API_KEY 환경변수가 없으면(미설정) 검사를 건너뛴다 — 로컬·테스트 편의.
+    설정된 배포에서는 면제 경로를 제외한 모든 요청에서 키 일치를 요구한다.
+    """
+    expected = os.environ.get("ROOM_SERVER_API_KEY")
+    if not expected:
+        return True
+    if path in _API_KEY_EXEMPT_PATHS:
+        return True
+    return provided == expected
 
 
 class RoomRegisterBody(BaseModel):
@@ -51,6 +70,16 @@ def create_app(rooms: RoomService | None = None) -> FastAPI:
     rooms = rooms or RoomService(store=SqliteStore.from_env())
     app = FastAPI(title="Space A Room Server")
 
+    @app.middleware("http")
+    async def _api_key_gate(request: Request, call_next):
+        # ROOM_SERVER_API_KEY 설정 시 x-api-key 헤더를 요구 (면제 경로 제외). 미설정이면 무관.
+        if not _api_key_ok(request.url.path, request.headers.get("x-api-key")):
+            return JSONResponse(
+                status_code=401,
+                content={"error": {"code": "unauthorized", "message": "invalid or missing x-api-key"}},
+            )
+        return await call_next(request)
+
     @app.exception_handler(errors.RoomServerError)
     async def _handle(_: Request, exc: errors.RoomServerError):
         status = _STATUS.get(type(exc), 400)
@@ -65,6 +94,8 @@ def create_app(rooms: RoomService | None = None) -> FastAPI:
             "service": "space-a-room-server",
             "description": "방 방문 서버 — 개인 방·에이전트 위치·방 디자인 (docs/design/room-visit.md)",
             "auth": "Authorization: Bearer <token> (등록: POST /rooms/register)",
+            # ROOM_SERVER_API_KEY 설정 시 모든 요청에 x-api-key 헤더 필요 (healthz/readyz 제외)
+            "api_key_required": bool(os.environ.get("ROOM_SERVER_API_KEY")),
             "openapi": "/docs",
             "room_protocol": 3,
         }

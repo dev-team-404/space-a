@@ -66,3 +66,31 @@ def test_design_forbidden_for_visitor(client):
         headers={"Authorization": f"Bearer {b['token']}"},
     )
     assert r.status_code == 403
+
+
+# --- x-api-key 관문 (ROOM_SERVER_API_KEY) ---
+
+
+def test_api_key_gate_blocks_without_key(monkeypatch):
+    monkeypatch.setenv("ROOM_SERVER_API_KEY", "secret")
+    c = TestClient(create_app())
+    assert c.get("/capabilities").status_code == 401
+    assert c.get("/capabilities").json()["error"]["code"] == "unauthorized"
+
+
+def test_api_key_gate_allows_with_matching_key(monkeypatch):
+    monkeypatch.setenv("ROOM_SERVER_API_KEY", "secret")
+    c = TestClient(create_app())
+    assert c.get("/capabilities", headers={"x-api-key": "secret"}).status_code == 200
+
+
+def test_api_key_gate_exempts_health(monkeypatch):
+    monkeypatch.setenv("ROOM_SERVER_API_KEY", "secret")
+    c = TestClient(create_app())
+    assert c.get("/healthz").status_code == 200
+    assert c.get("/readyz").status_code == 200
+
+
+def test_api_key_gate_off_when_unset(client):
+    # ROOM_SERVER_API_KEY 미설정이면 x-api-key 없이도 통과 (로컬·테스트 기본)
+    assert client.get("/capabilities").status_code == 200
