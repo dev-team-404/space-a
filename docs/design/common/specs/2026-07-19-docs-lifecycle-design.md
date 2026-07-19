@@ -11,9 +11,9 @@
 
 | 현재 작업 문서 루트 | 비고 |
 |---|---|
-| `docs/design/overview-mentor/{brainstorming,specs,plans}` | brainstorming은 설계 당시 r·o가 뒤바뀐 오타 철자였음 (실행 순서 ②에서 교정) |
+| `docs/design/a-mate/{brainstorming,specs,plans}` | brainstorming은 설계 당시 r·o가 뒤바뀐 오타 철자였음 (실행 순서 ②에서 교정) |
 | `docs/superpowers/{specs,plans}` | superpowers 스킬 기본 경로 |
-| `docs/design/overview-mentor/superpowers/plans` | 드리프트 사례 |
+| `docs/design/a-mate/superpowers/plans` | 드리프트 사례 |
 
 문제점:
 
@@ -48,7 +48,7 @@
 
 - 작업 문서 루트에 있으면 **활성**, `docs/archive/` 아래에 있으면 **완료·폐기**.
 - 아카이브 경로는 원 경로를 미러한다.
-  예: `docs/design/overview-mentor/plans/X.md` → `docs/archive/design/overview-mentor/plans/X.md`
+  예: `docs/design/a-mate/plans/X.md` → `docs/archive/design/a-mate/plans/X.md`
 - `docs/archive/`는 에이전트 기본 탐색에서 제외한다 (과거 이력 조사 시에만 명시적으로 접근).
 
 ### 2. frontmatter는 아카이브 시점에만

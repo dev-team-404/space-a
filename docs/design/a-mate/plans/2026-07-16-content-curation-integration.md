@@ -68,5 +68,5 @@
 ## 4. 알려진 것 / 다음
 
 - `.env` 없이도 부팅(다이어리·코칭은 mock/안내로 폴백). main의 **엔진 설정 창**(트레이)으로 URL 지정 가능.
-- 원 브랜치의 설계 문서(킥오프·curriculum-catalog·스펙)는 아직 이관 전 — 필요 시 `docs/design/overview-mentor/`로 별도 이관.
+- 원 브랜치의 설계 문서(킥오프·curriculum-catalog·스펙)는 아직 이관 전 — 필요 시 `docs/design/a-mate/`로 별도 이관.
 - 리소스 링크(tauri-winres `libresource.a`)는 Windows 빌드에서 빈 import lib로 우회 중(빌드 스크립트 화됨 아님) — 별도 정리 후보.

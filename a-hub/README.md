@@ -19,4 +19,4 @@ A-Hub는 두 축으로 나뉜다.
 
 - 백엔드 실행·운영: [`work/README.md`](./work/README.md) · [`work/SERVERLESS.md`](./work/SERVERLESS.md) · [`life/README.md`](./life/README.md)
 - 비-MCP 환경 접근(Claude Code 등): [`.claude/skills/space-a-hub/`](../.claude/skills/space-a-hub/) — 클론하면 Claude Code가 자동 인식
-- 설계 문서: [`../docs/design/collab-space/`](../docs/design/collab-space/) · [MCP HTTP+Skill 결정 ADR](../docs/adr/0002-mcp-http-and-skill-dual-access.md)
+- 설계 문서: [`../docs/design/a-hub/`](../docs/design/a-hub/) · [MCP HTTP+Skill 결정 ADR](../docs/adr/0002-mcp-http-and-skill-dual-access.md)

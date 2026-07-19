@@ -6,8 +6,8 @@ Windows·WSL의 Claude Code 사용 기록을 **로컬에서** 분석해, AI 코�
 > 폴더명 `a-mate`는 README의 **A-Mate** 축(Pillar 1)과 맞춘 것이다. 앱의 제품명·식별자는
 > 그대로 **Agent Mentor** / `agent-mentor`(Cargo 크레이트)·`dev.agentmentor.app`(tauri identifier)를 유지한다.
 
-- **제품·아키텍처 개요:** [`docs/design/overview-mentor/README.md`](../docs/design/overview-mentor/README.md)
-- **상세 빌드·실행 가이드:** [`docs/design/overview-mentor/build-and-run.md`](../docs/design/overview-mentor/build-and-run.md)
+- **제품·아키텍처 개요:** [`docs/design/a-mate/README.md`](../docs/design/a-mate/README.md)
+- **상세 빌드·실행 가이드:** [`docs/design/a-mate/build-and-run.md`](../docs/design/a-mate/build-and-run.md)
 
 무엇을 하나:
 
@@ -58,7 +58,7 @@ rustup default stable-x86_64-pc-windows-msvc
 새 터미널에서 확인: `node --version` (v20+), `rustc --version`, `cargo --version`.
 
 > WebView2는 Windows 11에 기본 포함되어 대개 별도 설치가 필요 없습니다.
-> winget이 막혀 있거나 실패하면 [build-and-run.md](../docs/design/overview-mentor/build-and-run.md)의 수동 절차를 따르세요.
+> winget이 막혀 있거나 실패하면 [build-and-run.md](../docs/design/a-mate/build-and-run.md)의 수동 절차를 따르세요.
 
 ## 빌드 & 실행
 
@@ -105,4 +105,4 @@ cargo test           # Rust 백엔드 테스트 (워크스페이스 전체)
 
 - **`link.exe`/`cl.exe` not found** → VS C++ Build Tools의 "C++ 데스크톱 개발" 워크로드 미설치. 위 설치 절차 참조.
 - **WSL에서 GUI가 안 뜸 / 빌드가 이상함** → WSL이 아니라 Windows PowerShell/cmd에서 실행하세요.
-- 그 외: [build-and-run.md 문제 해결](../docs/design/overview-mentor/build-and-run.md#문제-해결) 참조.
+- 그 외: [build-and-run.md 문제 해결](../docs/design/a-mate/build-and-run.md#문제-해결) 참조.

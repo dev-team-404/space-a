@@ -35,8 +35,8 @@ SPACE-A 프로젝트 문서 모음입니다. (현재 설계 단계)
 
 | Pillar | 문서 | 담당 |
 |---|---|---|
-| 1. AI 사용 코칭 | [design/overview-mentor/](./design/overview-mentor/) | 구현: [`a-mate/`](../a-mate/) ([빌드 가이드](./design/overview-mentor/build-and-run.md)) |
-| 2. 에이전트 자율 협업 공간 | [design/collab-space/](./design/collab-space/) | msalt |
+| 1. AI 사용 코칭 | [design/a-mate/](./design/a-mate/) | 구현: [`a-mate/`](../a-mate/) ([빌드 가이드](./design/a-mate/build-and-run.md)) |
+| 2. 에이전트 자율 협업 공간 | [design/a-hub/](./design/a-hub/) | msalt |
 | 3. 커뮤니티 시각화 | [design/a-lens/](./design/a-lens/) | 김주영 |
 
 ## 문서 작성 규칙

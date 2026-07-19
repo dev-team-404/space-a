@@ -24,7 +24,7 @@
 - Modify: `demo_mcp.py` — use `seed.py`.
 - Create: `skills/space-a-hub/SKILL.md`, `skills/space-a-hub/references/endpoints.md`.
 - Create: `docs/adr/0009-mcp-http-and-skill-dual-access.md` (number: next free ADR).
-- Modify: `README.md`, `SERVERLESS.md`, `docs/design/collab-space/03-architecture.md`, `docs/design/collab-space/05-contracts.md`.
+- Modify: `README.md`, `SERVERLESS.md`, `docs/design/a-hub/03-architecture.md`, `docs/design/a-hub/05-contracts.md`.
 
 **Working directory for all commands:** `a-hub/work` (run `cd a-hub/work` first). Tests run with the venv that has `fastapi mcp uvicorn httpx pytest` installed.
 
@@ -874,7 +874,7 @@ git commit -m "feat: add space-a-hub Skill for non-MCP REST access"
 **Files:**
 - Create: `docs/adr/0009-mcp-http-and-skill-dual-access.md` (verify next free number first)
 - Modify: `README.md`, `SERVERLESS.md`
-- Modify: `docs/design/collab-space/03-architecture.md`, `docs/design/collab-space/05-contracts.md`
+- Modify: `docs/design/a-hub/03-architecture.md`, `docs/design/a-hub/05-contracts.md`
 
 - [ ] **Step 1: Determine next ADR number**
 
@@ -919,13 +919,13 @@ a-hub/work의 MCP는 stdio + 단일 토큰(SPACE_A_TOKEN)으로만 구현되어,
 
 Find the line `C1: MCP (stdio/HTTP)` and the ports/adapters notes; update to reflect that HTTP is the implemented default and stdio is removed. Add a one-line note that REST+MCP share one process.
 
-Run to locate: `grep -n "stdio\|C1\|MCP" ../../docs/design/collab-space/03-architecture.md`
+Run to locate: `grep -n "stdio\|C1\|MCP" ../../docs/design/a-hub/03-architecture.md`
 
 - [ ] **Step 4: Update `05-contracts.md` (신원 표)**
 
 In §3.1, the transport table currently lists stdio as a dev option. Add a note that stdio is no longer implemented (HTTP Bearer is the sole transport); keep the header/claim contract unchanged.
 
-Run to locate: `grep -n "stdio\|SPACE_A_TOKEN\|Bearer" ../../docs/design/collab-space/05-contracts.md`
+Run to locate: `grep -n "stdio\|SPACE_A_TOKEN\|Bearer" ../../docs/design/a-hub/05-contracts.md`
 
 - [ ] **Step 5: Update `README.md` MCP section**
 
@@ -942,7 +942,7 @@ Run to locate: `grep -n "MCP\|stdio" SERVERLESS.md`
 - [ ] **Step 7: Commit**
 
 ```bash
-git add ../../docs/adr/ ../../docs/design/collab-space/03-architecture.md ../../docs/design/collab-space/05-contracts.md README.md SERVERLESS.md
+git add ../../docs/adr/ ../../docs/design/a-hub/03-architecture.md ../../docs/design/a-hub/05-contracts.md README.md SERVERLESS.md
 git commit -m "docs: record MCP HTTP + Skill dual-access decision (ADR + design)"
 ```
 

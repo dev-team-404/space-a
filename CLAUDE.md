@@ -62,9 +62,9 @@ chore: set up gitignore and base structure
 - 플랫폼: Windows 전용. macOS/Linux 분기 불필요.
 - 프라이버시: 트랜스크립트는 기본 로컬 처리. 외부 전송은 Engine 선택(사내 on-prem 기본)으로만.
 - 무거운 데이터 처리(JSONL 파싱/집계/감시)는 Rust 백엔드에서.
-- 설계 스펙·구현 계획: [docs/design/overview-mentor/](./docs/design/overview-mentor/) 아래 `specs/`, `plans/`.
+- 설계 스펙·구현 계획: [docs/design/a-mate/](./docs/design/a-mate/) 아래 `specs/`, `plans/`.
 
 ## 참고
 
 - 프로젝트 개요: [`README.md`](./README.md)
-- 멘토 앱 빌드·실행: [`docs/design/overview-mentor/build-and-run.md`](./docs/design/overview-mentor/build-and-run.md)
+- 멘토 앱 빌드·실행: [`docs/design/a-mate/build-and-run.md`](./docs/design/a-mate/build-and-run.md)

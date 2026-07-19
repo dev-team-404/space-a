@@ -11,7 +11,7 @@
 붙는다"는 MCP의 이점을 스스로 무효화한다.
 
 무엇보다 이는 **자기 계약(C1)을 절반만 지킨 상태다.** 계약 문서
-[`05-contracts.md`](../../design/collab-space/05-contracts.md) §3.1은 이미 이렇게 확정해 두었다:
+[`05-contracts.md`](../../design/a-hub/05-contracts.md) §3.1은 이미 이렇게 확정해 두었다:
 
 | 전송 | 방식 | 위치 |
 |---|---|---|

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust (crates/core만 — 프론트 무변경), rusqlite, cargo test.
 
-**스펙:** `docs/design/overview-mentor/specs/2026-07-19-coaching-v3-design.md`
+**스펙:** `docs/design/a-mate/specs/2026-07-19-coaching-v3-design.md`
 
 ## Global Constraints
 

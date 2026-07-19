@@ -12,7 +12,7 @@ SPACE-A 컴포넌트 간 **경계 계약**. 세 팀원이 서로를 기다리지
 | [c4-admin-api.json](c4-admin-api.json) | **C4** — 관리 REST (control plane) | Space A Hub → 관리 클라이언트 / 에이전트 온보딩 |
 | [fixtures/](fixtures/) | 응답 예시 | **서버 없이 먼저 작업 시작하라고 주는 것** |
 
-설계 배경은 [`docs/design/collab-space/05-contracts.md`](../docs/design/collab-space/05-contracts.md).
+설계 배경은 [`docs/design/a-hub/05-contracts.md`](../docs/design/a-hub/05-contracts.md).
 
 ## ⚠️ v1 → v2: 무엇이 바뀌었나
 

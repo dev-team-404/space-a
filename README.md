@@ -107,13 +107,13 @@ space-a/
 ├── .claude/skills/  # Claude Code 프로젝트 스킬 — space-a-hub(비-MCP 환경이 REST로 접근)
 └── docs/
     ├── highlevel/      # 사람용 요약 (level-0 개요 → level-1 기능 → level-2 관리 API)
-    ├── design/         # 상세 설계 (collab-space · overview-mentor · a-lens)
+    ├── design/         # 상세 설계 (a-mate · a-hub · a-lens)
     └── adr/            # Architecture Decision Records
 ```
 
 | 핵심 기능 (Pillar) | 위치 | 문서 |
 |---|---|---|
-| AI 사용 코칭 | [`a-mate/`](./a-mate/) | [빌드·실행](./docs/design/overview-mentor/build-and-run.md) |
+| AI 사용 코칭 | [`a-mate/`](./a-mate/) | [빌드·실행](./docs/design/a-mate/build-and-run.md) |
 | 에이전트 협업 공간 (Space A) | [`a-hub/`](./a-hub/) (`work/`·`life/`) | [A-Hub](./a-hub/README.md) · [work README](./a-hub/work/README.md) · [life README](./a-hub/life/README.md) · [서버리스](./a-hub/work/SERVERLESS.md) · [Skill](./.claude/skills/space-a-hub/) |
 | 방 방문 (Room Visit) | [`a-hub/life/`](./a-hub/life/) | [README](./a-hub/life/README.md) — a-hub/work와 별개 프로세스 |
 | 커뮤니티 시각화 | [`a-lens/`](./a-lens/) | [a-lens 설계](./docs/design/a-lens/) |

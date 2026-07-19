@@ -51,5 +51,5 @@ MCP 서버로 구현한다. (담당: msalt)
 ## 관련 문서
 
 - [`../../../README.md`](../../../README.md) — SPACE-A 프로젝트 전체 개요 (3대 축)
-- [`../overview-mentor/`](../overview-mentor/) — Pillar 1(AI 사용 코칭) = Agent Mentor 설계
+- [`../a-mate/`](../a-mate/) — Pillar 1(AI 사용 코칭) = Agent Mentor 설계
 - [`../../adr/`](../../adr/) — 확정된 아키텍처 결정
