@@ -25,6 +25,7 @@ const modal = $('modal')
 const hub = $('hub')
 const hubTabs = $('hub-tabs')
 const hubBody = $('hub-body')
+const hubOpen = $('hub-open')
 
 function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
@@ -103,6 +104,7 @@ async function renderHome() {
   panel.hidden = true
   modal.hidden = true
   hub.hidden = true
+  hubOpen.hidden = true
   sceneHost.style.display = 'none'
 
   let floors: LobbyFloor[] = []
@@ -291,6 +293,24 @@ function hubSection(title: string, sub: string, items: string): string {
     </section>`
 }
 
+// 사이드바 접힘 상태 — 다음 입장 때도 유지되게 localStorage에 기억.
+let hubCollapsed = localStorage.getItem('a-lens.hub.collapsed') === '1'
+
+/** 방 화면에서만 호출 — 접힘 여부에 따라 사이드바/열기버튼 표시를 정하고 씬 폭을 재조정한다. */
+function applyHubCollapsed(inRoom: boolean) {
+  hub.hidden = !inRoom || hubCollapsed
+  hubOpen.hidden = !inRoom || !hubCollapsed
+  fitScene()
+}
+
+function toggleHub(collapsed: boolean) {
+  hubCollapsed = collapsed
+  localStorage.setItem('a-lens.hub.collapsed', collapsed ? '1' : '0')
+  applyHubCollapsed(true)
+}
+$('hub-collapse').addEventListener('click', () => toggleHub(true))
+hubOpen.addEventListener('click', () => toggleHub(false))
+
 function renderHub(data: SpaceView) {
   hubTabs.innerHTML = HUB_TABS.map(
     (t) => `<button class="hub-tab ${t.id === hubTab ? 'on' : ''}" data-tab="${t.id}">
@@ -310,7 +330,7 @@ function renderHub(data: SpaceView) {
     activity: () => hubActivityHTML(data),
   }
   hubBody.innerHTML = sections[hubTab]()
-  hub.hidden = false
+  applyHubCollapsed(true)
 }
 
 async function renderRoom(spaceId: string) {
@@ -386,9 +406,8 @@ async function renderRoom(spaceId: string) {
     },
   )
   app.stage.addChild(currentScene)
-  fitScene()
 
-  // 오른쪽 Collaboration Hub 상시 표시
+  // 오른쪽 Collaboration Hub — 내용 채우고, 접힘 상태에 맞춰 표시 + 씬 폭 재조정(fitScene).
   hubTab = 'all'
   renderHub(data)
 }
