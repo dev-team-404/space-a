@@ -118,6 +118,8 @@ mod runtime {
                 maybe_push_telemetry(&state.store);
                 // 세션 회고 — "고생 끝 해결" 세션을 로컬 생성 요약으로 발행 (Engine 필요)
                 maybe_post_retros(&state.store);
+                // AI 스프라이트 — 캐시 없으면 1회 생성 (실패 무해, 절차 생성 폴백)
+                maybe_generate_sprite(app);
             }
             Err(e) => {
                 log::error!("pipeline error: {e}");
@@ -533,6 +535,29 @@ mod runtime {
                 Ok(None) => log::warn!("retro resolve 응답에 page_id 없음"),
                 Err(e) => log::warn!("retro resolve 실패(다음 스캔 재개): {e}"),
             }
+        }
+    }
+
+
+    /// AI 스프라이트(2026-07-19) — app_data/sprite.png 없고 이미지 모델 설정이 있으면 1회 생성.
+    /// 네트워크는 락과 무관(파일·env만). 성공 시 sprite:ready emit → 프론트 즉시 교체.
+    fn maybe_generate_sprite(app: &AppHandle) {
+        use agent_mentor::sprite;
+        let Ok(dir) = app.path().app_data_dir() else { return };
+        let path = dir.join("sprite.png");
+        if path.exists() { return; }
+        let Some(cfg) = sprite::SpriteConfig::from_env() else { return };
+        let spec = agent_mentor::mascot::robot_spec_for(&agent_mentor::mascot::stable_identity());
+        let desc = sprite::character_description(&spec);
+        match sprite::generate(&cfg, &desc) {
+            Ok(png) => {
+                let _ = std::fs::create_dir_all(&dir);
+                if std::fs::write(&path, png).is_ok() {
+                    log::info!("AI 스프라이트 생성 완료: {}", path.display());
+                    let _ = app.emit("sprite:ready", ());
+                }
+            }
+            Err(e) => log::warn!("AI 스프라이트 생성 실패(다음 스캔 재시도): {e}"),
         }
     }
 

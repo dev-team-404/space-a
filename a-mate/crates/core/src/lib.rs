@@ -9,6 +9,7 @@ pub mod hosts;
 pub mod hub;
 pub mod inventory;
 pub mod mascot;
+pub mod sprite;
 pub mod model;
 pub mod ops;
 pub mod pipeline;

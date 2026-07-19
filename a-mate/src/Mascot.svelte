@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { listen } from '@tauri-apps/api/event';
+import { getCurrentWindow } from '@tauri-apps/api/window';
   import './lib/theme.css';
   import {
     emitOccasionToday, getChatterPool, getMascotSeed, getSettings, getSummary, getTodayOccasions,
     hubSettingsGet, listFindings, mascotSetExpanded, openChatTab, openSettingsWindow,
     roomGoto, roomView, roomsList, setSetting,
     onDiaryReady, onNewFindings, onScanDone, onSettingsChanged,
-    type RoomListEntry,
-  } from './lib/api';
+    type RoomListEntry, getSprite } from './lib/api';
   import { drawRobot, type RobotSpec } from './lib/robot/render';
   import { frameAt, resolveState, type BubbleKind } from './lib/robot/anim';
   import { adviceBubble, diaryBubble, findingBubble, occasionBubble, pickChatter, type Bubble } from './lib/robot/bubble';
@@ -193,8 +193,18 @@
     }
   }
 
+  // AI 스프라이트 — 있으면 캔버스 루프 대신 이미지 (CSS 바운스)
+  let sprite = $state<string | null>(null);
+  $effect(() => {
+    let un: (() => void) | null = null;
+    getSprite().then((s) => (sprite = s));
+    listen('sprite:ready', () => getSprite().then((s) => (sprite = s))).then((u) => (un = u));
+    return () => un?.();
+  });
+
   // 렌더 루프
   $effect(() => {
+    if (sprite) return;
     if (!canvas || !spec) return;
     const ctx = canvas.getContext('2d')!;
     let raf = 0;
@@ -248,7 +258,11 @@
     onpointerup={onPointerUp}
     oncontextmenu={(e) => { e.preventDefault(); toggleRoomMenu(); }}
   >
-    <canvas bind:this={canvas} width="128" height="128"></canvas>
+    {#if sprite}
+      <img class="spriteimg" src={'data:image/png;base64,' + sprite} alt="마스코트" draggable="false" />
+    {:else}
+      <canvas bind:this={canvas} width="128" height="128"></canvas>
+    {/if}
   </div>
 </div>
 
@@ -257,6 +271,11 @@
   .stage { width: 100vw; height: 100vh; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-end; }
   .robot { width: 128px; height: 128px; margin: 0 16px 16px 0; cursor: pointer; touch-action: none; }
   canvas { width: 128px; height: 128px; image-rendering: pixelated; }
+  .spriteimg {
+    width: 128px; height: 128px; object-fit: contain; pointer-events: none;
+    animation: bounce 2.6s ease-in-out infinite;
+  }
+  @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
   .bubble {
     display: flex; align-items: flex-start; gap: 2px;
     max-width: 280px; margin: 8px 12px 0 0; padding: 9px 6px 9px 12px;

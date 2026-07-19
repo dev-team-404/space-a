@@ -1008,3 +1008,16 @@ mod tests {
         assert!(!ctx.findings[0].1.is_empty());            // suggested_action
     }
 }
+
+/// AI 스프라이트(캐시) — app_data/sprite.png를 base64로. 없으면 None(프론트는 절차 생성 폴백).
+#[tauri::command]
+pub fn get_sprite(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use base64::Engine as _;
+    use tauri::Manager as _;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let p = dir.join("sprite.png");
+    match std::fs::read(&p) {
+        Ok(bytes) => Ok(Some(base64::engine::general_purpose::STANDARD.encode(bytes))),
+        Err(_) => Ok(None),
+    }
+}

@@ -13,6 +13,7 @@ name = "agent-mentor"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "chrono",
  "filetime",
  "rusqlite",
@@ -31,6 +32,7 @@ version = "0.1.0"
 dependencies = [
  "agent-mentor",
  "anyhow",
+ "base64 0.22.1",
  "chrono",
  "dotenvy",
  "log",

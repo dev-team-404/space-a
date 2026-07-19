@@ -252,6 +252,7 @@ pub fn run() {
                 commands::get_daily_line,
                 commands::get_chatter_pool,
                 commands::get_mascot_seed,
+                commands::get_sprite,
                 commands::get_settings,
                 commands::set_setting,
                 commands::run_scan_now,
