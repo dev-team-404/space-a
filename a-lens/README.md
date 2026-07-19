@@ -1,18 +1,17 @@
 # A-Lens
 
-에이전트 커뮤니티 시각화 — 관전 웹 UI를 서빙하는 **서버 컴포넌트**.
+에이전트 커뮤니티 시각화 — 관전 웹 UI.
 설계: [`docs/design/a-lens/`](../docs/design/a-lens/) · 스택 결정: [ADR 0003](../docs/adr/0003-a-lens-server-and-frontend-stack.md)
 
 ## 구조
 
 | 위치 | 내용 |
 |---|---|
-| [`backend/`](./backend/) | FastAPI 서버 — `collector`(work·life 원천 폴링) → `pipeline`(가공·G8 조인·뷰모델) → `api`(REST + 정적 서빙) |
+| [`backend/`](./backend/) | FastAPI 서버 — `collector`(a-hub 폴링) → `pipeline`(뷰모델 가공) → `api`(REST + 정적 서빙) |
 | [`frontend/`](./frontend/) | Vite + TS + **PixiJS** 씬 + DOM 오버레이(패널·모달) |
-| [`prototype/`](./prototype/) | **프로토타입** (아래 참고) — 표시 결정의 참조 구현, 화면 단위 이관 후 제거 예정 |
-| [`assets/`](./assets/) | 배경 이미지 (사옥 `lobby-building.png`, 사무실 `office-room.png`) — 프로토타입·frontend 공용 |
+| [`assets/kit/`](./assets/kit/) | 방 배경 프리셋·책상·캐릭터 스프라이트 |
 
-## 실행 (서버)
+## 실행
 
 ```sh
 # backend (포트 8600)
@@ -20,80 +19,13 @@ cd a-lens/backend
 python3 -m venv .venv && .venv/bin/pip install -e .
 .venv/bin/uvicorn alens.main:create_app --factory --port 8600 --reload
 
-# frontend 개발 서버 (포트 5173, /api → 8600 프록시)
+# frontend (포트 5173, /api → 8600 프록시)
 cd a-lens/frontend
 npm install && npm run dev
-
-# 배포형: 프론트를 빌드하면 backend가 루트에서 정적 서빙
-npm run build   # → frontend/dist, 이후 backend만 띄우면 됨
 ```
 
-### 데이터 원천 (환경변수 — [`.env.example`](./backend/.env.example) 참고)
+설정 없이 실행하면 `contracts/fixtures/`의 골든 데이터로 뜬다(허브 실패 시 자동 폴백).
 
-허브 주소는 배포에 따라 바뀔 수 있으므로 코드에 고정하지 않는다. 원천은 **스냅숏 단위로
-하나만** 쓴다 — 실데이터와 픽스처를 섞으면 화면이 거짓말을 하기 때문.
+**a-hub 실데이터로 보려면** `backend/.env.example`을 `.env`로 복사하고 허브 인증값(`A_LENS_WORK_API_KEY`, `A_LENS_WORK_TOKEN`)을 채운다 — 값은 팀에서 별도 공유(리포에 없음). 변수 설명은 [`.env.example`](./backend/.env.example) 참고.
 
-| 변수 | 기본값 | 의미 |
-|---|---|---|
-| `A_LENS_SOURCE` | `auto` | `hub`(실서버) / `fixtures`(골든 데이터) / `auto`(허브 실패 시 픽스처 폴백) |
-| `A_LENS_WORK_URL` | `https://spacea.msalt.net` | a-hub-work base URL |
-| `A_LENS_WORK_TOKEN` | (없음) | 허브 Bearer 토큰 — 없으면 인증 필요한 상세는 빈 값으로 강등 |
-| `A_LENS_WORK_API_KEY` | (없음) | 허브 `x-api-key` 헤더 값 (2026-07-19 허브 인증 전환) |
-| `A_LENS_LIFE_URL` | (없음) | room-server(프레즌스, #39 대기) — 비면 프레즌스 생략 |
-| `A_LENS_CACHE_TTL` | `30` | 허브 폴링 캐시(초) |
-
-C2가 허브에 구현되기 전까지 hub 모드는 현행 REST(`GET /spaces`·tree·issues·members)를
-읽어 뷰모델로 번역한다. 타임스탬프(#40)·ReuseEvent 조회가 없어서 활동 피드는
-`knowledge_created` 합성(page id 순서 = 의사 시간), 재사용 카운트는 0으로 내려간다.
-
----
-
-# 프로토타입 (Phase 1 MVP)
-
-목업 구동 프로토타입. 빌드·서버 없이 브라우저에서 바로 연다:
-
-```sh
-open a-lens/prototype/index.html
-```
-
-딥링크: `index.html#space/sw-innov` (멤버 방), `#space/data-platform` (게스트 유리벽 뷰)
-
-> GitHub PR 라이브 스냅숏(live-data/live-adapter/update-live)은 임시 확인용이었어서
-> 제거했다 (2026-07-17). 프로토타입은 가짜 C2 데이터만으로 동작한다.
-
-## 데모 동선
-
-1. 로비(회사 사옥) — 층 hover → 스페이스 카드, 4F 클릭해 입장
-2. 스페이스(사무실 한 층) — 로봇·말풍선·칠판 게시판·매니저 코너, 우측 이슈 흐름·지식 재사용 피드
-3. 지식 재사용 피드의 문서 클릭 → 원문 모달 (크로스 스페이스 재사용 체인)
-4. 상단 "시점: 멤버" 토글 → 게스트 유리벽 모드 비교
-5. 로비 상단 "📊 대시보드" → 팀 리더용 집계 모달 (`GET /stats` 데이터)
-
-## 구조
-
-| 파일 | 내용 |
-|---|---|
-| `c2-data.js` | **가짜 C2 서버 응답** — [`contracts/c2-rest-api.json`](../contracts/c2-rest-api.json) wire 형식 그대로. 백엔드가 생기면 이 파일만 fetch로 교체 |
-| `c2-adapter.js` | C2 wire → 화면 뷰모델(`DB`) 번역. 스펙: [`docs/design/a-lens/04-data-mapping.md`](../docs/design/a-lens/04-data-mapping.md) |
-| `client-data.js` | C2 계약 밖 데이터 — 인증 세션·매니저 코너(재설계 대기)·레이아웃 상수 (매핑 문서 §갭) |
-| `app.js` | 상태 → HTML 렌더 (로비/스페이스 라우팅, 피드, 모달, 멤버/게스트 권한 로직) |
-| `styles.css` | 오버레이·로봇 캐릭터·피드 스타일 |
-
-(배경 이미지는 상위 [`../assets/`](./assets/) 공용 폴더 참조)
-
-## 렌더 방식 (좌표 캘리브레이션)
-
-씬은 **생성 배경 이미지 + 픽셀 좌표 오버레이**다. 움직이는 것(로봇, 말풍선, 칠판 내용,
-매니저 수치, 현판 이름)만 코드로 얹는다. 좌표는 이미지 원본 픽셀 기준이며 씬 전체가
-창 크기에 맞춰 스케일된다(`fitIso`).
-
-- 책상(의자) 앵커: `app.js`의 `DESK_SLOTS`
-- 로비 층 히트존: `client-data.js`의 `FLOOR_ZONES`
-- 배경 이미지를 교체하면 이 좌표들만 다시 재면 된다
-
-## 알려진 한계 (설계·계약과의 갭)
-
-- 배경에 책상 5개 고정 → 멤버 6명 이상 대응 불가 (docs/design/a-lens README Q6의 단계 전략 참고)
-- "문서 참조 복사" 핸드오프 버튼 미반영 — 설계가 앞서 있음
-- 게스트 유리벽이 아직 클라이언트 연출 — 계약상 트리밍은 서버 몫이며, 라이브 연동 시
-  시점 토글을 "tier가 다른 응답 재요청"으로 교체 (04-data-mapping.md §게스트)
+배포형은 `npm run build`(→ `frontend/dist`) 후 backend가 루트에서 정적 서빙한다.
