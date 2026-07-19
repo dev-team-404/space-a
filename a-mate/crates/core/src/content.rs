@@ -278,6 +278,22 @@ impl Default for BorisTipsSource {
     }
 }
 
+/// 보리스 팁 영어 제목 → 한국어 (알려진 제목 정적 매핑, 미지 제목은 원문 유지).
+/// 한국어 UI에 영어 제목이 떠 있으면 배움 카드가 붕 뜬다는 검토(2026-07-19) 반영.
+fn boris_ko_title(en: &str) -> String {
+    match en.trim() {
+        "Run 5 Claudes in Parallel" => "클로드 5개를 병렬로 돌리기".into(),
+        "Start in Plan Mode" => "플랜 모드로 먼저 계획하기".into(),
+        "Subagents for Common Workflows" => "자주 하는 작업은 서브에이전트로".into(),
+        "Parallel Web and Mobile Sessions" => "웹·모바일 세션 병렬 활용".into(),
+        "@.claude in Code Reviews" => "코드 리뷰에서 @.claude 태그 쓰기".into(),
+        "Slash Commands for Inner Loops" => "반복 루프는 슬래시 커맨드로".into(),
+        "Shared CLAUDE.md Documentation" => "CLAUDE.md를 팀과 공유하기".into(),
+        "Common Slash Commands" => "자주 쓰는 슬래시 커맨드 정리".into(),
+        other => other.to_string(),
+    }
+}
+
 /// 본문을 간결하게 — 파싱 아티팩트("View original post") 제거 + 공백 정리 + ~140자 축약.
 /// (엔진 꺼져 코칭이 없을 때의 폴백용. 코칭이 있으면 프론트가 본문을 숨긴다.)
 fn tidy_body(body: &str) -> String {
@@ -355,7 +371,7 @@ impl BorisTipsSource {
                 ContentItem {
                     id: format!("boris-{:02x}{:02x}{:02x}", hx[0], hx[1], hx[2]),
                     kind: ItemKind::Tip,
-                    title: t.trim().to_string(),
+                    title: boris_ko_title(&t),
                     body: format!("{} — Boris Cherny(Claude Code 창시자)", tidy_body(&b)),
                     source_url: Some(self.url.clone()),
                     dimension,
@@ -511,6 +527,9 @@ pub fn personal_lessons(
     yesterday: &str,
 ) -> Vec<ContentItem> {
     let mut out = Vec::new();
+    let parse = |d: &str| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok();
+    let day_before = parse(yesterday)
+        .map(|d| (d - chrono::Duration::days(1)).format("%Y-%m-%d").to_string());
 
     // ① 시행착오 세션 — 오류 반복 후 회복한 최근 세션 (hub 회고와 같은 신호, 코칭 프레임)
     if let Ok(sessions) = store.struggle_sessions(3, 20, "9999-12-31T00:00:00Z") {
@@ -545,9 +564,103 @@ pub fn personal_lessons(
         }
     }
 
-    // ② 캐시 재읽기 과다 — 컨텍스트가 눈덩이처럼 굴러가는 중
+    // ②-칭찬: 캐시 레슨을 보여준 적 있고, 어제 재읽기가 그제보다 30%+ 줄었다면 — 코칭의 완성은 피드백
+    let mut cache_praised = false;
+    if let (Some(db), Ok(true)) = (day_before.as_deref(), store.content_item_exists("lesson-cache")) {
+        if let (Ok(y), Ok(b)) = (store.summary_for_date(yesterday), store.summary_for_date(db)) {
+            if b.tok_cache_read > 50_000_000 && y.tok_cache_read * 10 <= b.tok_cache_read * 7 {
+                let pct = 100 - (y.tok_cache_read * 100 / b.tok_cache_read.max(1));
+                cache_praised = true;
+                out.push(lesson(
+                    "lesson-praise-cache",
+                    &["context"],
+                    format!("재읽기가 {pct}% 줄었어요 — 조언을 실천하셨네요 👏"),
+                    format!(
+                        "당신 로그: 캐시 재읽기가 그제 대비 {pct}% 감소했어요. 세션을 나누고                          위임하는 습관이 자리잡는 중입니다. 이 리듬 그대로 가면 돼요."
+                    ),
+                    "https://code.claude.com/docs/en/sub-agents",
+                ));
+            }
+        }
+    }
+
+    // ②-칭찬: 시행착오 레슨 실천 감지 — 어제 오류가 그제의 절반 이하
+    if let (Some(db), Ok(true)) = (day_before.as_deref(), store.content_item_exists("lesson-struggle")) {
+        if let (Ok(ye), Ok(be)) = (store.errors_on_local_date(yesterday), store.errors_on_local_date(db)) {
+            if be >= 5 && ye * 2 <= be {
+                out.push(lesson(
+                    "lesson-praise-struggle",
+                    &["plan"],
+                    format!("도구 오류가 {be}회 → {ye}회로 줄었어요 👏"),
+                    format!(
+                        "당신 로그: 어제 시행착오가 그제({be}회)의 절반 이하({ye}회)였어요.                          계획 먼저·접근 전환 습관이 통하고 있습니다."
+                    ),
+                    "https://code.claude.com/docs/en/common-workflows",
+                ));
+            }
+        }
+    }
+
+    // ②-보강: 캐시를 만들고 떠남 — 1h 캐시 생성 후 재사용 없이 세션 이탈 (R4 계열)
     if let Ok(day) = store.summary_for_date(yesterday) {
-        if day.tok_cache_read > 50_000_000 && day.tok_cache_read > day.tok_input.saturating_mul(5_000) {
+        if day.tok_cache_create > 3_000_000 && day.tok_cache_read < day.tok_cache_create {
+            out.push(lesson(
+                "lesson-cache-create",
+                &["context"],
+                "캐시를 만들고 바로 떠나고 있어요".into(),
+                format!(
+                    "당신 로그: 어제 캐시 생성 {}만 토큰인데 재사용이 그보다 적어요. 세션을                      열었다 금방 닫으면 캐시 비용만 내는 셈 — 관련 작업은 한 세션에서 몰아서                      하고, 정말 짧은 질문은 가벼운 모델로 처리하세요.",
+                    day.tok_cache_create / 10_000
+                ),
+                "https://code.claude.com/docs/en/model-config",
+            ));
+        }
+    }
+
+    // ③-주간: 월·화요일엔 지난주 리포트 (종단 서사의 시작)
+    if let Some(t) = parse(today) {
+        use chrono::Datelike;
+        let wd = t.weekday().num_days_from_monday(); // 0=월
+        if wd <= 1 {
+            let this_mon = t - chrono::Duration::days(wd as i64);
+            let last_mon = this_mon - chrono::Duration::days(7);
+            let last_sun = this_mon - chrono::Duration::days(1);
+            let prev_mon = last_mon - chrono::Duration::days(7);
+            let prev_sun = last_mon - chrono::Duration::days(1);
+            let f = |d: chrono::NaiveDate| d.format("%Y-%m-%d").to_string();
+            if let (Ok(lw), Ok(pw)) = (
+                store.range_totals(&f(last_mon), &f(last_sun)),
+                store.range_totals(&f(prev_mon), &f(prev_sun)),
+            ) {
+                if lw.0 > 0 {
+                    let delta = |now: u64, before: u64| -> String {
+                        if before == 0 { "—".into() }
+                        else {
+                            let p = now as i64 * 100 / before as i64 - 100;
+                            if p >= 0 { format!("+{p}%") } else { format!("{p}%") }
+                        }
+                    };
+                    let iso = last_mon.iso_week();
+                    out.push(lesson(
+                        &format!("lesson-weekly-{}-W{:02}", iso.year(), iso.week()),
+                        &["weekly"],
+                        "지난주 AI 사용 리포트".into(),
+                        format!(
+                            "당신 로그: 지난주 세션 {}개({}), 출력 {}만 토큰({}), 캐시 재읽기                              {}만 토큰({}). 괄호는 전주 대비예요. 재읽기가 늘고 있다면 세션                              분리·위임을, 세션이 늘었다면 반복 지시의 커맨드화를 점검해 보세요.",
+                            lw.0, delta(lw.0, pw.0),
+                            lw.2 / 10_000, delta(lw.2, pw.2),
+                            lw.3 / 10_000, delta(lw.3, pw.3),
+                        ),
+                        "https://code.claude.com/docs/en/common-workflows",
+                    ));
+                }
+            }
+        }
+    }
+
+    // ② 캐시 재읽기 과다 — 컨텍스트가 눈덩이처럼 굴러가는 중 (칭찬이 나갔으면 잔소리 생략)
+    if let Ok(day) = store.summary_for_date(yesterday) {
+        if !cache_praised && day.tok_cache_read > 50_000_000 && day.tok_cache_read > day.tok_input.saturating_mul(5_000) {
             let eok = day.tok_cache_read / 100_000_000;
             let label = if eok > 0 { format!("약 {eok}억") } else { format!("{}", day.tok_cache_read) };
             out.push(lesson(
@@ -668,7 +781,7 @@ pub fn coach_prompt(title: &str, body: &str, personal: Option<&str>) -> (String,
         인사말·따옴표·과장 없이 핵심만. \
         새 기능 소식이라면: 원문(패치노트)을 번역·반복하지 말고, 이 기능으로 '무엇이 가능해졌고 \
         언제 어떤 명령·방법으로 써보면 되는지'를 구체적으로 안내하세요. 쓸 만한 활용법이 \
-        떠오르지 않는 소식이면 억지로 포장하지 말고 어떤 상황에 해당되는지만 짧게 알려주세요."
+        떠오르지 않는 소식이면 억지로 포장하지 말고 어떤 상황에 해당되는지만 짧게 알려주세요.         절대 금지: 카드 제목·본문에 이미 있는 문장을 반복·번역·재서술하는 것. 본문에 없는         '다음 행동 딱 한 걸음'을 더할 수 없으면 빈 문자열만 반환하세요."
         .to_string();
     let data = personal.unwrap_or("(개인 데이터 없음 — 일반 원칙만)");
     let user = format!(
@@ -841,6 +954,57 @@ mod tests {
     }
 
     #[test]
+    fn praise_fires_when_cache_improves_after_lesson_shown() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        // 레슨을 보여준 적 있음
+        let mk = |id: &str| ContentItem {
+            id: id.into(), kind: ItemKind::Tip, title: "t".into(), body: "b".into(),
+            source_url: None, dimension: None, trigger_tags: vec!["personal".into()], base_priority: 0,
+        };
+        store.replace_content_items(&[(mk("lesson-cache"), 550)], "2026-07-17T00:00:00Z").unwrap();
+        // 그제 2.1억 → 어제 0.6억 (71% 감소)
+        store.conn.execute(
+            "INSERT INTO daily_rollup (host,project_id,date,tok_input,tok_output,tok_cache_read,tok_cache_create,session_count)
+             VALUES ('W','p','2026-07-17',1000,1,210000000,100,2), ('W','p','2026-07-18',1000,1,60000000,100,2)",
+            [],
+        ).unwrap();
+        let lessons = personal_lessons(&store, "2026-07-19", "2026-07-18");
+        let praise = lessons.iter().find(|l| l.id == "lesson-praise-cache").expect("칭찬 발화");
+        assert!(praise.title.contains("줄었어요"));
+        assert!(praise.body.contains("71%") || praise.body.contains("72%"), "{}", praise.body);
+        // 칭찬이 나가면 같은 축 잔소리(lesson-cache)는 침묵
+        assert!(!lessons.iter().any(|l| l.id == "lesson-cache"));
+    }
+
+    #[test]
+    fn weekly_report_fires_on_monday_with_last_week_data() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        // 지난주(7/6~7/12)와 전주(6/29~7/5) 데이터
+        store.conn.execute(
+            "INSERT INTO daily_rollup (host,project_id,date,tok_input,tok_output,tok_cache_read,tok_cache_create,session_count)
+             VALUES ('W','p','2026-07-08',10,2000000,50000000,1,4), ('W','p','2026-07-01',10,1000000,80000000,1,2)",
+            [],
+        ).unwrap();
+        // 2026-07-13 = 월요일
+        let lessons = personal_lessons(&store, "2026-07-13", "2026-07-12");
+        let weekly = lessons.iter().find(|l| l.id.starts_with("lesson-weekly-")).expect("주간 리포트");
+        assert!(weekly.body.contains("+100%"), "세션 2→4: {}", weekly.body); // 세션 전주 대비
+        // 수요일엔 침묵
+        assert!(!personal_lessons(&store, "2026-07-15", "2026-07-14")
+            .iter().any(|l| l.id.starts_with("lesson-weekly-")));
+    }
+
+    #[test]
+    fn boris_titles_localized_for_known_entries() {
+        let html = r#"
+          <div class="step-header"><div class="step-title">Start in Plan Mode</div></div>
+          <div class="step-body">Plan first.</div>
+        "#;
+        let items = BorisTipsSource::default().parse_html(html);
+        assert_eq!(items[0].title, "플랜 모드로 먼저 계획하기");
+    }
+
+    #[test]
     fn personal_lesson_outranks_frontier_tip() {
         let l = lesson("lesson-x", &["model"], "t".into(), "b".into(), "https://x");
         // 전 축 마스터 프로필이어도 (마스터 억제 미적용) 최상위
@@ -925,7 +1089,7 @@ mod tests {
         let items = BorisTipsSource::default().parse_html(html);
         assert_eq!(items.len(), 2, "빈 쌍은 걸러야 함 (got {})", items.len());
         // 첫 팁: worktree/parallel → Orchestration + subagent 태그, 창시자 출처
-        assert_eq!(items[0].title, "Run 5 Claudes in Parallel");
+        assert_eq!(items[0].title, "클로드 5개를 병렬로 돌리기"); // 한국어화(2026-07-19)
         assert!(items[0].body.contains("git worktrees"), "본문 텍스트: {}", items[0].body);
         assert!(items[0].body.contains("Boris"), "출처 표기 필요: {}", items[0].body);
         assert_eq!(items[0].dimension, Some(Dimension::Orchestration));

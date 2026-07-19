@@ -38,6 +38,7 @@
     const t = top;
     coaching = null;
     if (!t) return;
+    if (t.trigger_tags?.includes('personal')) return; // 레슨 본문이 이미 개인화 — 중복 코칭 금지
     coachLoading = true;
     coachTip(t)
       .then((s) => { coaching = s?.trim() || null; })

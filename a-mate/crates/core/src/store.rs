@@ -996,6 +996,43 @@ impl SqliteStore {
         Ok(())
     }
 
+    /// 콘텐츠 아이템 존재 여부 (레슨 칭찬 루프 — "이 레슨을 보여준 적 있나").
+    pub fn content_item_exists(&self, id: &str) -> Result<bool> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM content_items WHERE id=?1",
+            params![id],
+            |r| r.get(0),
+        )?;
+        Ok(n > 0)
+    }
+
+    /// 특정 로컬 날짜의 도구 오류(error+denied) 수 — 레슨 칭찬 루프용.
+    pub fn errors_on_local_date(&self, date: &str) -> Result<u64> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM events
+             WHERE date(ts,'localtime')=?1 AND result_status IN ('error','denied')",
+            params![date],
+            |r| r.get(0),
+        )?;
+        Ok(n as u64)
+    }
+
+    /// 날짜 구간 합계 (주간 리포트용) — (세션수, 입력, 출력, 캐시읽기).
+    pub fn range_totals(&self, from: &str, to: &str) -> Result<(u64, u64, u64, u64)> {
+        self.conn
+            .query_row(
+                "SELECT COALESCE(SUM(session_count),0), COALESCE(SUM(tok_input),0),
+                        COALESCE(SUM(tok_output),0), COALESCE(SUM(tok_cache_read),0)
+                 FROM daily_rollup WHERE date >= ?1 AND date <= ?2",
+                params![from, to],
+                |r| Ok((
+                    r.get::<_, i64>(0)? as u64, r.get::<_, i64>(1)? as u64,
+                    r.get::<_, i64>(2)? as u64, r.get::<_, i64>(3)? as u64,
+                )),
+            )
+            .map_err(Into::into)
+    }
+
     /// 텔레메트리(#46 목표 아키텍처): 특정 로컬 날짜의 MCP 서버별 호출 수 — 파생 카운트만.
     pub fn mcp_call_counts_for_date(&self, date: &str) -> Result<Vec<(String, u64)>> {
         let mut stmt = self.conn.prepare(

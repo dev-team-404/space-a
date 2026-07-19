@@ -165,6 +165,8 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     store.delete_findings_by_rule_and_scope("R9", "session")?;
     store.delete_findings_by_rule_and_scope("R12", "project")?;
     let engine = RuleEngine::new(vec![
+        // R6(반복 지시 → 스킬/커맨드화)은 v3 은퇴 대상 아님 — 킥오프 차별점 신규 등록
+        Box::new(crate::rules::r6_repeated_prompts::R6RepeatedPrompts::default()),
         Box::new(R7OpusTrivial::default()),
         Box::new(R10AutomationBurst::default()),
         Box::new(R11PermissionFriction::default()),

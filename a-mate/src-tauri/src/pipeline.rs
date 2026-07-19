@@ -413,9 +413,22 @@ mod runtime {
             Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
         };
         if already { return; }
-        let Some(token) = token_opt else { return }; // 공유 경로가 최초 register를 담당
         let Some(brief) = brief else { return };
         if hub::telemetry_is_empty(&brief) { return; } // 활동 없는 날은 노이즈 — 발행 생략
+        // 부트스트랩(2026-07-19): 공유할 발견이 없어도 텔레메트리는 나가야 한다 — 직접 register
+        let token = match token_opt {
+            Some(t) => t,
+            None => match HubClient::register(&cfg) {
+                Ok((agent_id, t)) => {
+                    if let Ok(store) = store_mutex.lock() {
+                        let _ = store.set_setting("knowledge_hub_agent_id", &agent_id);
+                        let _ = store.set_setting("knowledge_hub_token", &t);
+                    }
+                    t
+                }
+                Err(e) => { log::warn!("telemetry register 실패(다음 스캔 재시도): {e}"); return; }
+            },
+        };
 
         // ② 락 밖: 발행 (공간 부트스트랩 포함)
         let mut client = HubClient { base_url: cfg.base_url.clone(), api_key: cfg.api_key.clone(), token };
@@ -473,8 +486,21 @@ mod runtime {
             Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
         };
         if candidates.is_empty() { return; }
-        let Some(token) = token_opt else { return }; // 지식 공유 경로가 최초 register 담당
         let Some(engine) = engine else { return };   // Engine 없으면 보류 (품질 > 정시성)
+        // 부트스트랩(2026-07-19): 회고도 자체 register — 공유 발견 유무와 독립
+        let token = match token_opt {
+            Some(t) => t,
+            None => match HubClient::register(&cfg) {
+                Ok((agent_id, t)) => {
+                    if let Ok(store) = store_mutex.lock() {
+                        let _ = store.set_setting("knowledge_hub_agent_id", &agent_id);
+                        let _ = store.set_setting("knowledge_hub_token", &t);
+                    }
+                    t
+                }
+                Err(e) => { log::warn!("retro register 실패(다음 스캔 재시도): {e}"); return; }
+            },
+        };
 
         let client = HubClient { base_url: cfg.base_url.clone(), api_key: cfg.api_key.clone(), token };
         let now = chrono::Utc::now().to_rfc3339();

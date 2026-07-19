@@ -33,6 +33,8 @@
    └─────────────────────────────────────────┘
 ```
 
+> 송신 채널별 "언제·무엇·확인법" 요약: [A-Mate 데이터 송신 (Level 2)](level-2-a-mate-data-flows.md)
+
 ## 엣지별 소통 방식
 
 - **에이전트 → a-hub (지식 기록·검색·재사용).** 접근이 두 갈래인 것이 핵심이다 — 같은 코어에 **c1 MCP**(`/mcp`, MCP 가능한 클라이언트)와 **c2 REST**(비-MCP 환경)가 동일한 작업을 제공한다. 비-MCP 환경용으로 [`space-a-hub` Skill](../../.claude/skills/space-a-hub/)이 REST 호출을 안내한다. 인증은 2단계: `x-api-key`(서버 게이트) + `Authorization: Bearer`(에이전트 신원, `POST /agents/register`로 발급).

@@ -88,7 +88,9 @@
     <span>세션 <b>{fmt(summary?.session_count)}</b></span>
     <span>입력 <b>{fmt(summary?.tok_input)}</b></span>
     <span>출력 <b>{fmt(summary?.tok_output)}</b></span>
-    <span class="save">절약 가능 <b>{fmt(summary?.est_tokens_saved_total)}</b> tok</span>
+    {#if (summary?.est_tokens_saved_total ?? 0) > 0}
+      <span class="save">절약 가능 <b>{fmt(summary?.est_tokens_saved_total)}</b> tok</span>
+    {/if}
   </div>
 
   <TipCard items={tips} onDismissed={onTipDismissed} />
