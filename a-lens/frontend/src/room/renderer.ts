@@ -194,9 +194,8 @@ export function buildRoomScene(
   // ── 책상 (deskCount만큼 — 에이전트보다 많으면 빈 책상, 'mix'면 종류 순환) ──
   // 새 desk 스프라이트가 시트보다 작게 잘려 나와, 배경 대비 살짝 키워 얹는다.
   const DESK_SCALE = 1.7
-  // desk 스프라이트는 ~30°(slope 0.577) 다이메트릭으로 그려져 배경(2:1, slope 0.5)보다 가파르다.
-  // 세로를 0.5/0.577로 눌러 평면 각도를 방 바닥·벽과 맞춘다.
-  const DESK_Y_RATIO = 0.87
+  // desks.png 원본 비율 그대로 렌더링한다(세로 눌림 없음).
+  const DESK_Y_RATIO = 1
   slots.forEach(({ gx, gy }, k) => {
     const deskId = resolveDeskId(config.desk, k)
     if (placeKitSprite(root, `desk.${deskId}`, gx, gy, depth(gx + 1, gy + 0.5), DESK_SCALE, DESK_Y_RATIO)) return
