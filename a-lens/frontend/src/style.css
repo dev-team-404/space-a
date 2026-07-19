@@ -351,3 +351,88 @@ button { font: inherit; cursor: pointer; }
   line-height: 1.7;
   color: #c8cfd8;
 }
+/* 더미(fake) 데이터 구분 배지 — 실데이터와 섞여 표시될 때 오해 방지 */
+.demo-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #d9a441;
+  border: 1px solid #d9a441;
+  border-radius: 4px;
+  padding: 1px 5px;
+  vertical-align: 2px;
+}
+/* ── 이슈 흐름: 상태 필터 칩 + 사람 필터 + 시간 버킷 + 컴팩트 행 ── */
+.issue-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.issue-chip {
+  background: #101624;
+  border: 1px solid #2b3345;
+  color: #aab2bd;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.issue-chip b { font-weight: 700; margin-left: 2px; }
+.issue-chip.on { border-color: #d9a441; color: #f0e6d2; background: #1a2436; }
+.issue-person-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.issue-person {
+  flex: 1;
+  background: #101624;
+  border: 1px solid #2b3345;
+  color: #c8cfd8;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.bucket-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #7d8590;
+}
+.bucket-head::after { content: ''; flex: 1; height: 1px; background: #2b3345; }
+.issue-row {
+  background: #101624;
+  border: 1px solid #2b3345;
+  border-left: 3px solid #888;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+.issue-row.done { opacity: 0.55; }
+.issue-row-title {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #e8eaed;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.issue-row-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  font-size: 11px;
+  color: #8a93a3;
+}
+.issue-row.hl-related {
+  border-color: #d9a441;
+  box-shadow: 0 0 0 1px #d9a441, 0 0 14px rgba(217, 164, 65, 0.35);
+}
+/* 홈 상단 FAKE 표시/숨김 토글 */
+.fake-toggle { margin-left: 8px; }
+.fake-toggle.on { border-color: #d9a441; color: #d9a441; }
+/* 칠판 클릭 → 관련 이슈/재사용 카드 강조 */
+.feed-card.hl-related, .doc-item.hl-related {
+  border-color: #d9a441;
+  box-shadow: 0 0 0 1px #d9a441, 0 0 14px rgba(217, 164, 65, 0.35);
+}

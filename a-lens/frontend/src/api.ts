@@ -7,6 +7,7 @@ export type LobbyFloor = {
   activity: number
   stats: { knowledge?: number; reuse?: number; resolved?: number }
   highlight: string | null
+  demo?: boolean // 더미(fake) 스페이스 — 화면에서 FAKE 배지로 구분
 }
 
 export type LobbyView = {
@@ -59,6 +60,22 @@ export type KnowledgeDoc = {
   reuse_count: number
 }
 
+export type SpaceHighlight = {
+  text: string // 칠판에 분필로 적히는 한 줄
+  kind?: 'reuse' | 'issue' | string
+  doc_id?: string // kind=reuse — 재사용된 지식 문서
+  issue_id?: string // kind=issue — 해결된 이슈
+}
+
+export type ReuseEvent = {
+  doc_id?: string
+  source_space?: string
+  consumer_space?: string
+  at?: string | null
+  summary: string
+  demo?: boolean
+}
+
 export type SpaceView = {
   space_id: string
   viewer_tier: string
@@ -66,6 +83,9 @@ export type SpaceView = {
   issues: SpaceIssue[]
   knowledge: KnowledgeDoc[]
   visits: { today: number; total: number } | null
+  reuse_events?: ReuseEvent[] // 이 방이 원천/소비자인 재사용 이벤트 (Hub '지식 재사용' 탭)
+  highlight?: SpaceHighlight | null // 오늘의 하이라이트 — 방 칠판 표시 + 클릭 시 관련 항목 연동
+  demo?: boolean // 더미(fake) 스페이스 — 화면에서 FAKE 배지로 구분
 }
 
 async function getJson<T>(url: string): Promise<T> {

@@ -21,6 +21,8 @@ export type RoomSceneData = {
   agents: SpaceAgent[]
   issues: SpaceIssue[]
   knowledgeCount: number
+  /** 오늘의 하이라이트 한 줄 — 칠판에 분필 글씨로 표시 */
+  highlight?: string | null
 }
 
 /** 빌더 프리뷰용 샘플 — 실데이터 fetch 없이 방 모양만 확인 */
@@ -34,6 +36,7 @@ export const PREVIEW_DATA: RoomSceneData = {
     { issue_id: 'i2', title: '인증서 문제', status: 'resolved', opened_by: '', timeline: [] },
   ],
   knowledgeCount: 12,
+  highlight: '『배포 자동화 체크리스트』 지식이 플랫폼팀에서 재사용됐어요 (누적 4회)',
 }
 
 const ROBOT_COLORS = [0xd9a441, 0x7fb3d5, 0xa3be8c, 0xd08770, 0xb48ead, 0x8fbcbb]
@@ -212,6 +215,75 @@ export function buildRoomScene(
       label.position.set((SIGN_CX - cxI) * sx, (SIGN_CY - cyI) * sy)
       label.zIndex = -900 // 배경(-1000) 위, 히트존/책상 아래
       root.addChild(label)
+    }
+
+    // ── 칠판에 오늘의 하이라이트 — 하루치 기록 중 가장 핵심인 사건 한 줄 (분필 느낌) ──
+    const hl = data.highlight?.trim()
+    if (hl && roomCal.backWall) {
+      const [bx0, by0, bx1, by1] = roomCal.backWall
+      // 칠판 나무 프레임 안쪽 여백 (이미지 px)
+      const PADX = 36
+      const PADY = 26
+      const boardX = (bx0 + PADX - cxI) * sx
+      const boardY = (by0 + PADY - cyI) * sy
+      const boardW = (bx1 - bx0 - PADX * 2) * sx
+      const boardH = (by1 - by0 - PADY * 2) * sy
+
+      const font = '"Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif'
+      const headerStyle = (size: number) =>
+        new TextStyle({
+          fill: 0xffd97a, // 노란 분필
+          fontSize: size,
+          fontWeight: '700',
+          fontFamily: font,
+          dropShadow: { color: 0xffd97a, alpha: 0.35, blur: 4, distance: 0, angle: 0 }, // 분필 번짐
+        })
+      const bodyStyle = (size: number) =>
+        new TextStyle({
+          fill: 0xf3f0e2, // 흰 분필
+          fontSize: size,
+          fontWeight: '600',
+          lineHeight: Math.round(size * 1.45),
+          fontFamily: font,
+          wordWrap: true,
+          wordWrapWidth: boardW,
+          breakWords: true, // 한국어 긴 제목도 칠판 폭에서 강제 줄바꿈
+          dropShadow: { color: 0xf3f0e2, alpha: 0.3, blur: 3, distance: 0, angle: 0 },
+        })
+      const header = new Text({ text: '★ 오늘의 하이라이트', style: headerStyle(21) })
+      const body = new Text({ text: hl, style: bodyStyle(20) })
+      // 칠판 폭 전체로 줄바꿈하며 들어가는 최대 본문 폰트 크기를 이진 탐색 —
+      // 등비 축소 방식은 세로 초과 시 폭까지 좁아져 칠판 왼쪽만 쓰게 된다.
+      const gapY = 10
+      const totalH = () => header.height + gapY + body.height
+      let lo = 12
+      let hi = 44
+      let best = lo
+      while (lo <= hi) {
+        const mid = Math.floor((lo + hi) / 2)
+        header.style = headerStyle(mid + 2)
+        body.style = bodyStyle(mid)
+        if (totalH() <= boardH && header.width <= boardW) {
+          best = mid
+          lo = mid + 1
+        } else {
+          hi = mid - 1
+        }
+      }
+      header.style = headerStyle(best + 2)
+      body.style = bodyStyle(best)
+
+      const chalk = new Container()
+      body.position.set(0, header.height + gapY)
+      // 밑줄 — 분필로 그은 구분선
+      const rule = new Graphics()
+        .moveTo(0, header.height + 3)
+        .lineTo(Math.min(boardW, header.width + 24), header.height + 3)
+        .stroke({ color: 0xf3f0e2, alpha: 0.5, width: 2 })
+      chalk.addChild(header, rule, body)
+      chalk.position.set(boardX, boardY + Math.max(0, (boardH - totalH()) / 2))
+      chalk.zIndex = -890 // 간판(-900) 위, 히트존(-800) 아래
+      root.addChild(chalk)
     }
   }
 

@@ -24,7 +24,10 @@ cd a-lens/frontend
 npm install && npm run dev
 ```
 
-설정 없이 실행하면 `contracts/fixtures/`의 골든 데이터로 뜬다(허브 실패 시 자동 폴백).
+설정 없이 실행하면 `backend/dummy_data/`의 데모 데이터(fabless 반도체 회사 8개 팀,
+FAKE 배지 표시)로 뜬다. 허브 인증이 잡혀 있으면 **허브 실데이터 + 데모 데이터를 함께**
+보여주고, 허브 실패 시 데모 데이터만 남는다. 데모 데이터 재생성은
+`python backend/dummy_data/_generate.py`. 원천 강제는 `A_LENS_SOURCE`(auto|hub|dummy|fixtures).
 
 **a-hub 실데이터로 보려면** `backend/.env.example`을 `.env`로 복사하고 허브 인증값(`A_LENS_WORK_API_KEY`, `A_LENS_WORK_TOKEN`)을 채운다 — 값은 팀에서 별도 공유(리포에 없음). 변수 설명은 [`.env.example`](./backend/.env.example) 참고.
 
