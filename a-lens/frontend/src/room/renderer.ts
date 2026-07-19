@@ -303,11 +303,21 @@ export function buildRoomScene(
         const MAX_W = 150
         const txt = new Text({ text: brief, style: bubbleStyle })
         if (txt.width > MAX_W) {
-          let s = brief
-          while (s.length > 1 && txt.width > MAX_W) {
-            s = s.slice(0, -1)
-            txt.text = s + '…'
+          // 들어갈 최대 길이를 이진 탐색으로 — 한 글자씩 지우며 매번 측정하는 O(N)을 O(log N)으로.
+          let low = 0
+          let high = brief.length
+          let best = '…'
+          while (low <= high) {
+            const mid = Math.floor((low + high) / 2)
+            txt.text = brief.slice(0, mid) + '…'
+            if (txt.width <= MAX_W) {
+              best = txt.text
+              low = mid + 1
+            } else {
+              high = mid - 1
+            }
           }
+          txt.text = best
         }
         txt.anchor.set(0.5, 1)
         const padX = 8

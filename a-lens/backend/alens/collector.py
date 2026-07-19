@@ -99,11 +99,15 @@ def _bump_activity(
 
 
 def _flatten_tree(nodes: list[dict]) -> list[dict]:
-    """tree 응답은 children 중첩 구조 — 프레즌스 집계용으로 모든 노드를 평탄화한다."""
+    """tree 응답은 children 중첩 구조 — 프레즌스 집계용으로 모든 노드를 평탄화한다.
+    응답이 예상과 다른 모양(리스트 아님·노드가 dict 아님)이어도 스냅숏을 살리도록 방어한다."""
+    if not isinstance(nodes, list):
+        return []
     flat: list[dict] = []
     for n in nodes:
-        flat.append(n)
-        flat.extend(_flatten_tree(n.get("children") or []))
+        if isinstance(n, dict):
+            flat.append(n)
+            flat.extend(_flatten_tree(n.get("children") or []))
     return flat
 
 

@@ -172,8 +172,9 @@ function fitScene() {
   const b = currentScene.getLocalBounds()
   // 가용 영역 = 전체 화면 − (열린 Hub 폭) − 상단 헤더 높이. 여백은 최소만 두고 방을 꽉 채운다.
   const headerH = headerEl.hidden ? 0 : headerEl.offsetHeight
-  const availW = app.screen.width - (hub.hidden ? 0 : HUB_W) - SCENE_PAD * 2
-  const availH = app.screen.height - headerH - SCENE_PAD * 2
+  // 창이 아주 작아도 가용 영역을 양수로 유지 — 음수 배율(씬 뒤집힘) 방지.
+  const availW = Math.max(10, app.screen.width - (hub.hidden ? 0 : HUB_W) - SCENE_PAD * 2)
+  const availH = Math.max(10, app.screen.height - headerH - SCENE_PAD * 2)
   // contain: 잘림 없이 가용 영역에 최대로 — 가로/세로 배율 중 작은 쪽.
   const s = Math.min(availW / b.width, availH / b.height)
   currentScene.scale.set(s)
@@ -196,6 +197,7 @@ async function renderHome() {
   homeEl.hidden = false
   headerEl.hidden = true
   panel.hidden = true
+  cancelTyping() // 상세 패널 타이핑이 진행 중이었으면 홈으로 나갈 때 멈춘다
   modal.hidden = true
   hub.hidden = true
   hubOpen.hidden = true
@@ -396,7 +398,13 @@ function hubSection(title: string, sub: string, items: string): string {
 }
 
 // 사이드바 접힘 상태 — 다음 입장 때도 유지되게 localStorage에 기억.
-let hubCollapsed = localStorage.getItem('a-lens.hub.collapsed') === '1'
+// 사설 모드·iframe 등에서 localStorage 접근이 막혀도 앱이 죽지 않게 감싼다.
+let hubCollapsed = false
+try {
+  hubCollapsed = localStorage.getItem('a-lens.hub.collapsed') === '1'
+} catch (e) {
+  console.warn('localStorage 읽기 실패 — 접힘 상태 기본값 사용', e)
+}
 
 /** 방 화면에서만 호출 — 접힘 여부에 따라 사이드바/열기버튼 표시를 정하고 씬 폭을 재조정한다. */
 function applyHubCollapsed(inRoom: boolean) {
@@ -407,7 +415,11 @@ function applyHubCollapsed(inRoom: boolean) {
 
 function toggleHub(collapsed: boolean) {
   hubCollapsed = collapsed
-  localStorage.setItem('a-lens.hub.collapsed', collapsed ? '1' : '0')
+  try {
+    localStorage.setItem('a-lens.hub.collapsed', collapsed ? '1' : '0')
+  } catch (e) {
+    console.warn('localStorage 쓰기 실패 — 접힘 상태 저장 생략', e)
+  }
   applyHubCollapsed(true)
   if (!panel.hidden) positionPanel() // 열린 상세 패널도 새 위치로 따라오게
 }
