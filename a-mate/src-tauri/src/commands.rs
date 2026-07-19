@@ -512,8 +512,8 @@ pub struct HubSettings {
 
 /// 빈 문자열이면 None — 관문 없는 서버는 x-api-key를 안 붙인다 (하위호환).
 fn opt_key(key: String) -> Option<String> {
-    let k = key.trim().to_string();
-    if k.is_empty() { None } else { Some(k) }
+    let k = key.trim();
+    if k.is_empty() { None } else { Some(k.to_string()) }
 }
 
 fn hub_client(state: &State<AppState>) -> Result<Option<RoomsClient>, String> {

@@ -129,9 +129,11 @@ pub fn run() {
                     });
                     if let Some((url, token, room_id, api_key)) = cfg {
                         if !url.trim().is_empty() && !token.is_empty() && !room_id.is_empty() {
-                            let api_key = api_key.trim().to_string();
+                            let api_key = {
+                                let k = api_key.trim();
+                                if k.is_empty() { None } else { Some(k.to_string()) }
+                            };
                             std::thread::spawn(move || {
-                                let api_key = if api_key.is_empty() { None } else { Some(api_key) };
                                 let client = agent_mentor::rooms_client::RoomsClient { base_url: url, token, api_key };
                                 if let Err(e) = client.enter(&room_id, None) {
                                     log::warn!("시작 시 내 방 입장 실패(무시): {e}");
