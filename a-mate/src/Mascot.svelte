@@ -179,6 +179,18 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   let downAt: { x: number; y: number } | null = null; // 시작 스크린 좌표(논리 px)
   let dragOrigin: { winX: number; winY: number; scale: number } | null = null; // 시작 창 위치(물리 px)
   let dragging = false;
+  let dragId = 0; // 드래그 세션 식별자 — 늦게 resolve된 outerPosition이 다음 세션을 덮어쓰지 않게 가드
+  // 드래그 종료 정리 — pointerup 뿐 아니라 pointermove에서 버튼이 떼진 게 뒤늦게 감지되는
+  // 비정상 종료 경로에서도 반드시 불러, expanded 상태가 남아 클릭을 막는 누수를 막는다.
+  function endDrag() {
+    const wasDragging = dragging;
+    dragId++; // 진행 중이던 비동기 outerPosition 결과 무효화
+    downAt = null;
+    dragging = false;
+    dragOrigin = null;
+    if (wasDragging) mascotSetExpanded(false).catch(() => {}); // 폴러 고정 해제
+    return wasDragging;
+  }
   function onPointerDown(e: PointerEvent) {
     if (e.button === 2) return; // 우클릭은 contextmenu 핸들러가 처리
     // 캡처 없이는 빠른 드래그가 로봇 영역(128px)을 벗어난 뒤 move 이벤트가 끊겨
@@ -187,13 +199,15 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
     downAt = { x: e.screenX, y: e.screenY };
     dragging = false;
     dragOrigin = null;
-    // 시작 시점의 창 위치·스케일을 비동기로 확보 (드래그 판정 전에 준비되어 있으면 좋음)
+    const id = ++dragId;
+    // 시작 시점의 창 위치·스케일을 비동기로 확보 (드래그 판정 전에 준비되어 있으면 좋음).
+    // 늦게 resolve돼 다른 세션(또는 종료 후)을 덮어쓰지 않도록 dragId로 가드한다.
     Promise.all([win.outerPosition(), win.scaleFactor()])
-      .then(([p, s]) => { dragOrigin = { winX: p.x, winY: p.y, scale: s }; })
-      .catch(() => { dragOrigin = null; });
+      .then(([p, s]) => { if (id === dragId) dragOrigin = { winX: p.x, winY: p.y, scale: s }; })
+      .catch(() => { if (id === dragId) dragOrigin = null; });
   }
   function onPointerMove(e: PointerEvent) {
-    if (e.buttons === 0) { downAt = null; dragging = false; return; }
+    if (e.buttons === 0) { endDrag(); return; } // 버튼 떼짐이 뒤늦게 감지된 비정상 종료 — 정리 포함
     if (!downAt) return;
     if (!dragging && !isDrag(downAt.x, downAt.y, e.screenX, e.screenY)) return;
     if (!dragging) {
@@ -209,15 +223,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
     win.setPosition(new PhysicalPosition(nx, ny)).catch(() => { /* 일시 실패 — 다음 move에서 재시도 */ });
   }
   function onPointerUp() {
-    const wasDragging = dragging;
-    downAt = null;
-    dragging = false;
-    dragOrigin = null;
-    if (wasDragging) {
-      mascotSetExpanded(false).catch(() => {}); // 폴러 고정 해제 (드래그 종료)
-    } else {
-      openChatTab('home'); // 움직이지 않았으면 클릭 = 홈피 열기
-    }
+    if (!endDrag()) openChatTab('home'); // 움직이지 않았으면 클릭 = 홈피 열기
   }
 
   // AI 스프라이트 — 있으면 캔버스 루프 대신 이미지 (CSS 바운스)
