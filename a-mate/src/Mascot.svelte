@@ -232,7 +232,8 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
     const ny = Math.round(dragOrigin.winY + (e.screenY - downAt.y) * scale);
     win.setPosition(new PhysicalPosition(nx, ny)).catch(() => { /* 일시 실패 — 다음 move에서 재시도 */ });
   }
-  function onPointerUp() {
+  function onPointerUp(e: PointerEvent) {
+    if (e.button !== 0) return;
     if (!endDrag()) openChatTab('home'); // 움직이지 않았으면 클릭 = 홈피 열기
   }
 
