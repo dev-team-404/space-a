@@ -30,9 +30,15 @@ pub(crate) fn tokenize(
     tool_kind: &str,
     tool_server: Option<&str>,
     tool_target: Option<&str>,
+    raw_name: Option<&str>,
 ) -> String {
     match tool_kind {
-        "execute" => match tool_target.and_then(|t| t.split_whitespace().next()) {
+        // 시크릿 리댁션된 명령(<redacted: …>)은 내용을 알 수 없으니 일반 bash로 취급 —
+        // 특이 토큰으로 오인해 무관한 시크릿 명령들이 한 패턴으로 뭉치는 것 방지 (Codex P2).
+        "execute" => match tool_target
+            .filter(|t| !t.starts_with('<'))
+            .and_then(|t| t.split_whitespace().next())
+        {
             Some(cmd) => format!("bash:{}", cmd.to_lowercase()),
             None => "bash".into(),
         },
@@ -40,7 +46,10 @@ pub(crate) fn tokenize(
         "skill" => format!("skill:{}", tool_target.unwrap_or("?")),
         "sub_agent" => "agent".into(),
         "file_read" | "file_edit" | "file_write" | "search" => "file-ops".into(),
-        other => other.to_string(),
+        // 미분류 내장 도구는 raw_name으로 구분 — 전부 'other'로 뭉개면 서로 다른
+        // 워크플로가 같은 n-gram을 공유한다 (Codex P2).
+        "other" => raw_name.map(|r| r.to_lowercase()).unwrap_or_else(|| "other".into()),
+        k => k.to_string(),
     }
 }
 
@@ -81,8 +90,11 @@ fn hash8(s: &str) -> String {
     format!("{:02x}{:02x}{:02x}{:02x}", d[0], d[1], d[2], d[3])
 }
 
-/// a가 b의 연속 부분열인가 (동일 길이 포함).
+/// a가 b의 연속 부분열인가 (동일 길이 포함). 빈 a는 항상 참 — windows(0) 패닉 방지.
 fn is_contiguous_subseq(a: &[String], b: &[String]) -> bool {
+    if a.is_empty() {
+        return true;
+    }
     a.len() <= b.len() && b.windows(a.len()).any(|w| w == a)
 }
 
@@ -94,19 +106,25 @@ pub(crate) fn collect_streams(
     cutoff: &str,
 ) -> Result<BTreeMap<(String, String), Vec<String>>> {
     let mut stmt = store.conn.prepare(
-        "SELECT host, session_id, tool_kind, tool_server, tool_target
+        "SELECT host, session_id, tool_kind, tool_server, tool_target, raw_name
          FROM events
          WHERE kind='tool_call' AND is_sidechain=0 AND ts >= ?1
          ORDER BY host, session_id, source_offset, id",
     )?;
-    let rows: Vec<(String, String, Option<String>, Option<String>, Option<String>)> = stmt
+    #[allow(clippy::type_complexity)]
+    let rows: Vec<(String, String, Option<String>, Option<String>, Option<String>, Option<String>)> = stmt
         .query_map(rusqlite::params![cutoff], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?))
         })?
         .collect::<std::result::Result<_, _>>()?;
     let mut streams: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
-    for (host, sess, kind, server, target) in rows {
-        let tok = tokenize(kind.as_deref().unwrap_or("other"), server.as_deref(), target.as_deref());
+    for (host, sess, kind, server, target, raw) in rows {
+        let tok = tokenize(
+            kind.as_deref().unwrap_or("other"),
+            server.as_deref(),
+            target.as_deref(),
+            raw.as_deref(),
+        );
         streams.entry((host, sess)).or_default().push(tok);
     }
     Ok(streams.into_iter().map(|(k, v)| (k, rle(v))).collect())
@@ -144,8 +162,7 @@ impl Rule for R23ToolSequences {
                 for w in tokens.windows(n) {
                     // 무의미 패턴 가드 — 토큰 다양성 ≥2 그리고 특이 토큰(사용자 의도) ≥1.
                     // 일반 명령·file-ops만으로 된 에이전트 자율 루프는 제외.
-                    let distinct: BTreeSet<&String> = w.iter().collect();
-                    if distinct.len() < 2 || !w.iter().any(|t| is_distinctive(t)) {
+                    if w.iter().all(|x| x == &w[0]) || !w.iter().any(|t| is_distinctive(t)) {
                         continue;
                     }
                     seen.insert(w.to_vec());
@@ -165,7 +182,9 @@ impl Rule for R23ToolSequences {
         candidates.sort_by(|a, b| b.1.len().cmp(&a.1.len()).then_with(|| a.1.cmp(&b.1)));
         let mut kept: Vec<(String, Vec<String>, u64)> = Vec::new();
         for (host, g, n) in candidates {
-            if kept.iter().any(|(kh, kg, _)| kh == &host && is_contiguous_subseq(&g, kg)) {
+            // 포함되는 짧은 후보라도 등장 세션이 더 많으면(strictly) 독립 패턴으로 유지 —
+            // 짧고 강한 패턴을 길고 희소한 변형이 지우면 안 된다 (PR#77 리뷰).
+            if kept.iter().any(|(kh, kg, kn)| kh == &host && is_contiguous_subseq(&g, kg) && n <= *kn) {
                 continue;
             }
             kept.push((host, g, n));
@@ -245,14 +264,46 @@ mod tests {
 
     #[test]
     fn tokenize_maps_kinds_per_spec() {
-        assert_eq!(tokenize("execute", None, Some("gh pr create")), "bash:gh");
-        assert_eq!(tokenize("execute", None, None), "bash");
-        assert_eq!(tokenize("mcp_call", Some("context7"), None), "mcp:context7");
-        assert_eq!(tokenize("skill", None, Some("codex:rescue")), "skill:codex:rescue");
-        assert_eq!(tokenize("sub_agent", None, None), "agent");
-        assert_eq!(tokenize("file_read", None, Some("a.rs")), "file-ops");
-        assert_eq!(tokenize("search", None, None), "file-ops");
-        assert_eq!(tokenize("web_fetch", None, None), "web_fetch");
+        assert_eq!(tokenize("execute", None, Some("gh pr create"), Some("Bash")), "bash:gh");
+        assert_eq!(tokenize("execute", None, None, Some("Bash")), "bash");
+        assert_eq!(tokenize("mcp_call", Some("context7"), None, None), "mcp:context7");
+        assert_eq!(tokenize("skill", None, Some("codex:rescue"), Some("Skill")), "skill:codex:rescue");
+        assert_eq!(tokenize("sub_agent", None, None, Some("Task")), "agent");
+        assert_eq!(tokenize("file_read", None, Some("a.rs"), Some("Read")), "file-ops");
+        assert_eq!(tokenize("search", None, None, Some("Grep")), "file-ops");
+        assert_eq!(tokenize("web_fetch", None, None, Some("WebFetch")), "web_fetch");
+    }
+
+    #[test]
+    fn tokenize_redacted_bash_is_generic() {
+        // 시크릿 리댁션 target은 특이 명령이 아니다 (Codex P2)
+        let tok = tokenize("execute", None, Some(crate::adapter::SECRET_REDACTED), Some("Bash"));
+        assert_eq!(tok, "bash");
+    }
+
+    #[test]
+    fn tokenize_unclassified_tool_uses_raw_name() {
+        // ToolKind::Other는 raw_name으로 구분 — 'other'로 뭉개면 안 됨 (Codex P2)
+        assert_eq!(tokenize("other", None, None, Some("TodoWrite")), "todowrite");
+        assert_eq!(tokenize("other", None, None, Some("NotebookEdit")), "notebookedit");
+        assert_eq!(tokenize("other", None, None, None), "other");
+    }
+
+    #[test]
+    fn r23_distinguishes_unclassified_tools_by_raw_name() {
+        // 쿼리가 raw_name을 실제로 전달하는지 — evaluate 경로로 검증
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+        for sess in ["s1", "s2", "s3"] {
+            seed_tool(&store, sess, 0, &now, "Skill", Some("codex:rescue"));
+            seed_tool(&store, sess, 10, &now, "TodoWrite", None);
+            seed_tool(&store, sess, 20, &now, "Bash", Some("gh pr view"));
+        }
+        let findings = R23ToolSequences::default().evaluate(&store).unwrap();
+        assert_eq!(findings.len(), 1);
+        let seq: Vec<&str> = findings[0].evidence["sequence"].as_array().unwrap()
+            .iter().map(|v| v.as_str().unwrap()).collect();
+        assert_eq!(seq, vec!["skill:codex:rescue", "todowrite", "bash:gh"]);
     }
 
     #[test]
@@ -298,6 +349,36 @@ mod tests {
         seed_pr_workflow(&store, "s1", &now);
         seed_pr_workflow(&store, "s2", &now);
         assert!(R23ToolSequences::default().evaluate(&store).unwrap().is_empty());
+    }
+
+    #[test]
+    fn contiguous_subseq_empty_needle_is_safe() {
+        // slice.windows(0)은 패닉 — 빈 시퀀스 입력에도 안전해야 함 (Gemini medium)
+        assert!(is_contiguous_subseq(&[], &["a".to_string()]));
+    }
+
+    #[test]
+    fn r23_keeps_shorter_pattern_when_strictly_more_frequent() {
+        // 짧은 패턴(8세션)이 그것을 포함하는 긴 희소 패턴(3세션)에 지워지면 안 된다 (Gemini high)
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+        let seed_core = |sess: &str| {
+            seed_tool(&store, sess, 0, &now, "Bash", Some("gh pr create"));
+            seed_tool(&store, sess, 10, &now, "Skill", Some("codex:rescue"));
+            seed_tool(&store, sess, 20, &now, "mcp__m__query", None);
+        };
+        for sess in ["a1", "a2", "a3", "a4", "a5"] {
+            seed_core(sess);
+        }
+        for sess in ["b1", "b2", "b3"] {
+            seed_core(sess);
+            seed_tool(&store, sess, 30, &now, "Bash", Some("docker build"));
+        }
+        let findings = R23ToolSequences::default().evaluate(&store).unwrap();
+        let counts: Vec<u64> = findings.iter()
+            .map(|f| f.evidence["session_count"].as_u64().unwrap()).collect();
+        assert_eq!(findings.len(), 2, "짧은 강한 패턴 + 긴 패턴 둘 다 남아야 함: {findings:?}");
+        assert!(counts.contains(&8) && counts.contains(&3), "세션 수 8/3이어야 함: {counts:?}");
     }
 
     #[test]

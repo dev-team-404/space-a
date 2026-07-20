@@ -175,11 +175,19 @@ fn migrate(conn: &Connection) -> Result<()> {
         )?;
     }
     // v3.3 정리 — R23 특이 토큰 가드 도입(에이전트 자율 루프 노이즈, 2026-07-20 사용자 판정).
-    // 가드 이전에 쌓인 R23 finding을 전량 삭제해 새 기준으로 재산출. 이벤트는 그대로라 재수집 불필요.
+    // 가드 이전에 쌓인 R23 finding을 전량 삭제해 새 기준으로 재산출.
     if user_version < 3 {
         conn.execute_batch(
             "DELETE FROM findings WHERE rule_id='R23';
              PRAGMA user_version = 3;",
+        )?;
+    }
+    // v3.4 재수집 — prompt_events 사이드체인 제외(Codex 리뷰 P2)가 재구축을 요구.
+    if user_version < 4 {
+        conn.execute_batch(
+            "DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;
+             DELETE FROM prompt_events;
+             PRAGMA user_version = 4;",
         )?;
     }
     Ok(())
@@ -201,6 +209,9 @@ impl SqliteStore {
     }
 
     pub fn upsert_events(&self, evs: &[NormalizedEvent]) -> Result<usize> {
+        // 루프 전체를 단일 트랜잭션으로 — 문장마다 붙는 암묵 트랜잭션+fsync를 없애
+        // 수집(특히 전체 재수집) 성능을 확보하고 배치 원자성을 보장한다 (PR#77 리뷰).
+        let tx = self.conn.unchecked_transaction()?;
         let mut inserted = 0usize;
         for e in evs {
             let dedup_key = match &e.uuid {
@@ -239,6 +250,10 @@ impl SqliteStore {
                                 preview, e.source_file, e.source_offset as i64],
                     )?;
                     // 세션 내 전체 프롬프트 축적 — R6 v2 재료 (스펙 §4.1). 8자 미만은 정규화가 거른다.
+                    // 사이드체인(서브에이전트) 프롬프트는 사용자 지시가 아니므로 제외.
+                    if e.is_sidechain {
+                        continue;
+                    }
                     if let Some(norm60) = crate::rules::r6_repeated_prompts::normalize(preview) {
                         self.conn.execute(
                             "INSERT OR IGNORE INTO prompt_events
@@ -292,6 +307,7 @@ impl SqliteStore {
                 params![e.session_id, e.host, e.project_id, e.ts],
             )?;
         }
+        tx.commit()?;
         Ok(inserted)
     }
 
@@ -2393,6 +2409,50 @@ mod tests {
     }
 
     #[test]
+    fn prompt_events_skip_sidechain_prompts() {
+        // 사이드체인(서브에이전트) user 라인은 사용자 지시가 아니다 — R6 재료 제외 (Codex P2)
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_events(&[NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+            uuid: Some("sc1".into()), parent_uuid: None, is_sidechain: true,
+            ts: Some("2026-07-20T10:00:00Z".into()),
+            source_file: "s1.jsonl".into(), source_offset: 10,
+            kind: EventKind::UserPrompt { preview: "서브에이전트 내부의 반복 프롬프트입니다".into() },
+        }]).unwrap();
+        let n: i64 = store.conn
+            .query_row("SELECT COUNT(*) FROM prompt_events", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0, "사이드체인 프롬프트는 prompt_events에 쌓이면 안 됨");
+    }
+
+    #[test]
+    fn migrate_v4_recollects_to_rebuild_prompt_events() {
+        // v3 시대 DB에는 사이드체인 프롬프트가 prompt_events에 섞여 있을 수 있다 → 재수집으로 재구축
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("mv4.db");
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(SCHEMA).unwrap();
+            conn.execute_batch(
+                "PRAGMA user_version = 3;
+                 INSERT INTO prompt_events (dedup_key, session_id, host, project_id,
+                   source_file, source_offset, norm60, preview)
+                   VALUES ('sc:0','s1','Windows','p','f.jsonl',0,'서브에이전트 프롬프트','서브에이전트 프롬프트');
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 99);",
+            ).unwrap();
+        }
+        let store = SqliteStore::open(&db).unwrap();
+        for table in ["prompt_events", "ingest_state"] {
+            let n: i64 = store.conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap();
+            assert_eq!(n, 0, "{table} 은(는) v4에서 비워져 재수집돼야 함");
+        }
+        let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(uv, 4);
+    }
+
+    #[test]
     fn migrate_v2_creates_prompt_events_and_recollects() {
         let dir = tempfile::tempdir().unwrap();
         let db = dir.path().join("mv2.db");
@@ -2457,11 +2517,8 @@ mod tests {
             stmt.query_map([], |r| r.get(0)).unwrap().collect::<std::result::Result<_, _>>().unwrap()
         };
         assert_eq!(keys, vec!["R6|Windows|ok".to_string()], "R23만 삭제돼 재산출을 기다려야 함");
-        // 이벤트 데이터는 그대로라 재수집은 유도하지 않는다
-        let n: i64 = store.conn.query_row("SELECT COUNT(*) FROM ingest_state", [], |r| r.get(0)).unwrap();
-        assert_eq!(n, 1, "v3 정리는 재수집을 유도하면 안 됨");
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(uv, 3);
+        assert!(uv >= 3, "v3 분기를 지나야 함 (후속 분기로 더 올라갈 수 있음)");
     }
 
     #[test]

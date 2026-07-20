@@ -39,20 +39,24 @@ R6 v1은 **세션의 첫 프롬프트**가 정규화 동치일 때만 "반복 �
 
 | tool_kind | 토큰 | 예 |
 |-----------|------|----|
-| bash | `bash:<명령 첫 단어>` | `bash:gh`, `bash:cargo` |
+| bash | `bash:<명령 첫 단어>` (시크릿 리댁션 `<redacted:…>` target은 `bash`) | `bash:gh`, `bash:cargo` |
 | mcp | `mcp:<server>` | `mcp:context7` |
 | skill | `skill:<name>` | `skill:codex:rescue` |
 | sub_agent | `agent` | `agent` |
 | 파일/검색 내장 (read·edit·write·grep·glob) | `file-ops` | — |
-| 기타 내장 | 도구명 소문자 | `webfetch` |
+| 미분류 도구 (`other`) | raw_name 소문자 (뭉개면 서로 다른 워크플로가 병합됨) | `todowrite` |
+| 기타 내장 | tool_kind 그대로 | `web_fetch` |
 
 연속 동일 토큰은 1개로 압축(RLE) — `file-ops` 연쇄가 시퀀스를 잠식하지 않게 한다.
+사이드체인(서브에이전트) 도구 호출은 제외 — 사용자의 수동 워크플로가 아니다.
 
 ### 3.2 판정
 
 - RLE 압축 열에서 길이 **3~6**의 n-gram 추출.
 - 같은 `(host, n-gram)`이 **≥3 세션 / 14일** 등장하면 후보.
-- 서로 포함 관계인 후보는 **최장 시퀀스만** 남긴다.
+- 서로 포함 관계인 후보는 **최장 시퀀스만** 남긴다 — 단, 짧은 쪽의 등장 세션 수가
+  **더 많으면** 독립 패턴으로 함께 유지한다 (짧고 강한 패턴을 길고 희소한 변형이
+  지우면 안 됨 — PR#77 리뷰).
 - **무의미 패턴 가드**: 토큰 다양성 ≥2, 그리고 **특이 토큰 ≥1 필수**.
   특이 토큰 = `skill:`/`mcp:`/`agent`, 또는 일반 명령 목록(`git`·`npm`·`npx`·`cargo`
   등 빌드·테스트·VCS·셸 유틸)에 없는 `bash:<명령>`. 일반 명령과 `file-ops`만으로 된
@@ -85,6 +89,7 @@ CREATE TABLE IF NOT EXISTS prompt_events (
 
 - 어댑터는 이미 모든 user 프롬프트에 `UserPrompt` 이벤트를 방출한다 — store가
   `sessions` 갱신(기존)에 더해 `prompt_events`에 INSERT OR IGNORE(신규).
+- 사이드체인(서브에이전트) 프롬프트는 제외 — 사용자 지시가 아니다 (PR#77 Codex 리뷰).
 - `sessions.first_prompt_preview`는 유지 (R10 대표 프롬프트, hub, session_ctx가 사용).
 
 ### 4.2 프라이버시
@@ -108,7 +113,9 @@ CREATE TABLE IF NOT EXISTS prompt_events (
 
 - `PRAGMA user_version 1 → 2`: 전체 재수집(events/sessions/ingest_state/daily_rollup 비움,
   findings·status 보존 — §4.4 전례). 기존 JSONL에서 `prompt_events` 백필이 목적.
-- 신규 설치는 0→2 한 번에 통과 (v1 오탐 정리 분기는 빈 DB에서 no-op).
+- `→ 3`: R23 특이 토큰 가드 도입에 따른 기존 R23 finding 정리 (재산출).
+- `→ 4`: prompt_events 사이드체인 제외 반영을 위한 전체 재수집.
+- 신규 설치는 0→4 한 번에 통과 (중간 분기는 빈 DB에서 no-op).
 
 ## 6. 테스트 계획
 
