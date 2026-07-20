@@ -135,6 +135,10 @@ class SqliteStore:
         self._save_agent_row(agent)
         self._conn.commit()
 
+    def save_token(self, token: str, agent_id: str) -> None:
+        self._conn.execute("INSERT INTO tokens VALUES (?, ?)", (token, agent_id))
+        self._conn.commit()
+
     def save_owner_name(self, life: Life) -> None:
         self._conn.execute(
             "UPDATE life SET owner_name = ? WHERE life_id = ?", (life.owner_name, life.id)
@@ -165,7 +169,8 @@ class SqliteStore:
         self._conn.execute(
             "INSERT INTO agents VALUES (?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(agent_id) DO UPDATE SET "
-            "name = excluded.name, at_life = excluded.at_life, x = excluded.x, y = excluded.y",
+            "name = excluded.name, at_life = excluded.at_life, x = excluded.x, y = excluded.y, "
+            "mascot_seed = excluded.mascot_seed",
             (
                 agent.agent_id, agent.name, agent.life_id, agent.at_life,
                 agent.cell[0], agent.cell[1], agent.mascot_seed,

@@ -25,6 +25,21 @@ def test_state_survives_restart(tmp_path):
     assert s2.life_state(life_a.id)["owner_mascot_seed"] == "seed-a"
 
 
+def test_same_name_reconnect_token_survives_restart(tmp_path):
+    db = str(tmp_path / "life-reconnect.db")
+    s1 = LifeService(store=SqliteStore(db))
+    first_agent, _, first_life = s1.register("A", mascot_seed="seed-old")
+    second_agent, reconnect_token, second_life = s1.register(" A ", mascot_seed="seed-new")
+
+    assert second_agent.agent_id == first_agent.agent_id
+    assert second_life.id == first_life.id
+
+    s2 = LifeService(store=SqliteStore(db))
+    assert s2.me(reconnect_token)["my_life_id"] == first_life.id
+    assert s2.life_state(first_life.id)["owner_mascot_seed"] == "seed-new"
+    assert len(s2.list_life()) == 1
+
+
 def test_moves_persist(tmp_path):
     db = str(tmp_path / "life.db")
     s1 = LifeService(store=SqliteStore(db))

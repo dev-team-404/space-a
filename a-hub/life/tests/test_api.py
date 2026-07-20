@@ -34,6 +34,16 @@ def test_register_and_me(client):
     assert me.json()["my_life_id"] == a["life_id"]
 
 
+def test_register_same_name_returns_existing_life(client):
+    first = _register(client, "A")
+    second = _register(client, " A ")
+
+    assert second["agent_id"] == first["agent_id"]
+    assert second["life_id"] == first["life_id"]
+    assert second["token"] != first["token"]
+    assert len(client.get("/life").json()["life"]) == 1
+
+
 def test_missing_token_is_401(client):
     r = client.get("/life/me")
     assert r.status_code == 401

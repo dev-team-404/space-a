@@ -23,6 +23,18 @@ def test_register_creates_life_and_auto_enters(life):
     assert state["occupants"][0]["is_owner"] is True
 
 
+def test_register_same_normalized_name_reuses_life(life):
+    first_agent, first_token, first_life = life.register("  Same Name  ", mascot_seed="seed-old")
+    second_agent, second_token, second_life = life.register("Same Name", mascot_seed="seed-new")
+
+    assert second_agent.agent_id == first_agent.agent_id
+    assert second_life.id == first_life.id
+    assert second_token != first_token
+    assert life.me(second_token)["my_life_id"] == first_life.id
+    assert life.life_state(first_life.id)["owner_mascot_seed"] == "seed-new"
+    assert len(life.list_life()) == 1
+
+
 def test_auto_spawn_at_spawn_point_then_nearby(life):
     _, token, created_life = life.register("A")
     # 빈 방의 첫 스폰 = 스폰 지점 (구석 아님)
