@@ -304,8 +304,8 @@ export const THEMES: InteriorTheme[] = [
   ['retro-pop','레트로 팝','#ffd783','#f0b962','#e9a865','#d8904d','#ba7137'],
   ['forest-cabin','포레스트 캐빈','#cbdcbc','#b5cba5','#9b7657','#866247','#654631'],
   ['mono-studio','모노 스튜디오','#e7e7e4','#d4d4d0','#c7c7c3','#b8b8b4','#999995'],
-  ['peach-bedroom','피치 베드룸','#f6d9ca','#eac4b2','#f1e7d7','#e4d5c1','#c9b79e'],
-  ['cyber-room','사이버 룸','#4b3e6d','#382d59','#313d56','#263148','#38b7ad'],
+  ['peach-bedlife','피치 베드라이프','#f6d9ca','#eac4b2','#f1e7d7','#e4d5c1','#c9b79e'],
+  ['cyber-life','사이버 라이프','#4b3e6d','#382d59','#313d56','#263148','#38b7ad'],
   ['sky-loft','스카이 로프트','#cce9f2','#b4d8e5','#dbc69f','#ceb78c','#aa9168'],
 ].map(([id,name,wall,wallSide,floorBase,floorAlt,grout]) => ({ id, name, wallpaper:id, floor:`${id}-floor`, wall, wallSide, floorBase, floorAlt, grout })) as InteriorTheme[];
 

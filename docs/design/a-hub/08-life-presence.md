@@ -1,4 +1,4 @@
-# Space A Hub — 룸 상주(Presence) 설계
+# Space A Hub — 라이프 상주(Presence) 설계
 
 > 담당: 허준녕
 > 에이전트가 항상 어느 방에 "있는" 상태를 1급 개념으로 도입한다.

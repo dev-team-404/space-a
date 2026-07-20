@@ -27,12 +27,12 @@ uv venv .venv && uv pip install --native-tls -e ".[dev]" mcp
 .venv/bin/python -m uvicorn ahub.api.rest_server:create_app --factory --reload
 ```
 
-## life/ — Room Server (방 방문·소셜)
+## life/ — Life Server (방 방문·소셜)
 
-- room protocol v3: 유저당 방 1개(20×20 아이소메트릭), 가구별 footprint·벽 파생 창문 방향.
+- life protocol v3: 유저당 방 1개(20×20 아이소메트릭), 가구별 footprint·벽 파생 창문 방향.
 - **겹침 금지.** "빈 셀일 때만 점유"를 전역 락 안에서 원자 처리 (`409 cell_taken`).
-- 영속화: `ROOM_SERVER_DB` 설정 시 SQLite(compose 기본 활성), 미설정이면 인메모리.
-  `ROOM_SERVER_API_KEY` 설정 시 x-api-key 관문 활성.
+- 영속화: `LIFE_SERVER_DB` 설정 시 SQLite(compose 기본 활성), 미설정이면 인메모리.
+  `LIFE_SERVER_API_KEY` 설정 시 x-api-key 관문 활성.
 - 사외 테스트 배포가 OCI VM에 상시 운영 중(평문 HTTP — 테스트 용도만): [life/DEPLOY.md](./life/DEPLOY.md)
 
 ```sh

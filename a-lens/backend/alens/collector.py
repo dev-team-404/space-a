@@ -40,7 +40,7 @@ SOURCE = os.environ.get("A_LENS_SOURCE", "auto")
 WORK_URL = os.environ.get("A_LENS_WORK_URL", "https://spacea.msalt.net").rstrip("/")
 WORK_TOKEN = os.environ.get("A_LENS_WORK_TOKEN", "")
 WORK_API_KEY = os.environ.get("A_LENS_WORK_API_KEY", "")
-# 프레즌스는 work 최근 쓰기 활동으로 판정한다 (life room-server 프레즌스 대체, 2026-07-19).
+# 프레즌스는 work 최근 쓰기 활동으로 판정한다 (life life-server 프레즌스 대체, 2026-07-19).
 PRESENCE_WINDOW = float(os.environ.get("A_LENS_PRESENCE_WINDOW", "3600"))
 CACHE_TTL = float(os.environ.get("A_LENS_CACHE_TTL", "30"))
 
@@ -199,7 +199,7 @@ def _hub_snapshot() -> dict:
                 members = []
 
             # 프레즌스: 이 방 사람들의 최근 write(page·issue) 시각을 집계 → online 판정 재료.
-            # (life room-server 프레즌스 대체 — a-lens는 사람이 보는 view라 '사람의 활동'으로 읽는다.)
+            # (life life-server 프레즌스 대체 — a-lens는 사람이 보는 view라 '사람의 활동'으로 읽는다.)
             last_write: dict[str, dict] = {}
             for p in pages:
                 _bump_activity(

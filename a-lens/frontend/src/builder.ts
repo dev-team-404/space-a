@@ -1,18 +1,18 @@
 // 방 만들기 마법사 — DOM 오버레이(선택 UI) + PixiJS 라이브 프리뷰.
-// 선택 결과는 RoomConfig 데이터일 뿐이며, 렌더링은 전적으로 renderer.ts가 담당한다.
+// 선택 결과는 LifeConfig 데이터일 뿐이며, 렌더링은 전적으로 renderer.ts가 담당한다.
 
 import { Application } from 'pixi.js'
 import type { LobbyFloor } from './api'
-import { DESK_OPTIONS, ROOM_OPTIONS, resolveRoomId } from './room/catalog'
-import { buildRoomScene, PREVIEW_DATA } from './room/renderer'
-import type { DeskChoice, RoomConfig, RoomPresetId, VariantOption } from './room/types'
-import { getRoom } from './store'
+import { DESK_OPTIONS, LIFE_OPTIONS, resolveLifeId } from './life/catalog'
+import { buildLifeScene, PREVIEW_DATA } from './life/renderer'
+import type { DeskChoice, LifeConfig, LifePresetId, VariantOption } from './life/types'
+import { getLife } from './store'
 
 export type BuilderOptions = {
   floors: LobbyFloor[]
   /** 수정 모드 — 기존 방 설정에서 시작 */
-  initial?: RoomConfig
-  onSaved: (config: RoomConfig) => void
+  initial?: LifeConfig
+  onSaved: (config: LifeConfig) => void
 }
 
 // 프리뷰 Pixi 앱은 싱글턴 — 열 때마다 destroy/재생성하면 두 번째부터 공유 텍스처
@@ -26,8 +26,8 @@ async function ensurePreviewApp(): Promise<Application> {
   return previewApp
 }
 
-const DEFAULTS: Omit<RoomConfig, 'space_id' | 'space_name' | 'created_at'> = {
-  room: 'r1', // 방 배경 프리셋
+const DEFAULTS: Omit<LifeConfig, 'space_id' | 'space_name' | 'created_at'> = {
+  life: 'r1', // 방 배경 프리셋
   desk: 'd1',
   desks: 'auto',
 }
@@ -36,11 +36,11 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
   const host = document.getElementById('builder')
   if (!host) throw new Error('#builder 엘리먼트 없음')
 
-  const state: RoomConfig = opts.initial
+  const state: LifeConfig = opts.initial
     ? {
         ...opts.initial,
         // 구버전 저장분 → 방 배경 프리셋으로 정규화
-        room: resolveRoomId(opts.initial.room),
+        life: resolveLifeId(opts.initial.life),
       }
     : {
         space_id: opts.floors[0]?.space_id ?? '',
@@ -79,12 +79,12 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
   for (const f of opts.floors) {
     const o = document.createElement('option')
     o.value = f.space_id
-    o.textContent = f.name + (getRoom(f.space_id) ? ' (이미 방 있음 — 덮어씀)' : '')
+    o.textContent = f.name + (getLife(f.space_id) ? ' (이미 방 있음 — 덮어씀)' : '')
     if (f.space_id === state.space_id) o.selected = true
     select.appendChild(o)
   }
   const syncNote = () => {
-    note.textContent = getRoom(state.space_id) && !opts.initial ? '⚠️ 이 스페이스의 기존 방을 덮어씁니다.' : ''
+    note.textContent = getLife(state.space_id) && !opts.initial ? '⚠️ 이 스페이스의 기존 방을 덮어씁니다.' : ''
   }
   select.addEventListener('change', () => {
     state.space_id = select.value
@@ -124,7 +124,7 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
     row.querySelectorAll('.swatch').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.id === get()))
   }
   // 방 배경 프리셋 5종 중 하나를 고른다 (벽·바닥·책장·칠판이 다 그려진 통짜 이미지).
-  addGroup('방 배경', ROOM_OPTIONS, () => resolveRoomId(state.room), (id: RoomPresetId) => (state.room = id))
+  addGroup('방 배경', LIFE_OPTIONS, () => resolveLifeId(state.life), (id: LifePresetId) => (state.life = id))
   // 그 위에 얹을 책상 종류만 선택
   addGroup('책상', DESK_OPTIONS, () => state.desk, (id: DeskChoice) => (state.desk = id))
 
@@ -155,7 +155,7 @@ export async function openBuilder(opts: BuilderOptions): Promise<void> {
 
   function renderPreview() {
     preview.stage.removeChildren().forEach((c) => c.destroy({ children: true }))
-    const scene = buildRoomScene(state, PREVIEW_DATA)
+    const scene = buildLifeScene(state, PREVIEW_DATA)
     const b = scene.getLocalBounds()
     const s = Math.min(preview.screen.width / (b.width + 40), preview.screen.height / (b.height + 40))
     scene.scale.set(s)

@@ -28,7 +28,7 @@
 | #7 | 07-02 | coaching-r2-unused-plugins | R2 — 미사용 플러그인/스킬 상주 비용 탐지 |
 | #8 | 07-05 | frontend-shell | **Tauri 셸 진입** — workspace 재구성(`crates/core`+`src-tauri`), Svelte 스캐폴드, 트레이+autostart, notify 파이프라인, chat 창(홈·코칭 탭) |
 | #9 | 07-05 | frontend-mascot | 마스코트 창 — 절차 생성 픽셀 로봇(128px 프로시저럴), 애니메이션 상태 머신, 말풍선 4종 트리거 |
-| #10 | 07-06 | minihompy-restyle | 미니홈피 대개편 PR① — 파스텔 모던 스킨, 홈 위젯 4종+마이룸, 코칭 카드(무엇이→왜→어떻게) + 상태 관리 |
+| #10 | 07-06 | minihompy-restyle | 미니홈피 대개편 PR① — 파스텔 모던 스킨, 홈 위젯 4종+마이라이프, 코칭 카드(무엇이→왜→어떻게) + 상태 관리 |
 | #11 | 07-06 | coaching-v2 | 코칭 v2 — "조치 가능한 것만" 원칙, R10(자동화 버스트)·R11·R12 신규, R7 프로젝트 집계 재설계, R5 발화 보류 |
 | #12 | 07-07 | minihompy-pr2-chat | 미니홈피 PR② — 채팅 탭(Engine + 코칭 컨텍스트 주입) + triage 잔여 |
 | #13 | 07-07 | coaching-v2.1-pr1-collection | v2.1 수집 — tool_result 상태·user prompt 첫 줄·cwd·compaction 경계 (지연로드 포인터 방식) |

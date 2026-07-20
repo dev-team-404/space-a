@@ -5,9 +5,9 @@
 
 import { Assets, Texture } from 'pixi.js'
 
-export type KitMount = 'floor' | 'wall-right' | 'shell-floor' | 'shell-wall' | 'shell-room' | 'board' | 'character'
+export type KitMount = 'floor' | 'wall-right' | 'shell-floor' | 'shell-wall' | 'shell-life' | 'board' | 'character'
 
-/** shell-room 캘리브레이션 — 트리밍된 이미지 픽셀 좌표 기준 */
+/** shell-life 캘리브레이션 — 트리밍된 이미지 픽셀 좌표 기준 */
 export type KitShellCal = {
   /** 바닥 왼쪽/오른쪽 꼭짓점 */
   left: [number, number]
@@ -35,7 +35,7 @@ export type KitPiece = {
   anchor: [number, number]
   /** shell-wall: 코너 기준 벽면 높이 (에셋 px) — 칠판·조명 배치 계산용 */
   faceH: number
-  /** shell-room 전용 캘리브레이션 */
+  /** shell-life 전용 캘리브레이션 */
   cal?: KitShellCal
 }
 

@@ -567,11 +567,11 @@ pub fn coach_tip(title: String, body: String, personal: Option<String>) -> Resul
     engine.generate(&system, &user).map(|o| o.text).map_err(|e| e.to_string())
 }
 
-// --- 방 방문 (docs/design/room-visit.md) ---
-// 설정 키: hub_url·hub_user(입력), hub_token·hub_agent_id·hub_room_id(연결 시 캐시).
+// --- 방 방문 (docs/design/life-visit.md) ---
+// 설정 키: hub_url·hub_user(입력), hub_token·hub_agent_id·hub_life_id(연결 시 캐시).
 // 규율: 락은 설정 읽기/쓰기 동안만, 네트워크(hub HTTP)는 락 밖.
 
-use agent_mentor::rooms_client::{self, RoomsClient};
+use agent_mentor::life_client::{self, LifeClient};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct HubSettings {
@@ -579,7 +579,7 @@ pub struct HubSettings {
     pub user: String,
     pub api_key: String,
     pub connected: bool,
-    pub room_id: String,
+    pub life_id: String,
 }
 
 /// 빈 문자열이면 None — 관문 없는 서버는 x-api-key를 안 붙인다 (하위호환).
@@ -588,7 +588,7 @@ fn opt_key(key: String) -> Option<String> {
     if k.is_empty() { None } else { Some(k.to_string()) }
 }
 
-fn hub_client(state: &State<AppState>) -> Result<Option<RoomsClient>, String> {
+fn hub_client(state: &State<AppState>) -> Result<Option<LifeClient>, String> {
     let guard = lock(state)?;
     let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
     let url = get("hub_url");
@@ -596,7 +596,7 @@ fn hub_client(state: &State<AppState>) -> Result<Option<RoomsClient>, String> {
     if url.trim().is_empty() || token.is_empty() {
         return Ok(None);
     }
-    Ok(Some(RoomsClient { base_url: url, token, api_key: opt_key(get("hub_api_key")) }))
+    Ok(Some(LifeClient { base_url: url, token, api_key: opt_key(get("hub_api_key")) }))
 }
 
 #[tauri::command(async)]
@@ -608,7 +608,7 @@ pub fn hub_settings_get(state: State<AppState>) -> Result<HubSettings, String> {
         user: get("hub_user"),
         api_key: get("hub_api_key"),
         connected: !get("hub_token").is_empty(),
-        room_id: get("hub_room_id"),
+        life_id: get("hub_life_id"),
     })
 }
 
@@ -637,7 +637,7 @@ pub fn hub_connect(
         (get("hub_url"), get("hub_token"))
     };
     if existing.0 == url && !existing.1.is_empty() {
-        let client = RoomsClient { base_url: url.clone(), token: existing.1, api_key: key_opt.clone() };
+        let client = LifeClient { base_url: url.clone(), token: existing.1, api_key: key_opt.clone() };
         if client.rename(&user).is_ok() {
             let guard = lock(&state)?;
             guard.set_setting("hub_user", &user).map_err(|e| e.to_string())?;
@@ -650,12 +650,12 @@ pub fn hub_connect(
     }
     // 네트워크는 락 밖
     let seed = agent_mentor::mascot::stable_identity();
-    let v = rooms_client::register(&url, key_opt.as_deref(), &user, &seed).map_err(|e| e.to_string())?;
+    let v = life_client::register(&url, key_opt.as_deref(), &user, &seed).map_err(|e| e.to_string())?;
     let token = v["token"].as_str().unwrap_or_default().to_string();
     let agent_id = v["agent_id"].as_str().unwrap_or_default().to_string();
-    let room_id = v["room_id"].as_str().unwrap_or_default().to_string();
-    if token.is_empty() || room_id.is_empty() {
-        return Err("서버 응답에 token/room_id가 없어요".into());
+    let life_id = v["life_id"].as_str().unwrap_or_default().to_string();
+    if token.is_empty() || life_id.is_empty() {
+        return Err("서버 응답에 token/life_id가 없어요".into());
     }
     {
         let guard = lock(&state)?;
@@ -665,7 +665,7 @@ pub fn hub_connect(
             ("hub_api_key", api_key.as_str()),
             ("hub_token", token.as_str()),
             ("hub_agent_id", agent_id.as_str()),
-            ("hub_room_id", room_id.as_str()),
+            ("hub_life_id", life_id.as_str()),
         ] {
             guard.set_setting(k, val).map_err(|e| e.to_string())?;
         }
@@ -676,18 +676,18 @@ pub fn hub_connect(
 
 /// 홈 탭이 폴링하는 단일 진입점: 내 위치 + 그 방의 상태.
 #[tauri::command(async)]
-pub fn room_view(state: State<AppState>) -> Result<serde_json::Value, String> {
+pub fn life_view(state: State<AppState>) -> Result<serde_json::Value, String> {
     let Some(client) = hub_client(&state)? else {
         return Err("hub_not_connected".into());
     };
     let me = client.me().map_err(|e| e.to_string())?;
-    let room_id = me["room_id"].as_str().unwrap_or_default().to_string();
-    let room = client.room_state(&room_id).map_err(|e| e.to_string())?;
-    Ok(serde_json::json!({ "me": me, "room": room }))
+    let life_id = me["life_id"].as_str().unwrap_or_default().to_string();
+    let life = client.life_state(&life_id).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "me": me, "life": life }))
 }
 
 #[tauri::command(async)]
-pub fn rooms_list(state: State<AppState>) -> Result<serde_json::Value, String> {
+pub fn life_list(state: State<AppState>) -> Result<serde_json::Value, String> {
     let (url, api_key) = {
         let guard = lock(&state)?;
         let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
@@ -696,31 +696,31 @@ pub fn rooms_list(state: State<AppState>) -> Result<serde_json::Value, String> {
     if url.trim().is_empty() {
         return Err("hub_not_connected".into());
     }
-    rooms_client::list_rooms(&url, opt_key(api_key).as_deref()).map_err(|e| e.to_string())
+    life_client::list_life(&url, opt_key(api_key).as_deref()).map_err(|e| e.to_string())
 }
 
 /// 방 이동(우클릭 메뉴). cell 없이 입장 — 서버가 빈 셀 배정.
 #[tauri::command(async)]
-pub fn room_goto(state: State<AppState>, room_id: String) -> Result<serde_json::Value, String> {
+pub fn life_goto(state: State<AppState>, life_id: String) -> Result<serde_json::Value, String> {
     let Some(client) = hub_client(&state)? else {
         return Err("hub_not_connected".into());
     };
-    client.enter(&room_id, None).map_err(|e| e.to_string())
+    client.enter(&life_id, None).map_err(|e| e.to_string())
 }
 
 /// 방 안 셀 이동(좌클릭). 점유 셀이면 서버가 409 → cell_taken 에러 문자열.
 #[tauri::command(async)]
-pub fn room_move_cell(state: State<AppState>, x: i64, y: i64) -> Result<serde_json::Value, String> {
+pub fn life_move_cell(state: State<AppState>, x: i64, y: i64) -> Result<serde_json::Value, String> {
     let Some(client) = hub_client(&state)? else {
         return Err("hub_not_connected".into());
     };
     let me = client.me().map_err(|e| e.to_string())?;
-    let room_id = me["room_id"].as_str().unwrap_or_default().to_string();
-    client.move_to(&room_id, (x, y)).map_err(|e| e.to_string())
+    let life_id = me["life_id"].as_str().unwrap_or_default().to_string();
+    client.move_to(&life_id, (x, y)).map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]
-pub fn room_capabilities(state: State<AppState>) -> Result<serde_json::Value, String> {
+pub fn life_capabilities(state: State<AppState>) -> Result<serde_json::Value, String> {
     let Some(client) = hub_client(&state)? else {
         return Err("hub_not_connected".into());
     };
@@ -728,15 +728,15 @@ pub fn room_capabilities(state: State<AppState>) -> Result<serde_json::Value, St
 }
 
 #[tauri::command(async)]
-pub fn room_save_design(
+pub fn life_save_design(
     state: State<AppState>,
-    room_id: String,
+    life_id: String,
     design: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     let Some(client) = hub_client(&state)? else {
         return Err("hub_not_connected".into());
     };
-    client.save_design(&room_id, design).map_err(|e| e.to_string())
+    client.save_design(&life_id, design).map_err(|e| e.to_string())
 }
 
 /// 임의 시드의 로봇 스펙 — 방 안 다른 에이전트 렌더용.

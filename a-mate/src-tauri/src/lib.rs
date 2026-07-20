@@ -218,7 +218,7 @@ pub fn run() {
             })
             .setup(|app| {
                 // 테스트용 오버라이드: 한 PC에서 두 인스턴스를 돌릴 때 데이터 디렉터리 분리
-                // (docs/design/room-visit.md §5) — 미설정이면 기존 경로 그대로.
+                // (docs/design/life-visit.md §5) — 미설정이면 기존 경로 그대로.
                 let dir = match std::env::var("AGENT_MENTOR_DATA_DIR") {
                     Ok(d) if !d.trim().is_empty() => std::path::PathBuf::from(d),
                     _ => app.path().app_data_dir()?,
@@ -242,12 +242,12 @@ pub fn run() {
                         (
                             get("hub_url"),
                             get("hub_token"),
-                            get("hub_room_id"),
+                            get("hub_life_id"),
                             get("hub_api_key"),
                         )
                     });
-                    if let Some((url, token, room_id, api_key)) = cfg {
-                        if !url.trim().is_empty() && !token.is_empty() && !room_id.is_empty() {
+                    if let Some((url, token, life_id, api_key)) = cfg {
+                        if !url.trim().is_empty() && !token.is_empty() && !life_id.is_empty() {
                             let api_key = {
                                 let k = api_key.trim();
                                 if k.is_empty() {
@@ -257,12 +257,12 @@ pub fn run() {
                                 }
                             };
                             std::thread::spawn(move || {
-                                let client = agent_mentor::rooms_client::RoomsClient {
+                                let client = agent_mentor::life_client::LifeClient {
                                     base_url: url,
                                     token,
                                     api_key,
                                 };
-                                if let Err(e) = client.enter(&room_id, None) {
+                                if let Err(e) = client.enter(&life_id, None) {
                                     log::warn!("시작 시 내 방 입장 실패(무시): {e}");
                                 }
                             });
@@ -379,12 +379,12 @@ pub fn run() {
                 commands::set_content_status,
                 commands::hub_settings_get,
                 commands::hub_connect,
-                commands::room_view,
-                commands::room_capabilities,
-                commands::rooms_list,
-                commands::room_goto,
-                commands::room_move_cell,
-                commands::room_save_design,
+                commands::life_view,
+                commands::life_capabilities,
+                commands::life_list,
+                commands::life_goto,
+                commands::life_move_cell,
+                commands::life_save_design,
                 commands::robot_spec_for_seed,
                 commands::mascot_set_expanded,
                 commands::open_settings_window,

@@ -13,8 +13,8 @@ export type DeskChoice = DeskId | 'mix'
 export type ShelfId = 's1' | 's7' | 's9' | 's11'
 export type BoardId = 'chalk-green' | 'chalk-black' | 'glass'
 export type DecoId = 'plant' | 'water-cooler' | 'rug' | 'string-lights'
-/** 완성된 방 배경 5종 — room-preset-N.png 통짜 이미지. 벽·바닥·책장·칠판이 다 그려져 있다. */
-export type RoomPresetId = 'r1' | 'r2' | 'r3' | 'r4' | 'r5'
+/** 완성된 방 배경 5종 — life-preset-N.png 통짜 이미지. 벽·바닥·책장·칠판이 다 그려져 있다. */
+export type LifePresetId = 'r1' | 'r2' | 'r3' | 'r4' | 'r5'
 /** 내 캐릭터 15종 — char-cN.png. 방 안 에이전트(로봇 자리)를 이 스프라이트로 그린다. */
 export type CharacterId =
   | 'c1' | 'c2' | 'c3' | 'c4' | 'c5'
@@ -22,13 +22,13 @@ export type CharacterId =
   | 'c11' | 'c12' | 'c13' | 'c14' | 'c15'
 
 /** 사용자가 방 만들기에서 고른 것 전부. localStorage에 이대로 저장된다. */
-export type RoomConfig = {
+export type LifeConfig = {
   /** a-hub 스페이스 id — 이 방에 어느 스페이스 데이터를 표시할지 */
   space_id: string
   /** 표시용 스페이스 이름 (빌드 시점 스냅숏, 렌더 시 최신값으로 덮어씀) */
   space_name: string
   /** 방 배경 프리셋 — 이 위에 책상만 얹는다. 없으면(구버전 저장분) 'r1' */
-  room?: RoomPresetId
+  life?: LifePresetId
   desk: DeskChoice
   /** 책상 수 — 'auto'면 에이전트 수를 따라감. 이전 버전 저장분에는 없을 수 있다. */
   desks?: 'auto' | number

@@ -44,7 +44,7 @@
       "description": "Knowledge sharing scope, aligned with Pillar 3. 'org' = readable org-wide (the default: knowledge is meant to circulate). 'space' = readable only within the owning Space. NOTE: v1 used private|team|public; those values are gone.",
       "x-migration": "v1 public -> org; v1 team|private -> space"
     },
-    "spaceId": { "type": "string", "description": "e.g. 'sw-innov'. A Space is a team room (a floor in the Pillar 3 building metaphor)." },
+    "spaceId": { "type": "string", "description": "e.g. 'sw-innov'. A Space is a team life (a floor in the Pillar 3 building metaphor)." },
     "issueId": { "type": "string", "pattern": "^iss_[a-zA-Z0-9_-]+$" },
     "docId": { "type": "string", "pattern": "^doc_[a-zA-Z0-9_-]+$" },
     "skillId": { "type": "string", "pattern": "^skl_[a-zA-Z0-9_-]+$" },

@@ -1,7 +1,7 @@
 import type { FootprintCell, Rotation } from './catalog';
 
 export type WorldCell = [number, number];
-export const ROOM_GRID = { w: 20, h: 20 } as const;
+export const LIFE_GRID = { w: 20, h: 20 } as const;
 
 export interface GeometryObject {
   cell: WorldCell;
@@ -29,13 +29,13 @@ export function rotatedOffsets(object: Pick<GeometryObject, 'size' | 'footprint'
   });
 }
 
-export function placementOrigin(target: WorldCell, size: WorldCell, rotation: Rotation, grid = ROOM_GRID): WorldCell {
+export function placementOrigin(target: WorldCell, size: WorldCell, rotation: Rotation, grid = LIFE_GRID): WorldCell {
   const [w, h] = rotatedSize(size, rotation);
   const clamp = (value: number, max: number) => Math.max(0, Math.min(max, value));
   return [clamp(target[0] - Math.floor(w / 2), grid.w - w), clamp(target[1] - Math.floor(h / 2), grid.h - h)];
 }
 
-export function rotatedOrigin(object: GeometryObject, rotation: Rotation, grid = ROOM_GRID): WorldCell {
+export function rotatedOrigin(object: GeometryObject, rotation: Rotation, grid = LIFE_GRID): WorldCell {
   const [anchorX, anchorY] = groundAnchor(object);
   const [w, h] = rotatedSize(object.size, rotation);
   const clamp = (value: number, max: number) => Math.max(0, Math.min(max, value));
@@ -45,7 +45,7 @@ export function rotatedOrigin(object: GeometryObject, rotation: Rotation, grid =
   ];
 }
 
-export function wallPlacementOrigin(targetIndex: number, span: number, wallLength = ROOM_GRID.w): number {
+export function wallPlacementOrigin(targetIndex: number, span: number, wallLength = LIFE_GRID.w): number {
   return Math.max(0, Math.min(wallLength - span, targetIndex - Math.floor(span / 2)));
 }
 
@@ -67,6 +67,6 @@ export function spriteGroundAnchor(object: GeometryObject, footprintAnchor: Worl
   return [object.cell[0] + w * footprintAnchor[0], object.cell[1] + h * footprintAnchor[1]];
 }
 
-export function isInsideRoom(object: GeometryObject, grid = ROOM_GRID): boolean {
+export function isInsideLife(object: GeometryObject, grid = LIFE_GRID): boolean {
   return occupiedWorldCells(object).every(([x, y]) => x >= 0 && y >= 0 && x < grid.w && y < grid.h);
 }

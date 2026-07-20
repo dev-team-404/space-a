@@ -186,7 +186,7 @@ src/
 ├─ Mascot.svelte           # mascot 창 루트 — 렌더 루프, 말풍선, 잡담 타이머, 클릭/드래그 판별
 └─ lib/
    ├─ api.ts               # 모든 invoke 래퍼 + 타입 + 이벤트 리스너 (유일한 백엔드 접점)
-   ├─ ui/                  # HomeTab / CoachTab / DiaryTab / ChatTab / SessionModal / MiniRoom
+   ├─ ui/                  # HomeTab / CoachTab / DiaryTab / ChatTab / SessionModal / MiniLife
    │  ├─ home/             #   WeekTrend·ModelMix·SaveTop3·NoticeLog 위젯
    │  ├─ calendar.ts, coach-helpers.ts, notices.ts, chat-store.svelte.ts
    └─ robot/               # 절차 생성 로봇

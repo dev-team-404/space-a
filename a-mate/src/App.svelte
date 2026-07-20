@@ -7,7 +7,7 @@
   import RobotPortrait from './lib/ui/RobotPortrait.svelte';
   import {
     getSummary, getDailyLine, listFindings, onScanDone, onGotoTab,
-    onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, roomView, type Summary,
+    onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, lifeView, type Summary,
   } from './lib/api';
   import {
     diaryNotice, findingNotice, loadNotices, occasionNotice, pushNotice, saveNotices,
@@ -24,24 +24,24 @@
 
   let tab = $state<Tab>('home');
 
-  // 방문 컨텍스트 (docs/design/room-visit.md §3) — 남의 방을 보는 동안에는
+  // 방문 컨텍스트 (docs/design/life-visit.md §3) — 남의 방을 보는 동안에는
   // 사적 탭(일기·코칭·채팅)을 숨긴다. 데이터는 원래 로컬 전용이라 유출은 없지만,
   // 남의 방 화면에 내 사적 탭이 보이면 "남의 것"으로 오독된다.
   let visiting = $state(false);
-  let roomOwner = $state('');
+  let lifeOwner = $state('');
   let ownerSeed = $state(''); // 방문 중인 방 주인의 마스코트 시드 (없으면 이름 폴백)
   // 창(App) 레벨에서 직접 폴링 — 어느 탭에 있든 방 이동을 감지해 방문 모드로 전환
   $effect(() => {
     const tick = async () => {
       try {
-        const v = await roomView();
-        visiting = v.me.room_id !== v.me.my_room_id;
-        roomOwner = v.room.owner_name;
-        ownerSeed = v.room.owner_mascot_seed || v.room.owner_name;
+        const v = await lifeView();
+        visiting = v.me.life_id !== v.me.my_life_id;
+        lifeOwner = v.life.owner_name;
+        ownerSeed = v.life.owner_mascot_seed || v.life.owner_name;
         if (visiting && tab !== 'home') tab = 'home';
       } catch {
         visiting = false;
-        roomOwner = '';
+        lifeOwner = '';
         ownerSeed = '';
       }
     };
@@ -113,7 +113,7 @@
   <div class="homepy">
     <header class="titlebar">
       <!-- 헤더 = 지금 보는 방의 주인. 자기 방이면 hub 등록 이름, hub 미연결이면 로컬 계정명 -->
-      <h1>{roomOwner || (summary?.user_name ?? '주인')}님의 <span class="mh">미니홈피</span></h1>
+      <h1>{lifeOwner || (summary?.user_name ?? '주인')}님의 <span class="mh">미니홈피</span></h1>
       <!-- 카운터도 내 로컬 세션 수 — 방문 중엔 숨김 (주인 수치로 오독 방지) -->
       {#if !visiting}
         <div class="counter">

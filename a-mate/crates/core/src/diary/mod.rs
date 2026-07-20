@@ -1378,7 +1378,7 @@ mod tests {
             est_tokens_saved: 40000, prescription: None, dedup_key: "R9|s2".into(),
         }, "2026-07-10T10:00:00Z").unwrap();
 
-        // 어제(07-09) 일기 존재 → recent_diaries에 포함 → 그날 finding(R1)이 "이미 다룸"
+        // 어제(07-09) 일기 존재 → recent_diaries에 포함 → 그날 finding(R1)이 "이미 다라이프"
         seed_diary(&store, &cfg, "2026-07-09", "어제도 context7 얘기");
 
         let brief = assemble_brief(&store, "Windows", "2026-07-10", &cfg).unwrap();

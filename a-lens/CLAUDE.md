@@ -33,5 +33,5 @@ npm install && npm run dev
   `.env`는 자동 로드되지 않는다 (collector는 `os.environ`만 읽음) —
   `set -a && source .env && set +a`로 export한 뒤 uvicorn을 실행할 것.
 - 배포형: `npm run build` → `frontend/dist`를 backend가 루트에서 정적 서빙.
-- 방 배치·footprint 기하는 ADR 0003(room-placement-geometry-v2)~0011에 규정돼 있다 —
+- 방 배치·footprint 기하는 ADR 0003(life-placement-geometry-v2)~0011에 규정돼 있다 —
   배치 로직을 수정하기 전에 해당 ADR을 먼저 읽을 것.

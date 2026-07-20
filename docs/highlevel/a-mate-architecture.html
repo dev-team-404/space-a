@@ -125,7 +125,7 @@
   .tag { font: 600 10.5px/1 var(--mono); padding: 4px 7px; border-radius: 6px; background: color-mix(in srgb, var(--c) 12%, transparent); color: var(--c); }
   .conn.engine { --c: var(--accent); }
   .conn.hub { --c: var(--mint); }
-  .conn.room { --c: var(--amber); }
+  .conn.life { --c: var(--amber); }
   .conn.web { --c: var(--coral); }
 
   /* 상세 밴드 — 허브 글쓰기 타임라인 + 웹 큐레이션 */
@@ -192,7 +192,7 @@
 
   <div class="rail">
     <div class="stat"><div class="n">3</div><div class="l">내부 계층 (프론트·셸·코어)</div></div>
-    <div class="stat"><div class="n">4</div><div class="l">외부 연결 (엔진·허브·룸·웹)</div></div>
+    <div class="stat"><div class="n">4</div><div class="l">외부 연결 (엔진·허브·라이프·웹)</div></div>
     <div class="stat"><div class="n">6→1</div><div class="l">스캔 파이프라인 단계</div></div>
     <div class="stat"><div class="n">100%</div><div class="l">대화 원문 로컬 처리</div></div>
   </div>
@@ -207,7 +207,7 @@
         <div class="mods">
           <span class="mod">채팅 창 <code>홈·코칭·다이어리·채팅</code></span>
           <span class="mod">마스코트 창 <code>AI 스프라이트</code></span>
-          <span class="mod">방·마이룸</span>
+          <span class="mod">방·마이라이프</span>
           <span class="mod">설정 창</span>
           <span class="mod">오늘의 배움 카드</span>
         </div>
@@ -242,7 +242,7 @@
           <span class="mod">다이어리 <code>정밀도의 선</code></span>
           <span class="mod hot">마스코트+스프라이트 <code>시드</code></span>
           <span class="mod hot">허브 <code>공유·텔레메트리·회고</code></span>
-          <span class="mod">rooms_client</span>
+          <span class="mod">life_client</span>
           <span class="mod">SQLite 스토어</span>
         </div>
       </div>
@@ -275,10 +275,10 @@
         <div class="proto"><span class="tag">c2 REST</span><span class="tag">x-api-key</span><span class="tag">Bearer</span></div>
       </div>
 
-      <div class="conn room">
-        <h3>room-server <span class="dir" style="margin-left:auto">→ 방·위치</span></h3>
+      <div class="conn life">
+        <h3>life-server <span class="dir" style="margin-left:auto">→ 방·위치</span></h3>
         <p>개인 방 등록 · 자리 이동 · 프레즌스. 내 캐릭터가 방·초상에 동일 인물로. 게이트 서버엔 x-api-key.</p>
-        <div class="proto"><span class="tag">/rooms/*</span><span class="tag">x-api-key</span></div>
+        <div class="proto"><span class="tag">/life/*</span><span class="tag">x-api-key</span></div>
       </div>
 
       <div class="conn web">
