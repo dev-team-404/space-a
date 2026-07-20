@@ -9,9 +9,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "dompurify": "^3.4.12",
+    "marked": "^18.0.6",
     "pixi.js": "^8.6.6"
   },
   "devDependencies": {
+    "@types/dompurify": "^3.0.5",
     "typescript": "^5.6.3",
     "vite": "^6.0.5"
   }
