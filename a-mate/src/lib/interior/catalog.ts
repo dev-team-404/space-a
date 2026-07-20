@@ -132,6 +132,52 @@ export const WINDOW_TARGET_EDGE_SLOPE_BY_ROTATION: Partial<Record<Rotation, numb
   180: 0.5,
 };
 
+// Measured straight edges for floor sprites whose two isometric axes can be
+// identified reliably. Organic and round assets intentionally keep the source
+// projection instead of being distorted by a low-confidence measurement
+  // (ADR 0015).
+export const FLOOR_SOURCE_AXES_BY_ASSET: Partial<Record<string, Partial<Record<SpriteSource, [number, number]>>>> = {
+  'sofa.mint-loveseat': { ne: [0.571, -0.559], sw: [0.560, -0.559] },
+  'sofa.coral-two-seat': { ne: [0.560, -0.550], sw: [0.557, -0.569] },
+  'sofa.lavender-sectional': { ne: [0.577, -0.554], sw: [0.551, -0.562] },
+  'sofa.wood-frame': { ne: [0.560, -0.547], sw: [0.583, -0.550] },
+  'sofa.navy-modern': { ne: [0.572, -0.543], sw: [0.576, -0.571] },
+
+  // Desk axes use the visible outer tabletop edges. Internal drawer, monitor,
+  // and support lines are deliberately excluded because generated sprites are
+  // not internally parallel.
+  'desk.compact-study': { ne: [0.580, -0.420], sw: [0.500, -0.489] },
+  'desk.computer': { ne: [0.550, -0.400], sw: [0.500, -0.524] },
+  'desk.wood-writing': { ne: [0.580, -0.415], sw: [0.468, -0.496] },
+  'desk.pastel-vanity': { ne: [0.550, -0.420], sw: [0.470, -0.493] },
+  'desk.metal-workstation': { ne: [0.590, -0.394], sw: [0.488, -0.492] },
+
+  'table.square-two': { sw: [0.536, -0.559] },
+  'table.wood-four': { sw: [0.538, -0.576] },
+  'table.pastel-breakfast': { sw: [0.545, -0.548] },
+  'table.dark-modern': { sw: [0.545, -0.555] },
+
+  'appliance.retro-tv': { ne: [0.536, -0.500], sw: [0.529, -0.525] },
+  'appliance.compact-fridge': { ne: [0.500, -0.538], sw: [0.511, -0.547] },
+  'appliance.washer': { ne: [0.520, -0.522], sw: [0.535, -0.529] },
+  'appliance.stereo': { ne: [0.500, -0.480], sw: [0.525, -0.557] },
+  'appliance.desktop': { ne: [0.515, -0.504], sw: [0.522, -0.522] },
+};
+
+export const FLOOR_PROJECTION_EXEMPT_BY_ASSET: Record<string, string> = {
+  'lighting.warm-floor': 'no stable pair of straight floor-plane edges',
+  'lighting.pastel-table': 'no stable pair of straight floor-plane edges',
+  'lighting.retro-stand': 'no stable pair of straight floor-plane edges',
+  'lighting.paper-lantern': 'rotational silhouette',
+  'lighting.modern-arc': 'curved silhouette',
+  'table.round-cafe': 'round tabletop',
+  'chair.mint-cafe': 'one-cell organic silhouette',
+  'chair.coral-compact': 'one-cell organic silhouette',
+  'chair.warm-wood': 'one-cell organic silhouette',
+  'chair.pastel-cream': 'one-cell organic silhouette',
+  'chair.dark-modern': 'one-cell organic silhouette',
+};
+
 // Visible floor-support contour for each independent desk source PNG. These are
 // pixel coordinates, not per-direction offsets. Mirrored views reuse the same
 // contacts with their X coordinates reflected (ADR 0011).
@@ -234,6 +280,14 @@ const make = (category: FurnitureCategory, rows: Array<[string, string, [number,
         const effectiveSlope = view.mirrorX ? -sourceSlope : sourceSlope;
         return { scaleY: 1, shearY: targetSlope - effectiveSlope };
       }
+      const axes = FLOOR_SOURCE_AXES_BY_ASSET[assetId]?.[view.source];
+      if (axes) {
+        const [sourcePositive, sourceNegative] = axes;
+        const effectivePositive = view.mirrorX ? -sourceNegative : sourcePositive;
+        const effectiveNegative = view.mirrorX ? -sourcePositive : sourceNegative;
+        const scaleY = 1 / (effectivePositive - effectiveNegative);
+        return { scaleY, shearY: 0.5 - scaleY * effectivePositive };
+      }
       return { scaleY: 1, shearY: 0 };
     };
     const maximumDeskRegistrationFor = (rotation: Rotation): DeskRegistration | undefined => {
@@ -252,6 +306,14 @@ const make = (category: FurnitureCategory, rows: Array<[string, string, [number,
     const anchorFor = (rotation: Rotation): [number, number] => {
       const { source, mirrorX } = viewFor(rotation);
       const metric = metricFor(category, id, source);
+      if (category === 'window') {
+        const centerSourceY = metric.ground[1]
+          + windowSourceSlope() * (0.5 - metric.ground[0]) * metric.width / metric.height;
+        const projection = projectionFor(rotation);
+        const centerTransformedY = projection.scaleY * centerSourceY
+          + projection.shearY * 0.5 * metric.width / metric.height;
+        return [0.5, centerTransformedY];
+      }
       const registration = deskRegistrationFor(rotation);
       if (registration) return registration.anchor;
       const measuredImageX = mirrorX ? 1 - metric.ground[0] : metric.ground[0];

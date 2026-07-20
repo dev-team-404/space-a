@@ -31,6 +31,8 @@ SPACE-A 프로젝트 문서 모음입니다. (현재 설계 단계)
 | [0012](./adr/0012-locate-life-server-under-a-hub-life.md) | Life Server 구현을 A-Hub Life 경로에 배치한다 | 채택 |
 | [0013](./adr/0013-docs-lifecycle-and-archive.md) | 작업 문서 수명주기와 `docs/archive/` 미러를 도입한다 | 채택 |
 | [0014](./adr/0014-unify-life-domain-naming.md) | 소셜 공간 도메인 명칭을 Life로 통일한다 | 채택 |
+| [0015](./adr/0015-normalize-floor-sprite-projection.md) | 바닥 가구 원본의 두 투영 축을 2:1 격자에 선택적으로 정규화한다 | 채택 |
+| [0016](./adr/0016-register-window-frame-to-wall-span.md) | 창문 프레임의 크기와 하단 중앙을 실제 벽 점유 구간에 등록한다 | 채택 |
 
 ## 설계 문서
 
