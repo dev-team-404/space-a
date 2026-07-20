@@ -1124,6 +1124,84 @@ pub fn get_sprite(app: tauri::AppHandle) -> Result<Option<String>, String> {
     }
 }
 
+/// 캐릭터 이미지 모델 설정 스냅샷 (설정창용). source: "store"(설정창) | "env"(.env) | "none".
+#[derive(Debug, Clone, Serialize)]
+pub struct ImageSettings {
+    pub url: String,
+    pub key: String,
+    pub model: String,
+    pub source: String,
+}
+
+#[tauri::command(async)]
+pub fn image_settings_get(state: State<AppState>) -> Result<ImageSettings, String> {
+    let guard = lock(&state)?;
+    let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
+    let stored_url = get("image_url").trim().to_string();
+    if !stored_url.is_empty() {
+        return Ok(ImageSettings {
+            url: stored_url,
+            key: get("image_key"),
+            model: get("image_model"),
+            source: "store".into(),
+        });
+    }
+    // 저장값이 없으면 env 폴백이 뭘로 잡히는지 그대로 보여준다(설정 안내용).
+    Ok(match crate::resolve_sprite_cfg(&guard) {
+        Some(c) => ImageSettings { url: c.base_url, key: c.api_key, model: c.model, source: "env".into() },
+        None => ImageSettings {
+            url: String::new(),
+            key: String::new(),
+            model: agent_mentor::sprite::DEFAULT_IMAGE_MODEL.into(),
+            source: "none".into(),
+        },
+    })
+}
+
+#[tauri::command(async)]
+pub fn image_settings_set(
+    state: State<AppState>,
+    url: String,
+    key: String,
+    model: String,
+) -> Result<(), String> {
+    let guard = lock(&state)?;
+    for (k, v) in [
+        ("image_url", url.trim()),
+        ("image_key", key.trim()),
+        ("image_model", model.trim()),
+    ] {
+        guard.set_setting(k, v).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// 내 캐릭터 재생성 — 이미지 모델로 새로 그려 캐시를 교체. 네트워크는 **락 밖**(규율 동일).
+/// 완료 시 `sprite:ready` emit → 마스코트가 즉시 교체된다.
+#[tauri::command(async)]
+pub fn regenerate_sprite(app: tauri::AppHandle, state: State<AppState>) -> Result<(), String> {
+    use tauri::{Emitter as _, Manager as _};
+    // 락 범위: 설정 해석만
+    let cfg = {
+        let guard = lock(&state)?;
+        crate::resolve_sprite_cfg(&guard)
+    };
+    let Some(cfg) = cfg else {
+        return Err("이미지 모델이 설정되지 않았어요 — 설정 → 캐릭터 이미지에서 URL·키를 넣어주세요".into());
+    };
+    let identity = agent_mentor::mascot::stable_identity();
+    let spec = agent_mentor::mascot::robot_spec_for(&identity);
+    let desc = agent_mentor::sprite::character_description(&spec, &identity);
+    // 락 밖 네트워크 (수십 초 걸릴 수 있음 — async 커맨드라 UI는 안 막힌다)
+    let png = agent_mentor::sprite::generate(&cfg, &desc).map_err(|e| e.to_string())?;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join("sprite.png"), png).map_err(|e| e.to_string())?;
+    log::info!("캐릭터 재생성 완료");
+    let _ = app.emit("sprite:ready", ());
+    Ok(())
+}
+
 /// 방 점유자 스프라이트 캐시 경로 — app_data/sprites/<hash>.png.
 fn occupant_sprite_path(app: &tauri::AppHandle, seed: &str) -> Result<std::path::PathBuf, String> {
     use tauri::Manager as _;
@@ -1146,13 +1224,22 @@ pub fn get_occupant_sprite(app: tauri::AppHandle, seed: String) -> Result<Option
 /// 점유자 스프라이트를 백그라운드로 생성 요청(즉시 반환). 이미지 모델 미설정이면 no-op(절차 유지).
 /// 완료 시 `occupant-sprite:ready`(payload=seed) 이벤트 → 프론트가 다시 불러와 교체.
 #[tauri::command(async)]
-pub fn request_occupant_sprite(app: tauri::AppHandle, seed: String) -> Result<(), String> {
+pub fn request_occupant_sprite(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    seed: String,
+) -> Result<(), String> {
     use tauri::Emitter as _;
     let p = occupant_sprite_path(&app, &seed)?;
     if p.exists() {
         return Ok(()); // 이미 있음
     }
-    let Some(cfg) = agent_mentor::sprite::SpriteConfig::from_env() else {
+    // 설정창(image_*) → env 순 해석 — 내 캐릭터와 동일한 이미지 엔드포인트를 쓴다.
+    let cfg = {
+        let guard = lock(&state)?;
+        crate::resolve_sprite_cfg(&guard)
+    };
+    let Some(cfg) = cfg else {
         return Ok(()); // 이미지 모델 미설정 — 절차 폴백 유지
     };
     // pending 마커로 동시/중복 생성 방지 (토큰 낭비 차단)

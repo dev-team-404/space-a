@@ -23,6 +23,8 @@ anyhow = "1"
 sys-locale = "0.3"
 base64 = "0.22"
 sha2 = "0.10"
+# 생성된 스프라이트의 흰 배경을 투명으로 (마스코트 창이 투명이라 흰 박스가 보이면 안 됨)
+png = "0.17"
 # Boris 팁 사이트(howborisusesclaudecode.com) HTML 파싱 — 중첩 태그 때문에 정식 파서 필요.
 scraper = "0.20"
 

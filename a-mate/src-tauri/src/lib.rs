@@ -165,6 +165,17 @@ pub(crate) fn resolve_engine(store: &SqliteStore) -> Option<OpenAiCompatEngine> 
     OpenAiCompatEngine::from_env()
 }
 
+/// 캐릭터 이미지 생성용 설정 해석 — 설정창 저장값(image_*) → env 순.
+/// 텍스트 엔진과 **분리**된다(사내 LM Studio는 이미지 생성을 못 하므로, 이미지만 OpenRouter 등으로).
+pub(crate) fn resolve_sprite_cfg(store: &SqliteStore) -> Option<agent_mentor::sprite::SpriteConfig> {
+    let get = |k: &str| store.get_setting(k).ok().flatten();
+    agent_mentor::sprite::SpriteConfig::resolve(
+        get("image_url").as_deref(),
+        get("image_key").as_deref(),
+        get("image_model").as_deref(),
+    )
+}
+
 /// content_protected 설정을 두 창(chat·mascot)에 적용 — 화면 캡처/녹화에서 제외 (스펙 §7).
 pub(crate) fn apply_content_protection(app: &tauri::AppHandle, on: bool) {
     use tauri::Manager;
@@ -356,6 +367,9 @@ pub fn run() {
                 commands::get_sprite,
                 commands::get_occupant_sprite,
                 commands::request_occupant_sprite,
+                commands::image_settings_get,
+                commands::image_settings_set,
+                commands::regenerate_sprite,
                 commands::generate_skill_draft,
                 commands::save_skill_draft,
                 commands::get_settings,
