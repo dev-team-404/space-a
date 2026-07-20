@@ -151,8 +151,8 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
     if (wasCollapsed) await expand(true);
   }
   async function gotoLife(lifeId: string) {
-    try { await lifeGoto(lifeId); } catch { /* cell_taken 등 — 다음 시도 */ }
     await closeLifeMenu();
+    try { await lifeGoto(lifeId); } catch { /* 이동 실패 시에도 메뉴는 닫힌 상태 유지 */ }
   }
   async function closeLifeMenu() {
     if (lifeMenu === null) return;
@@ -168,7 +168,14 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
     }, 2000);
     const onBlur = () => closeLifeMenu();
     window.addEventListener('blur', onBlur);
-    return () => { clearInterval(t); window.removeEventListener('blur', onBlur); };
+    const focusChanged = win.onFocusChanged(({ payload: focused }) => {
+      if (!focused) closeLifeMenu();
+    });
+    return () => {
+      clearInterval(t);
+      window.removeEventListener('blur', onBlur);
+      focusChanged.then((unlisten) => unlisten());
+    };
   });
 
   // 클릭 vs 드래그 (스펙 §6): drag-region 대신 수동 판별 — 클릭이면 홈피 열기.
@@ -195,6 +202,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   }
   function onPointerDown(e: PointerEvent) {
     if (e.button === 2) return; // 우클릭은 contextmenu 핸들러가 처리
+    if (lifeMenu !== null) closeLifeMenu();
     // 캡처 없이는 빠른 드래그가 로봇 영역(128px)을 벗어난 뒤 move 이벤트가 끊겨
     // 이동이 끊긴다 — 캡처로 창 밖까지 move를 계속 받는다.
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
