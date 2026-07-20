@@ -63,84 +63,87 @@ impl SpriteConfig {
     }
 }
 
-/// 확장 특성 — 시드 해시의 미사용 바이트(6·7·8)로 성별 표현·피부톤·액세서리를 추가.
+/// 확장 특성 — 시드 해시의 미사용 바이트(6·7·8)로 체형·마감·부착물 축을 추가.
 /// (mascot::RobotSpec 계약은 d[0..5]만 사용 — 여기서 더 다양해진다)
 pub fn extended_traits(identity: &str) -> (&'static str, &'static str, &'static str) {
     use sha2::{Digest, Sha256};
     let d = Sha256::digest(identity.as_bytes());
-    const GENDER: [&str; 3] = ["boy", "girl", "person"];
-    const SKIN: [&str; 4] = [
-        "fair skin",
-        "light tan skin",
-        "warm tan skin",
-        "deep brown skin",
+    const BUILD: [&str; 3] = ["compact", "slender", "sturdy"];
+    const FINISH: [&str; 4] = [
+        "matte white",
+        "brushed steel",
+        "cream plastic",
+        "charcoal matte",
     ];
     const ACC: [&str; 6] = [
         "",
-        "wearing small round glasses",
-        "wearing a baseball cap",
-        "with headphones around the neck",
-        "with a tiny hairpin",
-        "with light freckles",
+        "with a small shoulder lamp",
+        "with a slim backpack module",
+        "with headphone-style side units",
+        "with a tiny status light on its chest",
+        "with a utility tool belt",
     ];
     (
-        GENDER[(d[6] as usize) % 3],
-        SKIN[(d[7] as usize) % 4],
+        BUILD[(d[6] as usize) % 3],
+        FINISH[(d[7] as usize) % 4],
         ACC[(d[8] as usize) % 6],
     )
 }
 
-/// 시드 스펙 + 정체성 → 인물 묘사 (v6 슬롯 의미와 동일한 매핑 — 결정론).
+/// 시드 스펙 + 정체성 → **로봇** 묘사 (슬롯 의미는 유지 — 결정론).
+/// 제품이 AI 에이전트이므로 마스코트는 사람이 아닌 로봇이다. 화풍은 레퍼런스(치비 픽셀) 그대로.
 pub fn character_description(spec: &crate::mascot::RobotSpec, identity: &str) -> String {
-    const HAIR: [&str; 6] = [
-        "neat bowl-cut hair with straight bangs",
-        "messy tousled hair with a few spiky strands",
-        "side-parted hair with a small tuft",
-        "curly poofy hair",
-        "longer hair reaching the shoulders",
-        "short tidy hair with visible forehead",
+    // antenna 슬롯 = 머리 형태
+    const HEAD: [&str; 6] = [
+        "a rounded helmet-shaped head with a short antenna",
+        "a boxy head with rounded corners and two small side vents",
+        "a dome head with a wide visor band",
+        "a rounded head with small ear-discs on both sides",
+        "a tall head unit with a blinking status light on top",
+        "a compact head with a flat top panel and no antenna",
     ];
     const EYES: [&str; 6] = [
-        "dark oval eyes",
-        "big round eyes",
-        "calm dark oval eyes",
-        "sparkling eyes with bright highlights",
-        "gentle droopy eyes",
-        "cheerful closed smiling eyes",
+        "two glowing oval eyes behind a dark visor",
+        "big round glowing eyes with bright highlights",
+        "calm narrow glowing eye slits",
+        "sparkling square eyes with bright highlights",
+        "gentle droopy glowing eyes",
+        "cheerful curved glowing eyes like a smile",
     ];
-    // (의상색, 바지색, 머리색) — content.rs 팔레트와 동일 감각
+    // (본체색, 하체색, 발광 액센트색)
     const COLORS: [(&str, &str, &str); 8] = [
-        ("navy", "grey", "dark brown"),
-        ("blue", "blue", "dark brown"),
-        ("green", "grey", "black"),
-        ("pink", "mauve", "brown"),
-        ("purple", "dark grey", "black"),
-        ("mustard yellow", "slate", "auburn"),
-        ("teal", "grey", "blonde"),
-        ("slate grey", "charcoal", "brown"),
+        ("navy", "grey", "cyan"),
+        ("blue", "steel blue", "sky blue"),
+        ("green", "grey", "lime"),
+        ("pink", "mauve", "magenta"),
+        ("purple", "dark grey", "violet"),
+        ("mustard yellow", "slate", "amber"),
+        ("teal", "grey", "mint"),
+        ("slate grey", "charcoal", "white"),
     ];
     const POSE: [&str; 6] = [
-        "arms relaxed at sides",
-        "hands in pockets",
+        "arms relaxed at its sides",
+        "hands resting on its hips",
         "one hand raised in a small wave",
-        "hands together in front",
-        "holding a small green shopping basket",
-        "hands behind the back",
+        "both hands together in front",
+        "holding a small toolbox",
+        "hands behind its back",
     ];
-    let (oc, pc, hc) = COLORS[(spec.palette as usize) % 8];
-    let (gender, skin, acc) = extended_traits(identity);
-    let outfit = match (spec.body as usize) % 6 {
-        0 => format!("a {oc} zip-up hoodie with white drawstrings"),
-        1 => format!("a {oc} school blazer over a white shirt with a red tie"),
-        2 => format!("a plain {oc} t-shirt"),
-        3 => format!("a cozy {oc} sweater"),
-        4 => format!("a white button-up shirt with {oc} collar and {oc} buttons"),
-        _ => format!("{pc} overalls over a white shirt"),
+    let (cc, lc, ac) = COLORS[(spec.palette as usize) % 8];
+    let (build, finish, acc) = extended_traits(identity);
+    let chassis = match (spec.body as usize) % 6 {
+        0 => format!("a {cc} rounded chest plate with a small lit panel"),
+        1 => format!("a {cc} armored torso with shoulder pauldrons"),
+        2 => format!("a plain {cc} torso with a single seam line"),
+        3 => format!("a {cc} padded torso with soft rounded edges"),
+        4 => format!("a white torso with {cc} trim and {cc} buttons"),
+        _ => format!("a {cc} torso with an exposed cable harness"),
     };
     let acc_part = if acc.is_empty() { String::new() } else { format!(", {acc}") };
     format!(
-        "a chibi pixel-art {gender} with {skin}: {hc} {hair}, {eyes}, small smile{acc_part},          wearing {outfit}, {pc} pants, white sneakers, {pose}",
-        hair = HAIR[(spec.antenna as usize) % 6],
+        "a chibi pixel-art ROBOT (not a human) with a {build} {finish} body: {head}, {eyes}, \
+         {chassis}, {lc} leg units with flat feet, {ac} glowing accents{acc_part}, {pose}",
+        head = HEAD[(spec.antenna as usize) % 6],
         eyes = EYES[(spec.eyes as usize) % 6],
         pose = POSE[(spec.arms as usize) % 6],
     )
@@ -329,8 +332,12 @@ mod tests {
         let d2 = character_description(&spec, id);
         assert_eq!(d1, d2);
         assert!(d1.contains("chibi pixel-art"));
-        assert!(d1.contains("skin"));
-        assert!(d1.contains("pants"));
+        // 마스코트는 사람이 아니라 로봇 — 화풍은 유지하되 인물 어휘가 섞이면 안 된다
+        assert!(d1.contains("ROBOT"), "로봇으로 묘사되어야 함: {d1}");
+        assert!(d1.contains("leg units"), "다리 유닛 슬롯 포함: {d1}");
+        for human in ["skin", "hair", "pants", "sneakers", "hoodie"] {
+            assert!(!d1.contains(human), "인물 어휘 '{human}'가 남아있음: {d1}");
+        }
     }
 
     #[test]
@@ -350,18 +357,18 @@ mod tests {
     }
 
     #[test]
-    fn extended_traits_add_gender_skin_accessory_axes() {
-        // 서로 다른 정체성에서 성별/피부/액세서리 축이 실제로 갈리는지 표본 확인
-        let mut genders = std::collections::HashSet::new();
-        let mut skins = std::collections::HashSet::new();
+    fn extended_traits_add_build_finish_accessory_axes() {
+        // 서로 다른 정체성에서 체형/마감/부착물 축이 실제로 갈리는지 표본 확인
+        let mut builds = std::collections::HashSet::new();
+        let mut finishes = std::collections::HashSet::new();
         for i in 0..40 {
             let id = format!("HOST-{i}|user{i}");
-            let (g, sk, _a) = extended_traits(&id);
-            genders.insert(g);
-            skins.insert(sk);
+            let (b, f, _a) = extended_traits(&id);
+            builds.insert(b);
+            finishes.insert(f);
         }
-        assert!(genders.len() >= 3, "성별 표현 3종 모두 등장");
-        assert!(skins.len() >= 3, "피부톤 다양성");
+        assert!(builds.len() >= 3, "체형 3종 모두 등장");
+        assert!(finishes.len() >= 3, "마감 다양성");
     }
 
     #[test]
