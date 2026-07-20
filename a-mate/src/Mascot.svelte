@@ -127,6 +127,8 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   let myLifeId = $state('');
   let curLifeId = $state(''); // 현재 있는 방 — 내 방이면 "돌아가기" 버튼을 숨긴다
   let hubOn = $state(false);
+  const visibleLifeEntries = $derived(lifeMenu?.filter((life) => life.life_id !== myLifeId && life.life_id !== curLifeId) ?? []);
+  const lifeMenuItemCount = $derived(visibleLifeEntries.length + (curLifeId !== myLifeId ? 1 : 0));
   async function toggleLifeMenu() {
     if (lifeMenu !== null) { lifeMenu = null; await expand(false); return; }
     const wasCollapsed = bubble === null;
@@ -257,7 +259,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
 
 <div class="stage" class:expanded={bubble !== null || lifeMenu !== null}>
   {#if lifeMenu !== null}
-    <div class="menu">
+    <div class="menu" class:away={curLifeId !== myLifeId}>
       <div class="menu-title">방 이동</div>
       {#if !hubOn}
         <button class="item" onclick={() => { openSettingsWindow(); closeLifeMenu(); }}>
@@ -267,9 +269,9 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
         {#if curLifeId !== myLifeId}
           <button class="item" onclick={() => gotoLife(myLifeId)}>🏠 내 방으로 돌아가기</button>
         {/if}
-        <div class="list">
+        <div class="list" class:scrollable={lifeMenuItemCount >= 3}>
           <!-- 지금 있는 방은 이동 대상이 아님 — 내 방은 위의 "돌아가기"가 담당 -->
-          {#each lifeMenu.filter((r) => r.life_id !== myLifeId && r.life_id !== curLifeId) as r (r.life_id)}
+          {#each visibleLifeEntries as r (r.life_id)}
             <button class="item" onclick={() => gotoLife(r.life_id)}>
               {r.owner_name}의 방 <span class="n">{r.occupants}</span>
             </button>
@@ -334,11 +336,13 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
     font: 12px 'Segoe UI', 'Malgun Gothic', sans-serif;
   }
   .menu-title { font-weight: 700; font-size: 11px; color: var(--ink-soft); padding: 0 4px; }
-  .menu .list { max-height: 96px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  .menu .list { max-height: 92px; overflow-y: hidden; display: flex; flex-direction: column; gap: 4px; }
+  .menu.away .list { max-height: 60px; }
+  .menu .list.scrollable { overflow-y: scroll; scrollbar-gutter: stable; }
   .menu .item {
     border: none; background: var(--pastel-lav); color: var(--ink);
-    border-radius: var(--radius-s); padding: 6px 8px; font: inherit;
-    cursor: pointer; text-align: left;
+    box-sizing: border-box; min-height: 28px; border-radius: var(--radius-s); padding: 6px 8px; font: inherit;
+    cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .menu .item:hover { background: var(--accent); color: #fff; }
   .menu .n { float: right; color: inherit; opacity: 0.7; }
