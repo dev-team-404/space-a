@@ -412,6 +412,10 @@ export function buildLifeScene(
         robot.addChild(bub)
       }
     }
+    // 오프라인(idle) 에이전트는 유령처럼 반투명하게 — 방에 있지만 지금은 활동 중이 아님을 표시.
+    if (agent.status !== 'working') {
+      robot.alpha = 0.4
+    }
     robot.eventMode = 'static'
     robot.cursor = 'pointer'
     robot.on('pointertap', () => cb.onAgentTap?.(agent))
