@@ -19,7 +19,7 @@ cd a-lens/backend
 python3 -m venv .venv && .venv/bin/pip install -e .
 .venv/bin/uvicorn alens.main:create_app --factory --port 8600 --reload
 
-# frontend (포트 5173, /api → 8600 프록시)
+# frontend (포트 5279, /api → 8600 프록시)
 cd a-lens/frontend
 npm install && npm run dev
 ```
