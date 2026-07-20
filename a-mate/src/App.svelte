@@ -32,7 +32,10 @@
   let ownerSeed = $state(''); // 방문 중인 방 주인의 마스코트 시드 (없으면 이름 폴백)
   // 창(App) 레벨에서 직접 폴링 — 어느 탭에 있든 방 이동을 감지해 방문 모드로 전환
   $effect(() => {
+    let ticking = false;
     const tick = async () => {
+      if (ticking) return;
+      ticking = true;
       try {
         const v = await lifeView();
         visiting = v.me.life_id !== v.me.my_life_id;
@@ -43,6 +46,8 @@
         visiting = false;
         lifeOwner = '';
         ownerSeed = '';
+      } finally {
+        ticking = false;
       }
     };
     tick();
