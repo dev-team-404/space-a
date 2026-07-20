@@ -53,6 +53,10 @@ export function wallOccupiedIndices(origin: number, span: number): number[] {
   return Array.from({ length: span }, (_, index) => origin + index);
 }
 
+export function wallSpanScreenWidth(span: number, tileWidth: number): number {
+  return span * tileWidth / 2;
+}
+
 export function occupiedWorldCells(object: GeometryObject): WorldCell[] {
   return rotatedOffsets(object).map(([x, y]) => [object.cell[0] + x, object.cell[1] + y]);
 }

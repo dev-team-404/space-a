@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DESK_SUPPORT_CONTACTS_BY_ASSET, DESK_SUPPORT_PADDING, FURNITURE_BY_ID, MIRRORED_DIRECTION, OPPOSITE_DIRECTION, ROTATIONS, SPRITE_DIRECTION_BY_ROTATION, WINDOW_SOURCE_EDGE_SLOPE_BY_ASSET, WINDOW_TARGET_EDGE_SLOPE_BY_ROTATION, canonicalizeFurnitureGeometry, wallRotation, type Rotation, type SpriteSource } from './catalog';
+import { DESK_SUPPORT_CONTACTS_BY_ASSET, DESK_SUPPORT_PADDING, FLOOR_PROJECTION_EXEMPT_BY_ASSET, FLOOR_SOURCE_AXES_BY_ASSET, FURNITURE_BY_ID, MIRRORED_DIRECTION, OPPOSITE_DIRECTION, ROTATIONS, SPRITE_DIRECTION_BY_ROTATION, WINDOW_SOURCE_EDGE_SLOPE_BY_ASSET, WINDOW_TARGET_EDGE_SLOPE_BY_ROTATION, canonicalizeFurnitureGeometry, wallRotation, type Rotation, type SpriteSource } from './catalog';
 import { rotatedSize } from './geometry';
 import assetMetricsJson from './asset-metrics.json';
 
@@ -144,17 +144,55 @@ describe('interior asset orientation contract', () => {
     }
   });
 
-  it('reuses one undistorted source registration for each mirrored desk pair', () => {
-    for (const assetId of Object.keys(DESK_SUPPORT_CONTACTS_BY_ASSET)) {
-      const desk = FURNITURE_BY_ID.get(assetId)!;
-      for (const rotation of ROTATIONS) expect(desk.render.projections[rotation]).toEqual({ scaleY: 1, shearY: 0 });
-      for (const rotation of [90, 180, 270] as Rotation[]) {
-        expect(desk.render.widthTiles[rotation]).toBeCloseTo(desk.render.widthTiles[0], 8);
+  it('maps every registered floor source axis onto the room grid', () => {
+    for (const [assetId, sourceAxes] of Object.entries(FLOOR_SOURCE_AXES_BY_ASSET)) {
+      const item = FURNITURE_BY_ID.get(assetId)!;
+      for (const rotation of ROTATIONS) {
+        const source = item.render.sources[rotation];
+        const axes = sourceAxes[source];
+        if (!axes) continue;
+        const [sourcePositive, sourceNegative] = axes;
+        const mirrored = item.render.mirrorX[rotation];
+        const effectivePositive = mirrored ? -sourceNegative : sourcePositive;
+        const effectiveNegative = mirrored ? -sourcePositive : sourceNegative;
+        const projection = item.render.projections[rotation];
+        expect(projection.shearY + projection.scaleY * effectivePositive, `${assetId} ${rotation}° positive`).toBeCloseTo(0.5, 6);
+        expect(projection.shearY + projection.scaleY * effectiveNegative, `${assetId} ${rotation}° negative`).toBeCloseTo(-0.5, 6);
+        expect(projection.scaleY, `${assetId} ${rotation}° scale`).toBeGreaterThan(0.85);
+        expect(projection.scaleY, `${assetId} ${rotation}° scale`).toBeLessThan(1.15);
+        expect(Math.abs(projection.shearY), `${assetId} ${rotation}° shear`).toBeLessThan(0.15);
       }
-      expect(desk.render.anchors[0][0] + desk.render.anchors[270][0]).toBeCloseTo(1, 8);
-      expect(desk.render.anchors[90][0] + desk.render.anchors[180][0]).toBeCloseTo(1, 8);
-      expect(desk.render.anchors[0][1]).toBeCloseTo(desk.render.anchors[270][1], 8);
-      expect(desk.render.anchors[90][1]).toBeCloseTo(desk.render.anchors[180][1], 8);
+    }
+  });
+
+  it('anchors every window at the transformed midpoint of its bottom frame', () => {
+    const metrics = assetMetricsJson as Record<string, { width: number; height: number; ground: [number, number] }>;
+    for (const [assetId, sourceSlope] of Object.entries(WINDOW_SOURCE_EDGE_SLOPE_BY_ASSET)) {
+      const window = FURNITURE_BY_ID.get(assetId)!;
+      const id = assetId.slice('window.'.length);
+      const metric = metrics[`window/${id}/ne`];
+      const centerSourceY = metric.ground[1]
+        + sourceSlope * (0.5 - metric.ground[0]) * metric.width / metric.height;
+      for (const rotation of [90, 180] as Rotation[]) {
+        const projection = window.render.projections[rotation];
+        const expectedY = projection.scaleY * centerSourceY
+          + projection.shearY * 0.5 * metric.width / metric.height;
+        expect(window.render.anchors[rotation][0], `${assetId} ${rotation}° x`).toBe(0.5);
+        expect(window.render.anchors[rotation][1], `${assetId} ${rotation}° y`).toBeCloseTo(expectedY, 6);
+      }
+    }
+  });
+
+  it('classifies every floor asset as normalized or explicitly exempt', () => {
+    for (const item of FURNITURE_BY_ID.values()) {
+      if (item.category === 'window') continue;
+      const axes = FLOOR_SOURCE_AXES_BY_ASSET[item.id];
+      const exemption = FLOOR_PROJECTION_EXEMPT_BY_ASSET[item.id];
+      expect(Boolean(axes) !== Boolean(exemption), item.id).toBe(true);
+      if (!exemption) continue;
+      for (const rotation of ROTATIONS) {
+        expect(item.render.projections[rotation], `${item.id} ${rotation}°`).toEqual({ scaleY: 1, shearY: 0 });
+      }
     }
   });
 

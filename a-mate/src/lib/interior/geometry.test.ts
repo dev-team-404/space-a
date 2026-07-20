@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groundAnchor, occupiedWorldCells, placementOrigin, rotatedOffsets, rotatedOrigin, spriteGroundAnchor, wallOccupiedIndices, wallPlacementOrigin } from './geometry';
+import { groundAnchor, occupiedWorldCells, placementOrigin, rotatedOffsets, rotatedOrigin, spriteGroundAnchor, wallOccupiedIndices, wallPlacementOrigin, wallSpanScreenWidth } from './geometry';
 
 describe('placement geometry v2', () => {
   it.each([
@@ -32,6 +32,11 @@ describe('placement geometry v2', () => {
     expect(spriteGroundAnchor({ cell:[3,4], size:[2,2], rotation:0 }, [0.5,0.5])).toEqual([4,5]);
     expect(spriteGroundAnchor({ cell:[3,4], size:[2,2], rotation:90 }, [0.5,0.5])).toEqual([4,5]);
     expect(spriteGroundAnchor({ cell:[3,4], size:[2,2], rotation:0 }, [0.75,0.75])).toEqual([4.5,5.5]);
+  });
+
+  it('projects a wall span onto the same horizontal axis as the isometric grid', () => {
+    expect(wallSpanScreenWidth(3, 18)).toBe(27);
+    expect(wallSpanScreenWidth(5, 18)).toBe(45);
   });
 
   it('preserves the anchor when possible and moves inward at an edge', () => {
