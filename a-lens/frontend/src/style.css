@@ -351,6 +351,29 @@ button { font: inherit; cursor: pointer; }
   line-height: 1.7;
   color: #c8cfd8;
 }
+/* .md — create_page 원문을 marked로 렌더링한 실제 HTML. pre-wrap을 끄고
+   태그별로 스타일을 입혀 나머지 UI(이슈 공유/지식 재사용)와 결을 맞춘다. */
+.doc-body.md { white-space: normal; }
+.doc-body.md :is(h1, h2, h3) { color: #e9edf2; margin: 14px 0 6px; line-height: 1.4; }
+.doc-body.md h1 { font-size: 18px; }
+.doc-body.md h2 { font-size: 16px; }
+.doc-body.md h3 { font-size: 14px; }
+.doc-body.md :is(h1, h2, h3):first-child { margin-top: 0; }
+.doc-body.md p { margin: 0 0 10px; }
+.doc-body.md :is(ul, ol) { margin: 0 0 10px; padding-left: 20px; }
+.doc-body.md li { margin-bottom: 4px; }
+.doc-body.md a { color: #d9a441; }
+.doc-body.md code {
+  background: #1a2436; border-radius: 4px; padding: 1px 5px; font-size: 12px;
+}
+.doc-body.md pre {
+  background: #101624; border: 1px solid #2b3345; border-radius: 8px;
+  padding: 10px; overflow-x: auto;
+}
+.doc-body.md pre code { background: none; padding: 0; }
+.doc-body.md blockquote {
+  margin: 0 0 10px; padding: 2px 12px; border-left: 2px solid #2b3345; color: #98a0ab;
+}
 /* 더미(fake) 데이터 구분 배지 — 실데이터와 섞여 표시될 때 오해 방지 */
 .demo-badge {
   display: inline-block;

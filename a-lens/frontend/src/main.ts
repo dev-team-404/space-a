@@ -1,6 +1,8 @@
 // A-Lens 프론트 진입점 — 홈(방 목록) / 방 만들기(빌더) / 방 안(PixiJS 씬) 라우팅.
 // 로비(사옥) 화면은 보류 — 이슈 #44 순서 조정. 데이터는 백엔드 뷰모델만 사용 (ADR 0003).
 
+import DOMPurify from 'dompurify'
+import { marked } from 'marked'
 import { Application, Container } from 'pixi.js'
 import { fetchLobby, fetchSpace, type LobbyFloor, type SpaceAgent, type SpaceIssue, type SpaceView } from './api'
 import { openBuilder } from './builder'
@@ -30,6 +32,12 @@ const hubOpen = $('hub-open')
 
 function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
+}
+
+// Page 원문(create_page로 남긴 마크다운)을 모달에 렌더링할 때 씀 — 팀원이 작성한 임의 텍스트라
+// DOMPurify로 한 번 걸러서 XSS를 막는다.
+function mdHTML(md: string): string {
+  return DOMPurify.sanitize(marked.parse(md || '', { async: false }) as string)
 }
 
 // 시각은 서버가 UTC(ISO)로 준다. 화면에는 KST(+9)로 HH:MM 표시 — 한국 사용자 기준.
@@ -156,13 +164,34 @@ let currentScene: Container | null = null
 
 async function ensureApp() {
   if (appReady) return
-  await app.init({ resizeTo: window, background: '#0d1220', antialias: true })
+  await app.init({
+    resizeTo: window,
+    background: '#0d1220',
+    antialias: true,
+    resolution: window.devicePixelRatio || 1,
+    autoDensity: true,
+  })
   sceneHost.appendChild(app.canvas)
   appReady = true
   // 렌더러가 실제로 리사이즈된 뒤(screen.width 갱신 후) 씬을 다시 맞춘다.
   // window resize만 듣던 이전 방식은 resizeTo의 반영 타이밍과 어긋나 배율이 안 맞았다.
   app.renderer.on('resize', () => fitScene())
   window.addEventListener('resize', () => fitScene())
+  watchDevicePixelRatio()
+}
+
+// 브라우저 줌·모니터 이동 등으로 devicePixelRatio가 바뀌어도 렌더러 resolution은
+// init 시점 값에 고정된 채라(리사이즈 이벤트가 안 따라옴) 글자·스프라이트가 흐려진다.
+// matchMedia로 현재 DPR을 감시하다가 바뀌면 renderer.resolution을 다시 맞춘다.
+function watchDevicePixelRatio() {
+  const mq = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+  const onChange = () => {
+    app.renderer.resolution = window.devicePixelRatio || 1
+    app.renderer.resize(app.screen.width, app.screen.height)
+    fitScene()
+    watchDevicePixelRatio() // 새 DPR 기준으로 감시자 재등록 (matchMedia는 1회성)
+  }
+  mq.addEventListener('change', onChange, { once: true })
 }
 
 const HUB_W = 340 // #hub 사이드바 폭 — 씬 가용 영역에서 제외
@@ -328,10 +357,11 @@ function statusBadge(status: string): string {
 // ── 오른쪽 Collaboration Hub (상시 사이드바) ──
 // a-lens는 사람이 보는 view — 캐릭터·Activity는 '사람'이다. 라벨도 사람/팀 관점.
 // 위 2/3 = 탭(이슈 공유 / 지식 재사용) 내용, 아래 1/3 = 팀 활동 상시 표시.
-type HubTab = 'issues' | 'reuse'
+type HubTab = 'issues' | 'reuse' | 'pages'
 const HUB_TABS: { id: HubTab; label: string; icon: string }[] = [
   { id: 'issues', label: '이슈 공유', icon: '🔗' },
   { id: 'reuse', label: '지식 재사용', icon: '📄' },
+  { id: 'pages', label: '문서함', icon: '📑' },
 ]
 let hubTab: HubTab = 'issues'
 
@@ -461,7 +491,7 @@ function hubReuseHTML(data: SpaceView): string {
           ({ d, i }) => `
         <div class="doc-item" data-doc="${i}" data-docid="${esc(d.doc_id)}">
           <b>${esc(d.title)}</b>
-          <div class="muted">${esc(d.author_agent)}${d.visibility === 'org' ? ' · 조직 공개' : ''} · 재사용 ${d.reuse_count}</div>
+          <div class="muted">👤 ${esc(d.author_agent || '작성자 미상')}${d.visibility === 'org' ? ' · 조직 공개' : ''} · 재사용 ${d.reuse_count ?? 0}</div>
           <div class="doc-summary">${esc(d.summary)}</div>
         </div>`,
         )
@@ -472,6 +502,35 @@ function hubReuseHTML(data: SpaceView): string {
     hubSection('지식 재사용', 'Knowledge Reuse', eventItems) +
     hubSection('책장 — 재사용하면 좋을 지식', 'Bookshelf', docItems)
   )
+}
+
+// 'page_12' → 12. 허브 지식 문서엔 타임스탬프가 없어 id 순서를 의사 시간으로 쓴다
+// (백엔드 collector._id_seq와 동일 관례).
+function docSeq(docId: string): number {
+  const m = /(\d+)$/.exec(docId ?? '')
+  return m ? Number(m[1]) : 0
+}
+
+// ── 문서함 탭 — create_page로 남긴 모든 지식 문서를 최신순으로 전부 나열 ──
+// '지식 재사용' 탭의 책장은 재사용 많은 순 상위 20개만 추리지만, 여기는 필터 없이 전체를
+// 훑어보는 용도 — 허브에 남긴 작업 요약·새 사실이 어딘가엔 반드시 보이게 한다.
+function hubPagesHTML(data: SpaceView): string {
+  const docs = [...data.knowledge]
+    .map((d, i) => ({ d, i }))
+    .sort((a, b) => docSeq(b.d.doc_id) - docSeq(a.d.doc_id))
+  const items = docs.length
+    ? docs
+        .map(
+          ({ d, i }) => `
+        <div class="doc-item" data-doc="${i}" data-docid="${esc(d.doc_id)}">
+          <b>${esc(d.title)}</b>
+          <div class="muted">👤 ${esc(d.author_agent || '작성자 미상')} · ${d.visibility === 'org' ? '조직 공개' : '방 전용'}</div>
+          <div class="doc-summary">${esc(d.summary)}</div>
+        </div>`,
+        )
+        .join('')
+    : '<p class="muted small">표시할 항목이 없어요</p>'
+  return hubSection('문서함', 'All Pages', items)
 }
 
 type ActivityTab = 'online' | 'offline'
@@ -554,7 +613,8 @@ function renderHub(data: SpaceView) {
   })
 
   // 위 2/3: 선택 탭 내용. 아래 1/3: 팀 활동 상시 (온라인/오프라인 서브탭).
-  hubBody.innerHTML = hubTab === 'issues' ? hubIssuesHTML(data) : hubReuseHTML(data)
+  hubBody.innerHTML =
+    hubTab === 'issues' ? hubIssuesHTML(data) : hubTab === 'reuse' ? hubReuseHTML(data) : hubPagesHTML(data)
   // 이슈 흐름 필터 — 상태 칩 + 사람 드롭다운
   hubBody.querySelectorAll<HTMLElement>('[data-ifilter]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -570,7 +630,7 @@ function renderHub(data: SpaceView) {
   hubBody.querySelectorAll<HTMLElement>('.doc-item').forEach((el) => {
     el.addEventListener('click', () => {
       const doc = data.knowledge[Number(el.dataset.doc)]
-      if (doc) showModal(doc.title, `<pre class="doc-body">${esc(doc.body)}</pre>`)
+      if (doc) showModal(doc.title, `<div class="doc-body md">${mdHTML(doc.body)}</div>`)
     })
   })
   renderHubActivity(data)
@@ -687,10 +747,11 @@ async function renderLife(spaceId: string) {
           renderHub(data)
         }
       },
-      // 책장 클릭 → Hub '지식 재사용' 탭 열기 (접혀 있으면 펼침).
+      // 책장 클릭 → Hub '문서함' 탭 열기 (접혀 있으면 펼침) — 책장은 지식 문서가 쌓이는
+      // 곳이라는 은유이므로, 재사용 이벤트 피드보다 전체 문서 목록을 보여주는 쪽이 맞다.
       onShelfTap: () => {
         if (hubCollapsed) toggleHub(false)
-        hubTab = 'reuse'
+        hubTab = 'pages'
         renderHub(data)
       },
     },

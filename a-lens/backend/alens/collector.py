@@ -197,6 +197,8 @@ def _hub_snapshot() -> dict:
             except _DEGRADE as e:
                 log.warning("members 수집 실패 (%s): %s", sid, e)
                 members = []
+            # agent_id → 사람이 읽을 name. Page 작성자(author_agent)·이슈 opened_by 표시에 공용으로 쓴다.
+            member_name = {m["agent_id"]: m.get("name", m["agent_id"]) for m in members}
 
             # 프레즌스: 이 방 사람들의 최근 write(page·issue) 시각을 집계 → online 판정 재료.
             # (life life-server 프레즌스 대체 — a-lens는 사람이 보는 view라 '사람의 활동'으로 읽는다.)
@@ -235,16 +237,26 @@ def _hub_snapshot() -> dict:
             # 지식 본문: 원문 모달(L4 역추적)용. 페이지 수가 적고 30s 캐시라 개별 조회 감당 가능
             knowledge_docs = []
             for p in pages:
-                doc = {"doc_id": p["page_id"], "title": p.get("title", "")}
+                doc = {
+                    "doc_id": p["page_id"],
+                    "title": p.get("title", ""),
+                    "reuse_count": 0,  # 허브에 ReuseEvent 조회 endpoint가 아직 없다 (totals와 동일 사유)
+                    "cited_by": [],
+                }
                 try:
                     page = _hub_get(client, f"/pages/{p['page_id']}")
                     doc["body"] = page.get("body", "")
                     doc["visibility"] = page.get("visibility", "org")
                     doc["summary"] = (page.get("body") or "")[:120]
+                    # 작성자: created_by_name(허브가 내려주면) 우선, 없으면 멤버 목록에서 이름 조회,
+                    # 그마저 없으면(비멤버 공간 등) agent_id 그대로.
+                    creator = page.get("created_by")
+                    doc["author_agent"] = page.get("created_by_name") or member_name.get(creator, creator) or ""
                 except _DEGRADE:
                     doc["body"] = ""
                     doc["visibility"] = "space"  # 못 읽었으면 잠금으로 취급
                     doc["summary"] = ""
+                    doc["author_agent"] = ""
                 knowledge_docs.append(doc)
 
             def _agent(m: dict) -> dict:
@@ -258,8 +270,6 @@ def _hub_snapshot() -> dict:
                     # 사람이 읽을 최근 활동 문장 (말풍선=brief, 상세=detail). 번역은 _humanize_activity.
                     "recent_activity": _humanize_activity(seen) if seen else None,
                 }
-
-            member_name = {m["agent_id"]: m.get("name", m["agent_id"]) for m in members}
 
             details[sid] = {
                 "space_id": sid,
