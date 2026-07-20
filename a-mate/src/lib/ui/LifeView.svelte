@@ -5,6 +5,7 @@
   import FurnitureSprite from './FurnitureSprite.svelte';
   import { CATEGORY_LABELS, FURNITURE, FURNITURE_BY_ID, ROTATIONS, THEMES, canonicalizeFurnitureGeometry, themeFor, wallRotation, type FurnitureCategory, type PlacedFurniture, type Rotation, type WallSide } from '../interior/catalog';
   import { LIFE_GRID, isInsideLife, occupiedWorldCells, placementOrigin, rotatedOffsets, rotatedOrigin, rotatedSize, spriteGroundAnchor, wallOccupiedIndices, wallPlacementOrigin, wallSpanScreenWidth } from '../interior/geometry';
+  import { lifeRenderSignatures, type LifeRenderSignatures, type LifeViewPayload } from '../interior/life-render-state';
   const VW=900,VH=460,TW=28,TH=14,OX=450,OY=140,WALL=110;
   // 실제 오브젝트가 없는 좌우 여백을 적극적으로 덜어낸 표시 뷰포트. 원래 좌표계는
   // 유지해 배치 계산을 건드리지 않고, 기본 창에서 라이프 공간이 더 크게 차도록 한다.
@@ -14,6 +15,7 @@
   const GRID_W=LIFE_GRID.w,GRID_H=LIFE_GRID.h;
   const previewMode=import.meta.env.DEV&&new URLSearchParams(location.search).has('interiorPreview');
   let me=$state<LifeMe|null>(null),life=$state<LifeState|null>(null),draft=$state<LifeState['design']|null>(null);
+  let root=$state<HTMLElement|null>(null);
   let editing=$state(false),saving=$state(false),error=$state(''),flash=$state(''),category=$state<FurnitureCategory>('sofa'),selectedId=$state(FURNITURE[0].id),rotation=$state<Rotation>(0),wall=$state<WallSide>('north');
   let hoverCell=$state<[number,number]|null>(null),menu=$state<{index:number;x:number;y:number}|null>(null);
   let hoverWall=$state<{side:'north'|'west';index:number}|null>(null);
@@ -34,8 +36,25 @@
       {agent_id:'preview-guest',name:'유연',cell:[18,17],is_owner:false,mascot_seed:'preview-guest'},
     ]};
   }
-  async function poll(){if(previewMode||editing)return;try{const v=await lifeView();me=v.me;life={...v.life,design:normalizedDesign(v.life.design)};error='';}catch(e){error=`${e}`}}
+  let scrolling=false,polling=false,pendingView:LifeViewPayload|null=null,lastSignatures:LifeRenderSignatures|null=null,scrollTimer:ReturnType<typeof setTimeout>|null=null;
+  function applyView(v:LifeViewPayload){
+    error='';
+    const next=lifeRenderSignatures(v),previous=lastSignatures;
+    const meChanged=!previous||next.me!==previous.me;
+    const metaChanged=!previous||next.meta!==previous.meta;
+    const designChanged=!previous||next.design!==previous.design;
+    const occupantsChanged=!previous||next.occupants!==previous.occupants;
+    if(meChanged)me=v.me;
+    if(!life||metaChanged||designChanged||occupantsChanged){
+      const design=designChanged||!life?normalizedDesign(v.life.design):life.design;
+      const occupants=occupantsChanged||!life?v.life.occupants:life.occupants;
+      life={...v.life,design,occupants};
+    }
+    lastSignatures=next;
+  }
+  async function poll(){if(previewMode||editing||polling)return;polling=true;try{const v=await lifeView();if(scrolling)pendingView=v;else applyView(v)}catch(e){error=`${e}`}finally{polling=false}}
   poll(); $effect(()=>{const t=setInterval(poll,2000);return()=>clearInterval(t)});
+  $effect(()=>{const host=root?.closest('.content');if(!host)return;const onScroll=()=>{scrolling=true;if(scrollTimer)clearTimeout(scrollTimer);scrollTimer=setTimeout(()=>{scrolling=false;if(pendingView){const next=pendingView;pendingView=null;applyView(next)}},140)};host.addEventListener('scroll',onScroll,{passive:true});return()=>{host.removeEventListener('scroll',onScroll);if(scrollTimer)clearTimeout(scrollTimer)}});
   function msg(s:string){flash=s;setTimeout(()=>{if(flash===s)flash=''},2200)}
   function cells(o:Pick<LifeObject,'cell'|'size'|'rotation'|'footprint'>){return occupiedWorldCells(o).map(([x,y])=>`${x},${y}`)}
   const occupied=$derived.by(()=>{const s=new Set<string>();if(life)life.occupants.forEach(o=>s.add(`${o.cell[0]},${o.cell[1]}`));activeDesign?.objects.filter(o=>o.category!=='window').forEach(o=>cells(o).forEach(c=>s.add(c)));return s});
@@ -53,7 +72,7 @@
   function openMenu(e:MouseEvent,index:number){if(!editing)return;e.preventDefault();const host=(e.currentTarget as HTMLElement).closest('.scene')!.getBoundingClientRect();menu={index,x:e.clientX-host.left,y:e.clientY-host.top}}
   async function assertProtocol(){if(previewMode)return true;try{const c=await lifeCapabilities();if(c.life_protocol===3&&c.grid.w===GRID_W&&c.grid.h===GRID_H&&c.floor_min_y===0&&c.footprint_mask)return true}catch{}msg('라이프 서버가 구버전입니다. 새 life-server를 재시작해야 인테리어를 저장할 수 있습니다.');return false}
   function normalizedDesign(design:LifeState['design']){const next:LifeState['design']=JSON.parse(JSON.stringify(design));next.objects=next.objects.filter(o=>o.category!=='dining').map(o=>{const canonical=canonicalizeFurnitureGeometry(o);return canonical.category==='window'&&(canonical.wall==='north'||canonical.wall==='west')?{...canonical,rotation:wallRotation(canonical.wall)}:canonical});return next}
-  async function beginEdit(){if(life&&isOwner&&await assertProtocol()){draft=normalizedDesign(life.design);editing=true}}
+  async function beginEdit(){if(life&&isOwner&&await assertProtocol()){pendingView=null;draft=normalizedDesign(life.design);editing=true}}
   function chooseCategory(c:FurnitureCategory){category=c;selectedId=FURNITURE.find(i=>i.category===c)!.id;rotation=c==='window'?wallRotation(wall):0}
   function chooseTheme(id:string,floor:string){if(draft){draft.wallpaper=id;draft.floor=floor}}
   function cancel(){editing=false;draft=null}
@@ -66,7 +85,7 @@
   const occSeed=(o:{mascot_seed?:string;name:string})=>o.mascot_seed||o.name;
   $effect(()=>{const occ=life?.occupants??[];for(const o of occ){const s=occSeed(o);if(me&&o.agent_id===me.agent_id)continue;if(occSpr[s]!==undefined)continue;occSpr[s]='';getOccupantSprite(s).then(v=>{if(v)occSpr[s]=v;else requestOccupantSprite(s);})}});
   $effect(()=>{let un:(()=>void)|null=null;listen<string>('occupant-sprite:ready',(e)=>{const s=e.payload;getOccupantSprite(s).then(v=>{if(v)occSpr={...occSpr,[s]:v}})}).then(u=>un=u);return()=>un?.()});
-  const specs=new Map<string,RobotSpec>(); function robot(node:HTMLCanvasElement,name:string){let raf=0;const run=(spec:RobotSpec)=>{const c=node.getContext('2d')!;const loop=(t:number)=>{drawRobot(c,spec,frameAt('idle',t));raf=requestAnimationFrame(loop)};loop(0)};specs.has(name)?run(specs.get(name)!):robotSpecForSeed(name).then(s=>{specs.set(name,s);run(s)});return{destroy:()=>cancelAnimationFrame(raf)}}
+  const specs=new Map<string,RobotSpec>(); function robot(node:HTMLCanvasElement,name:string){let raf=0,lastFrame=-Infinity,visible=true;const observer=new IntersectionObserver(([entry])=>{visible=entry?.isIntersecting??false});observer.observe(node);const run=(spec:RobotSpec)=>{const c=node.getContext('2d')!;const loop=(t:number)=>{if(visible&&!scrolling&&document.visibilityState==='visible'&&t-lastFrame>=66){drawRobot(c,spec,frameAt('idle',t));lastFrame=t}raf=requestAnimationFrame(loop)};loop(0)};specs.has(name)?run(specs.get(name)!):robotSpecForSeed(name).then(s=>{specs.set(name,s);run(s)});return{destroy:()=>{observer.disconnect();cancelAnimationFrame(raf)}}}
   function spriteRotation(o:LifeObject|PlacedFurniture):Rotation{return o.category==='window'&&(o.wall==='north'||o.wall==='west')?wallRotation(o.wall):o.rotation}
   function objectLayout(o:LifeObject){
     const item=FURNITURE_BY_ID.get(o.asset_id),visualRotation=spriteRotation(o),imageAnchor=item?.render.anchors[visualRotation]??[.5,1] as [number,number];
@@ -77,7 +96,7 @@
 </script>
 
 {#if life&&me&&activeDesign}
-<div class="lifewrap"><div class="title"><b>{life.owner_name}님의 방</b>{#if me.life_id!==me.my_life_id}<span>방문 중</span>{/if}<small>{life.occupants.length}명</small>{#if flash}<em>{flash}</em>{/if}{#if isOwner&&!editing}<button onclick={beginEdit}>인테리어 설정</button>{/if}</div>
+<div class="lifewrap" bind:this={root}><div class="title"><b>{life.owner_name}님의 방</b>{#if me.life_id!==me.my_life_id}<span>방문 중</span>{/if}<small>{life.occupants.length}명</small>{#if flash}<em>{flash}</em>{/if}{#if isOwner&&!editing}<button onclick={beginEdit}>인테리어 설정</button>{/if}</div>
   <div class="scene">
     <svg viewBox={`${VIEW_X} ${VIEW_Y} ${VIEW_W} ${VIEW_H}`} aria-label="아이소메트릭 미니라이프">
       <polygon class="north" fill={theme.wall} points={points([[a[0],a[1]-WALL],[b[0],b[1]-WALL],b,a])}/>
@@ -131,7 +150,7 @@
 
 <style>
   .lifewrap{display:flex;flex-direction:column;gap:8px}.title{display:flex;align-items:center;gap:8px;font-size:12px}.title span{background:#ffd9ca;border-radius:99px;padding:2px 8px}.title small{color:var(--ink-soft)}.title em{font-style:normal;color:var(--accent)}button{font:inherit;color:inherit}.title button{margin-left:auto;border:0;border-radius:99px;padding:5px 11px;background:var(--accent);color:white;cursor:pointer}
-  .scene{position:relative;width:min(100%,900px);aspect-ratio:580/420;margin:auto;overflow:hidden;border-radius:14px;background:linear-gradient(#fbf8ee,#e9e4d8);box-shadow:var(--shadow-soft)}svg{position:absolute;inset:0;width:100%;height:100%}.north,.west{stroke:#a69483;stroke-width:2}.tile{cursor:pointer;stroke-width:.65;transition:filter .1s}.tile:hover{filter:brightness(1.12)}.tile.taken{cursor:not-allowed}.ghost-cell,.ghost-wall-cell{fill:rgba(68,211,159,.38);stroke:#24a77a;stroke-width:1.2;pointer-events:none}.ghost-cell.blocked,.ghost-wall-cell.blocked{fill:rgba(226,80,80,.4);stroke:#c93636}.placed-cell,.placed-wall-cell{fill:rgba(44,166,224,.08);stroke:#2ca6e0;stroke-width:.85;pointer-events:none}.ground-point{fill:#ff5b5b;stroke:white;stroke-width:.8;pointer-events:none}.wallslot{fill:rgba(116,225,197,.06);stroke:rgba(124,111,208,.22);stroke-width:.7;cursor:crosshair;transition:fill .1s}.wallslot:hover,.wallslot.hovered{fill:rgba(116,225,197,.16);stroke:#58cdb0;stroke-width:1}
-  .furniture{position:absolute;height:auto;min-width:0!important;max-width:none;overflow:visible;border:0;padding:0;background:transparent;pointer-events:none;filter:drop-shadow(0 2px 1px #544b4533)}.furniture.placed{pointer-events:auto;cursor:default}.ghost{opacity:.48}.ghost.invalid{opacity:.25;filter:grayscale(1) drop-shadow(0 0 3px #d33)}.agent{position:absolute;width:10.86%;height:15.33%;transform:translate(-50%,-82%);pointer-events:none}.agent canvas{width:100%;height:100%;image-rendering:pixelated}.agent .spr{width:100%;height:100%;object-fit:contain}.agent span{position:absolute;left:50%;bottom:-3px;transform:translateX(-50%);white-space:nowrap;color:#2b2520;background:#fffaf0;border:1px solid #c8bea9;border-radius:99px;box-shadow:0 1px 3px #342d2433;padding:1px 6px;font-size:9px;font-weight:600}.object-menu{position:absolute;z-index:1001;display:flex;flex-direction:column;min-width:145px;padding:5px;color:#443b35;background:#fffdf8;border:1px solid #c8bea9;border-radius:8px;box-shadow:0 6px 20px #342d2440}.object-menu button{border:0;padding:7px 9px;text-align:left;background:transparent;border-radius:5px;cursor:pointer}.object-menu button:hover{background:var(--pastel-lavender)}.object-menu .remove{color:#b74444}.menu-dismiss{position:absolute;inset:0;z-index:1000;border:0;background:transparent}
+  .scene{position:relative;width:min(100%,900px);aspect-ratio:580/420;margin:auto;overflow:hidden;contain:layout paint;isolation:isolate;transform:translateZ(0);border-radius:14px;background:linear-gradient(#fbf8ee,#e9e4d8);box-shadow:var(--shadow-soft)}svg{position:absolute;inset:0;width:100%;height:100%}.north,.west{stroke:#a69483;stroke-width:2}.tile{cursor:pointer;stroke-width:.65;transition:filter .1s}.tile:hover{filter:brightness(1.12)}.tile.taken{cursor:not-allowed}.ghost-cell,.ghost-wall-cell{fill:rgba(68,211,159,.38);stroke:#24a77a;stroke-width:1.2;pointer-events:none}.ghost-cell.blocked,.ghost-wall-cell.blocked{fill:rgba(226,80,80,.4);stroke:#c93636}.placed-cell,.placed-wall-cell{fill:rgba(44,166,224,.08);stroke:#2ca6e0;stroke-width:.85;pointer-events:none}.ground-point{fill:#ff5b5b;stroke:white;stroke-width:.8;pointer-events:none}.wallslot{fill:rgba(116,225,197,.06);stroke:rgba(124,111,208,.22);stroke-width:.7;cursor:crosshair;transition:fill .1s}.wallslot:hover,.wallslot.hovered{fill:rgba(116,225,197,.16);stroke:#58cdb0;stroke-width:1}
+  .furniture{position:absolute;height:auto;min-width:0!important;max-width:none;overflow:visible;border:0;padding:0;background:transparent;pointer-events:none}.furniture.placed{pointer-events:auto;cursor:default}.ghost{opacity:.48}.ghost.invalid{opacity:.25;filter:grayscale(1) drop-shadow(0 0 3px #d33)}.agent{position:absolute;width:10.86%;height:15.33%;transform:translate(-50%,-82%);pointer-events:none}.agent canvas{width:100%;height:100%;image-rendering:pixelated}.agent .spr{width:100%;height:100%;object-fit:contain}.agent span{position:absolute;left:50%;bottom:-3px;transform:translateX(-50%);white-space:nowrap;color:#2b2520;background:#fffaf0;border:1px solid #c8bea9;border-radius:99px;box-shadow:0 1px 3px #342d2433;padding:1px 6px;font-size:9px;font-weight:600}.object-menu{position:absolute;z-index:1001;display:flex;flex-direction:column;min-width:145px;padding:5px;color:#443b35;background:#fffdf8;border:1px solid #c8bea9;border-radius:8px;box-shadow:0 6px 20px #342d2440}.object-menu button{border:0;padding:7px 9px;text-align:left;background:transparent;border-radius:5px;cursor:pointer}.object-menu button:hover{background:var(--pastel-lavender)}.object-menu .remove{color:#b74444}.menu-dismiss{position:absolute;inset:0;z-index:1000;border:0;background:transparent}
   .editor{display:flex;flex-direction:column;gap:9px;padding:12px;background:var(--frame-bg);border-radius:12px;box-shadow:var(--shadow-soft)}header{display:flex;justify-content:space-between;gap:10px}header div{display:flex;flex-direction:column}header small{color:var(--ink-soft)}nav{display:flex;gap:6px}nav button,.tabs button,.directions button{border:0;border-radius:7px;padding:5px 9px;background:var(--pastel-lavender);cursor:pointer}.primary,.tabs button.active,.directions button.active{background:var(--accent)!important;color:white}.themes{display:grid;grid-template-columns:repeat(10,1fr);gap:5px}.themes button{height:52px;position:relative;display:grid;grid-template-rows:1fr 1fr;border:2px solid transparent;border-radius:7px;overflow:hidden;padding:0}.themes button.active,.catalog button.active{border-color:var(--accent)}.themes i{display:block}.themes small{position:absolute;inset:auto 1px 1px;background:#ffffffcc;font-size:8px}.tabs{display:flex;flex-wrap:wrap;gap:5px}.catalog{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}.catalog button{height:104px;min-width:0;display:grid;grid-template-rows:80px auto;border:2px solid transparent;border-radius:8px;background:#fffdfa;overflow:hidden}.catalog span{display:block;min-width:0;min-height:0;overflow:hidden;padding:5px}.catalog span :global(canvas){display:block!important;width:100%!important;height:100%!important;min-width:0!important;max-width:100%!important}.catalog small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.directions{display:flex;align-items:center;gap:5px;font-size:11px}.empty{padding:14px;background:var(--frame-bg);border-radius:12px;color:var(--ink-soft)}
 </style>
