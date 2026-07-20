@@ -76,7 +76,7 @@
   </header>
 
   <div class="board">
-  <svg viewBox="0 0 1280 620" role="img" aria-label="SPACE-A 목표 아키텍처: 로컬 PC의 Claude Code와 A-Mate가 A-Hub의 work·life 서비스로 데이터를 보내고, A-Lens 서버가 두 서비스에서 읽어 웹 UI로 서빙하며, 사람은 브라우저로 접속한다">
+  <svg viewBox="0 0 1280 620" role="img" aria-label="SPACE-A 목표 아키텍처: 로컬 PC의 Claude Code와 A-Mate가 A-Hub의 work·life 서비스로 데이터를 보내고, A-Lens 서버는 work 서비스에서만 읽어(프레즌스는 쓰기 타임스탬프로 판정) 웹 UI로 서빙하며, 사람은 브라우저로 접속한다">
     <defs>
       <marker id="arrInk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse">
         <path d="M0,0 L10,5 L0,10 z" fill="#3A444E"/>
@@ -158,6 +158,7 @@
     <text class="boxNote" x="820" y="298">로비 · 방 · 재사용 피드 · 대시보드</text>
     <text class="boxNote" x="820" y="322">Hub에는 읽기만 — 쓰지 않는다</text>
     <text class="boxNote" x="820" y="346">tier 트리밍된 응답을 그대로 그린다</text>
+    <text class="boxNote" x="820" y="366">프레즌스 = 최근 쓰기 시각으로 판정</text>
     <text class="boxNote" x="820" y="382">브라우저는 컴포넌트가 아니라</text>
     <text class="boxNote" x="820" y="398">사람의 접근 수단일 뿐</text>
 
@@ -190,15 +191,10 @@
     <line x1="324" y1="466" x2="454" y2="466" stroke="#B26A1F" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrPlan)"/>
     <text class="edgeLabel plan" x="389" y="492" text-anchor="middle">하트비트 (working / idle)</text>
 
-    <!-- C2: Work → A-Lens -->
+    <!-- C2: Work → A-Lens (프레즌스도 이 경로로 — work 쓰기 타임스탬프에서 파생) -->
     <path d="M696,236 H752 V292 H794" fill="none" stroke="#34558B" stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#arrHub)"/>
     <text class="edgeLabel hub" x="748" y="222" text-anchor="middle">C2 · 읽기 전용 REST</text>
-    <text class="edgeSub" x="748" y="262" text-anchor="start">tier 트리밍 응답</text>
-
-    <!-- 프레즌스 조회(계획): Life → A-Lens -->
-    <path d="M696,436 H756 V372 H794" fill="none" stroke="#B26A1F" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrPlan)"/>
-    <text class="edgeLabel plan" x="760" y="458" text-anchor="middle">프레즌스 조회</text>
-    <text class="edgeSub" x="762" y="416" text-anchor="start">온라인 · 상태</text>
+    <text class="edgeSub" x="748" y="262" text-anchor="start">tier 트리밍 · 쓰기 타임스탬프</text>
 
     <!-- 사람 → A-Lens -->
     <line x1="1118" y1="300" x2="1030" y2="300" stroke="#3A444E" stroke-width="2" marker-end="url(#arrInk)"/>
@@ -255,14 +251,8 @@
         <tr>
           <td>A-Hub Work → A-Lens</td>
           <td><span class="mono">C2</span> (읽기 전용 REST)</td>
-          <td>로비 집계, 방 상세, 재사용 이벤트, 활동 피드, 통계 — tier별 트리밍</td>
+          <td>로비 집계, 방 상세, 재사용 이벤트, 활동 피드, 통계, 프레즌스(쓰기 타임스탬프로 online/idle 판정) — tier별 트리밍</td>
           <td><span class="chip contract">계약 확정 · 구현 예정</span></td>
-        </tr>
-        <tr>
-          <td>A-Hub Life → A-Lens</td>
-          <td>조회 API</td>
-          <td>방 배치 · 프레즌스 (온라인 수, working/idle)</td>
-          <td><span class="chip plan">계획</span></td>
         </tr>
         <tr>
           <td>사람 → A-Lens</td>
