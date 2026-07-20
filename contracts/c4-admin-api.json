@@ -22,7 +22,7 @@
       "method": "POST",
       "path": "/spaces",
       "auth": "none (MVP)",
-      "summary": "Create a team/task room (Space).",
+      "summary": "Create a team/task life (Space).",
       "request": { "id": "string — slug, e.g. 'sw-innov'", "name": "string" },
       "response": { "status": 201, "body": { "id": "string", "name": "string", "status": "active" } }
     },

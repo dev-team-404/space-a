@@ -14,7 +14,7 @@ pub mod model;
 pub mod ops;
 pub mod pipeline;
 pub mod profile;
-pub mod rooms_client;
+pub mod life_client;
 pub mod rules;
 pub mod skill_draft;
 pub mod store;

@@ -1,9 +1,9 @@
-"""REST 바인딩 — 인증·상태코드 매핑이 계약(room-visit.md §4)대로인지."""
+"""REST 바인딩 — 인증·상태코드 매핑이 계약(life-visit.md §4)대로인지."""
 
 import pytest
 from fastapi.testclient import TestClient
 
-from room_server.api import create_app
+from life_server.api import create_app
 
 
 @pytest.fixture
@@ -12,14 +12,14 @@ def client() -> TestClient:
 
 
 def _register(client, name):
-    r = client.post("/rooms/register", json={"name": name})
+    r = client.post("/life/register", json={"name": name})
     assert r.status_code == 201
     return r.json()
 
 
 def test_capabilities_expose_orientation_contract(client):
     assert client.get("/capabilities").json() == {
-        "room_protocol": 3,
+        "life_protocol": 3,
         "grid": {"w": 20, "h": 20},
         "floor_min_y": 0,
         "footprint_mask": True,
@@ -29,13 +29,13 @@ def test_capabilities_expose_orientation_contract(client):
 
 def test_register_and_me(client):
     a = _register(client, "A")
-    me = client.get("/rooms/me", headers={"Authorization": f"Bearer {a['token']}"})
+    me = client.get("/life/me", headers={"Authorization": f"Bearer {a['token']}"})
     assert me.status_code == 200
-    assert me.json()["my_room_id"] == a["room_id"]
+    assert me.json()["my_life_id"] == a["life_id"]
 
 
 def test_missing_token_is_401(client):
-    r = client.get("/rooms/me")
+    r = client.get("/life/me")
     assert r.status_code == 401
     assert r.json()["error"]["code"] == "unauthorized"
 
@@ -45,15 +45,15 @@ def test_enter_conflict_is_409_cell_taken(client):
     b = _register(client, "B")
     hb = {"Authorization": f"Bearer {b['token']}"}
     ha = {"Authorization": f"Bearer {a['token']}"}
-    assert client.post(f"/rooms/{a['room_id']}/enter", json={"cell": [5, 6]}, headers=hb).status_code == 200
-    r = client.post(f"/rooms/{a['room_id']}/move", json={"cell": [5, 6]}, headers=ha)
+    assert client.post(f"/life/{a['life_id']}/enter", json={"cell": [5, 6]}, headers=hb).status_code == 200
+    r = client.post(f"/life/{a['life_id']}/move", json={"cell": [5, 6]}, headers=ha)
     assert r.status_code == 409
     assert r.json()["error"]["code"] == "cell_taken"
 
 
-def test_unknown_room_is_404(client):
+def test_unknown_life_is_404(client):
     a = _register(client, "A")
-    r = client.post("/rooms/room_none/enter", json={}, headers={"Authorization": f"Bearer {a['token']}"})
+    r = client.post("/life/life_none/enter", json={}, headers={"Authorization": f"Bearer {a['token']}"})
     assert r.status_code == 404
 
 
@@ -61,31 +61,31 @@ def test_design_forbidden_for_visitor(client):
     a = _register(client, "A")
     b = _register(client, "B")
     r = client.put(
-        f"/rooms/{a['room_id']}/design",
+        f"/life/{a['life_id']}/design",
         json={"wallpaper": "mint"},
         headers={"Authorization": f"Bearer {b['token']}"},
     )
     assert r.status_code == 403
 
 
-# --- x-api-key 관문 (ROOM_SERVER_API_KEY) ---
+# --- x-api-key 관문 (LIFE_SERVER_API_KEY) ---
 
 
 def test_api_key_gate_blocks_without_key(monkeypatch):
-    monkeypatch.setenv("ROOM_SERVER_API_KEY", "secret")
+    monkeypatch.setenv("LIFE_SERVER_API_KEY", "secret")
     c = TestClient(create_app())
     assert c.get("/capabilities").status_code == 401
     assert c.get("/capabilities").json()["error"]["code"] == "unauthorized"
 
 
 def test_api_key_gate_allows_with_matching_key(monkeypatch):
-    monkeypatch.setenv("ROOM_SERVER_API_KEY", "secret")
+    monkeypatch.setenv("LIFE_SERVER_API_KEY", "secret")
     c = TestClient(create_app())
     assert c.get("/capabilities", headers={"x-api-key": "secret"}).status_code == 200
 
 
 def test_api_key_gate_exempts_health(monkeypatch):
-    monkeypatch.setenv("ROOM_SERVER_API_KEY", "secret")
+    monkeypatch.setenv("LIFE_SERVER_API_KEY", "secret")
     c = TestClient(create_app())
     assert c.get("/healthz").status_code == 200
     assert c.get("/readyz").status_code == 200
@@ -93,18 +93,18 @@ def test_api_key_gate_exempts_health(monkeypatch):
 
 def test_api_key_gate_exempts_docs(monkeypatch):
     # 관문을 켜도 브라우저로 API 문서를 열 수 있어야 한다 (헤더를 못 실으므로)
-    monkeypatch.setenv("ROOM_SERVER_API_KEY", "secret")
+    monkeypatch.setenv("LIFE_SERVER_API_KEY", "secret")
     c = TestClient(create_app())
     assert c.get("/docs").status_code == 200
     assert c.get("/openapi.json").status_code == 200
 
 
 def test_api_key_gate_rejects_wrong_key(monkeypatch):
-    monkeypatch.setenv("ROOM_SERVER_API_KEY", "secret")
+    monkeypatch.setenv("LIFE_SERVER_API_KEY", "secret")
     c = TestClient(create_app())
     assert c.get("/capabilities", headers={"x-api-key": "wrong"}).status_code == 401
 
 
 def test_api_key_gate_off_when_unset(client):
-    # ROOM_SERVER_API_KEY 미설정이면 x-api-key 없이도 통과 (로컬·테스트 기본)
+    # LIFE_SERVER_API_KEY 미설정이면 x-api-key 없이도 통과 (로컬·테스트 기본)
     assert client.get("/capabilities").status_code == 200

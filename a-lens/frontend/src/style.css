@@ -60,20 +60,20 @@ button { font: inherit; cursor: pointer; }
 .home-sub { color: #8b93a0; flex: 1; }
 .home-section { margin: 26px 0 12px; font-size: 14px; color: #c8cfd8; }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
-.room-card {
+.life-card {
   background: #171d2b;
   border: 1px solid #2b3345;
   border-radius: 12px;
   padding: 16px;
 }
-.room-card.dim { opacity: 0.75; }
-.room-card-name { font-weight: 700; margin-bottom: 6px; }
-.room-card-stats { font-size: 12px; color: #8b93a0; min-height: 18px; margin-bottom: 12px; }
-.room-card-actions { display: flex; gap: 8px; }
+.life-card.dim { opacity: 0.75; }
+.life-card-name { font-weight: 700; margin-bottom: 6px; }
+.life-card-stats { font-size: 12px; color: #8b93a0; min-height: 18px; margin-bottom: 12px; }
+.life-card-actions { display: flex; gap: 8px; }
 .error-note { color: #d08770; margin: 12px 0; font-size: 13px; }
 
 /* ── 방 헤더 ── */
-#room-header {
+#life-header {
   position: fixed;
   top: 0; left: 0; right: 0;
   display: flex;
@@ -84,7 +84,7 @@ button { font: inherit; cursor: pointer; }
   border-bottom: 1px solid #232c3e;
   backdrop-filter: blur(4px);
 }
-#room-header .spacer { flex: 1; }
+#life-header .spacer { flex: 1; }
 
 /* ── 패널 ── */
 #panel {

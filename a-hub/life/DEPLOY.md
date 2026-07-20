@@ -1,7 +1,7 @@
-# room_server 배포 — Oracle Cloud VM (현재 운영 중)
+# life_server 배포 — Oracle Cloud VM (현재 운영 중)
 
-room_server를 **사외에서 접근 가능한 테스트 서버**로 띄운 기록·운영 절차입니다.
-room_server는 인메모리 + SQLite 단일 프로세스라 **상주 서버**로 운영합니다.
+life_server를 **사외에서 접근 가능한 테스트 서버**로 띄운 기록·운영 절차입니다.
+life_server는 인메모리 + SQLite 단일 프로세스라 **상주 서버**로 운영합니다.
 
 ## 현재 배포 상태
 
@@ -12,9 +12,9 @@ room_server는 인메모리 + SQLite 단일 프로세스라 **상주 서버**로
 | VM | Oracle Cloud (OCI), Ubuntu 24.04 LTS, AMD x86_64, RAM ~1 GB |
 | SSH | `ssh msalt-spacea` (User `ubuntu`, HostName `158.179.194.42`) |
 | 배포 경로 | `~/space-a-life/life` |
-| 런타임 | Docker + Compose (`space-a-room-server` 컨테이너, `restart: unless-stopped`) |
-| 인증 | `x-api-key` 관문 활성 (`ROOM_SERVER_API_KEY`) |
-| 영속 | SQLite 볼륨 `life_room-server-data` (`/data/rooms.db`) — 재부팅에도 유지 |
+| 런타임 | Docker + Compose (`space-a-life-server` 컨테이너, `restart: unless-stopped`) |
+| 인증 | `x-api-key` 관문 활성 (`LIFE_SERVER_API_KEY`) |
+| 영속 | SQLite 볼륨 `life_life-server-data` (`/data/life.db`) — 재부팅에도 유지 |
 | 스왑 | 2 GB (`/swapfile`, 빌드 OOM 방지) |
 
 > ⚠️ 평문 HTTP라 **토큰·`x-api-key`가 네트워크에 그대로 흐릅니다.** 테스트 용도로만 쓰고,
@@ -31,7 +31,7 @@ KEY=<x-api-key>
 curl $API/healthz                        # 관문 면제 → {"status":"ok"} (키 없이 200)
 curl $API/ -H "x-api-key: $KEY"          # discovery — api_key_required: true
 curl -i $API/capabilities                # 키 없이 → 401 unauthorized
-curl -X POST $API/rooms/register -H "x-api-key: $KEY" \
+curl -X POST $API/life/register -H "x-api-key: $KEY" \
   -H 'content-type: application/json' -d '{"name":"bot"}'
 ```
 
@@ -46,7 +46,7 @@ cd a-hub
 tar czf - --exclude='__pycache__' --exclude='.pytest_cache' --exclude='*.egg-info' --exclude='.git' life \
   | ssh msalt-spacea 'tar xzf - -C ~/space-a-life'
 # 재빌드·재기동
-ssh msalt-spacea 'cd ~/space-a-life/life && sudo ROOM_SERVER_API_KEY="<x-api-key>" docker compose up -d --build'
+ssh msalt-spacea 'cd ~/space-a-life/life && sudo LIFE_SERVER_API_KEY="<x-api-key>" docker compose up -d --build'
 ```
 
 ## 운영 메모
@@ -58,10 +58,10 @@ ssh msalt-spacea 'cd ~/space-a-life/life && sudo ROOM_SERVER_API_KEY="<x-api-key
 | 상태 | `sudo docker compose ps` |
 | 로그 | `sudo docker compose logs -f` |
 | 재시작 | `sudo docker compose restart` |
-| 키 변경 | `sudo ROOM_SERVER_API_KEY="<새키>" docker compose up -d` |
+| 키 변경 | `sudo LIFE_SERVER_API_KEY="<새키>" docker compose up -d` |
 | 중지 | `sudo docker compose down` (볼륨 유지) |
-| 데이터 초기화 | `sudo docker compose down -v && sudo ROOM_SERVER_API_KEY="<키>" docker compose up -d` |
-| DB 백업 | `sudo docker cp space-a-room-server:/data/rooms.db ./rooms.db` |
+| 데이터 초기화 | `sudo docker compose down -v && sudo LIFE_SERVER_API_KEY="<키>" docker compose up -d` |
+| DB 백업 | `sudo docker cp space-a-life-server:/data/life.db ./life.db` |
 
 `restart: unless-stopped`라 VM 재부팅 후 Docker 데몬이 뜨면 컨테이너도 자동 복귀한다.
 

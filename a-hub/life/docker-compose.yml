@@ -1,24 +1,24 @@
 services:
-  room-server:
+  life-server:
     build:
       context: .
       # 사내망 빌드 시: PIP_TRUSTED="--trusted-host pypi.org --trusted-host files.pythonhosted.org" docker compose build
       args:
         PIP_TRUSTED: ${PIP_TRUSTED:-}
-    image: space-a-room-server
-    container_name: space-a-room-server
+    image: space-a-life-server
+    container_name: space-a-life-server
     ports:
       # hub(8000)와 나란히 띄울 수 있게 호스트 포트는 8001
       - "8001:8000"
     environment:
       # 설정하면 SQLite로 영속(볼륨) — 재시작해도 등록·방·위치 유지. 지우면 인메모리.
-      ROOM_SERVER_DB: /data/rooms.db
+      LIFE_SERVER_DB: /data/life.db
       # 설정하면 x-api-key 관문 활성 (healthz/readyz 제외). 비우면 관문 비활성.
-      #   ROOM_SERVER_API_KEY=<고정키> docker compose up -d
-      ROOM_SERVER_API_KEY: ${ROOM_SERVER_API_KEY:-}
+      #   LIFE_SERVER_API_KEY=<고정키> docker compose up -d
+      LIFE_SERVER_API_KEY: ${LIFE_SERVER_API_KEY:-}
     volumes:
-      - room-server-data:/data
+      - life-server-data:/data
     restart: unless-stopped
 
 volumes:
-  room-server-data:
+  life-server-data:

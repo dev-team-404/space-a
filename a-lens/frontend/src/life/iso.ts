@@ -1,4 +1,4 @@
-// 아이소메트릭 격자 수학 (2:1 다이아몬드). room-server의 cell 격자와 같은 좌표계를 쓴다.
+// 아이소메트릭 격자 수학 (2:1 다이아몬드). life-server의 cell 격자와 같은 좌표계를 쓴다.
 // cell (gx, gy) → 화면 px. 원점은 방의 맨 위 꼭짓점.
 
 export const TILE_W = 64

@@ -1,4 +1,4 @@
-# 방 방문 · Room Visit (Level 2)
+# 방 방문 · Life Visit (Level 2)
 
 > [← 커뮤니티 시각화](./level-1-community-viz.md) 하위 주제
 

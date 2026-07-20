@@ -4,10 +4,10 @@
 import { Application, Container } from 'pixi.js'
 import { fetchLobby, fetchSpace, type LobbyFloor, type SpaceAgent, type SpaceIssue, type SpaceView } from './api'
 import { openBuilder } from './builder'
-import { loadKit } from './room/kit'
-import { buildRoomScene } from './room/renderer'
-import type { RoomConfig } from './room/types'
-import { deleteRoom, getRoom, loadRooms, saveRoom } from './store'
+import { loadKit } from './life/kit'
+import { buildLifeScene } from './life/renderer'
+import type { LifeConfig } from './life/types'
+import { deleteLife, getLife, loadLife, saveLife } from './store'
 
 const $ = <T extends HTMLElement>(id: string): T => {
   const el = document.getElementById(id)
@@ -17,7 +17,7 @@ const $ = <T extends HTMLElement>(id: string): T => {
 
 const sceneHost = $('scene')
 const homeEl = $('home')
-const headerEl = $('room-header')
+const headerEl = $('life-header')
 const panel = $('panel')
 const panelTitle = $('panel-title')
 const panelBody = $('panel-body')
@@ -223,19 +223,19 @@ async function renderHome() {
 
   // FAKE 숨김이면 더미 스페이스(카드·방 목록 모두)를 화면에서 제외
   const visibleFloors = showFake ? floors : floors.filter((f) => !f.demo)
-  const rooms = loadRooms().filter((r) => {
+  const life = loadLife().filter((r) => {
     const f = floors.find((f) => f.space_id === r.space_id)
     return showFake || !f?.demo
   })
-  const roomCards = rooms
+  const lifeCards = life
     .map((r) => {
       const f = floors.find((f) => f.space_id === r.space_id)
       const stats = f ? `지식 ${f.stats.knowledge ?? 0} · 재사용 ${f.stats.reuse ?? 0} · 해결 ${f.stats.resolved ?? 0}` : ''
       return `
-      <div class="room-card" data-room="${esc(r.space_id)}">
-        <div class="room-card-name">${esc(f?.name ?? r.space_name)}${f?.demo ? ' <span class="demo-badge">FAKE</span>' : ''}</div>
-        <div class="room-card-stats">${stats}</div>
-        <div class="room-card-actions">
+      <div class="life-card" data-life="${esc(r.space_id)}">
+        <div class="life-card-name">${esc(f?.name ?? r.space_name)}${f?.demo ? ' <span class="demo-badge">FAKE</span>' : ''}</div>
+        <div class="life-card-stats">${stats}</div>
+        <div class="life-card-actions">
           <button class="primary-btn sm" data-act="enter">입장</button>
           <button class="ghost-btn sm" data-act="edit">꾸미기</button>
           <button class="ghost-btn sm" data-act="del">삭제</button>
@@ -244,14 +244,14 @@ async function renderHome() {
     })
     .join('')
 
-  const unbuilt = visibleFloors.filter((f) => !getRoom(f.space_id))
+  const unbuilt = visibleFloors.filter((f) => !getLife(f.space_id))
   const unbuiltCards = unbuilt
     .map(
       (f) => `
-      <div class="room-card dim" data-space="${esc(f.space_id)}">
-        <div class="room-card-name">${esc(f.name)}${f.demo ? ' <span class="demo-badge">FAKE</span>' : ''}</div>
-        <div class="room-card-stats">아직 방 없음</div>
-        <div class="room-card-actions"><button class="ghost-btn sm" data-act="build">이 스페이스로 방 만들기</button></div>
+      <div class="life-card dim" data-space="${esc(f.space_id)}">
+        <div class="life-card-name">${esc(f.name)}${f.demo ? ' <span class="demo-badge">FAKE</span>' : ''}</div>
+        <div class="life-card-stats">아직 방 없음</div>
+        <div class="life-card-actions"><button class="ghost-btn sm" data-act="build">이 스페이스로 방 만들기</button></div>
       </div>`,
     )
     .join('')
@@ -261,29 +261,29 @@ async function renderHome() {
       <header class="home-head">
         <h1>A-Lens</h1>
         <p class="home-sub">스페이스 방 관전 — 방을 만들고 a-hub 데이터를 들여다보세요</p>
-        <button class="primary-btn" id="btn-new-room" ${visibleFloors.length ? '' : 'disabled'}>+ 방 만들기</button>
+        <button class="primary-btn" id="btn-new-life" ${visibleFloors.length ? '' : 'disabled'}>+ 방 만들기</button>
         ${floors.some((f) => f.demo) ? `<button class="ghost-btn sm fake-toggle ${showFake ? 'on' : ''}" id="btn-toggle-fake">${showFake ? 'FAKE 숨기기' : 'FAKE 보이기'}</button>` : ''}
       </header>
       ${loadError ? `<div class="error-note">백엔드 연결 실패: ${esc(loadError)}</div>` : ''}
-      ${rooms.length ? `<h3 class="home-section">내가 만든 방</h3><div class="card-grid">${roomCards}</div>` : ''}
+      ${life.length ? `<h3 class="home-section">내가 만든 방</h3><div class="card-grid">${lifeCards}</div>` : ''}
       ${unbuilt.length ? `<h3 class="home-section">방이 없는 스페이스</h3><div class="card-grid">${unbuiltCards}</div>` : ''}
-      ${!rooms.length && !unbuilt.length && !loadError ? '<div class="error-note">표시할 스페이스가 없습니다.</div>' : ''}
+      ${!life.length && !unbuilt.length && !loadError ? '<div class="error-note">표시할 스페이스가 없습니다.</div>' : ''}
     </div>`
 
-  const startBuilder = (initial?: RoomConfig, presetSpaceId?: string) => {
+  const startBuilder = (initial?: LifeConfig, presetSpaceId?: string) => {
     void openBuilder({
       floors: presetSpaceId
         ? visibleFloors.filter((f) => f.space_id === presetSpaceId).concat(visibleFloors.filter((f) => f.space_id !== presetSpaceId))
         : visibleFloors,
       initial,
       onSaved: (config) => {
-        saveRoom(config)
-        location.hash = `#room/${config.space_id}`
+        saveLife(config)
+        location.hash = `#life/${config.space_id}`
       },
     })
   }
 
-  homeEl.querySelector('#btn-new-room')?.addEventListener('click', () => startBuilder())
+  homeEl.querySelector('#btn-new-life')?.addEventListener('click', () => startBuilder())
   homeEl.querySelector('#btn-toggle-fake')?.addEventListener('click', () => {
     showFake = !showFake
     try {
@@ -293,16 +293,16 @@ async function renderHome() {
     }
     void renderHome()
   })
-  homeEl.querySelectorAll<HTMLElement>('.room-card[data-room]').forEach((card) => {
-    const id = card.dataset.room!
-    card.querySelector('[data-act="enter"]')?.addEventListener('click', () => (location.hash = `#room/${id}`))
-    card.querySelector('[data-act="edit"]')?.addEventListener('click', () => startBuilder(getRoom(id)))
+  homeEl.querySelectorAll<HTMLElement>('.life-card[data-life]').forEach((card) => {
+    const id = card.dataset.life!
+    card.querySelector('[data-act="enter"]')?.addEventListener('click', () => (location.hash = `#life/${id}`))
+    card.querySelector('[data-act="edit"]')?.addEventListener('click', () => startBuilder(getLife(id)))
     card.querySelector('[data-act="del"]')?.addEventListener('click', () => {
-      deleteRoom(id)
+      deleteLife(id)
       void renderHome()
     })
   })
-  homeEl.querySelectorAll<HTMLElement>('.room-card[data-space]').forEach((card) => {
+  homeEl.querySelectorAll<HTMLElement>('.life-card[data-space]').forEach((card) => {
     card.querySelector('[data-act="build"]')?.addEventListener('click', () => startBuilder(undefined, card.dataset.space))
   })
 }
@@ -522,9 +522,9 @@ try {
 }
 
 /** 방 화면에서만 호출 — 접힘 여부에 따라 사이드바/열기버튼 표시를 정하고 씬 폭을 재조정한다. */
-function applyHubCollapsed(inRoom: boolean) {
-  hub.hidden = !inRoom || hubCollapsed
-  hubOpen.hidden = !inRoom || !hubCollapsed
+function applyHubCollapsed(inLife: boolean) {
+  hub.hidden = !inLife || hubCollapsed
+  hubOpen.hidden = !inLife || !hubCollapsed
   fitScene()
 }
 
@@ -594,8 +594,8 @@ function renderHubActivity(data: SpaceView) {
   })
 }
 
-async function renderRoom(spaceId: string) {
-  const config = getRoom(spaceId)
+async function renderLife(spaceId: string) {
+  const config = getLife(spaceId)
   if (!config) {
     location.hash = ''
     return
@@ -608,20 +608,20 @@ async function renderRoom(spaceId: string) {
   headerEl.hidden = false
   headerEl.innerHTML = `
     <button class="ghost-btn sm" id="btn-back">← 목록</button>
-    <b id="room-title">${esc(config.space_name)}</b>
-    <span class="demo-badge" id="room-demo" hidden>FAKE</span>
-    <span class="muted" id="room-visits"></span>
+    <b id="life-title">${esc(config.space_name)}</b>
+    <span class="demo-badge" id="life-demo" hidden>FAKE</span>
+    <span class="muted" id="life-visits"></span>
     <span class="spacer"></span>
-    <button class="ghost-btn sm" id="btn-edit-room">꾸미기</button>`
+    <button class="ghost-btn sm" id="btn-edit-life">꾸미기</button>`
   $('btn-back').addEventListener('click', () => (location.hash = ''))
-  $('btn-edit-room').addEventListener('click', async () => {
+  $('btn-edit-life').addEventListener('click', async () => {
     const floors = await getFloors()
     void openBuilder({
       floors,
-      initial: getRoom(spaceId),
+      initial: getLife(spaceId),
       onSaved: (c) => {
-        saveRoom(c)
-        void renderRoom(spaceId)
+        saveLife(c)
+        void renderLife(spaceId)
       },
     })
   })
@@ -633,19 +633,19 @@ async function renderRoom(spaceId: string) {
     showPanel('연결 오류', `스페이스 데이터를 불러오지 못했습니다.<br/>${esc(String(e))}`)
     data = { space_id: spaceId, viewer_tier: 'member', agents: [], issues: [], knowledge: [], visits: null }
   }
-  if (location.hash !== `#room/${spaceId}` && location.hash !== `#room/${encodeURIComponent(spaceId)}`) {
+  if (location.hash !== `#life/${spaceId}` && location.hash !== `#life/${encodeURIComponent(spaceId)}`) {
     return
   }
 
-  const title = $('room-title')
+  const title = $('life-title')
   const floors = floorsCache
   const liveName = floors?.find((f) => f.space_id === spaceId)?.name
   if (liveName) {
     title.textContent = liveName
     config.space_name = liveName // 칠판 위 간판에도 최신 이름 반영
   }
-  $('room-visits').textContent = data.visits ? `방문 TODAY ${data.visits.today} · TOTAL ${data.visits.total}` : ''
-  $('room-demo').hidden = !data.demo // 더미(fake) 스페이스 구분 배지
+  $('life-visits').textContent = data.visits ? `방문 TODAY ${data.visits.today} · TOTAL ${data.visits.total}` : ''
+  $('life-demo').hidden = !data.demo // 더미(fake) 스페이스 구분 배지
 
   if (currentScene) {
     currentScene.destroy({ children: true })
@@ -662,7 +662,7 @@ async function renderRoom(spaceId: string) {
         (b.last_active_at ?? '').localeCompare(a.last_active_at ?? ''),
     )
     .slice(0, SCENE_MAX_AGENTS)
-  currentScene = buildRoomScene(
+  currentScene = buildLifeScene(
     config,
     { agents: sceneAgents, issues: data.issues, knowledgeCount: data.knowledge.length, highlight: data.highlight?.text },
     {
@@ -704,8 +704,8 @@ async function renderRoom(spaceId: string) {
 
 // ── 해시 라우팅 ──
 function route() {
-  const m = location.hash.match(/^#room\/(.+)$/)
-  if (m) void renderRoom(decodeURIComponent(m[1]))
+  const m = location.hash.match(/^#life\/(.+)$/)
+  if (m) void renderLife(decodeURIComponent(m[1]))
   else void renderHome()
 }
 window.addEventListener('hashchange', route)

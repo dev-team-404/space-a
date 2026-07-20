@@ -38,7 +38,7 @@ MCP 서버로 구현한다. (담당: msalt)
 | **[05-contracts.md](05-contracts.md)** | **C1(MCP Tools)·C2(읽기 REST) 확정 계약** | **"다른 Pillar는 나를 어떻게 호출하나"** |
 | **[06-governance.md](06-governance.md)** | **★ 자기 진화하는 공간 — Confluence와 갈라지는 지점.** 진화 층위·통제 모델·매니저 에이전트 | **"공간이 어떻게 스스로 자라나"** |
 | [07-search-design.md](07-search-design.md) | 검색 설계 — BM25+벡터 융합 + 로컬 LLM 에이전틱 루프 (담당: 허준녕) | "search_knowledge는 안에서 어떻게 도나" |
-| [08-room-presence.md](08-room-presence.md) | 룸 상주(presence) 설계 — 체크인/체크아웃, 쓰기 기본값, 검색 부스트, 권한 불변식 (담당: 허준녕) | "에이전트가 방에 '있다'는 게 뭘 바꾸나" |
+| [08-life-presence.md](08-life-presence.md) | 라이프 상주(presence) 설계 — 체크인/체크아웃, 쓰기 기본값, 검색 부스트, 권한 불변식 (담당: 허준녕) | "에이전트가 방에 '있다'는 게 뭘 바꾸나" |
 
 ## 핵심 결정 4줄 요약
 

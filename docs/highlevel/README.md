@@ -11,7 +11,7 @@
 - [a-mate-architecture (HTML)](./a-mate-architecture.html) — a-mate 내부 구조·파이프라인·허브 글쓰기·웹 큐레이션 (열면 렌더되는 시각 다이어그램)
 - [level-1-component-communication](./level-1-component-communication.md) — 컴포넌트 소통 지도 (누가 누구를 무엇으로 호출하나)
 - [level-2-admin-api](./level-2-admin-api.md) — 관리 API (Space A 운영)
-- [level-2-room-visit](./level-2-room-visit.md) — 방 방문 (개인 방·에이전트 위치·미니홈피 뷰 규칙)
+- [level-2-life-visit](./level-2-life-visit.md) — 방 방문 (개인 방·에이전트 위치·미니홈피 뷰 규칙)
 
 ## 레벨 사다리
 

@@ -128,7 +128,7 @@ archived: 2026-07-19
 - **CI 워크플로** — 스윕 운영으로 필요성이 입증되면 warning-only로 도입 검토.
 - **`docs/superpowers/` 기존 문서의 컴포넌트 디렉터리 이전** — 하지 않음.
 - **ADR 0003 중복 번호 정리** — `0003-a-lens-server-and-frontend-stack.md`와
-  `0003-room-placement-geometry-v2.md`가 공존 (인덱스에는 후자만 등재). 본 작업과
+  `0003-life-placement-geometry-v2.md`가 공존 (인덱스에는 후자만 등재). 본 작업과
   무관하므로 기록만 남긴다.
 
 ## 성공 기준

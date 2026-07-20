@@ -1,15 +1,15 @@
-// 방 씬 렌더러 — 완성된 방 배경 프리셋(room.rN, 통짜 이미지) 위에 책상·로봇만 얹는다.
+// 방 씬 렌더러 — 완성된 방 배경 프리셋(life.rN, 통짜 이미지) 위에 책상·로봇만 얹는다.
 // 배경 이미지는 manifest cal(좌우 바닥 꼭짓점 + slope)로 2:1 격자 좌표계에 정규화된다.
 // 책상은 킷 스프라이트(desk.dN)가 있으면 Sprite, 없으면 Graphics 아이소 박스로 폴백.
 
 import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js'
 import type { SpaceAgent, SpaceIssue } from '../api'
-import { DESKS, characterForSeed, resolveDeskId, resolveRoomId } from './catalog'
+import { DESKS, characterForSeed, resolveDeskId, resolveLifeId } from './catalog'
 import { TILE_W, TILE_H, isoX, isoY, depth } from './iso'
 import { kitPiece, kitPieceScale } from './kit'
-import type { DeskId, RoomConfig } from './types'
+import type { DeskId, LifeConfig } from './types'
 
-export type RoomSceneCallbacks = {
+export type LifeSceneCallbacks = {
   onAgentTap?: (agent: SpaceAgent) => void
   /** 배경 칠판 영역 클릭 → 이슈 패널 */
   onBoardTap?: () => void
@@ -17,7 +17,7 @@ export type RoomSceneCallbacks = {
   onShelfTap?: () => void
 }
 
-export type RoomSceneData = {
+export type LifeSceneData = {
   agents: SpaceAgent[]
   issues: SpaceIssue[]
   knowledgeCount: number
@@ -26,7 +26,7 @@ export type RoomSceneData = {
 }
 
 /** 빌더 프리뷰용 샘플 — 실데이터 fetch 없이 방 모양만 확인 */
-export const PREVIEW_DATA: RoomSceneData = {
+export const PREVIEW_DATA: LifeSceneData = {
   agents: [
     { agent_id: 'p1', name: '김도현', role: '', owner: '', status: 'working', status_line: '', last_active_at: null },
     { agent_id: 'p2', name: '이하늘', role: '', owner: '', status: 'idle', status_line: '', last_active_at: null },
@@ -121,10 +121,10 @@ function layoutDesks(count: number): { slots: { gx: number; gy: number }[]; W: n
   return { slots, W, H }
 }
 
-export function buildRoomScene(
-  config: RoomConfig,
-  data: RoomSceneData,
-  cb: RoomSceneCallbacks = {},
+export function buildLifeScene(
+  config: LifeConfig,
+  data: LifeSceneData,
+  cb: LifeSceneCallbacks = {},
 ): Container {
   const root = new Container()
   root.sortableChildren = true
@@ -141,28 +141,28 @@ export function buildRoomScene(
   const W = Math.max(16, LW, LH)
   const H = W
 
-  // ── 방 배경 프리셋 (room.rN — 벽·바닥·책장·칠판이 다 그려진 통짜 이미지 한 장) ──
+  // ── 방 배경 프리셋 (life.rN — 벽·바닥·책장·칠판이 다 그려진 통짜 이미지 한 장) ──
   // 캘리브레이션(manifest cal)으로 이미지를 2:1 격자 좌표계에 정규화한다:
   // 좌우 바닥 꼭짓점 ↔ 격자 (0,W)/(W,0), 이미지 기울기(slope)는 비등방 스케일로 보정.
-  const roomId = resolveRoomId(config.room)
-  const roomKit = kitPiece(`room.${roomId}`) ?? kitPiece('shell.room')
-  const roomCal = roomKit?.cal
+  const lifeId = resolveLifeId(config.life)
+  const lifeKit = kitPiece(`life.${lifeId}`) ?? kitPiece('shell.life')
+  const lifeCal = lifeKit?.cal
   let cut = 0 // 뒷벽이 잘라먹는 격자 깊이: gx+gy < cut 영역은 벽 뒤
-  if (roomKit && roomCal) {
-    const [lxI, lyI] = roomCal.left
-    const [rxI] = roomCal.right
+  if (lifeKit && lifeCal) {
+    const [lxI, lyI] = lifeCal.left
+    const [rxI] = lifeCal.right
     const cxI = (lxI + rxI) / 2
     const ax = (rxI - lxI) / (2 * W) // 이미지 px / 격자 x단위
-    const ay = ax * (roomCal.slope ?? 0.5)
+    const ay = ax * (lifeCal.slope ?? 0.5)
     const cyI = lyI - W * ay // 가상 다이아 원점의 이미지 y
     const sx = TILE_W / 2 / ax
     const sy = TILE_H / 2 / ay
-    const sp = new Sprite(roomKit.texture)
+    const sp = new Sprite(lifeKit.texture)
     sp.scale.set(sx, sy)
     sp.position.set(-cxI * sx, -cyI * sy)
     sp.zIndex = -1000
     root.addChild(sp)
-    cut = (roomCal.backEdgeY - cyI) / ay
+    cut = (lifeCal.backEdgeY - cyI) / ay
 
     // 배경에 이미 그려진 칠판·책장 영역에 투명 히트존 → 이슈/지식 패널 진입점 유지.
     // cal 좌표(이미지 px)를 배경 스프라이트와 같은 변환(sx/sy, -cxI/-cyI)으로 화면에 맞춘다.
@@ -182,14 +182,14 @@ export function buildRoomScene(
       hz.on('pointertap', onTap)
       root.addChild(hz)
     }
-    hitZone(roomCal.backWall, -800, cb.onBoardTap)
-    if (roomCal.shelfArea) hitZone(roomCal.shelfArea, -800, cb.onShelfTap)
+    hitZone(lifeCal.backWall, -800, cb.onBoardTap)
+    if (lifeCal.shelfArea) hitZone(lifeCal.shelfArea, -800, cb.onShelfTap)
 
     // ── 칠판 위 나무 간판에 스페이스 이름 ──
     // 간판 안쪽 영역(signArea)은 프리셋마다 다르다(manifest cal). 배경과 같은 변환으로 얹는다.
     const name = config.space_name?.trim()
-    if (name && roomCal.signArea) {
-      const [sax0, say0, sax1, say1] = roomCal.signArea
+    if (name && lifeCal.signArea) {
+      const [sax0, say0, sax1, say1] = lifeCal.signArea
       const SIGN_CX = (sax0 + sax1) / 2 // 간판 중앙 x(이미지 px)
       const SIGN_CY = (say0 + say1) / 2 // 간판 중앙 y(이미지 px)
       const PAD = 20 // 좌우 안쪽 패딩(이미지 px)
@@ -219,8 +219,8 @@ export function buildRoomScene(
 
     // ── 칠판에 오늘의 하이라이트 — 하루치 기록 중 가장 핵심인 사건 한 줄 (분필 느낌) ──
     const hl = data.highlight?.trim()
-    if (hl && roomCal.backWall) {
-      const [bx0, by0, bx1, by1] = roomCal.backWall
+    if (hl && lifeCal.backWall) {
+      const [bx0, by0, bx1, by1] = lifeCal.backWall
       // 칠판 나무 프레임 안쪽 여백 (이미지 px)
       const PADX = 36
       const PADY = 26

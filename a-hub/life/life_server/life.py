@@ -1,12 +1,12 @@
-"""방 방문(Room Visit) — 개인 방·에이전트 위치·방 디자인.
+"""방 방문(Life Visit) — 개인 방·에이전트 위치·방 디자인.
 
-설계: docs/design/room-visit.md
+설계: docs/design/life-visit.md
 - 유저당 방 1개, 20×20 정사각 셀 격자. 에이전트 점유 = 논리 1셀.
 - 위치의 단일 원천은 서버. 겹침 금지는 전역 락 안에서 "빈 셀일 때만 점유"로 원자 처리.
 - 방 디자인(벽지·바닥·가구)은 방문자에게 보여주는 공개 표면이므로 서버가 가진다.
   사적 내용(다이어리 등)은 클라이언트에만 있다 — 여기 없음이 설계다.
 - hub(Space/Page 도메인)와 별개의 서버 프로세스. 상태는 인메모리가 원천이고,
-  `ROOM_SERVER_DB` 설정 시 SQLite로 write-through 영속화(store.py) — 재시작을 견딘다.
+  `LIFE_SERVER_DB` 설정 시 SQLite로 write-through 영속화(store.py) — 재시작을 견딘다.
 """
 
 import secrets
@@ -29,7 +29,7 @@ Cell = tuple[int, int]
 
 
 @dataclass
-class RoomObject:
+class LifeObject:
     asset_id: str
     category: str
     cell: Cell
@@ -54,28 +54,28 @@ class RoomObject:
 
 
 @dataclass
-class RoomDesign:
+class LifeDesign:
     wallpaper: str = "lavender"
     floor: str = "cream"
-    objects: list[RoomObject] = field(default_factory=list)
+    objects: list[LifeObject] = field(default_factory=list)
 
 
 @dataclass
-class RoomAgent:
+class LifeAgent:
     agent_id: str
     name: str
-    room_id: str  # 자기 방 (소유)
-    at_room: str  # 현재 있는 방
+    life_id: str  # 자기 방 (소유)
+    at_life: str  # 현재 있는 방
     cell: Cell
     mascot_seed: str = ""  # 클라이언트 마스코트 시드 — 어느 방에서든 같은 로봇으로 보이게
 
 
 @dataclass
-class Room:
+class Life:
     id: str
     owner_agent_id: str
     owner_name: str
-    design: RoomDesign = field(default_factory=RoomDesign)
+    design: LifeDesign = field(default_factory=LifeDesign)
 
 
 def _validate_cell(cell: Cell) -> None:
@@ -84,7 +84,7 @@ def _validate_cell(cell: Cell) -> None:
         raise errors.InvalidRequest(f"셀 범위 밖: ({x},{y}) — 0~{GRID_W - 1} × 0~{GRID_H - 1}")
 
 
-class RoomService:
+class LifeService:
     """방 서비스. 모든 변이는 self._lock 안 — 겹침 금지의 원자성 보장.
 
     상태는 인메모리가 원천이고, store(SqliteStore)를 주면 변이를 write-through로
@@ -94,46 +94,46 @@ class RoomService:
     def __init__(self, store=None) -> None:
         self._lock = threading.Lock()
         self._store = store
-        self._rooms: dict[str, Room] = {}
-        self._agents: dict[str, RoomAgent] = {}
+        self._life: dict[str, Life] = {}
+        self._agents: dict[str, LifeAgent] = {}
         self._tokens: dict[str, str] = {}  # token -> agent_id
         if store is not None:
-            self._rooms, self._agents, self._tokens = store.load()
+            self._life, self._agents, self._tokens = store.load()
             # protocol v2에서는 창문 회전이 자유값이었다. v3부터 벽이 방향의 단일 원천이다.
-            for room in self._rooms.values():
+            for life in self._life.values():
                 changed = False
-                for obj in room.design.objects:
+                for obj in life.design.objects:
                     expected = WINDOW_ROTATION_BY_WALL.get(obj.wall) if obj.category == "window" else None
                     if expected is not None and obj.rotation != expected:
                         obj.rotation = expected
                         changed = True
                 if changed:
-                    store.save_design(room)
+                    store.save_design(life)
 
     # --- 신원 ---
 
-    def register(self, name: str, mascot_seed: str = "") -> tuple[RoomAgent, str, Room]:
+    def register(self, name: str, mascot_seed: str = "") -> tuple[LifeAgent, str, Life]:
         """유저 등록 + 개인 방 생성. 에이전트는 자기 방에 자동 입장."""
         name = name.strip()
         if not name:
             raise errors.InvalidRequest("이름이 비어 있음")
         with self._lock:
             agent_id = f"ragt_{uuid.uuid4().hex[:8]}"
-            room_id = f"room_{uuid.uuid4().hex[:8]}"
-            room = Room(id=room_id, owner_agent_id=agent_id, owner_name=name)
-            self._rooms[room_id] = room
-            agent = RoomAgent(
-                agent_id=agent_id, name=name, room_id=room_id, at_room=room_id,
-                cell=self._free_cell_locked(room_id), mascot_seed=mascot_seed,
+            life_id = f"life_{uuid.uuid4().hex[:8]}"
+            life = Life(id=life_id, owner_agent_id=agent_id, owner_name=name)
+            self._life[life_id] = life
+            agent = LifeAgent(
+                agent_id=agent_id, name=name, life_id=life_id, at_life=life_id,
+                cell=self._free_cell_locked(life_id), mascot_seed=mascot_seed,
             )
             self._agents[agent_id] = agent
             token = secrets.token_urlsafe(24)
             self._tokens[token] = agent_id
             if self._store:
-                self._store.save_registration(agent, token, room)
-            return agent, token, room
+                self._store.save_registration(agent, token, life)
+            return agent, token, life
 
-    def _authed(self, token: str | None) -> RoomAgent:
+    def _authed(self, token: str | None) -> LifeAgent:
         agent_id = self._tokens.get(token or "")
         if agent_id is None:
             raise errors.Unauthorized("invalid or missing token")
@@ -147,41 +147,41 @@ class RoomService:
         agent = self._authed(token)
         with self._lock:
             agent.name = name
-            room = self._rooms[agent.room_id]
-            room.owner_name = name
+            life = self._life[agent.life_id]
+            life.owner_name = name
             if self._store:
                 self._store.save_agent(agent)
-                self._store.save_owner_name(room)
+                self._store.save_owner_name(life)
         return self.me(token)
 
     # --- 조회 ---
 
-    def list_rooms(self) -> list[dict]:
+    def list_life(self) -> list[dict]:
         with self._lock:
             return [
                 {
-                    "room_id": r.id,
+                    "life_id": r.id,
                     "owner_name": r.owner_name,
-                    "occupants": sum(1 for a in self._agents.values() if a.at_room == r.id),
+                    "occupants": sum(1 for a in self._agents.values() if a.at_life == r.id),
                 }
-                for r in self._rooms.values()
+                for r in self._life.values()
             ]
 
-    def room_state(self, room_id: str) -> dict:
+    def life_state(self, life_id: str) -> dict:
         with self._lock:
-            room = self._rooms.get(room_id)
-            if room is None:
-                raise errors.NotFound(f"room '{room_id}' not found")
-            owner = self._agents.get(room.owner_agent_id)
+            life = self._life.get(life_id)
+            if life is None:
+                raise errors.NotFound(f"life '{life_id}' not found")
+            owner = self._agents.get(life.owner_agent_id)
             return {
-                "room_id": room.id,
-                "owner_name": room.owner_name,
+                "life_id": life.id,
+                "owner_name": life.owner_name,
                 # 주인이 다른 방에 가 있어도 방문자가 주인의 로봇(미니홈피 프로필)을 그릴 수 있게
                 "owner_mascot_seed": owner.mascot_seed if owner else "",
                 "grid": {"w": GRID_W, "h": GRID_H},
                 "design": {
-                    "wallpaper": room.design.wallpaper,
-                    "floor": room.design.floor,
+                    "wallpaper": life.design.wallpaper,
+                    "floor": life.design.floor,
                     "objects": [
                         {
                             "asset_id": o.asset_id,
@@ -192,7 +192,7 @@ class RoomService:
                             "wall": o.wall,
                             "footprint": [list(cell) for cell in o.footprint] if o.footprint else None,
                         }
-                        for o in room.design.objects
+                        for o in life.design.objects
                     ],
                 },
                 "occupants": [
@@ -200,11 +200,11 @@ class RoomService:
                         "agent_id": a.agent_id,
                         "name": a.name,
                         "cell": list(a.cell),
-                        "is_owner": a.agent_id == room.owner_agent_id,
+                        "is_owner": a.agent_id == life.owner_agent_id,
                         "mascot_seed": a.mascot_seed,
                     }
                     for a in self._agents.values()
-                    if a.at_room == room.id
+                    if a.at_life == life.id
                 ],
             }
 
@@ -214,25 +214,25 @@ class RoomService:
             return {
                 "agent_id": agent.agent_id,
                 "name": agent.name,
-                "my_room_id": agent.room_id,
-                "room_id": agent.at_room,
+                "my_life_id": agent.life_id,
+                "life_id": agent.at_life,
                 "cell": list(agent.cell),
             }
 
     # --- 위치 변이 (전부 락 안에서 원자 처리) ---
 
-    def enter(self, token: str | None, room_id: str, cell: Cell | None) -> dict:
+    def enter(self, token: str | None, life_id: str, cell: Cell | None) -> dict:
         agent = self._authed(token)
         if cell is not None:
             _validate_cell(cell)
         with self._lock:
-            if room_id not in self._rooms:
-                raise errors.NotFound(f"room '{room_id}' not found")
-            target = cell if cell is not None else self._free_cell_locked(room_id)
-            if self._occupied_locked(room_id, target, except_agent=agent.agent_id):
+            if life_id not in self._life:
+                raise errors.NotFound(f"life '{life_id}' not found")
+            target = cell if cell is not None else self._free_cell_locked(life_id)
+            if self._occupied_locked(life_id, target, except_agent=agent.agent_id):
                 raise CellTaken(f"셀 ({target[0]},{target[1]}) 이미 점유됨")
-            # 이전 방 자동 퇴장 = at_room/cell 원자 교체
-            agent.at_room = room_id
+            # 이전 방 자동 퇴장 = at_life/cell 원자 교체
+            agent.at_life = life_id
             agent.cell = target
             if self._store:
                 self._store.save_agent(agent)
@@ -242,7 +242,7 @@ class RoomService:
         agent = self._authed(token)
         _validate_cell(cell)
         with self._lock:
-            if self._occupied_locked(agent.at_room, cell, except_agent=agent.agent_id):
+            if self._occupied_locked(agent.at_life, cell, except_agent=agent.agent_id):
                 raise CellTaken(f"셀 ({cell[0]},{cell[1]}) 이미 점유됨")
             agent.cell = cell
             if self._store:
@@ -251,15 +251,15 @@ class RoomService:
 
     # --- 방 디자인 (주인만) ---
 
-    def set_design(self, token: str | None, room_id: str, design: dict) -> dict:
+    def set_design(self, token: str | None, life_id: str, design: dict) -> dict:
         agent = self._authed(token)
         with self._lock:
-            room = self._rooms.get(room_id)
-            if room is None:
-                raise errors.NotFound(f"room '{room_id}' not found")
-            if room.owner_agent_id != agent.agent_id:
+            life = self._life.get(life_id)
+            if life is None:
+                raise errors.NotFound(f"life '{life_id}' not found")
+            if life.owner_agent_id != agent.agent_id:
                 raise errors.Forbidden("방 주인만 디자인을 바꿀 수 있음")
-            objects: list[RoomObject] = []
+            objects: list[LifeObject] = []
             occupied: set = set()
             for o in design.get("objects", []):
                 cell = (int(o["cell"][0]), int(o["cell"][1]))
@@ -284,7 +284,7 @@ class RoomService:
                 asset_id = str(o.get("asset_id", o.get("kind", "unknown"))).strip()
                 if not asset_id or len(asset_id) > 80 or len(category) > 40:
                     raise errors.InvalidRequest("잘못된 가구 식별자")
-                obj = RoomObject(
+                obj = LifeObject(
                     asset_id=asset_id,
                     category=category,
                     cell=cell,
@@ -319,37 +319,37 @@ class RoomService:
                     raise CellTaken("가구끼리 겹침")
                 # 에이전트가 서 있는 셀에는 가구를 못 놓는다
                 for a in self._agents.values():
-                    if a.at_room == room_id and a.cell in cells:
+                    if a.at_life == life_id and a.cell in cells:
                         raise CellTaken(f"셀 ({a.cell[0]},{a.cell[1]})에 에이전트가 있음")
                 occupied.update(cells)
                 objects.append(obj)
-            room.design = RoomDesign(
-                wallpaper=str(design.get("wallpaper", room.design.wallpaper)),
-                floor=str(design.get("floor", room.design.floor)),
+            life.design = LifeDesign(
+                wallpaper=str(design.get("wallpaper", life.design.wallpaper)),
+                floor=str(design.get("floor", life.design.floor)),
                 objects=objects,
             )
             if self._store:
-                self._store.save_design(room)
-        return self.room_state(room_id)
+                self._store.save_design(life)
+        return self.life_state(life_id)
 
     # --- 내부 (호출자가 락 보유) ---
 
-    def _occupied_locked(self, room_id: str, cell: Cell, except_agent: str) -> bool:
+    def _occupied_locked(self, life_id: str, cell: Cell, except_agent: str) -> bool:
         for a in self._agents.values():
-            if a.agent_id != except_agent and a.at_room == room_id and a.cell == cell:
+            if a.agent_id != except_agent and a.at_life == life_id and a.cell == cell:
                 return True
-        room = self._rooms.get(room_id)
-        if room and any(o.category != "window" and cell in o.occupied_cells() for o in room.design.objects):
+        life = self._life.get(life_id)
+        if life and any(o.category != "window" and cell in o.occupied_cells() for o in life.design.objects):
             return True
         return False
 
-    def _free_cell_locked(self, room_id: str) -> Cell:
+    def _free_cell_locked(self, life_id: str) -> Cell:
         """자율 입장용 빈 셀 배정 — 스폰 지점(SPAWN_X, SPAWN_Y)에서 가까운 순으로 첫 빈 셀."""
         cells = sorted(
             ((x, y) for y in range(FLOOR_Y, GRID_H) for x in range(GRID_W)),
             key=lambda c: max(abs(c[0] - SPAWN_X), abs(c[1] - SPAWN_Y)),
         )
         for cell in cells:
-            if not self._occupied_locked(room_id, cell, except_agent=""):
+            if not self._occupied_locked(life_id, cell, except_agent=""):
                 return cell
         raise CellTaken("방이 가득 참")

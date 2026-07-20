@@ -58,7 +58,7 @@
   getMascotSeed().then((s) => (spec = s));
 </script>
 
-<div class="room">
+<div class="life">
   <div class="window"></div>
   <div class="plant">🪴</div>
   <div class="bubble">{line}</div>
@@ -74,7 +74,7 @@
 </div>
 
 <style>
-  .room {
+  .life {
     position: relative; height: 190px; overflow: hidden;
     background: linear-gradient(180deg, var(--pastel-lav) 0%, #e9e3f8 68%, transparent 68%);
     border-radius: var(--radius-m); box-shadow: var(--shadow-soft);

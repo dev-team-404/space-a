@@ -1,7 +1,7 @@
 // 부품 카탈로그 — 방 배경 프리셋 5종 + 그 위에 얹는 책상 9종.
 // 방(벽·바닥·책장·칠판)은 통짜 배경 이미지가 그리므로, 남은 선택지는 배경과 책상뿐이다.
 
-import type { CharacterId, DeskChoice, DeskId, RoomPresetId, VariantOption } from './types'
+import type { CharacterId, DeskChoice, DeskId, LifePresetId, VariantOption } from './types'
 
 /** 내 캐릭터 15종 — char-cN.png. 방 안 에이전트 자리를 이 스프라이트로 그린다. */
 export const CHARACTER_IDS: CharacterId[] = [
@@ -22,19 +22,19 @@ export function characterForSeed(seed: string): CharacterId {
 
 
 /** 방 배경 프리셋 5종 — 통짜 이미지(벽·바닥·책장·칠판 포함). 이 위에 책상만 얹는다. */
-export const ROOM_PRESET_IDS: RoomPresetId[] = ['r1', 'r2', 'r3', 'r4', 'r5']
+export const LIFE_PRESET_IDS: LifePresetId[] = ['r1', 'r2', 'r3', 'r4', 'r5']
 
-export function resolveRoomId(v: string | undefined): RoomPresetId {
-  return v && ROOM_PRESET_IDS.includes(v as RoomPresetId) ? (v as RoomPresetId) : 'r1'
+export function resolveLifeId(v: string | undefined): LifePresetId {
+  return v && LIFE_PRESET_IDS.includes(v as LifePresetId) ? (v as LifePresetId) : 'r1'
 }
 
-const roomThumb = (id: RoomPresetId) => `/assets/kit/room-preset-${id.slice(1)}.png`
-export const ROOM_OPTIONS: VariantOption<RoomPresetId>[] = [
-  { id: 'r1', label: '벽돌 · 다크우드', swatch: '#8a4438', thumb: roomThumb('r1') },
-  { id: 'r2', label: '세이지 · 라이트우드', swatch: '#9aa889', thumb: roomThumb('r2') },
-  { id: 'r3', label: '네이비 · 나이트', swatch: '#2e3a4e', thumb: roomThumb('r3') },
-  { id: 'r4', label: '크림 · 데이라이트', swatch: '#d8c9a8', thumb: roomThumb('r4') },
-  { id: 'r5', label: '그레이 · 이브닝', swatch: '#8a7d6e', thumb: roomThumb('r5') },
+const lifeThumb = (id: LifePresetId) => `/assets/kit/life-preset-${id.slice(1)}.png`
+export const LIFE_OPTIONS: VariantOption<LifePresetId>[] = [
+  { id: 'r1', label: '벽돌 · 다크우드', swatch: '#8a4438', thumb: lifeThumb('r1') },
+  { id: 'r2', label: '세이지 · 라이트우드', swatch: '#9aa889', thumb: lifeThumb('r2') },
+  { id: 'r3', label: '네이비 · 나이트', swatch: '#2e3a4e', thumb: lifeThumb('r3') },
+  { id: 'r4', label: '크림 · 데이라이트', swatch: '#d8c9a8', thumb: lifeThumb('r4') },
+  { id: 'r5', label: '그레이 · 이브닝', swatch: '#8a7d6e', thumb: lifeThumb('r5') },
 ]
 
 export type DeskPalette = { top: number; side: number; leg: number }

@@ -1,6 +1,6 @@
-# 방 방문(Room Visit) 설계
+# 방 방문(Life Visit) 설계
 
-> 담당: 허준녕 · 개념: [level-2-room-visit.md](../highlevel/level-2-room-visit.md)
+> 담당: 허준녕 · 개념: [level-2-life-visit.md](../highlevel/level-2-life-visit.md)
 > 서버(hub)의 방·위치 API와 클라이언트(미니홈피·마스코트)의 뷰 규칙.
 
 ## 1. 데이터 소유 경계
@@ -30,26 +30,26 @@
 - **마스코트 입력 재배치**: 더블클릭 = 미니홈피 열기 · 우클릭 = 방 이동 팝오버
   ("내 방으로 돌아가기" + 방 목록 버튼, `max-height` + 스크롤) · 드래그 = 창 이동(기존 유지)
 
-## 4. 서버 API (A-Hub Life / room-server)
+## 4. 서버 API (A-Hub Life / life-server)
 
 **A-Hub Work와 별개의 서버 프로세스** — `a-hub/life/` 폴더의 독립 FastAPI 앱
 (기본 호스트 포트 **8001**). 같은 `a-hub/` 아래에 있지만 Work(Space/Page 협업 도메인)와
-Python 프로젝트·배포·스토어·생애주기를 공유하지 않는다. 신원은 rooms 전용 토큰(Bearer).
+Python 프로젝트·배포·스토어·생애주기를 공유하지 않는다. 신원은 life 전용 토큰(Bearer).
 
 | Method | Path | 동작 |
 |---|---|---|
-| POST | `/rooms/register` | `{name}` → `{agent_id, token, room_id}`. 유저 등록 + 개인 방 생성. 에이전트는 자기 방에 자동 입장 |
-| GET | `/rooms` | 방 목록 `[{room_id, owner_name, occupants}]` — 이동 메뉴의 원천 |
-| GET | `/rooms/{id}` | 방 상태: `{design, occupants: [{agent_id, name, cell, is_owner}]}` — 폴링 대상 |
-| POST | `/rooms/{id}/enter` | `{cell?}` 입장. cell 생략 = 서버가 빈 셀 배정(자율 입장). 이전 방 자동 퇴장 |
-| POST | `/rooms/{id}/move` | `{cell}` 방 안 이동. 그 방에 있어야 함 |
-| PUT | `/rooms/{id}/design` | 방 주인만. `{wallpaper, floor, objects: [{asset_id, category, cell, size, rotation}]}` |
-| GET | `/rooms/me` | 내 에이전트의 현재 위치 `{room_id, cell}` — 뷰 규칙의 입력 |
+| POST | `/life/register` | `{name}` → `{agent_id, token, life_id}`. 유저 등록 + 개인 방 생성. 에이전트는 자기 방에 자동 입장 |
+| GET | `/life` | 방 목록 `[{life_id, owner_name, occupants}]` — 이동 메뉴의 원천 |
+| GET | `/life/{id}` | 방 상태: `{design, occupants: [{agent_id, name, cell, is_owner}]}` — 폴링 대상 |
+| POST | `/life/{id}/enter` | `{cell?}` 입장. cell 생략 = 서버가 빈 셀 배정(자율 입장). 이전 방 자동 퇴장 |
+| POST | `/life/{id}/move` | `{cell}` 방 안 이동. 그 방에 있어야 함 |
+| PUT | `/life/{id}/design` | 방 주인만. `{wallpaper, floor, objects: [{asset_id, category, cell, size, rotation}]}` |
+| GET | `/life/me` | 내 에이전트의 현재 위치 `{life_id, cell}` — 뷰 규칙의 입력 |
 
 ### 원자성 (겹침 금지)
 
 - enter/move는 서버가 **"해당 셀이 비었을 때만 점유"를 원자 연산**으로 수행. 실패 = `409 cell_taken`
-- 인메모리 구현은 전역 락, DB 구현은 `(room_id, x, y)` 유니크 제약으로 동일 의미
+- 인메모리 구현은 전역 락, DB 구현은 `(life_id, x, y)` 유니크 제약으로 동일 의미
 - 가구 배치(design PUT)는 회전된 footprint 전체를 검사하며, 에이전트·다른 가구와 충돌하면 409
 
 ### 에러
@@ -61,15 +61,15 @@ Python 프로젝트·배포·스토어·생애주기를 공유하지 않는다. 
 
 | 지점 | 내용 |
 |---|---|
-| 설정 | 설정 창에 "Space A 서버" 섹션: room-server URL(예: `http://localhost:8001`) + 유저 이름. 저장 시 register 호출, 토큰은 로컬 설정에 보관 |
-| Rust 커맨드 | `room_me` / `rooms_list` / `room_state` / `room_enter` / `room_move` — hub HTTP 호출 래퍼 (네트워크는 락 밖 규율 동일) |
-| 홈 탭 | 기존 장식용 MiniRoom을 격자 방 렌더로 교체. 점유 맵 기반 커서, 좌클릭 이동, 에이전트는 이름 시드 로봇으로 렌더 |
+| 설정 | 설정 창에 "Space A 서버" 섹션: life-server URL(예: `http://localhost:8001`) + 유저 이름. 저장 시 register 호출, 토큰은 로컬 설정에 보관 |
+| Rust 커맨드 | `life_me` / `life_list` / `life_state` / `life_enter` / `life_move` — hub HTTP 호출 래퍼 (네트워크는 락 밖 규율 동일) |
+| 홈 탭 | 기존 장식용 MiniLife을 격자 방 렌더로 교체. 점유 맵 기반 커서, 좌클릭 이동, 에이전트는 이름 시드 로봇으로 렌더 |
 | 마스코트 | 우클릭 → 팝오버(내 방으로 + 방 목록). 클릭 = 미니홈피(기존 동작 유지, 더블클릭 분리는 후속) |
 | 테스트용 | `AGENT_MENTOR_DATA_DIR` env로 데이터 디렉터리 오버라이드 — 한 PC에서 두 인스턴스 실행 가능 |
 
 ## 6. 검증 시나리오 (한 PC, 실제 배치 흉내)
 
-1. room-server를 기동(`a-hub/life/`에서 `docker compose up` — 호스트 포트 8001), 클라이언트는 `http://<호스트IP>:8001`으로 접속
+1. life-server를 기동(`a-hub/life/`에서 `docker compose up` — 호스트 포트 8001), 클라이언트는 `http://<호스트IP>:8001`으로 접속
 2. 클라이언트 A(유저 "A")·B(유저 "B")를 데이터 디렉터리 분리로 동시 실행
 3. A가 우클릭 메뉴에서 B의 방으로 이동 → B의 홈 탭에 A 에이전트가 나타남
 4. A의 홈 탭은 B의 방(디자인+입주자)을 보여줌 → "에이전트 시점" 뷰 규칙 확인
@@ -78,8 +78,8 @@ Python 프로젝트·배포·스토어·생애주기를 공유하지 않는다. 
 ## 7. 미결·후속
 
 - 위치 갱신 폴링 → SSE/WebSocket 전환 시점
-- ~~방 디자인 영속화~~ → 해결: `ROOM_SERVER_DB`(SQLite, 볼륨) write-through 영속화. 미설정 시 인메모리
-- rooms 신원과 기존 C4 에이전트 신원(spaces 토큰)의 통합
+- ~~방 디자인 영속화~~ → 해결: `LIFE_SERVER_DB`(SQLite, 볼륨) write-through 영속화. 미설정 시 인메모리
+- life 신원과 기존 C4 에이전트 신원(spaces 토큰)의 통합
 - 마스코트 더블클릭/싱글클릭 분리, 편집 모드(가구 배치 UI)
 - 강제소환·말풍선 등 방문 중 상호작용 (이슈 #11 아이디어)
 
@@ -91,7 +91,7 @@ Python 프로젝트·배포·스토어·생애주기를 공유하지 않는다. 
 |---|---|---|
 | 테마·가구 픽셀 리소스 | 클라이언트 | 앱 버전과 함께 캐시·배포하고 서버의 정적 파일 트래픽을 없앤다 |
 | 카탈로그 메타데이터(`asset_id`, 카테고리, 기본 footprint) | 클라이언트 | 리소스와 동일 버전으로 관리한다 |
-| 선택 테마·배치·회전·실제 점유 셀 | room-server | 모든 방문자가 같은 방을 보고 이동/배치 충돌을 원자 검증한다 |
+| 선택 테마·배치·회전·실제 점유 셀 | life-server | 모든 방문자가 같은 방을 보고 이동/배치 충돌을 원자 검증한다 |
 
 서버는 리소스 파일을 저장하지 않는다. 대신 안정적인 `asset_id`와 검증에 필요한
 `category`, `origin`, `footprint`, `rotation`을 저장한다. 클라이언트가 모르는 미래
@@ -99,7 +99,7 @@ Python 프로젝트·배포·스토어·생애주기를 공유하지 않는다. 
 
 ### 공간과 배치 규칙
 
-- 방은 정면 직사각형이 아니라 싸이월드 미니룸과 같은 **2.5D 아이소메트릭 공간**이다.
+- 방은 정면 직사각형이 아니라 싸이월드 미니라이프과 같은 **2.5D 아이소메트릭 공간**이다.
 - 논리 바닥은 `20×20` 정사각 격자이며 화면에서는 확대된 마름모 타일로 투영한다. 화면에 보이는 모든 바닥 셀은 이동·가구 배치가 가능하다.
   `screenX=(x-y)×tileW/2`, `screenY=(x+y)×tileH/2`를 공통 투영식으로 사용한다.
 - 바닥의 뒤쪽 두 변에서 북쪽 벽과 측면 벽이 수직으로 올라온다. 벽지는 두 벽면에

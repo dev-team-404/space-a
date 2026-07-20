@@ -10,8 +10,8 @@
   import SaveTop3 from './home/SaveTop3.svelte';
   import NoticeLog from './home/NoticeLog.svelte';
   import TipCard from './home/TipCard.svelte';
-  import MiniRoom from './MiniRoom.svelte';
-  import RoomView from './RoomView.svelte';
+  import MiniLife from './MiniLife.svelte';
+  import LifeView from './LifeView.svelte';
   import { hubSettingsGet } from '../api';
 
   let { summary, visiting = false, onGotoCoach, onGotoNotice }: {
@@ -29,7 +29,7 @@
   let notices = $state<Notice[]>([]);
   let tips = $state<ContentItem[]>([]);
   const topAdvice = $derived(findings.length > 0 ? findings[0].suggested_action : null);
-  // 방 서버 연결 시 격자 방(RoomView), 미연결 시 기존 장식 방(MiniRoom) — 원기능 보존
+  // 방 서버 연결 시 격자 방(LifeView), 미연결 시 기존 장식 방(MiniLife) — 원기능 보존
   // 설정 창에서 연결하는 순간 바뀌도록 settings:changed와 창 포커스에 반응한다
   let hubConnected = $state(false);
   const interiorPreview = import.meta.env.DEV && new URLSearchParams(location.search).has('interiorPreview');
@@ -77,9 +77,9 @@
 
 <section class="home">
   {#if hubConnected || interiorPreview}
-    <RoomView />
+    <LifeView />
   {:else}
-    <MiniRoom advice={topAdvice} />
+    <MiniLife advice={topAdvice} />
   {/if}
 
   <!-- 아래는 전부 내 로컬 데이터 — 남의 방을 보는 동안엔 숨긴다 (남의 것으로 오독 방지) -->

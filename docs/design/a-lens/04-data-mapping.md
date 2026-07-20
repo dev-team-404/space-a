@@ -32,7 +32,7 @@ C2 계약과 어긋나면 계약 파일이 정답이다.
 | `members_online` | 집계 | 엘리베이터 온라인 표시 |
 | `highlight` | **서사 (서버 제공)** | 층 hover 카드의 오늘 하이라이트 1줄 |
 | `token_budget`, `token_used` | 집계 | 매니저 코너 토큰 게이지 |
-| `status` | 공간 | 매니저 코너 Room 상태 (정상/혼잡) |
+| `status` | 공간 | 매니저 코너 Life 상태 (정상/혼잡) |
 | `viewer_tier` | 권한 | 멤버 뱃지·입장 모드 결정 (멤버십은 이 필드에서 유도) |
 
 ### `GET /spaces/{space_id}` → 스페이스 씬·피드·모달
@@ -136,7 +136,7 @@ Pillar 3 설계를 미러링"이라 명시), 현재는 a-lens 백엔드(pipeline
 | G5 | 책상 좌표(`deskSlot`), 층 히트존, 씬 스케일 | 클라이언트 상수 | 레이아웃은 클라이언트 소유 — 계약에 올리지 않는 게 맞음 |
 | G6 | — | — | 픽스처 내부 불일치: `stats.json` totals(지식 128)와 `spaces.json` stats 합계(지식 75)가 안 맞음. 골든 데이터 정리 시 msalt와 함께 보정 |
 | G7 | `GET /activity`의 tier 트리밍 | a-lens 백엔드 org-safe 필터 (임시) | 계약에 /activity의 tier 규칙이 없었음. **정책은 결정됨(2026-07-14, 권한 모델 소유자=시각화)**: lobby/guest 응답에는 org-safe 이벤트(`reused`·`knowledge_created`·`skill_proposed`·`condensed`)만, `issue_opened`와 space 전용 문서 관련 summary는 제외. → 계약 반영·서버 집행을 계약 소유자에게 **전달** |
-| G8 | 프레즌스성 필드의 원천 — `agents[].status`(working/idle) · `last_active_at` · `members_online` · `visits` | C2 계약이 로비·방 상세 응답에 포함 | **확정 (2026-07-17)**: 이 값들의 원천은 a-hub-**life**(room server — a-mate 하트비트·방 방문)이므로 **a-lens가 work(C2)와 life를 직접 조회해 조인**한다. C2의 프레즌스성 필드는 사용하지 않음 — 계약 정리는 소유자 몫(#40 통보). 프레즌스는 org-safe(상태 종류만)라 tier 트리밍 불필요. life 하트비트·조회 API 요청: #39 (담당 허준녕) |
+| G8 | 프레즌스성 필드의 원천 — `agents[].status`(working/idle) · `last_active_at` · `members_online` · `visits` | C2 계약이 로비·방 상세 응답에 포함 | **확정 (2026-07-17)**: 이 값들의 원천은 a-hub-**life**(life server — a-mate 하트비트·방 방문)이므로 **a-lens가 work(C2)와 life를 직접 조회해 조인**한다. C2의 프레즌스성 필드는 사용하지 않음 — 계약 정리는 소유자 몫(#40 통보). 프레즌스는 org-safe(상태 종류만)라 tier 트리밍 불필요. life 하트비트·조회 API 요청: #39 (담당 허준녕) |
 
 ## 데이터 흐름
 

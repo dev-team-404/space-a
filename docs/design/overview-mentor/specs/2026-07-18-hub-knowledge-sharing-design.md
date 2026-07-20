@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS hub_share_state (
 );
 ```
 
-settings에 `knowledge_hub_token`·`knowledge_hub_agent_id` 보존 (기존 방 방문 기능의 `hub_token`(room-server용)과 키 충돌 방지)(자동 register 결과).
+settings에 `knowledge_hub_token`·`knowledge_hub_agent_id` 보존 (기존 방 방문 기능의 `hub_token`(life-server용)과 키 충돌 방지)(자동 register 결과).
 
 ## 8. 코드 배치
 

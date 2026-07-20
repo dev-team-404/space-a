@@ -50,7 +50,7 @@
   }
 
   // --- Space A 서버 (방 방문) ---
-  interface HubSettings { url: string; user: string; api_key: string; connected: boolean; room_id: string }
+  interface HubSettings { url: string; user: string; api_key: string; connected: boolean; life_id: string }
   let hub = $state<HubSettings | null>(null);
   let hubUrl = $state('');
   let hubUser = $state('');
@@ -71,7 +71,7 @@
     hubStatus = { kind: 'busy', text: '연결 중…' };
     try {
       hub = await invoke<HubSettings>('hub_connect', { url: hubUrl, user: hubUser, apiKey: hubApiKey });
-      hubStatus = { kind: 'ok', text: `연결 완료 — 개인 방이 만들어졌어요 (${hub.room_id})` };
+      hubStatus = { kind: 'ok', text: `연결 완료 — 개인 방이 만들어졌어요 (${hub.life_id})` };
     } catch (e) {
       hubStatus = { kind: 'err', text: `${e}` };
     }
@@ -116,10 +116,10 @@
   <hr />
 
   <h1>Space A 서버</h1>
-  <p class="hint">방 방문·에이전트 위치를 관장하는 room-server에 연결합니다 (hub와 별개 프로세스).</p>
+  <p class="hint">방 방문·에이전트 위치를 관장하는 life-server에 연결합니다 (hub와 별개 프로세스).</p>
   {#if hub}
     <p class="source" data-kind={hub.connected ? 'store' : 'none'}>
-      {hub.connected ? `연결됨 — 내 방: ${hub.room_id}` : '미연결'}
+      {hub.connected ? `연결됨 — 내 방: ${hub.life_id}` : '미연결'}
     </p>
   {/if}
 

@@ -5,9 +5,9 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   import {
     emitOccasionToday, getChatterPool, getMascotSeed, getSettings, getSummary, getTodayOccasions,
     hubSettingsGet, listFindings, mascotSetExpanded, openChatTab, openSettingsWindow,
-    roomGoto, roomView, roomsList, setSetting,
+    lifeGoto, lifeView, lifeList, setSetting,
     onDiaryReady, onNewFindings, onScanDone, onSettingsChanged,
-    type RoomListEntry, getSprite } from './lib/api';
+    type LifeListEntry, getSprite } from './lib/api';
   import { drawRobot, type RobotSpec } from './lib/robot/render';
   import { frameAt, resolveState, type BubbleKind } from './lib/robot/anim';
   import { adviceBubble, diaryBubble, findingBubble, occasionBubble, pickChatter, type Bubble } from './lib/robot/bubble';
@@ -122,49 +122,49 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
     return () => { clearTimeout(t); p.then((u) => u()); };
   });
 
-  // 방 이동 팝오버 (docs/design/room-visit.md §3): 우클릭 = 메뉴, 클릭 = 홈피(기존)
-  let roomMenu = $state<RoomListEntry[] | null>(null); // null = 닫힘
-  let myRoomId = $state('');
-  let curRoomId = $state(''); // 현재 있는 방 — 내 방이면 "돌아가기" 버튼을 숨긴다
+  // 방 이동 팝오버 (docs/design/life-visit.md §3): 우클릭 = 메뉴, 클릭 = 홈피(기존)
+  let lifeMenu = $state<LifeListEntry[] | null>(null); // null = 닫힘
+  let myLifeId = $state('');
+  let curLifeId = $state(''); // 현재 있는 방 — 내 방이면 "돌아가기" 버튼을 숨긴다
   let hubOn = $state(false);
-  async function toggleRoomMenu() {
-    if (roomMenu !== null) { roomMenu = null; await expand(false); return; }
+  async function toggleLifeMenu() {
+    if (lifeMenu !== null) { lifeMenu = null; await expand(false); return; }
     const wasCollapsed = bubble === null;
     try {
       const [h, list, view] = await Promise.all([
         hubSettingsGet(),
-        roomsList().catch(() => ({ rooms: [] })),
-        roomView().catch(() => null),
+        lifeList().catch(() => ({ life: [] })),
+        lifeView().catch(() => null),
       ]);
       hubOn = h.connected;
-      myRoomId = h.room_id;
+      myLifeId = h.life_id;
       // 위치 조회 실패 시 내 방으로 간주 — 돌아가기 버튼을 띄워봐야 이동도 실패한다
-      curRoomId = view?.me.room_id ?? h.room_id;
-      roomMenu = list.rooms;
+      curLifeId = view?.me.life_id ?? h.life_id;
+      lifeMenu = list.life;
     } catch {
       hubOn = false;
-      roomMenu = [];
+      lifeMenu = [];
     }
     bubble = null; // 말풍선과 동시 표시 안 함
     if (wasCollapsed) await expand(true);
   }
-  async function gotoRoom(roomId: string) {
-    try { await roomGoto(roomId); } catch { /* cell_taken 등 — 다음 시도 */ }
-    await closeRoomMenu();
+  async function gotoLife(lifeId: string) {
+    try { await lifeGoto(lifeId); } catch { /* cell_taken 등 — 다음 시도 */ }
+    await closeLifeMenu();
   }
-  async function closeRoomMenu() {
-    if (roomMenu === null) return;
-    roomMenu = null;
+  async function closeLifeMenu() {
+    if (lifeMenu === null) return;
+    lifeMenu = null;
     await expand(false);
   }
 
   // 메뉴가 열려 있는 동안: 인원수 실시간 갱신(2s) + 포커스 잃으면 자동 닫힘
   $effect(() => {
-    if (roomMenu === null) return;
+    if (lifeMenu === null) return;
     const t = setInterval(async () => {
-      try { roomMenu = (await roomsList()).rooms; } catch { /* 서버 순단 — 다음 틱 */ }
+      try { lifeMenu = (await lifeList()).life; } catch { /* 서버 순단 — 다음 틱 */ }
     }, 2000);
-    const onBlur = () => closeRoomMenu();
+    const onBlur = () => closeLifeMenu();
     window.addEventListener('blur', onBlur);
     return () => { clearInterval(t); window.removeEventListener('blur', onBlur); };
   });
@@ -255,22 +255,22 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   loadSettings();
 </script>
 
-<div class="stage" class:expanded={bubble !== null || roomMenu !== null}>
-  {#if roomMenu !== null}
+<div class="stage" class:expanded={bubble !== null || lifeMenu !== null}>
+  {#if lifeMenu !== null}
     <div class="menu">
       <div class="menu-title">방 이동</div>
       {#if !hubOn}
-        <button class="item" onclick={() => { openSettingsWindow(); closeRoomMenu(); }}>
+        <button class="item" onclick={() => { openSettingsWindow(); closeLifeMenu(); }}>
           서버 미연결 — 설정 열기
         </button>
       {:else}
-        {#if curRoomId !== myRoomId}
-          <button class="item" onclick={() => gotoRoom(myRoomId)}>🏠 내 방으로 돌아가기</button>
+        {#if curLifeId !== myLifeId}
+          <button class="item" onclick={() => gotoLife(myLifeId)}>🏠 내 방으로 돌아가기</button>
         {/if}
         <div class="list">
           <!-- 지금 있는 방은 이동 대상이 아님 — 내 방은 위의 "돌아가기"가 담당 -->
-          {#each roomMenu.filter((r) => r.room_id !== myRoomId && r.room_id !== curRoomId) as r (r.room_id)}
-            <button class="item" onclick={() => gotoRoom(r.room_id)}>
+          {#each lifeMenu.filter((r) => r.life_id !== myLifeId && r.life_id !== curLifeId) as r (r.life_id)}
+            <button class="item" onclick={() => gotoLife(r.life_id)}>
               {r.owner_name}의 방 <span class="n">{r.occupants}</span>
             </button>
           {/each}
@@ -289,7 +289,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}
     onpointerup={onPointerUp}
-    oncontextmenu={(e) => { e.preventDefault(); toggleRoomMenu(); }}
+    oncontextmenu={(e) => { e.preventDefault(); toggleLifeMenu(); }}
   >
     {#if sprite}
       <img class="spriteimg" src={'data:image/png;base64,' + sprite} alt="마스코트" draggable="false" />

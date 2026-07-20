@@ -1,5 +1,5 @@
 [project]
-name = "space-a-room-server"
+name = "space-a-life-server"
 version = "0.1.0"
 description = "SPACE-A A-Hub Life 서버 — 개인 방·에이전트 위치·방 디자인 (a-hub/work와 별개 프로세스)"
 requires-python = ">=3.12"
