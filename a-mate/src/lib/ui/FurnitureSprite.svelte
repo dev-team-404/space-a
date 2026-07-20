@@ -8,7 +8,7 @@
 </script>
 
 <span class="sprite" class:life class:mirrored style={`--scale-y:${projection.scaleY};--shear-y:${projection.shearY}`}>
-  {#if src}<img {src} alt={label} draggable="false" />{/if}
+  {#if src}<img {src} alt={label} draggable="false" decoding="async" />{/if}
 </span>
 
 <style>
