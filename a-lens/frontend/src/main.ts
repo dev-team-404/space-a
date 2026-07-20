@@ -747,10 +747,11 @@ async function renderLife(spaceId: string) {
           renderHub(data)
         }
       },
-      // 책장 클릭 → Hub '지식 재사용' 탭 열기 (접혀 있으면 펼침).
+      // 책장 클릭 → Hub '문서함' 탭 열기 (접혀 있으면 펼침) — 책장은 지식 문서가 쌓이는
+      // 곳이라는 은유이므로, 재사용 이벤트 피드보다 전체 문서 목록을 보여주는 쪽이 맞다.
       onShelfTap: () => {
         if (hubCollapsed) toggleHub(false)
-        hubTab = 'reuse'
+        hubTab = 'pages'
         renderHub(data)
       },
     },
