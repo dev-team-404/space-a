@@ -174,6 +174,14 @@ fn migrate(conn: &Connection) -> Result<()> {
              PRAGMA user_version = 2;",
         )?;
     }
+    // v3.3 정리 — R23 특이 토큰 가드 도입(에이전트 자율 루프 노이즈, 2026-07-20 사용자 판정).
+    // 가드 이전에 쌓인 R23 finding을 전량 삭제해 새 기준으로 재산출. 이벤트는 그대로라 재수집 불필요.
+    if user_version < 3 {
+        conn.execute_batch(
+            "DELETE FROM findings WHERE rule_id='R23';
+             PRAGMA user_version = 3;",
+        )?;
+    }
     Ok(())
 }
 
@@ -2403,13 +2411,57 @@ mod tests {
         let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v2 분기 발화
 
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(uv, 2);
+        assert!(uv >= 2, "v2 분기를 지나야 함 (후속 정리 분기로 더 올라갈 수 있음)");
         let n: i64 = store.conn.query_row("SELECT COUNT(*) FROM ingest_state", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0, "prompt_events 백필을 위해 전체 재수집을 유도해야 함");
         let has_pe = store.conn
             .prepare("SELECT 1 FROM pragma_table_info('prompt_events') WHERE name='norm60'").unwrap()
             .exists([]).unwrap();
         assert!(has_pe, "prompt_events 테이블이 생성돼야 함");
+    }
+
+    #[test]
+    fn migrate_v3_purges_r23_findings_without_recollect() {
+        use crate::finding::{Finding, Severity};
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("mv3.db");
+        // v2 시대 DB — R23 특이 토큰 가드 도입 전에 쌓인 일반 루프 finding이 남아 있는 상태
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(SCHEMA).unwrap();
+            conn.execute_batch(
+                "PRAGMA user_version = 2;
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 123);",
+            ).unwrap();
+            let store = SqliteStore { conn };
+            store.upsert_finding(&Finding {
+                rule_id: "R23".into(), severity: Severity::Suggest,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "pattern".into(), scope_ref: "pattern:x".into(),
+                evidence: serde_json::json!({"sequence": ["file-ops", "bash:npx", "bash:git"], "session_count": 3}),
+                est_tokens_saved: 0, prescription: None, dedup_key: "R23|Windows|x".into(),
+            }, "2026-07-20T00:00:00Z").unwrap();
+            store.upsert_finding(&Finding {
+                rule_id: "R6".into(), severity: Severity::Suggest,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "pattern".into(), scope_ref: "pattern:ok".into(),
+                evidence: serde_json::json!({"repeated_prompt": "매일 아침 판매 리포트 뽑아줘"}),
+                est_tokens_saved: 0, prescription: None, dedup_key: "R6|Windows|ok".into(),
+            }, "2026-07-20T00:00:00Z").unwrap();
+        }
+
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v3 분기 발화
+
+        let keys: Vec<String> = {
+            let mut stmt = store.conn.prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
+            stmt.query_map([], |r| r.get(0)).unwrap().collect::<std::result::Result<_, _>>().unwrap()
+        };
+        assert_eq!(keys, vec!["R6|Windows|ok".to_string()], "R23만 삭제돼 재산출을 기다려야 함");
+        // 이벤트 데이터는 그대로라 재수집은 유도하지 않는다
+        let n: i64 = store.conn.query_row("SELECT COUNT(*) FROM ingest_state", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1, "v3 정리는 재수집을 유도하면 안 됨");
+        let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(uv, 3);
     }
 
     #[test]

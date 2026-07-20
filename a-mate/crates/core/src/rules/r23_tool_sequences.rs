@@ -44,6 +44,26 @@ pub(crate) fn tokenize(
     }
 }
 
+/// 에이전트가 자율적으로 흔히 쓰는 일반 명령 — 이것만으로 이뤄진 시퀀스는
+/// 사용자가 지시한 워크플로가 아니라 에이전트의 기본 루프다(빌드·테스트·VCS·셸 유틸).
+const GENERIC_BASH: &[&str] = &[
+    "git", "npm", "npx", "pnpm", "yarn", "node", "python", "python3", "pip", "pip3",
+    "cargo", "rustc", "go", "pytest", "ls", "cd", "cat", "echo", "mkdir", "rm", "cp",
+    "mv", "grep", "rg", "find", "sed", "awk", "head", "tail", "touch", "chmod",
+    "curl", "wget", "powershell", "pwsh", "cmd", "dir", "type", "sh", "bash", "test",
+];
+
+/// 사용자 의도가 실린 특이 토큰인가 — skill/MCP/서브에이전트 호출, 또는 일반 명령이 아닌
+/// bash(예: gh, codex, 배포 스크립트). 특이 토큰이 하나도 없는 시퀀스는 코칭 가치가 없다.
+fn is_distinctive(token: &str) -> bool {
+    if token.starts_with("skill:") || token.starts_with("mcp:") || token == "agent" {
+        return true;
+    }
+    token
+        .strip_prefix("bash:")
+        .is_some_and(|cmd| !GENERIC_BASH.contains(&cmd))
+}
+
 /// 연속 동일 토큰 압축(RLE) — file-ops 연쇄가 시퀀스를 잠식하지 않게 한다.
 fn rle(tokens: Vec<String>) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
@@ -122,9 +142,10 @@ impl Rule for R23ToolSequences {
             let mut seen: BTreeSet<Vec<String>> = BTreeSet::new();
             for n in NGRAM_MIN..=NGRAM_MAX.min(tokens.len()) {
                 for w in tokens.windows(n) {
-                    // 무의미 패턴 가드 — 토큰 다양성 2 미만이거나 전부 file-ops면 제외
+                    // 무의미 패턴 가드 — 토큰 다양성 ≥2 그리고 특이 토큰(사용자 의도) ≥1.
+                    // 일반 명령·file-ops만으로 된 에이전트 자율 루프는 제외.
                     let distinct: BTreeSet<&String> = w.iter().collect();
-                    if distinct.len() < 2 || w.iter().all(|t| t == "file-ops") {
+                    if distinct.len() < 2 || !w.iter().any(|t| is_distinctive(t)) {
                         continue;
                     }
                     seen.insert(w.to_vec());
@@ -277,6 +298,22 @@ mod tests {
         seed_pr_workflow(&store, "s1", &now);
         seed_pr_workflow(&store, "s2", &now);
         assert!(R23ToolSequences::default().evaluate(&store).unwrap().is_empty());
+    }
+
+    #[test]
+    fn r23_ignores_generic_agent_loops() {
+        // 에이전트가 자율 반복하는 일반 루프(파일 수정 → 테스트 → 커밋)는 사용자 워크플로가 아니다
+        // — 실사용 노이즈 재현: file-ops → bash:npx → bash:git (2026-07-20 사용자 판정)
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+        for sess in ["g1", "g2", "g3"] {
+            seed_tool(&store, sess, 0, &now, "Read", Some("a.ts"));
+            seed_tool(&store, sess, 10, &now, "Edit", Some("a.ts"));
+            seed_tool(&store, sess, 20, &now, "Bash", Some("npx vitest run"));
+            seed_tool(&store, sess, 30, &now, "Bash", Some("git commit -m x"));
+        }
+        assert!(R23ToolSequences::default().evaluate(&store).unwrap().is_empty(),
+            "특이 토큰 없는 일반 루프는 침묵해야 함");
     }
 
     #[test]
