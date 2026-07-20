@@ -19,21 +19,17 @@ pub const DEFAULT_IMAGE_MODEL: &str = "google/gemini-2.5-flash-image";
 
 /// 비어있지 않은 첫 값을 고른다: 저장된 설정(설정창) → env 후보들 순.
 fn pick(stored: Option<&str>, env_keys: &[&str]) -> Option<String> {
-    if let Some(s) = stored {
-        let t = s.trim();
-        if !t.is_empty() {
-            return Some(t.to_string());
-        }
-    }
-    for k in env_keys {
-        if let Ok(v) = std::env::var(k) {
-            let t = v.trim().to_string();
-            if !t.is_empty() {
-                return Some(t);
-            }
-        }
-    }
-    None
+    stored
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .or_else(|| {
+            env_keys
+                .iter()
+                .filter_map(|k| std::env::var(k).ok())
+                .map(|v| v.trim().to_string())
+                .find(|v| !v.is_empty())
+        })
 }
 
 impl SpriteConfig {
@@ -209,29 +205,35 @@ pub fn make_background_transparent(png_bytes: &[u8]) -> Result<Vec<u8>> {
     for k in 0..3 {
         bg[k] /= 4;
     }
-    // 밝고(=배경 후보) 기준색과 가까운 픽셀만 배경으로 본다
+    // 밝고(=배경 후보) 기준색과 가까운 픽셀만 배경으로 본다.
+    /// 기준색과의 채널 합 거리 허용치 — JPEG/모델 노이즈로 배경이 순백이 아닐 수 있어 여유를 둔다.
+    const BG_COLOR_DISTANCE_THRESHOLD: i32 = 42;
+    /// 배경으로 인정할 최소 밝기 — 어두운 실루엣·머리색이 배경으로 오인되지 않게 한다.
+    const BG_MIN_BRIGHTNESS: i32 = 150;
     let is_bg = |px: &[u8], i: usize| -> bool {
         let p = at(px, i);
         let dist = (p[0] - bg[0]).abs() + (p[1] - bg[1]).abs() + (p[2] - bg[2]).abs();
-        dist <= 42 && p[0].min(p[1]).min(p[2]) > 150
+        dist <= BG_COLOR_DISTANCE_THRESHOLD && p[0].min(p[1]).min(p[2]) > BG_MIN_BRIGHTNESS
     };
 
     // 테두리에서 플러드 필
     let mut seen = vec![false; w * h];
     let mut q: VecDeque<usize> = VecDeque::new();
-    let mut seed = |i: usize, seen: &mut Vec<bool>, q: &mut VecDeque<usize>, px: &[u8]| {
-        if !seen[i] && is_bg(px, i) {
-            seen[i] = true;
-            q.push_back(i);
+    {
+        let mut seed = |i: usize| {
+            if !seen[i] && is_bg(&rgba, i) {
+                seen[i] = true;
+                q.push_back(i);
+            }
+        };
+        for x in 0..w {
+            seed(x);
+            seed((h - 1) * w + x);
         }
-    };
-    for x in 0..w {
-        seed(x, &mut seen, &mut q, &rgba);
-        seed((h - 1) * w + x, &mut seen, &mut q, &rgba);
-    }
-    for y in 0..h {
-        seed(y * w, &mut seen, &mut q, &rgba);
-        seed(y * w + (w - 1), &mut seen, &mut q, &rgba);
+        for y in 0..h {
+            seed(y * w);
+            seed(y * w + (w - 1));
+        }
     }
     while let Some(i) = q.pop_front() {
         let (x, y) = (i % w, i / w);
