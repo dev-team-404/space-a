@@ -8,6 +8,7 @@ pub mod r9_web_overuse;
 pub mod r10_automation_burst;
 pub mod r11_permission_friction;
 pub mod r12_unused_skills;
+pub mod r23_tool_sequences;
 pub mod session_stats;
 
 use crate::finding::Finding;

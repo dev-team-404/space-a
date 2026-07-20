@@ -175,7 +175,7 @@ fn cmd_skill_draft(store: &SqliteStore) -> Result<()> {
     use agent_mentor::rules::Rule;
     let findings = R6RepeatedPrompts::default().evaluate(store)?;
     if findings.is_empty() {
-        println!("R6 반복 지시 패턴 없음 (같은 첫 프롬프트로 ≥3 세션, 최근 14일). 초안 대상 없음.");
+        println!("R6 반복 지시 패턴 없음 (같은 지시가 ≥3 세션에서 반복, 최근 14일). 초안 대상 없음.");
         return Ok(());
     }
     let engine = OpenAiCompatEngine::from_env();

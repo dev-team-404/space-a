@@ -76,11 +76,20 @@
 
   const icon = (s: CoachFinding['severity']) => (s === 'warn' ? '⚠' : s === 'suggest' ? '💡' : 'ℹ');
 
-  // R6 → SKILL.md 초안: 반복 지시를 재사용 스킬로 전환 ("반복 작업은 Skill로 전환된다")
+  // R6/R23 → SKILL.md 초안: 반복 지시·도구 시퀀스를 재사용 스킬로 전환 ("반복 작업은 Skill로 전환된다")
   const repeatedPromptOf = (f: CoachFinding): string | null => {
     const ev = f.evidence as { repeated_prompt?: string } | null;
     return ev?.repeated_prompt ?? null;
   };
+  const sequenceOf = (f: CoachFinding): string[] | null => {
+    const ev = f.evidence as { sequence?: unknown } | null;
+    const seq = ev?.sequence;
+    if (!Array.isArray(seq)) return null;
+    const items = seq.filter((x): x is string => typeof x === 'string');
+    return items.length > 0 ? items : null;
+  };
+  const skillifiable = (f: CoachFinding): boolean =>
+    (f.rule_id === 'R6' && !!repeatedPromptOf(f)) || (f.rule_id === 'R23' && !!sequenceOf(f));
   let draft = $state<{
     key: string;
     loading: boolean;
@@ -92,10 +101,11 @@
 
   async function makeDraft(f: CoachFinding) {
     const rep = repeatedPromptOf(f);
-    if (!rep) return;
+    const seq = f.rule_id === 'R23' ? sequenceOf(f) : null;
+    if (!rep && !seq) return;
     draft = { key: f.dedup_key, loading: true, result: null, error: null, savedPath: null, copied: false };
     try {
-      const r = await generateSkillDraft(f.scope_host ?? '', rep);
+      const r = await generateSkillDraft(f.scope_host ?? '', rep ?? '', seq);
       draft = { key: f.dedup_key, loading: false, result: r, error: null, savedPath: null, copied: false };
     } catch (e) {
       draft = { key: f.dedup_key, loading: false, result: null, error: String(e), savedPath: null, copied: false };
@@ -167,7 +177,7 @@
               {copied === f.dedup_key ? '복사됨!' : `📋 ${f.fix_command}`}
             </button>
           {/if}
-          {#if f.rule_id === 'R6' && repeatedPromptOf(f)}
+          {#if skillifiable(f)}
             <button class="skillify" onclick={() => makeDraft(f)}>🧩 스킬 초안 만들기</button>
           {/if}
           {#if f.scope_kind === 'session'}

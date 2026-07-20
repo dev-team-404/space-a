@@ -296,9 +296,13 @@ export interface SkillDraft {
   session_count: number;
 }
 
-/** R6 반복 지시(host + 대표 프롬프트) → SKILL.md 초안 생성. */
-export async function generateSkillDraft(host: string, representative: string): Promise<SkillDraft> {
-  return invoke<SkillDraft>('generate_skill_draft', { host, representative });
+/** R6/R23 반복 패턴 → SKILL.md 초안 생성. R6는 대표 프롬프트, R23은 도구 시퀀스로 매칭. */
+export async function generateSkillDraft(
+  host: string,
+  representative: string,
+  sequence: string[] | null = null,
+): Promise<SkillDraft> {
+  return invoke<SkillDraft>('generate_skill_draft', { host, representative, sequence });
 }
 
 /** 초안을 ~/.claude/skills/<slug>/SKILL.md 로 저장. 저장된 절대 경로 반환. */

@@ -97,15 +97,33 @@ fn content_text(content: Option<&Value>) -> Option<String> {
     }
 }
 
-/// user 프롬프트 미리보기(첫 줄 ≤120자). content가 문자열이면 그대로, 블록 배열이면 text 연결.
-/// tool_result 라인이나 빈 내용은 None. command 마커로 시작하면 None.
+/// Claude Code가 user 라인에 주입하는 합성 마커 — 사용자 지시가 아니다.
+/// (슬래시 커맨드 에코, 로컬 커맨드 출력, IDE 연동 이벤트, 훅/백그라운드 알림)
+fn is_synthetic_marker(text: &str) -> bool {
+    let t = text.trim_start();
+    t.starts_with("<command")
+        || t.starts_with("<local-command")
+        || t.starts_with("<ide_")
+        || t.starts_with("<system-reminder")
+        || t.starts_with("<task-notification")
+}
+
+/// user 프롬프트 미리보기(첫 줄 ≤120자). content가 문자열이면 그대로, 블록 배열이면
+/// 합성 마커 블록(<ide_opened_file> 등)을 제외하고 text 연결.
+/// tool_result 라인이나 빈 내용은 None. 합성 마커로 시작하면 None.
 fn extract_prompt_preview(content: Option<&Value>) -> Option<String> {
-    let raw = content_text(content)?;
+    let raw = match content {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Array(arr)) => arr
+            .iter()
+            .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+            .filter(|t| !is_synthetic_marker(t))
+            .collect::<Vec<_>>()
+            .join(" "),
+        _ => return None,
+    };
     let first_line = raw.lines().next().unwrap_or("").trim();
-    if first_line.is_empty()
-        || first_line.starts_with("<command")
-        || first_line.starts_with("<local-command")
-    {
+    if first_line.is_empty() || is_synthetic_marker(first_line) {
         return None;
     }
     // 시크릿 포함 첫 줄은 미리보기로 저장하지 않는다 (본문 미저장 원칙 — 코칭 v3 §4.2; SecretFlag는 별도 방출됨)
@@ -449,6 +467,40 @@ mod tests {
     fn map_meta_user_line_is_not_prompt() {
         let line = r#"{"type":"user","sessionId":"s1","uuid":"u4","isMeta":true,
             "message":{"role":"user","content":"<command-name>/clear</command-name>"}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        assert!(!evs.iter().any(|e| matches!(e.kind, crate::model::EventKind::UserPrompt { .. })));
+    }
+
+    #[test]
+    fn map_user_prompt_skips_ide_synthetic_block() {
+        use crate::model::EventKind;
+        // VS Code 연동이 user content 배열 앞에 주입하는 <ide_opened_file> 블록은 지시가 아니다
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u6","timestamp":"2026-07-07T10:00:00Z",
+            "message":{"role":"user","content":[
+              {"type":"text","text":"<ide_opened_file>The user opened the file /home/j/Work/a.md in the IDE. This may or may not be related to the current task.</ide_opened_file>"},
+              {"type":"text","text":"리뷰 중에 잠깐 다음 단계 질문\n둘째 줄"}]}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        let up = evs.iter().find(|e| matches!(e.kind, EventKind::UserPrompt { .. })).unwrap();
+        match &up.kind {
+            EventKind::UserPrompt { preview } => assert_eq!(preview, "리뷰 중에 잠깐 다음 단계 질문"),
+            k => panic!("expected UserPrompt, got {k:?}"),
+        }
+    }
+
+    #[test]
+    fn map_user_line_with_only_synthetic_blocks_yields_no_prompt() {
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u7",
+            "message":{"role":"user","content":[
+              {"type":"text","text":"<ide_opened_file>The user opened the file /home/j/Work/a.md in the IDE.</ide_opened_file>"}]}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        assert!(!evs.iter().any(|e| matches!(e.kind, crate::model::EventKind::UserPrompt { .. })));
+    }
+
+    #[test]
+    fn map_user_string_content_with_synthetic_marker_yields_no_prompt() {
+        // 훅/알림 주입은 문자열 content로도 온다 (<system-reminder> 등)
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u8",
+            "message":{"role":"user","content":"<system-reminder>background task done</system-reminder>"}}"#;
         let evs = adapter().map(line, "s1.jsonl", 0);
         assert!(!evs.iter().any(|e| matches!(e.kind, crate::model::EventKind::UserPrompt { .. })));
     }
