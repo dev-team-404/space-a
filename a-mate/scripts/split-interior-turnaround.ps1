@@ -147,3 +147,27 @@ try {
 } finally {
     $sourceBitmap.Dispose()
 }
+
+# The source sheet uses magenta as its chroma background. The hard background
+# cut above intentionally keeps uncertain antialiased pixels opaque, so clean
+# only the transparent boundary after every split to prevent chroma fringe.
+$categoryRoot = Join-Path $rootPath $Category
+$cleanupScript = Join-Path $PSScriptRoot "clean-interior-chroma-fringe.ps1"
+$tempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
+$cleanupOutput = Join-Path $tempRoot ("space-a-chroma-clean-" + [Guid]::NewGuid().ToString("N"))
+try {
+    & $cleanupScript -SourceRoot $categoryRoot -OutputRoot $cleanupOutput | Write-Output
+    Get-ChildItem -LiteralPath $cleanupOutput -Recurse -File -Filter "*.png" | ForEach-Object {
+        $relative = $_.FullName.Substring($cleanupOutput.Length).TrimStart('\', '/')
+        Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $categoryRoot $relative) -Force
+    }
+} finally {
+    if (Test-Path -LiteralPath $cleanupOutput) {
+        $resolvedCleanupOutput = (Resolve-Path -LiteralPath $cleanupOutput).Path
+        $expectedPrefix = Join-Path $tempRoot "space-a-chroma-clean-"
+        if (-not $resolvedCleanupOutput.StartsWith($expectedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to remove unexpected cleanup directory: $resolvedCleanupOutput"
+        }
+        Remove-Item -LiteralPath $cleanupOutput -Recurse -Force
+    }
+}
