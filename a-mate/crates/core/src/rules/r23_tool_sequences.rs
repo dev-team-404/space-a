@@ -100,10 +100,15 @@ fn is_contiguous_subseq(a: &[String], b: &[String]) -> bool {
     a.len() <= b.len() && b.windows(a.len()).any(|w| w == a)
 }
 
-/// 두 시퀀스가 연속 2-토큰(bigram)을 공유하는가 — 같은 워크플로에서 파생된
-/// 포함·시프트 변형을 한 가족으로 판정한다 (호출부는 길이 ≥3만 넘긴다).
-fn shares_bigram(a: &[String], b: &[String]) -> bool {
-    a.windows(2).any(|wa| b.windows(2).any(|wb| wa == wb))
+/// 두 시퀀스가 **특이 토큰을 포함한** 연속 2-토큰(bigram)을 공유하는가 — 같은
+/// 워크플로에서 파생된 포함·시프트 변형을 한 가족으로 판정한다.
+/// 공통(비특이) 단계(file-ops → bash:cargo 등)만 겹치는 서로 다른 워크플로를
+/// 병합해 지우지 않도록 특이 토큰 조건을 건다 (PR#78 리뷰).
+fn shares_distinctive_bigram(a: &[String], b: &[String]) -> bool {
+    a.windows(2).any(|wa| {
+        (is_distinctive(&wa[0]) || is_distinctive(&wa[1]))
+            && b.windows(2).any(|wb| wa == wb)
+    })
 }
 
 /// (host, session) → RLE 압축 토큰 열 (cutoff 이후 tool_call, 메인 체인 한정 —
@@ -185,32 +190,68 @@ impl Rule for R23ToolSequences {
             }
         }
 
-        // 문턱 통과 후보 → 겹침 가족당 대표 1개 + host당 상한.
+        // 문턱 통과 후보 → host별 겹침 가족(연결 요소)당 대표 1개 + host당 상한.
         // score = 세션 수 × 길이: 짧고 강한 패턴(예: 3-gram × 8세션)과 길고 풍부한
         // 패턴(예: 6-gram × 3세션)의 균형을 하나의 순위로 정한다. 실데이터에서 부분
         // 시퀀스의 세션 수는 항상 상위 시퀀스 이상이라, "빈도 우위면 유지" 방식은
         // dedup을 무력화해 카드 홍수를 만들었다 (2026-07-20 실사용 판정).
-        let mut candidates: Vec<(String, Vec<String>, u64)> = counts
-            .into_iter()
-            .filter(|(_, n)| (*n as usize) >= self.min_sessions)
-            .map(|((host, g), n)| (host, g, n))
-            .collect();
-        let score = |g: &Vec<String>, n: u64| n * g.len() as u64;
-        candidates.sort_by(|a, b| {
-            score(&b.1, b.2)
-                .cmp(&score(&a.1, a.2))
-                .then_with(|| b.1.len().cmp(&a.1.len()))
-                .then_with(|| a.1.cmp(&b.1))
-        });
+        // 가족은 연결 요소로 만든다 — 그리디 비교는 다리(bridge) 후보가 탈락하면
+        // 가족이 갈라져 대표가 중복될 수 있다 (PR#78 리뷰).
+        let mut by_host: BTreeMap<String, Vec<(Vec<String>, u64)>> = BTreeMap::new();
+        for ((host, g), n) in counts {
+            if (n as usize) >= self.min_sessions {
+                by_host.entry(host).or_default().push((g, n));
+            }
+        }
+        let score = |g: &[String], n: u64| n * g.len() as u64;
         let mut kept: Vec<(String, Vec<String>, u64)> = Vec::new();
-        for (host, g, n) in candidates {
-            if kept.iter().any(|(kh, kg, _)| kh == &host && shares_bigram(&g, kg)) {
-                continue;
+        for (host, cands) in by_host {
+            // 연결 요소 라벨링 (BFS)
+            let mut comp = vec![usize::MAX; cands.len()];
+            let mut n_comp = 0usize;
+            for i in 0..cands.len() {
+                if comp[i] != usize::MAX {
+                    continue;
+                }
+                comp[i] = n_comp;
+                let mut queue = vec![i];
+                while let Some(u) = queue.pop() {
+                    for v in 0..cands.len() {
+                        if comp[v] == usize::MAX
+                            && shares_distinctive_bigram(&cands[u].0, &cands[v].0)
+                        {
+                            comp[v] = n_comp;
+                            queue.push(v);
+                        }
+                    }
+                }
+                n_comp += 1;
             }
-            if kept.iter().filter(|(kh, _, _)| kh == &host).count() >= MAX_CARDS_PER_HOST {
-                continue;
-            }
-            kept.push((host, g, n));
+            // 가족당 대표 = score 최고 (동점이면 긴 것 → 사전순 작은 것)
+            let mut reps: Vec<&(Vec<String>, u64)> = (0..n_comp)
+                .map(|c| {
+                    cands
+                        .iter()
+                        .zip(&comp)
+                        .filter(|(_, cc)| **cc == c)
+                        .map(|(x, _)| x)
+                        .max_by(|a, b| {
+                            score(&a.0, a.1)
+                                .cmp(&score(&b.0, b.1))
+                                .then_with(|| a.0.len().cmp(&b.0.len()))
+                                .then_with(|| b.0.cmp(&a.0))
+                        })
+                        .expect("연결 요소는 비어 있지 않다")
+                })
+                .collect();
+            reps.sort_by(|a, b| {
+                score(&b.0, b.1)
+                    .cmp(&score(&a.0, a.1))
+                    .then_with(|| b.0.len().cmp(&a.0.len()))
+                    .then_with(|| a.0.cmp(&b.0))
+            });
+            reps.truncate(MAX_CARDS_PER_HOST);
+            kept.extend(reps.into_iter().map(|(g, n)| (host.clone(), g.clone(), *n)));
         }
 
         let mut out = Vec::new();
@@ -440,6 +481,44 @@ mod tests {
         }
         assert!(R23ToolSequences::default().evaluate(&store).unwrap().is_empty(),
             "무명 도구가 낀 시퀀스는 침묵해야 함");
+    }
+
+    #[test]
+    fn r23_keeps_workflows_sharing_only_generic_bigram() {
+        // 공통(비특이) 꼬리 단계(file-ops → bash:cargo)만 공유하는 서로 다른
+        // 워크플로는 별개 카드로 남아야 한다 (PR#78 Gemini)
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+        for (skill, group) in [("team:deploy", "d"), ("team:test", "t")] {
+            for s in 0..3 {
+                let sess = format!("{group}{s}");
+                seed_tool(&store, &sess, 0, &now, "Skill", Some(skill));
+                seed_tool(&store, &sess, 10, &now, "Read", Some("a.rs"));
+                seed_tool(&store, &sess, 20, &now, "Bash", Some("cargo test"));
+            }
+        }
+        let findings = R23ToolSequences::default().evaluate(&store).unwrap();
+        assert_eq!(findings.len(), 2, "특이 토큰 없는 bigram 공유로 병합되면 안 됨: {findings:?}");
+    }
+
+    #[test]
+    fn r23_collapses_transitive_family_via_bridge() {
+        // X~Y, Y~Z만 직접 겹칠 때(X~Z 직접 공유 없음) 셋은 한 가족 — 대표 1장 (PR#78 Codex P2)
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+        let seed_stream = |group: &str, tools: [(&str, Option<&str>); 3]| {
+            for s in 0..3 {
+                let sess = format!("{group}{s}");
+                for (i, (raw, target)) in tools.iter().enumerate() {
+                    seed_tool(&store, &sess, (i as u64) * 10, &now, raw, *target);
+                }
+            }
+        };
+        seed_stream("x", [("mcp__a__q", None), ("Skill", Some("b")), ("mcp__c__q", None)]);
+        seed_stream("y", [("Skill", Some("b")), ("mcp__c__q", None), ("Skill", Some("d"))]);
+        seed_stream("z", [("mcp__c__q", None), ("Skill", Some("d")), ("mcp__e__q", None)]);
+        let findings = R23ToolSequences::default().evaluate(&store).unwrap();
+        assert_eq!(findings.len(), 1, "브리지로 이어진 가족은 대표 1장만: {findings:?}");
     }
 
     #[test]

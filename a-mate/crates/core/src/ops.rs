@@ -181,6 +181,13 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     for f in &findings {
         store.upsert_finding(f, &now)?;
     }
+    // R23은 스캔마다 순위가 바뀌는 패턴 카드 — 이번 평가에서 빠진 활성 카드를 내려
+    // host당 상한이 저장소에도 지켜지게 한다 (dismissed 등 사용자 기록은 보존).
+    let r23_keys: Vec<String> = findings.iter()
+        .filter(|f| f.rule_id == "R23")
+        .map(|f| f.dedup_key.clone())
+        .collect();
+    store.prune_new_findings_to_current("R23", &r23_keys)?;
     tx.commit()?;
     Ok(findings)
 }
@@ -347,6 +354,56 @@ mod tests {
 
         run_rules(&store).unwrap();
         assert_eq!(store.count_findings().unwrap(), 1, "R11만 생존해야 함");
+    }
+
+    #[test]
+    fn run_rules_prunes_displaced_r23_cards_but_keeps_dismissed() {
+        // R23은 스캔마다 순위가 바뀐다 — 이번 평가에서 빠진 'new' 카드는 내려가되
+        // dismissed는 사용자 기록이라 보존 (PR#78 Codex P1)
+        use crate::finding::{Finding, Severity};
+        use crate::model::{EventKind, NormalizedEvent, ToolKind};
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |key: &str| Finding {
+            rule_id: "R23".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "pattern".into(), scope_ref: "x".into(),
+            evidence: serde_json::json!({}), est_tokens_saved: 0,
+            prescription: None, dedup_key: key.into(),
+        };
+        store.upsert_finding(&mk("R23|Windows|stale"), "2026-07-19T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R23|Windows|muted"), "2026-07-19T00:00:00Z").unwrap();
+        store.set_finding_status("R23|Windows|muted", "dismissed").unwrap();
+
+        // 현재 스캔이 감지할 실제 패턴 (3세션 × skill→mcp→bash:gh)
+        let now = chrono::Utc::now().to_rfc3339();
+        for sess in ["s1", "s2", "s3"] {
+            let mk_ev = |off: u64, kind: ToolKind, raw: &str, target: Option<&str>| NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(),
+                host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
+                uuid: Some(format!("{sess}-u{off}")), parent_uuid: None, is_sidechain: false,
+                ts: Some(now.clone()), source_file: "s.jsonl".into(), source_offset: off,
+                kind: EventKind::ToolCall {
+                    kind, raw_name: raw.into(), target: target.map(Into::into),
+                    tool_use_id: Some(format!("{sess}-t{off}")),
+                },
+            };
+            store.upsert_events(&[
+                mk_ev(0, ToolKind::Skill { name: "codex:rescue".into() }, "Skill", Some("codex:rescue")),
+                mk_ev(10, ToolKind::from_raw_name("mcp__m__q"), "mcp__m__q", None),
+                mk_ev(20, ToolKind::from_raw_name("Bash"), "Bash", Some("gh pr view")),
+            ]).unwrap();
+        }
+
+        run_rules(&store).unwrap();
+
+        let keys: Vec<String> = {
+            let mut stmt = store.conn
+                .prepare("SELECT dedup_key FROM findings WHERE rule_id='R23' ORDER BY dedup_key").unwrap();
+            stmt.query_map([], |r| r.get(0)).unwrap().collect::<std::result::Result<_, _>>().unwrap()
+        };
+        assert!(!keys.contains(&"R23|Windows|stale".to_string()), "밀려난 new 카드는 삭제: {keys:?}");
+        assert!(keys.contains(&"R23|Windows|muted".to_string()), "dismissed는 보존: {keys:?}");
+        assert_eq!(keys.len(), 2, "muted + 현재 감지 1건만 남아야 함: {keys:?}");
     }
 
     #[test]

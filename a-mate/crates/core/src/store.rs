@@ -192,9 +192,10 @@ fn migrate(conn: &Connection) -> Result<()> {
     }
     // v3.5 정리 — R23 겹침 가족 dedup·host당 상한 도입 전에 쌓인 카드 홍수(200+)를
     // 일괄 삭제해 새 기준으로 재산출 (2026-07-20 실사용 판정). 재수집 불필요.
+    // dismissed/resolved는 사용자 기록(나깅 방지 쿨다운)이라 보존한다.
     if user_version < 5 {
         conn.execute_batch(
-            "DELETE FROM findings WHERE rule_id='R23';
+            "DELETE FROM findings WHERE rule_id='R23' AND status='new';
              PRAGMA user_version = 5;",
         )?;
     }
@@ -737,6 +738,18 @@ impl SqliteStore {
     }
 
     /// v2 이행: 특정 룰의 특정 스코프 finding 일괄 삭제 (예: R7 세션 스코프 폐기 — 스펙 §3).
+    /// 이번 평가에서 빠진 rule의 활성('new') finding을 내린다 — 순위 변동형 룰(R23)의
+    /// host당 상한이 저장소에도 지켜지게. dismissed/resolved는 사용자 기록이라 보존.
+    pub fn prune_new_findings_to_current(&self, rule_id: &str, keep: &[String]) -> Result<usize> {
+        let mut sql = String::from("DELETE FROM findings WHERE rule_id=? AND status='new'");
+        if !keep.is_empty() {
+            sql.push_str(&format!(" AND dedup_key NOT IN ({})", vec!["?"; keep.len()].join(",")));
+        }
+        let params = std::iter::once(rule_id.to_string()).chain(keep.iter().cloned());
+        let n = self.conn.execute(&sql, rusqlite::params_from_iter(params))?;
+        Ok(n)
+    }
+
     pub fn delete_findings_by_rule_and_scope(&self, rule_id: &str, scope_kind: &str) -> Result<usize> {
         let n = self.conn.execute(
             "DELETE FROM findings WHERE rule_id=?1 AND scope_kind=?2",
@@ -2488,13 +2501,23 @@ mod tests {
                 evidence: serde_json::json!({"repeated_prompt": "매일 아침 판매 리포트 뽑아줘"}),
                 est_tokens_saved: 0, prescription: None, dedup_key: "R6|Windows|ok".into(),
             }, "2026-07-20T12:00:00Z").unwrap();
+            // 사용자가 무시한 R23 — 삭제하면 재스캔에서 'new'로 부활(나깅) → 보존해야 함
+            store.upsert_finding(&Finding {
+                rule_id: "R23".into(), severity: Severity::Suggest,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "pattern".into(), scope_ref: "pattern:muted".into(),
+                evidence: serde_json::json!({"sequence": ["skill:x", "mcp:m", "bash:gh"]}),
+                est_tokens_saved: 0, prescription: None, dedup_key: "R23|Windows|muted".into(),
+            }, "2026-07-20T12:00:00Z").unwrap();
+            store.set_finding_status("R23|Windows|muted", "dismissed").unwrap();
         }
         let store = SqliteStore::open(&db).unwrap();
         let keys: Vec<String> = {
             let mut stmt = store.conn.prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
             stmt.query_map([], |r| r.get(0)).unwrap().collect::<std::result::Result<_, _>>().unwrap()
         };
-        assert_eq!(keys, vec!["R6|Windows|ok".to_string()]);
+        assert_eq!(keys, vec!["R23|Windows|muted".to_string(), "R6|Windows|ok".to_string()],
+            "new 홍수만 삭제, dismissed는 보존");
         let n: i64 = store.conn.query_row("SELECT COUNT(*) FROM ingest_state", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 1, "v5 정리는 재수집을 유도하면 안 됨");
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
