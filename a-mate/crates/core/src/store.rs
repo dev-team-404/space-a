@@ -24,6 +24,13 @@ CREATE TABLE IF NOT EXISTS events (
   source_file TEXT, tool_use_id TEXT, result_status TEXT,
   result_len INTEGER DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS prompt_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dedup_key TEXT UNIQUE NOT NULL,
+  session_id TEXT NOT NULL, host TEXT NOT NULL, project_id TEXT NOT NULL,
+  ts TEXT, source_file TEXT NOT NULL, source_offset INTEGER NOT NULL,
+  norm60 TEXT NOT NULL, preview TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS daily_rollup (
   host TEXT NOT NULL, project_id TEXT NOT NULL, date TEXT NOT NULL,
   tok_input INTEGER DEFAULT 0, tok_output INTEGER DEFAULT 0,
@@ -159,6 +166,14 @@ fn migrate(conn: &Connection) -> Result<()> {
              PRAGMA user_version = 1;",
         )?;
     }
+    // v3.2 재수집 — prompt_events 신설(세션 내 전체 프롬프트 축적, R6 v2 스펙 §4)이 백필을 요구.
+    if user_version < 2 {
+        conn.execute_batch(
+            "DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;
+             DELETE FROM prompt_events;
+             PRAGMA user_version = 2;",
+        )?;
+    }
     Ok(())
 }
 
@@ -180,6 +195,10 @@ impl SqliteStore {
     pub fn upsert_events(&self, evs: &[NormalizedEvent]) -> Result<usize> {
         let mut inserted = 0usize;
         for e in evs {
+            let dedup_key = match &e.uuid {
+                Some(u) => format!("{}:{}", u, e.source_offset),
+                None => format!("{}:{}", e.source_file, e.source_offset),
+            };
             // 세션 단위 필드는 sessions로만 라우팅 (events 미삽입)
             match &e.kind {
                 EventKind::SessionMeta { cwd, git_branch } => {
@@ -211,15 +230,21 @@ impl SqliteStore {
                         params![e.session_id, e.host, e.project_id, e.ts,
                                 preview, e.source_file, e.source_offset as i64],
                     )?;
+                    // 세션 내 전체 프롬프트 축적 — R6 v2 재료 (스펙 §4.1). 8자 미만은 정규화가 거른다.
+                    if let Some(norm60) = crate::rules::r6_repeated_prompts::normalize(preview) {
+                        self.conn.execute(
+                            "INSERT OR IGNORE INTO prompt_events
+                               (dedup_key, session_id, host, project_id, ts,
+                                source_file, source_offset, norm60, preview)
+                             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+                            params![dedup_key, e.session_id, e.host, e.project_id, e.ts,
+                                    e.source_file, e.source_offset as i64, norm60, preview],
+                        )?;
+                    }
                     continue;
                 }
                 _ => {}
             }
-
-            let dedup_key = match &e.uuid {
-                Some(u) => format!("{}:{}", u, e.source_offset),
-                None => format!("{}:{}", e.source_file, e.source_offset),
-            };
 
             let (tool_use_id, result_status, result_len) = match &e.kind {
                 EventKind::ToolCall { tool_use_id, .. } => (tool_use_id.clone(), None, 0i64),
@@ -1179,14 +1204,14 @@ impl SqliteStore {
         Ok(out)
     }
 
-    /// R6 스킬 초안용 — 특정 host의 (session_id, first_prompt_preview) 전량.
-    /// 정규화 동치 판정은 호출부(rules::r6::normalize)가 Rust에서 수행한다.
-    pub fn sessions_with_prompts(&self, host: &str) -> Result<Vec<(String, String)>> {
+    /// R6 스킬 초안용 — 특정 host에서 정규화 지시(norm60)가 일치하는 (session_id, preview) 전량.
+    /// 세션·원문 중복 제거는 호출부(skill_draft)가 수행한다.
+    pub fn prompt_sessions_for_norm(&self, host: &str, norm60: &str) -> Result<Vec<(String, String)>> {
         let mut stmt = self.conn.prepare(
-            "SELECT session_id, first_prompt_preview FROM sessions
-             WHERE host = ?1 AND first_prompt_preview IS NOT NULL",
+            "SELECT session_id, preview FROM prompt_events
+             WHERE host = ?1 AND norm60 = ?2 ORDER BY id",
         )?;
-        let rows = stmt.query_map(params![host], |r| {
+        let rows = stmt.query_map(params![host, norm60], |r| {
             Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
         })?;
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
@@ -2322,6 +2347,69 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].dedup_key, "keep21");
         assert_eq!(rows[0].status, "dismissed");
+    }
+
+    #[test]
+    fn prompt_events_accumulate_all_prompts_with_norm_and_dedup() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let base = |uuid: &str, off: u64, preview: &str| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+            uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-20T10:00:00Z".into()),
+            source_file: "s1.jsonl".into(), source_offset: off,
+            kind: EventKind::UserPrompt { preview: preview.into() },
+        };
+        store.upsert_events(&[
+            base("p1", 10, "매일 아침 판매 리포트 뽑아줘"),
+            base("p2", 20, "PR 리뷰 코멘트 종합해서 조치해줘"), // 세션 중간 프롬프트도 축적
+            base("p3", 30, "ㅇㅋ"),                              // 8자 미만 → 제외
+        ]).unwrap();
+        store.upsert_events(&[base("p1", 10, "매일 아침 판매 리포트 뽑아줘")]).unwrap(); // 멱등
+
+        let rows: Vec<(String, String, String)> = {
+            let mut stmt = store.conn.prepare(
+                "SELECT session_id, norm60, preview FROM prompt_events ORDER BY source_offset").unwrap();
+            stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap()
+                .collect::<std::result::Result<_, _>>().unwrap()
+        };
+        assert_eq!(rows.len(), 2, "짧은 프롬프트 제외 + 멱등이어야 함");
+        assert_eq!(rows[0].1, "매일 아침 판매 리포트 뽑아줘");
+        assert_eq!(rows[1].2, "PR 리뷰 코멘트 종합해서 조치해줘");
+        // sessions.first_prompt_preview는 기존대로 최초 1건 유지
+        let first: Option<String> = store.conn.query_row(
+            "SELECT first_prompt_preview FROM sessions WHERE session_id='s1'",
+            [], |r| r.get(0)).unwrap();
+        assert_eq!(first.as_deref(), Some("매일 아침 판매 리포트 뽑아줘"));
+    }
+
+    #[test]
+    fn migrate_v2_creates_prompt_events_and_recollects() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("mv2.db");
+        // v1 시대 DB 시뮬레이션 — prompt_events 없음, user_version=1
+        let v1_schema = SCHEMA.replace("CREATE TABLE IF NOT EXISTS prompt_events", "CREATE TABLE IF NOT EXISTS prompt_events_absent");
+        assert!(v1_schema.contains("prompt_events_absent"), "prompt_events 치환 실패");
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(&v1_schema).unwrap();
+            conn.execute_batch(
+                "PRAGMA user_version = 1;
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 123);",
+            ).unwrap();
+        }
+
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v2 분기 발화
+
+        let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(uv, 2);
+        let n: i64 = store.conn.query_row("SELECT COUNT(*) FROM ingest_state", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0, "prompt_events 백필을 위해 전체 재수집을 유도해야 함");
+        let has_pe = store.conn
+            .prepare("SELECT 1 FROM pragma_table_info('prompt_events') WHERE name='norm60'").unwrap()
+            .exists([]).unwrap();
+        assert!(has_pe, "prompt_events 테이블이 생성돼야 함");
     }
 
     #[test]

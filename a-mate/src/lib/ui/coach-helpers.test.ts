@@ -45,6 +45,10 @@ describe('coachTitle', () => {
   it('R1은 기존 제목', () => {
     expect(coachTitle('R1', null)).toContain('MCP');
   });
+  it('R6/R23은 반복 패턴 제목', () => {
+    expect(coachTitle('R6', {})).toContain('같은 지시');
+    expect(coachTitle('R23', {})).toContain('도구 순서');
+  });
   it('알 수 없는 rule → fallback', () => {
     expect(coachTitle('RX', {})).toBe('아낄 수 있는 게 보여요');
   });

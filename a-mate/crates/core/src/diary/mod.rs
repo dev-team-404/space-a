@@ -217,8 +217,22 @@ pub fn finding_advice(
             let prompt = evidence.get("repeated_prompt").and_then(|v| v.as_str()).unwrap_or("?");
             let n = evidence.get("session_count").and_then(|v| v.as_u64()).unwrap_or(0);
             (
-                format!("같은 지시로 세션을 {n}번 열었어요 — \"{prompt}\""),
+                format!("같은 지시를 {n}개 세션에서 반복했어요 — \"{prompt}\""),
                 "이 반복을 스킬(SKILL.md)로 묶으면 매번 다시 설명할 필요가 없어요. 코치 탭의 '스킬 초안 만들기'로 바로 만들 수 있어요".to_string(),
+            )
+        }
+        "R23" => {
+            let seq = evidence
+                .get("sequence")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>().join(" → ")
+                })
+                .unwrap_or_else(|| "?".into());
+            let n = evidence.get("session_count").and_then(|v| v.as_u64()).unwrap_or(0);
+            (
+                format!("{n}개 세션에서 같은 도구 순서를 반복했어요 — {seq}"),
+                "이 워크플로를 스킬(SKILL.md)로 묶으면 매번 손으로 지시할 필요가 없어요. 코치 탭의 '스킬 초안 만들기'로 바로 만들 수 있어요".to_string(),
             )
         }
         "R8" => {
@@ -1625,9 +1639,25 @@ mod tests {
             &serde_json::json!({ "repeated_prompt": "매일 아침 배포 리포트 뽑아줘", "session_count": 3 }),
             0,
         );
-        assert!(detail.contains("3번"));
+        assert!(detail.contains("3개 세션"));
         assert!(detail.contains("매일 아침 배포 리포트"));
         assert!(!detail.contains("repeated_prompt")); // 원본 JSON 노출 금지
+        assert!(action.contains("스킬"));
+    }
+
+    #[test]
+    fn finding_advice_r23_reads_sequence() {
+        let (detail, action) = super::finding_advice(
+            "R23",
+            &serde_json::json!({
+                "sequence": ["bash:gh", "skill:codex:rescue", "file-ops"],
+                "session_count": 4,
+            }),
+            0,
+        );
+        assert!(detail.contains("4개 세션"));
+        assert!(detail.contains("bash:gh → skill:codex:rescue → file-ops"));
+        assert!(!detail.contains("sequence")); // 원본 JSON 노출 금지
         assert!(action.contains("스킬"));
     }
 
