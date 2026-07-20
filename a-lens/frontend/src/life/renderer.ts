@@ -9,6 +9,14 @@ import { TILE_W, TILE_H, isoX, isoY, depth } from './iso'
 import { kitPiece, kitPieceScale } from './kit'
 import type { DeskId, LifeConfig } from './types'
 
+// 0~2π 사이 결정적 위상 — 같은 agent는 항상 같은 위상으로 흔들려서, 여러 캐릭터가
+// 전부 같은 박자로 움직이는 부자연스러움을 피한다 (characterForSeed와 동일한 해시 관례).
+function seedPhase(seed: string): number {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0
+  return (Math.abs(h) % 1000) / 1000 * Math.PI * 2
+}
+
 export type LifeSceneCallbacks = {
   onAgentTap?: (agent: SpaceAgent) => void
   /** 배경 칠판 영역 클릭 → 이슈 패널 */
@@ -415,6 +423,14 @@ export function buildLifeScene(
     // 오프라인(idle) 에이전트는 유령처럼 반투명하게 — 방에 있지만 지금은 활동 중이 아님을 표시.
     if (agent.status !== 'working') {
       robot.alpha = 0.4
+    }
+    // idle 흔들림 — 정지 화면이 죽어 보이지 않게 위아래로 살짝 떠 있는 느낌만 준다.
+    // 작업 중이면 조금 더 활기차게, 오프라인(유령)은 느리고 옅게 — 상태 구분을 움직임으로도 보강.
+    const phase = seedPhase(agent.agent_id || agent.name || String(k))
+    const amp = agent.status === 'working' ? 3 : 1.2
+    const speed = agent.status === 'working' ? 1.8 : 0.9
+    robot.onRender = () => {
+      robot.y = ry + Math.sin(performance.now() / 1000 * speed + phase) * amp
     }
     robot.eventMode = 'static'
     robot.cursor = 'pointer'
