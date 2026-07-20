@@ -147,6 +147,18 @@ fn migrate(conn: &Connection) -> Result<()> {
              DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;",
         )?;
     }
+    // v3.1 재수집 — IDE 합성 블록(<ide_opened_file> 등) 프롬프트 오염 수정이 라인 재해석을 요구.
+    // 스키마 변화가 없어 PRAGMA user_version(=1)으로 1회 트리거. 오염 preview에서 파생된
+    // R6 finding만 삭제 (repeated_prompt가 '<'로 시작 = 합성 마커 확정).
+    let user_version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    if user_version < 1 {
+        conn.execute_batch(
+            "DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;
+             DELETE FROM findings WHERE rule_id='R6'
+               AND json_extract(evidence_json, '$.repeated_prompt') LIKE '<%';
+             PRAGMA user_version = 1;",
+        )?;
+    }
     Ok(())
 }
 
@@ -2310,6 +2322,63 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].dedup_key, "keep21");
         assert_eq!(rows[0].status, "dismissed");
+    }
+
+    #[test]
+    fn migrate_synthetic_prompt_purges_and_forces_recollect_once() {
+        use crate::finding::{Finding, Severity};
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("msyn.db");
+        // 마커 없는 기존 DB 시뮬레이션 — 스키마는 최신, settings에 마커만 부재
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(SCHEMA).unwrap();
+            conn.execute_batch(
+                "INSERT INTO sessions (session_id, host, project_id, agent, first_prompt_preview)
+                   VALUES ('s1','WSL:U','p','claude-code','<ide_opened_file>The user opened the file /home/j/a.md');
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 99);",
+            ).unwrap();
+            let store = SqliteStore { conn };
+            // 오염 R6 finding → 삭제 대상 / 정상 R6 finding·타 룰 finding → 보존
+            store.upsert_finding(&Finding {
+                rule_id: "R6".into(), severity: Severity::Suggest,
+                scope_host: Some("WSL:U".into()), scope_project: None,
+                scope_kind: "pattern".into(), scope_ref: "pattern:bad".into(),
+                evidence: serde_json::json!({"repeated_prompt": "<ide_opened_file>The user opened", "session_count": 10}),
+                est_tokens_saved: 0, prescription: None, dedup_key: "R6|WSL:U|bad".into(),
+            }, "2026-07-19T00:00:00Z").unwrap();
+            store.upsert_finding(&Finding {
+                rule_id: "R6".into(), severity: Severity::Suggest,
+                scope_host: Some("WSL:U".into()), scope_project: None,
+                scope_kind: "pattern".into(), scope_ref: "pattern:ok".into(),
+                evidence: serde_json::json!({"repeated_prompt": "매일 아침 판매 리포트 뽑아줘", "session_count": 3}),
+                est_tokens_saved: 0, prescription: None, dedup_key: "R6|WSL:U|ok".into(),
+            }, "2026-07-19T00:00:00Z").unwrap();
+        }
+
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — 마커 부재로 발화
+
+        // 전체 재수집 유도 + 오염 R6만 삭제
+        for table in ["events", "sessions", "ingest_state", "daily_rollup"] {
+            let n: i64 = store.conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap();
+            assert_eq!(n, 0, "{table} 은(는) 합성 프롬프트 마이그레이션 후 비워져야 함");
+        }
+        let keys: Vec<String> = {
+            let mut stmt = store.conn.prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
+            stmt.query_map([], |r| r.get(0)).unwrap().collect::<std::result::Result<_, _>>().unwrap()
+        };
+        assert_eq!(keys, vec!["R6|WSL:U|ok".to_string()]);
+
+        // 마커가 설정돼 두 번째 open은 재수집을 다시 유도하지 않는다
+        store.conn.execute(
+            "INSERT INTO ingest_state (source_file, last_offset) VALUES ('g.jsonl', 7)", [],
+        ).unwrap();
+        drop(store);
+        let store2 = SqliteStore::open(&db).unwrap();
+        let n: i64 = store2.conn
+            .query_row("SELECT COUNT(*) FROM ingest_state", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1, "마커 설정 후에는 재수집이 반복되면 안 됨");
     }
 
     #[test]
