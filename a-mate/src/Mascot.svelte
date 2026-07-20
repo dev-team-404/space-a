@@ -127,28 +127,34 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   let myLifeId = $state('');
   let curLifeId = $state(''); // 현재 있는 방 — 내 방이면 "돌아가기" 버튼을 숨긴다
   let hubOn = $state(false);
+  let lifeMenuRequest = 0;
+  let lifeMenuPolling = false;
   const visibleLifeEntries = $derived(lifeMenu?.filter((life) => life.life_id !== myLifeId && life.life_id !== curLifeId) ?? []);
   const lifeMenuItemCount = $derived(visibleLifeEntries.length + (curLifeId !== myLifeId ? 1 : 0));
   async function toggleLifeMenu() {
     if (lifeMenu !== null) { lifeMenu = null; await expand(false); return; }
+    const request = ++lifeMenuRequest;
     const wasCollapsed = bubble === null;
+    bubble = null; // 말풍선과 동시 표시 안 함
+    lifeMenu = [];
+    if (wasCollapsed) await expand(true);
     try {
       const [h, list, view] = await Promise.all([
         hubSettingsGet(),
         lifeList().catch(() => ({ life: [] })),
         lifeView().catch(() => null),
       ]);
+      if (request !== lifeMenuRequest || lifeMenu === null) return;
       hubOn = h.connected;
       myLifeId = h.life_id;
       // 위치 조회 실패 시 내 방으로 간주 — 돌아가기 버튼을 띄워봐야 이동도 실패한다
       curLifeId = view?.me.life_id ?? h.life_id;
       lifeMenu = list.life;
     } catch {
+      if (request !== lifeMenuRequest || lifeMenu === null) return;
       hubOn = false;
       lifeMenu = [];
     }
-    bubble = null; // 말풍선과 동시 표시 안 함
-    if (wasCollapsed) await expand(true);
   }
   async function gotoLife(lifeId: string) {
     await closeLifeMenu();
@@ -156,6 +162,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   }
   async function closeLifeMenu() {
     if (lifeMenu === null) return;
+    lifeMenuRequest++;
     lifeMenu = null;
     await expand(false);
   }
@@ -164,7 +171,13 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   $effect(() => {
     if (lifeMenu === null) return;
     const t = setInterval(async () => {
-      try { lifeMenu = (await lifeList()).life; } catch { /* 서버 순단 — 다음 틱 */ }
+      if (lifeMenuPolling) return;
+      lifeMenuPolling = true;
+      try {
+        const list = await lifeList();
+        if (lifeMenu !== null) lifeMenu = list.life;
+      } catch { /* 서버 순단 — 다음 틱 */ }
+      finally { lifeMenuPolling = false; }
     }, 2000);
     const onBlur = () => closeLifeMenu();
     window.addEventListener('blur', onBlur);
@@ -347,10 +360,10 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   .menu-title { font-weight: 700; font-size: 11px; color: var(--ink-soft); padding: 0 4px; }
   .menu .list { max-height: 92px; overflow-y: hidden; display: flex; flex-direction: column; gap: 4px; }
   .menu.away .list { max-height: 60px; }
-  .menu .list.scrollable { overflow-y: scroll; scrollbar-gutter: stable; }
+  .menu .list.scrollable { overflow-x: hidden; overflow-y: auto; scrollbar-gutter: stable; }
   .menu .item {
     border: none; background: var(--pastel-lav); color: var(--ink);
-    box-sizing: border-box; min-height: 28px; border-radius: var(--radius-s); padding: 6px 8px; font: inherit;
+    box-sizing: border-box; width: 100%; min-width: 0; min-height: 28px; border-radius: var(--radius-s); padding: 6px 8px; font: inherit;
     cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .menu .item:hover { background: var(--accent); color: #fff; }

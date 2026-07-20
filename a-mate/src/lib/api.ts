@@ -179,13 +179,28 @@ export interface LifeCapabilities { life_protocol: number; grid: { w: number; h:
 export const hubSettingsGet = () => invoke<HubSettings>('hub_settings_get');
 export const hubConnect = (url: string, user: string) =>
   invoke<HubSettings>('hub_connect', { url, user });
-export const lifeView = () => invoke<{ me: LifeMe; life: LifeState }>('life_view');
+type LifeViewResponse = { me: LifeMe; life: LifeState };
+let lifeViewInFlight: Promise<LifeViewResponse> | null = null;
+let lifeViewCache: { at: number; value: LifeViewResponse } | null = null;
+const invalidateLifeView = () => { lifeViewCache = null; };
+export const lifeView = () => {
+  const now = performance.now();
+  if (lifeViewCache && now - lifeViewCache.at < 500) return Promise.resolve(lifeViewCache.value);
+  if (lifeViewInFlight) return lifeViewInFlight;
+  lifeViewInFlight = invoke<LifeViewResponse>('life_view')
+    .then((value) => {
+      lifeViewCache = { at: performance.now(), value };
+      return value;
+    })
+    .finally(() => { lifeViewInFlight = null; });
+  return lifeViewInFlight;
+};
 export const lifeCapabilities = () => invoke<LifeCapabilities>('life_capabilities');
 export const lifeList = () => invoke<{ life: LifeListEntry[] }>('life_list');
-export const lifeGoto = (lifeId: string) => invoke<LifeMe>('life_goto', { lifeId });
-export const lifeMoveCell = (x: number, y: number) => invoke<LifeMe>('life_move_cell', { x, y });
+export const lifeGoto = (lifeId: string) => invoke<LifeMe>('life_goto', { lifeId }).then((value) => { invalidateLifeView(); return value; });
+export const lifeMoveCell = (x: number, y: number) => invoke<LifeMe>('life_move_cell', { x, y }).then((value) => { invalidateLifeView(); return value; });
 export const lifeSaveDesign = (lifeId: string, design: LifeState['design']) =>
-  invoke<LifeState>('life_save_design', { lifeId, design });
+  invoke<LifeState>('life_save_design', { lifeId, design }).then((value) => { invalidateLifeView(); return value; });
 export const robotSpecForSeed = (seed: string) => invoke<RobotSpec>('robot_spec_for_seed', { seed });
 export const openSettingsWindow = () => invoke<void>('open_settings_window');
 // 마스코트 창 확장/복귀 — 위치+크기를 네이티브에서 한 번에 적용 (중간 프레임 깜빡임 방지)

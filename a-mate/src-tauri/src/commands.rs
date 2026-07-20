@@ -675,19 +675,38 @@ pub fn hub_connect(
 }
 
 /// 홈 탭이 폴링하는 단일 진입점: 내 위치 + 그 방의 상태.
-#[tauri::command(async)]
-pub fn life_view(state: State<AppState>) -> Result<serde_json::Value, String> {
+async fn run_life_http<T, F>(operation: &'static str, request: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    let started = std::time::Instant::now();
+    let result = tauri::async_runtime::spawn_blocking(request)
+        .await
+        .map_err(|error| format!("{operation}_task_failed: {error}"))?;
+    let elapsed = started.elapsed();
+    if elapsed >= std::time::Duration::from_secs(2) {
+        log::warn!("slow Life request: {operation} took {elapsed:?}");
+    }
+    result
+}
+
+#[tauri::command]
+pub async fn life_view(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let Some(client) = hub_client(&state)? else {
         return Err("hub_not_connected".into());
     };
-    let me = client.me().map_err(|e| e.to_string())?;
-    let life_id = me["life_id"].as_str().unwrap_or_default().to_string();
-    let life = client.life_state(&life_id).map_err(|e| e.to_string())?;
-    Ok(serde_json::json!({ "me": me, "life": life }))
+    run_life_http("life_view", move || {
+        let me = client.me().map_err(|e| e.to_string())?;
+        let life_id = me["life_id"].as_str().unwrap_or_default().to_string();
+        let life = client.life_state(&life_id).map_err(|e| e.to_string())?;
+        Ok(serde_json::json!({ "me": me, "life": life }))
+    })
+    .await
 }
 
-#[tauri::command(async)]
-pub fn life_list(state: State<AppState>) -> Result<serde_json::Value, String> {
+#[tauri::command]
+pub async fn life_list(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let (url, api_key) = {
         let guard = lock(&state)?;
         let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
@@ -696,47 +715,56 @@ pub fn life_list(state: State<AppState>) -> Result<serde_json::Value, String> {
     if url.trim().is_empty() {
         return Err("hub_not_connected".into());
     }
-    life_client::list_life(&url, opt_key(api_key).as_deref()).map_err(|e| e.to_string())
+    run_life_http("life_list", move || {
+        life_client::list_life(&url, opt_key(api_key).as_deref()).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// 방 이동(우클릭 메뉴). cell 없이 입장 — 서버가 빈 셀 배정.
-#[tauri::command(async)]
-pub fn life_goto(state: State<AppState>, life_id: String) -> Result<serde_json::Value, String> {
+#[tauri::command]
+pub async fn life_goto(state: State<'_, AppState>, life_id: String) -> Result<serde_json::Value, String> {
     let Some(client) = hub_client(&state)? else {
         return Err("hub_not_connected".into());
     };
-    client.enter(&life_id, None).map_err(|e| e.to_string())
+    run_life_http("life_goto", move || client.enter(&life_id, None).map_err(|e| e.to_string())).await
 }
 
 /// 방 안 셀 이동(좌클릭). 점유 셀이면 서버가 409 → cell_taken 에러 문자열.
-#[tauri::command(async)]
-pub fn life_move_cell(state: State<AppState>, x: i64, y: i64) -> Result<serde_json::Value, String> {
+#[tauri::command]
+pub async fn life_move_cell(state: State<'_, AppState>, x: i64, y: i64) -> Result<serde_json::Value, String> {
     let Some(client) = hub_client(&state)? else {
         return Err("hub_not_connected".into());
     };
-    let me = client.me().map_err(|e| e.to_string())?;
-    let life_id = me["life_id"].as_str().unwrap_or_default().to_string();
-    client.move_to(&life_id, (x, y)).map_err(|e| e.to_string())
+    run_life_http("life_move_cell", move || {
+        let me = client.me().map_err(|e| e.to_string())?;
+        let life_id = me["life_id"].as_str().unwrap_or_default().to_string();
+        client.move_to(&life_id, (x, y)).map_err(|e| e.to_string())
+    })
+    .await
 }
 
-#[tauri::command(async)]
-pub fn life_capabilities(state: State<AppState>) -> Result<serde_json::Value, String> {
+#[tauri::command]
+pub async fn life_capabilities(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let Some(client) = hub_client(&state)? else {
         return Err("hub_not_connected".into());
     };
-    client.capabilities().map_err(|e| e.to_string())
+    run_life_http("life_capabilities", move || client.capabilities().map_err(|e| e.to_string())).await
 }
 
-#[tauri::command(async)]
-pub fn life_save_design(
-    state: State<AppState>,
+#[tauri::command]
+pub async fn life_save_design(
+    state: State<'_, AppState>,
     life_id: String,
     design: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     let Some(client) = hub_client(&state)? else {
         return Err("hub_not_connected".into());
     };
-    client.save_design(&life_id, design).map_err(|e| e.to_string())
+    run_life_http("life_save_design", move || {
+        client.save_design(&life_id, design).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// 임의 시드의 로봇 스펙 — 방 안 다른 에이전트 렌더용.
