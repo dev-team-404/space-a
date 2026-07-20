@@ -190,6 +190,14 @@ fn migrate(conn: &Connection) -> Result<()> {
              PRAGMA user_version = 4;",
         )?;
     }
+    // v3.5 정리 — R23 겹침 가족 dedup·host당 상한 도입 전에 쌓인 카드 홍수(200+)를
+    // 일괄 삭제해 새 기준으로 재산출 (2026-07-20 실사용 판정). 재수집 불필요.
+    if user_version < 5 {
+        conn.execute_batch(
+            "DELETE FROM findings WHERE rule_id='R23';
+             PRAGMA user_version = 5;",
+        )?;
+    }
     Ok(())
 }
 
@@ -2449,7 +2457,48 @@ mod tests {
             assert_eq!(n, 0, "{table} 은(는) v4에서 비워져 재수집돼야 함");
         }
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(uv, 4);
+        assert!(uv >= 4, "v4 분기를 지나야 함 (후속 분기로 더 올라갈 수 있음)");
+    }
+
+    #[test]
+    fn migrate_v5_purges_flooded_r23_findings_without_recollect() {
+        // 가족 dedup·상한 도입 전에 쌓인 R23 카드 홍수(200+)를 일괄 정리 — 재수집은 불필요
+        use crate::finding::{Finding, Severity};
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("mv5.db");
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(SCHEMA).unwrap();
+            conn.execute_batch(
+                "PRAGMA user_version = 4;
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 42);",
+            ).unwrap();
+            let store = SqliteStore { conn };
+            store.upsert_finding(&Finding {
+                rule_id: "R23".into(), severity: Severity::Suggest,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "pattern".into(), scope_ref: "pattern:flood".into(),
+                evidence: serde_json::json!({"sequence": ["bash:gh", "file-ops", "other"]}),
+                est_tokens_saved: 0, prescription: None, dedup_key: "R23|Windows|flood".into(),
+            }, "2026-07-20T12:00:00Z").unwrap();
+            store.upsert_finding(&Finding {
+                rule_id: "R6".into(), severity: Severity::Suggest,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "pattern".into(), scope_ref: "pattern:ok".into(),
+                evidence: serde_json::json!({"repeated_prompt": "매일 아침 판매 리포트 뽑아줘"}),
+                est_tokens_saved: 0, prescription: None, dedup_key: "R6|Windows|ok".into(),
+            }, "2026-07-20T12:00:00Z").unwrap();
+        }
+        let store = SqliteStore::open(&db).unwrap();
+        let keys: Vec<String> = {
+            let mut stmt = store.conn.prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
+            stmt.query_map([], |r| r.get(0)).unwrap().collect::<std::result::Result<_, _>>().unwrap()
+        };
+        assert_eq!(keys, vec!["R6|Windows|ok".to_string()]);
+        let n: i64 = store.conn.query_row("SELECT COUNT(*) FROM ingest_state", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1, "v5 정리는 재수집을 유도하면 안 됨");
+        let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(uv, 5);
     }
 
     #[test]

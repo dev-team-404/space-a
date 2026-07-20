@@ -24,6 +24,8 @@ impl Default for R23ToolSequences {
 
 const NGRAM_MIN: usize = 3;
 const NGRAM_MAX: usize = 6;
+/// host당 카드 상한 — 겹침 dedup 후에도 무관한 패턴이 코치 탭을 채우지 않게 한다.
+const MAX_CARDS_PER_HOST: usize = 5;
 
 /// tool_call 행 → 시퀀스 토큰 (스펙 §3.1). skill_draft가 같은 기준을 쓰도록 crate 공개.
 pub(crate) fn tokenize(
@@ -98,6 +100,12 @@ fn is_contiguous_subseq(a: &[String], b: &[String]) -> bool {
     a.len() <= b.len() && b.windows(a.len()).any(|w| w == a)
 }
 
+/// 두 시퀀스가 연속 2-토큰(bigram)을 공유하는가 — 같은 워크플로에서 파생된
+/// 포함·시프트 변형을 한 가족으로 판정한다 (호출부는 길이 ≥3만 넘긴다).
+fn shares_bigram(a: &[String], b: &[String]) -> bool {
+    a.windows(2).any(|wa| b.windows(2).any(|wb| wa == wb))
+}
+
 /// (host, session) → RLE 압축 토큰 열 (cutoff 이후 tool_call, 메인 체인 한정 —
 /// 사이드체인의 도구 호출은 사용자의 수동 워크플로가 아니다).
 /// R23 판정과 스킬 초안 재료 수집(skill_draft)이 같은 기준을 공유한다.
@@ -162,7 +170,11 @@ impl Rule for R23ToolSequences {
                 for w in tokens.windows(n) {
                     // 무의미 패턴 가드 — 토큰 다양성 ≥2 그리고 특이 토큰(사용자 의도) ≥1.
                     // 일반 명령·file-ops만으로 된 에이전트 자율 루프는 제외.
-                    if w.iter().all(|x| x == &w[0]) || !w.iter().any(|t| is_distinctive(t)) {
+                    // raw_name 없는 무명 도구('other'/빈 토큰)가 낀 시퀀스는 카드 정보가 없다.
+                    if w.iter().all(|x| x == &w[0])
+                        || !w.iter().any(|t| is_distinctive(t))
+                        || w.iter().any(|t| t == "other" || t.is_empty())
+                    {
                         continue;
                     }
                     seen.insert(w.to_vec());
@@ -173,18 +185,29 @@ impl Rule for R23ToolSequences {
             }
         }
 
-        // 문턱 통과 후보 → 최장 시퀀스만 (포함되는 짧은 후보 제거)
+        // 문턱 통과 후보 → 겹침 가족당 대표 1개 + host당 상한.
+        // score = 세션 수 × 길이: 짧고 강한 패턴(예: 3-gram × 8세션)과 길고 풍부한
+        // 패턴(예: 6-gram × 3세션)의 균형을 하나의 순위로 정한다. 실데이터에서 부분
+        // 시퀀스의 세션 수는 항상 상위 시퀀스 이상이라, "빈도 우위면 유지" 방식은
+        // dedup을 무력화해 카드 홍수를 만들었다 (2026-07-20 실사용 판정).
         let mut candidates: Vec<(String, Vec<String>, u64)> = counts
             .into_iter()
             .filter(|(_, n)| (*n as usize) >= self.min_sessions)
             .map(|((host, g), n)| (host, g, n))
             .collect();
-        candidates.sort_by(|a, b| b.1.len().cmp(&a.1.len()).then_with(|| a.1.cmp(&b.1)));
+        let score = |g: &Vec<String>, n: u64| n * g.len() as u64;
+        candidates.sort_by(|a, b| {
+            score(&b.1, b.2)
+                .cmp(&score(&a.1, a.2))
+                .then_with(|| b.1.len().cmp(&a.1.len()))
+                .then_with(|| a.1.cmp(&b.1))
+        });
         let mut kept: Vec<(String, Vec<String>, u64)> = Vec::new();
         for (host, g, n) in candidates {
-            // 포함되는 짧은 후보라도 등장 세션이 더 많으면(strictly) 독립 패턴으로 유지 —
-            // 짧고 강한 패턴을 길고 희소한 변형이 지우면 안 된다 (PR#77 리뷰).
-            if kept.iter().any(|(kh, kg, kn)| kh == &host && is_contiguous_subseq(&g, kg) && n <= *kn) {
+            if kept.iter().any(|(kh, kg, _)| kh == &host && shares_bigram(&g, kg)) {
+                continue;
+            }
+            if kept.iter().filter(|(kh, _, _)| kh == &host).count() >= MAX_CARDS_PER_HOST {
                 continue;
             }
             kept.push((host, g, n));
@@ -358,8 +381,10 @@ mod tests {
     }
 
     #[test]
-    fn r23_keeps_shorter_pattern_when_strictly_more_frequent() {
-        // 짧은 패턴(8세션)이 그것을 포함하는 긴 희소 패턴(3세션)에 지워지면 안 된다 (Gemini high)
+    fn r23_collapses_workflow_family_to_single_best_card() {
+        // 한 워크플로에서 파생된 겹침 변형(포함·시프트)은 대표 1장만 —
+        // score(세션수×길이)가 높은 쪽. 짧고 강한 패턴(8세션×3=24)이
+        // 길고 희소한 변형(3세션×4=12)을 이긴다. (카드 홍수 수정, 2026-07-20)
         let store = SqliteStore::open_in_memory().unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         let seed_core = |sess: &str| {
@@ -375,10 +400,46 @@ mod tests {
             seed_tool(&store, sess, 30, &now, "Bash", Some("docker build"));
         }
         let findings = R23ToolSequences::default().evaluate(&store).unwrap();
-        let counts: Vec<u64> = findings.iter()
-            .map(|f| f.evidence["session_count"].as_u64().unwrap()).collect();
-        assert_eq!(findings.len(), 2, "짧은 강한 패턴 + 긴 패턴 둘 다 남아야 함: {findings:?}");
-        assert!(counts.contains(&8) && counts.contains(&3), "세션 수 8/3이어야 함: {counts:?}");
+        assert_eq!(findings.len(), 1, "겹침 가족은 대표 1장만: {findings:?}");
+        assert_eq!(findings[0].evidence["session_count"], 8);
+        assert_eq!(findings[0].evidence["sequence"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn r23_caps_cards_per_host() {
+        // 서로 무관한 패턴이 아무리 많아도 host당 상위 5장까지만 (카드 홍수 방지)
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+        for i in 0..6 {
+            for s in 0..3 {
+                let sess = format!("p{i}s{s}");
+                seed_tool(&store, &sess, 0, &now, "Skill", Some(&format!("team:flow{i}")));
+                seed_tool(&store, &sess, 10, &now, &format!("mcp__srv{i}__q"), None);
+                seed_tool(&store, &sess, 20, &now, "Bash", Some(&format!("deploy{i} run")));
+            }
+        }
+        let findings = R23ToolSequences::default().evaluate(&store).unwrap();
+        assert_eq!(findings.len(), 5, "host당 5장 상한: {}건", findings.len());
+    }
+
+    #[test]
+    fn r23_ignores_sequences_with_unnamed_tools() {
+        // raw_name이 없는(NULL) 도구는 'other' 토큰이 되는데, 이런 시퀀스는 카드로서
+        // 정보가 없다 — 제외 (실사용 노이즈: bash:gh → file-ops → other)
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+        for sess in ["u1", "u2", "u3"] {
+            seed_tool(&store, sess, 0, &now, "Bash", Some("gh pr view"));
+            seed_tool(&store, sess, 10, &now, "Read", Some("a.rs"));
+            store.conn.execute(
+                "INSERT INTO events (dedup_key, session_id, host, project_id, ts, source_offset,
+                   kind, tool_kind, raw_name, is_sidechain, source_file)
+                 VALUES (?1, ?2, 'Windows', 'p', ?3, 20, 'tool_call', 'other', NULL, 0, 's.jsonl')",
+                rusqlite::params![format!("{sess}-null"), sess, now],
+            ).unwrap();
+        }
+        assert!(R23ToolSequences::default().evaluate(&store).unwrap().is_empty(),
+            "무명 도구가 낀 시퀀스는 침묵해야 함");
     }
 
     #[test]
