@@ -118,6 +118,15 @@ class LifeService:
         if not name:
             raise errors.InvalidRequest("이름이 비어 있음")
         with self._lock:
+            existing = next((agent for agent in self._agents.values() if agent.name == name), None)
+            if existing is not None:
+                existing.mascot_seed = mascot_seed or existing.mascot_seed
+                token = secrets.token_urlsafe(24)
+                self._tokens[token] = existing.agent_id
+                if self._store:
+                    self._store.save_agent(existing)
+                    self._store.save_token(token, existing.agent_id)
+                return existing, token, self._life[existing.life_id]
             agent_id = f"ragt_{uuid.uuid4().hex[:8]}"
             life_id = f"life_{uuid.uuid4().hex[:8]}"
             life = Life(id=life_id, owner_agent_id=agent_id, owner_name=name)

@@ -588,6 +588,10 @@ fn opt_key(key: String) -> Option<String> {
     if k.is_empty() { None } else { Some(k.to_string()) }
 }
 
+fn token_was_rejected(error: &str) -> bool {
+    error.contains("HTTP 401") || error.contains("HTTP 403")
+}
+
 fn hub_client(state: &State<AppState>) -> Result<Option<LifeClient>, String> {
     let guard = lock(state)?;
     let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
@@ -636,17 +640,26 @@ pub fn hub_connect(
         let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
         (get("hub_url"), get("hub_token"))
     };
-    if existing.0 == url && !existing.1.is_empty() {
+    if !existing.1.is_empty() {
         let client = LifeClient { base_url: url.clone(), token: existing.1, api_key: key_opt.clone() };
-        if client.rename(&user).is_ok() {
-            let guard = lock(&state)?;
-            guard.set_setting("hub_user", &user).map_err(|e| e.to_string())?;
-            guard.set_setting("hub_api_key", &api_key).map_err(|e| e.to_string())?;
-            drop(guard);
-            let _ = app.emit("settings:changed", ());
-            return hub_settings_get(state);
+        match client.rename(&user) {
+            Ok(_) => {
+                let guard = lock(&state)?;
+                guard.set_setting("hub_url", &url).map_err(|e| e.to_string())?;
+                guard.set_setting("hub_user", &user).map_err(|e| e.to_string())?;
+                guard.set_setting("hub_api_key", &api_key).map_err(|e| e.to_string())?;
+                drop(guard);
+                let _ = app.emit("settings:changed", ());
+                return hub_settings_get(state);
+            }
+            Err(error) => {
+                let message = error.to_string();
+                if !token_was_rejected(&message) {
+                    return Err(format!("기존 Life 연결 확인 실패: {message}"));
+                }
+            }
         }
-        // rename 실패(서버 재시작으로 토큰 무효 등) → 아래에서 새로 등록
+        // 대상 서버가 기존 토큰을 명시적으로 거부한 경우에만 새로 등록한다.
     }
     // 네트워크는 락 밖
     let seed = agent_mentor::mascot::stable_identity();
@@ -833,6 +846,14 @@ mod tests {
     fn open_chat_tab_validates_tab() {
         assert!(valid_tab("home") && valid_tab("diary") && valid_tab("coach") && valid_tab("chat"));
         assert!(!valid_tab("etc") && !valid_tab(""));
+    }
+
+    #[test]
+    fn token_rejection_is_distinct_from_transient_failure() {
+        assert!(token_was_rejected("unauthorized (HTTP 401)"));
+        assert!(token_was_rejected("forbidden (HTTP 403)"));
+        assert!(!token_was_rejected("connection timed out"));
+        assert!(!token_was_rejected("server error (HTTP 500)"));
     }
 
     #[test]
