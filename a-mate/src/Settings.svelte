@@ -82,6 +82,55 @@
     : source === 'env' ? '.env 파일 값 사용 중 (아래에 저장하면 이 값을 덮어씁니다)'
     : '엔진 미설정 — 일기·채팅이 비활성 상태예요',
   );
+
+  // --- 캐릭터 이미지 모델 (텍스트 엔진과 분리) ---
+  // 사내 LLM(LM Studio 등)은 이미지를 생성하지 못하므로, 캐릭터 그림용 엔드포인트를 따로 둔다.
+  interface ImageSettings { url: string; key: string; model: string; source: 'store' | 'env' | 'none' }
+
+  let imgUrl = $state('');
+  let imgKey = $state('');
+  let imgModel = $state('');
+  let imgSource = $state<'store' | 'env' | 'none'>('none');
+  let imgStatus = $state<{ kind: 'idle' | 'ok' | 'err' | 'busy'; text: string }>({ kind: 'idle', text: '' });
+
+  async function loadImage() {
+    try {
+      const s = await invoke<ImageSettings>('image_settings_get');
+      imgUrl = s.url; imgKey = s.key; imgModel = s.model; imgSource = s.source;
+    } catch (e) {
+      imgStatus = { kind: 'err', text: `이미지 설정을 불러오지 못했어요: ${e}` };
+    }
+  }
+  loadImage();
+
+  async function saveImage() {
+    imgStatus = { kind: 'busy', text: '저장 중…' };
+    try {
+      await invoke('image_settings_set', { url: imgUrl, key: imgKey, model: imgModel });
+      await loadImage();
+      imgStatus = { kind: 'ok', text: '저장했어요.' };
+    } catch (e) {
+      imgStatus = { kind: 'err', text: `${e}` };
+    }
+  }
+
+  async function regenerate() {
+    imgStatus = { kind: 'busy', text: '캐릭터 그리는 중… 수십 초 걸릴 수 있어요' };
+    try {
+      await invoke('regenerate_sprite');
+      imgStatus = { kind: 'ok', text: '새 캐릭터로 바뀌었어요 — 마스코트를 확인해보세요!' };
+    } catch (e) {
+      imgStatus = { kind: 'err', text: `생성 실패: ${e}` };
+    }
+  }
+
+  const imgSourceLabel = $derived(
+    imgSource === 'store'
+      ? '설정창 값 사용 중'
+      : imgSource === 'env'
+        ? '.env 값 사용 중'
+        : '미설정 — 캐릭터가 기본 그림으로 표시됩니다'
+  );
 </script>
 
 <main>
@@ -112,6 +161,37 @@
   {/if}
 
   <p class="hint">URL을 비우고 저장하면 .env(AGENT_MENTOR_ENGINE_*) 값으로 되돌아갑니다.</p>
+
+  <hr />
+
+  <h1>캐릭터 이미지</h1>
+  <p class="hint">
+    마스코트 캐릭터를 그릴 <b>이미지 생성 모델</b>입니다. 사내 LLM은 그림을 못 그리므로 위 텍스트 엔진과
+    따로 지정합니다. 사람마다 한 번 생성해 캐시하므로, 이후에는 호출하지 않습니다.
+  </p>
+  <p class="source" data-kind={imgSource}>{imgSourceLabel}</p>
+
+  <label>
+    <span>엔드포인트 URL</span>
+    <input type="text" bind:value={imgUrl} placeholder="https://openrouter.ai/api/v1" spellcheck="false" />
+  </label>
+  <label>
+    <span>API 키</span>
+    <input type="password" bind:value={imgKey} placeholder="sk-or-..." spellcheck="false" />
+  </label>
+  <label>
+    <span>이미지 모델</span>
+    <input type="text" bind:value={imgModel} placeholder="google/gemini-2.5-flash-image" spellcheck="false" />
+  </label>
+
+  <div class="actions">
+    <button class="primary" onclick={saveImage} disabled={imgStatus.kind === 'busy'}>저장</button>
+    <button onclick={regenerate} disabled={imgStatus.kind === 'busy'}>캐릭터 재생성</button>
+  </div>
+
+  {#if imgStatus.text}
+    <p class="status" data-kind={imgStatus.kind}>{imgStatus.text}</p>
+  {/if}
 
   <hr />
 

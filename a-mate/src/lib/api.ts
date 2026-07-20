@@ -233,6 +233,22 @@ export async function getOccupantSprite(seed: string): Promise<string | null> {
   try { return await invoke<string | null>('get_occupant_sprite', { seed }); } catch { return null; }
 }
 
+/** 캐릭터 이미지 모델 설정 (텍스트 엔진과 분리 — 사내 LLM은 이미지 생성을 못 하므로). */
+export interface ImageSettings { url: string; key: string; model: string; source: 'store' | 'env' | 'none' }
+
+export async function imageSettingsGet(): Promise<ImageSettings> {
+  return await invoke<ImageSettings>('image_settings_get');
+}
+
+export async function imageSettingsSet(url: string, key: string, model: string): Promise<void> {
+  await invoke('image_settings_set', { url, key, model });
+}
+
+/** 내 캐릭터를 이미지 모델로 다시 생성 (수십 초 걸릴 수 있음). 완료 시 sprite:ready 이벤트. */
+export async function regenerateSprite(): Promise<void> {
+  await invoke('regenerate_sprite');
+}
+
 /** 점유자 스프라이트 백그라운드 생성 요청 — 완료 시 'occupant-sprite:ready'(seed) 이벤트. */
 export async function requestOccupantSprite(seed: string): Promise<void> {
   try { await invoke('request_occupant_sprite', { seed }); } catch { /* 무시 */ }

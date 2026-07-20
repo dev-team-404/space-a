@@ -564,7 +564,13 @@ mod runtime {
         let Ok(dir) = app.path().app_data_dir() else { return };
         let path = dir.join("sprite.png");
         if path.exists() { return; }
-        let Some(cfg) = sprite::SpriteConfig::from_env() else { return };
+        // 설정창(image_*) → env 순 해석. 락은 해석 동안만 (네트워크 전 해제 규율).
+        let state = app.state::<crate::AppState>();
+        let cfg = match state.store.lock() {
+            Ok(store) => crate::resolve_sprite_cfg(&store),
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        };
+        let Some(cfg) = cfg else { return };
         let identity = agent_mentor::mascot::stable_identity();
         let spec = agent_mentor::mascot::robot_spec_for(&identity);
         let desc = sprite::character_description(&spec, &identity);

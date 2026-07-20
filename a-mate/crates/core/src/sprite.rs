@@ -15,20 +15,54 @@ pub struct SpriteConfig {
     pub model: String,
 }
 
+pub const DEFAULT_IMAGE_MODEL: &str = "google/gemini-2.5-flash-image";
+
+/// 비어있지 않은 첫 값을 고른다: 저장된 설정(설정창) → env 후보들 순.
+fn pick(stored: Option<&str>, env_keys: &[&str]) -> Option<String> {
+    if let Some(s) = stored {
+        let t = s.trim();
+        if !t.is_empty() {
+            return Some(t.to_string());
+        }
+    }
+    for k in env_keys {
+        if let Ok(v) = std::env::var(k) {
+            let t = v.trim().to_string();
+            if !t.is_empty() {
+                return Some(t);
+            }
+        }
+    }
+    None
+}
+
 impl SpriteConfig {
     /// Engine 설정(OpenRouter 등 OpenAI 호환)을 재사용. 미설정/off면 None.
     pub fn from_env() -> Option<SpriteConfig> {
+        Self::resolve(None, None, None)
+    }
+
+    /// 설정창 저장값 → env 순으로 해석.
+    /// 이미지 전용(`AGENT_MENTOR_IMAGE_*`)이 있으면 그것을, 없으면 텍스트 엔진 설정을 폴백으로 쓴다
+    /// (텍스트는 사내 LM Studio, 이미지는 OpenRouter처럼 **분리**할 수 있게 하기 위함).
+    /// url이 비면 None → 스프라이트 기능 전체 no-op(절차 생성 폴백).
+    pub fn resolve(
+        stored_url: Option<&str>,
+        stored_key: Option<&str>,
+        stored_model: Option<&str>,
+    ) -> Option<SpriteConfig> {
         if std::env::var("AGENT_MENTOR_SPRITE").map(|v| v == "off").unwrap_or(false) {
             return None;
         }
-        let base_url = std::env::var("AGENT_MENTOR_ENGINE_URL").ok()?;
+        let base_url = pick(stored_url, &["AGENT_MENTOR_IMAGE_URL", "AGENT_MENTOR_ENGINE_URL"])?;
+        let api_key = pick(stored_key, &["AGENT_MENTOR_IMAGE_KEY", "AGENT_MENTOR_ENGINE_KEY"])
+            .unwrap_or_default();
+        let model = pick(stored_model, &["AGENT_MENTOR_IMAGE_MODEL"])
+            .unwrap_or_else(|| DEFAULT_IMAGE_MODEL.to_string());
         Some(SpriteConfig {
             base_url: base_url.trim_end_matches('/').to_string(),
-            api_key: std::env::var("AGENT_MENTOR_ENGINE_KEY").unwrap_or_default(),
-            model: std::env::var("AGENT_MENTOR_IMAGE_MODEL")
-                .ok()
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| "google/gemini-2.5-flash-image".into()),
+            api_key,
+            model,
         })
     }
 }
@@ -132,6 +166,105 @@ pub fn sprite_for_seed(cfg: &SpriteConfig, seed: &str) -> Result<Vec<u8>> {
     generate(cfg, &desc)
 }
 
+/// 생성 이미지는 "plain white background"로 그려지는데, 마스코트 창은 투명이라 그대로 두면
+/// 캐릭터 주위에 **흰 박스**가 보인다. **테두리에서 연결된 배경색만** 알파 0으로 지운다 —
+/// 안쪽 흰색(신발·후드 끈)은 둘러싸여 있어 보존된다(플러드 필이 실루엣 아웃라인에서 막힘).
+pub fn make_background_transparent(png_bytes: &[u8]) -> Result<Vec<u8>> {
+    use std::collections::VecDeque;
+
+    let mut decoder = png::Decoder::new(png_bytes);
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info()?;
+    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf)?;
+    let (w, h) = (info.width as usize, info.height as usize);
+    if w == 0 || h == 0 {
+        return Err(anyhow!("빈 이미지"));
+    }
+    let ch = match info.color_type {
+        png::ColorType::Rgb => 3,
+        png::ColorType::Rgba => 4,
+        other => return Err(anyhow!("지원하지 않는 PNG 색 형식: {other:?}")),
+    };
+
+    // RGBA로 정규화
+    let mut rgba = vec![0u8; w * h * 4];
+    for i in 0..w * h {
+        rgba[i * 4] = buf[i * ch];
+        rgba[i * 4 + 1] = buf[i * ch + 1];
+        rgba[i * 4 + 2] = buf[i * ch + 2];
+        rgba[i * 4 + 3] = if ch == 4 { buf[i * ch + 3] } else { 255 };
+    }
+
+    // 배경 기준색 = 네 모서리 평균 (모델이 순백이 아닌 254 같은 값을 쓰기도 함)
+    let at = |px: &[u8], i: usize| [px[i * 4] as i32, px[i * 4 + 1] as i32, px[i * 4 + 2] as i32];
+    let corners = [0, w - 1, (h - 1) * w, (h - 1) * w + (w - 1)];
+    let mut bg = [0i32; 3];
+    for c in corners {
+        let p = at(&rgba, c);
+        for k in 0..3 {
+            bg[k] += p[k];
+        }
+    }
+    for k in 0..3 {
+        bg[k] /= 4;
+    }
+    // 밝고(=배경 후보) 기준색과 가까운 픽셀만 배경으로 본다
+    let is_bg = |px: &[u8], i: usize| -> bool {
+        let p = at(px, i);
+        let dist = (p[0] - bg[0]).abs() + (p[1] - bg[1]).abs() + (p[2] - bg[2]).abs();
+        dist <= 42 && p[0].min(p[1]).min(p[2]) > 150
+    };
+
+    // 테두리에서 플러드 필
+    let mut seen = vec![false; w * h];
+    let mut q: VecDeque<usize> = VecDeque::new();
+    let mut seed = |i: usize, seen: &mut Vec<bool>, q: &mut VecDeque<usize>, px: &[u8]| {
+        if !seen[i] && is_bg(px, i) {
+            seen[i] = true;
+            q.push_back(i);
+        }
+    };
+    for x in 0..w {
+        seed(x, &mut seen, &mut q, &rgba);
+        seed((h - 1) * w + x, &mut seen, &mut q, &rgba);
+    }
+    for y in 0..h {
+        seed(y * w, &mut seen, &mut q, &rgba);
+        seed(y * w + (w - 1), &mut seen, &mut q, &rgba);
+    }
+    while let Some(i) = q.pop_front() {
+        let (x, y) = (i % w, i / w);
+        let neighbours = [
+            if x > 0 { Some(i - 1) } else { None },
+            if x + 1 < w { Some(i + 1) } else { None },
+            if y > 0 { Some(i - w) } else { None },
+            if y + 1 < h { Some(i + w) } else { None },
+        ];
+        for n in neighbours.into_iter().flatten() {
+            if !seen[n] && is_bg(&rgba, n) {
+                seen[n] = true;
+                q.push_back(n);
+            }
+        }
+    }
+    for i in 0..w * h {
+        if seen[i] {
+            rgba[i * 4 + 3] = 0;
+        }
+    }
+
+    let mut out = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut out, w as u32, h as u32);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut writer = enc.write_header()?;
+        writer.write_image_data(&rgba)?;
+    }
+    Ok(out)
+}
+
 /// 이미지 생성 — 스타일 앵커 + 인물 묘사. 반환 = PNG 바이트.
 pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
     let ref_b64 = base64::engine::general_purpose::STANDARD.encode(STYLE_REF_JPG);
@@ -168,9 +301,17 @@ pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
         .split_once(',')
         .map(|(_, b)| b)
         .ok_or_else(|| anyhow!("sprite data URL 형식 아님"))?;
-    base64::engine::general_purpose::STANDARD
+    let png = base64::engine::general_purpose::STANDARD
         .decode(b64)
-        .map_err(|e| anyhow!("sprite base64 디코드 실패: {e}"))
+        .map_err(|e| anyhow!("sprite base64 디코드 실패: {e}"))?;
+    // 흰 배경 → 투명. 실패해도 캐릭터는 보여야 하므로 원본으로 폴백(무해).
+    match make_background_transparent(&png) {
+        Ok(t) => Ok(t),
+        Err(e) => {
+            eprintln!("[sprite] 배경 투명화 실패(원본 사용): {e}");
+            Ok(png)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -219,6 +360,67 @@ mod tests {
         }
         assert!(genders.len() >= 3, "성별 표현 3종 모두 등장");
         assert!(skins.len() >= 3, "피부톤 다양성");
+    }
+
+    #[test]
+    fn transparent_bg_removes_only_border_connected_white() {
+        let (w, h) = (9usize, 9usize);
+        let mut rgb = vec![255u8; w * h * 3]; // 전부 흰색
+        // (2,2)-(6,6) 테두리를 어둡게 → 그 안쪽 흰색은 실루엣에 둘러싸인 상태가 된다
+        for x in 2..=6usize {
+            for y in 2..=6usize {
+                if x == 2 || x == 6 || y == 2 || y == 6 {
+                    let i = (y * w + x) * 3;
+                    rgb[i] = 20;
+                    rgb[i + 1] = 20;
+                    rgb[i + 2] = 30;
+                }
+            }
+        }
+        let mut src = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut src, w as u32, h as u32);
+            enc.set_color(png::ColorType::Rgb);
+            enc.set_depth(png::BitDepth::Eight);
+            enc.write_header().unwrap().write_image_data(&rgb).unwrap();
+        }
+
+        let out = make_background_transparent(&src).expect("투명화 성공");
+
+        let mut dec = png::Decoder::new(&out[..]);
+        let mut r = dec.read_info().unwrap();
+        let mut buf = vec![0u8; r.output_buffer_size()];
+        let info = r.next_frame(&mut buf).unwrap();
+        assert_eq!(info.color_type, png::ColorType::Rgba);
+        let alpha = |x: usize, y: usize| buf[(y * w + x) * 4 + 3];
+        assert_eq!(alpha(0, 0), 0, "테두리에 연결된 바깥 흰 배경 → 투명");
+        assert_eq!(alpha(4, 4), 255, "링 안쪽 흰색(신발·끈 상당) → 보존");
+        assert_eq!(alpha(4, 2), 255, "실루엣(어두운 링) 자체 → 보존");
+    }
+
+    #[test]
+    fn resolve_prefers_stored_settings_and_trims_url() {
+        // 저장된 설정이 있으면 env와 무관하게 그것을 쓴다 (설정창 우선).
+        let cfg = SpriteConfig::resolve(
+            Some("  https://openrouter.ai/api/v1/  "),
+            Some(" sk-test "),
+            Some(" some/model "),
+        )
+        .expect("stored url이 있으면 Some");
+        assert_eq!(cfg.base_url, "https://openrouter.ai/api/v1");
+        assert_eq!(cfg.api_key, "sk-test");
+        assert_eq!(cfg.model, "some/model");
+    }
+
+    #[test]
+    fn resolve_defaults_model_when_not_given() {
+        let cfg = SpriteConfig::resolve(Some("https://x/api/v1"), Some(""), None)
+            .expect("stored url이 있으면 Some");
+        // 모델 미지정 + env 미설정이면 기본 이미지 모델
+        if std::env::var("AGENT_MENTOR_IMAGE_MODEL").is_err() {
+            assert_eq!(cfg.model, DEFAULT_IMAGE_MODEL);
+        }
+        assert_eq!(cfg.base_url, "https://x/api/v1");
     }
 
     #[test]
