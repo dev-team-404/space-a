@@ -156,13 +156,34 @@ let currentScene: Container | null = null
 
 async function ensureApp() {
   if (appReady) return
-  await app.init({ resizeTo: window, background: '#0d1220', antialias: true })
+  await app.init({
+    resizeTo: window,
+    background: '#0d1220',
+    antialias: true,
+    resolution: window.devicePixelRatio || 1,
+    autoDensity: true,
+  })
   sceneHost.appendChild(app.canvas)
   appReady = true
   // 렌더러가 실제로 리사이즈된 뒤(screen.width 갱신 후) 씬을 다시 맞춘다.
   // window resize만 듣던 이전 방식은 resizeTo의 반영 타이밍과 어긋나 배율이 안 맞았다.
   app.renderer.on('resize', () => fitScene())
   window.addEventListener('resize', () => fitScene())
+  watchDevicePixelRatio()
+}
+
+// 브라우저 줌·모니터 이동 등으로 devicePixelRatio가 바뀌어도 렌더러 resolution은
+// init 시점 값에 고정된 채라(리사이즈 이벤트가 안 따라옴) 글자·스프라이트가 흐려진다.
+// matchMedia로 현재 DPR을 감시하다가 바뀌면 renderer.resolution을 다시 맞춘다.
+function watchDevicePixelRatio() {
+  const mq = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
+  const onChange = () => {
+    app.renderer.resolution = window.devicePixelRatio || 1
+    app.renderer.resize(app.screen.width, app.screen.height)
+    fitScene()
+    watchDevicePixelRatio() // 새 DPR 기준으로 감시자 재등록 (matchMedia는 1회성)
+  }
+  mq.addEventListener('change', onChange, { once: true })
 }
 
 const HUB_W = 340 // #hub 사이드바 폭 — 씬 가용 영역에서 제외
