@@ -50,3 +50,9 @@ export function coachTitle(ruleId: string, evidence: unknown): string {
   }
   return COACH_TITLE[ruleId] ?? '아낄 수 있는 게 보여요';
 }
+
+/** 코치 탭 '숨긴 항목'에 보일 상태 — 사용자가 직접 처분한 것만.
+ * pending(판정 대기)·rejected(판정 탈락)는 내부 상태라 노출하지 않는다 (fail-safe 침묵). */
+export function isHiddenFinding(status: string): boolean {
+  return status === 'resolved' || status === 'dismissed';
+}

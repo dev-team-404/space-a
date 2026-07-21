@@ -1,7 +1,7 @@
 <script lang="ts">
   import { listFindings, onNewFindings, setFindingStatus, sessionsCtx, generateSkillDraft, saveSkillDraft, type CoachFinding, type SessionCtxItem, type SkillDraft } from '../api';
   import SessionModal from './SessionModal.svelte';
-  import { coachTitle, ctxLine, sessionIdsOf, totalSessionsOf } from './coach-helpers';
+  import { coachTitle, ctxLine, isHiddenFinding, sessionIdsOf, totalSessionsOf } from './coach-helpers';
 
   let { focusKey = null, onChanged }: { focusKey?: string | null; onChanged?: () => void } = $props();
 
@@ -25,7 +25,7 @@
   }
 
   const active = $derived(all.filter((f) => f.status === 'new'));
-  const hidden = $derived(all.filter((f) => f.status !== 'new'));
+  const hidden = $derived(all.filter((f) => isHiddenFinding(f.status)));
 
   async function refresh() {
     all = await listFindings(true).catch(() => []);

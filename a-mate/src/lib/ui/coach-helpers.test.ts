@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coachTitle, ctxLine, sessionIdsOf, totalSessionsOf } from './coach-helpers';
+import { coachTitle, ctxLine, isHiddenFinding, sessionIdsOf, totalSessionsOf } from './coach-helpers';
 import type { SessionCtxItem } from '../api';
 
 const item = (over: Partial<SessionCtxItem> = {}): SessionCtxItem => ({
@@ -50,5 +50,17 @@ describe('coachTitle', () => {
   });
   it('알 수 없는 rule → fallback', () => {
     expect(coachTitle('RX', {})).toBe('아낄 수 있는 게 보여요');
+  });
+});
+
+describe('isHiddenFinding', () => {
+  it('사용자 처분 상태(resolved/dismissed)만 숨긴 항목', () => {
+    expect(isHiddenFinding('resolved')).toBe(true);
+    expect(isHiddenFinding('dismissed')).toBe(true);
+  });
+  it('내부 상태(new/pending/rejected)는 숨긴 항목이 아니다', () => {
+    expect(isHiddenFinding('new')).toBe(false);
+    expect(isHiddenFinding('pending')).toBe(false);
+    expect(isHiddenFinding('rejected')).toBe(false);
   });
 });

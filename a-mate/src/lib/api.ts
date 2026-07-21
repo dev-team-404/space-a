@@ -34,7 +34,7 @@ export interface Finding {
 }
 
 export interface CoachFinding extends Finding {
-  status: 'new' | 'resolved' | 'dismissed';
+  status: 'new' | 'resolved' | 'dismissed' | 'pending' | 'rejected';
   detail: string;
   suggested_action: string;
   fix_command: string | null;
