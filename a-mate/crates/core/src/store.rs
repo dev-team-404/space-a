@@ -202,6 +202,13 @@ fn migrate(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// 논리 dedup 키용 내용 해시 — r6/r23의 hash8과 같은 규약 (sha256 앞 4바이트 hex).
+fn hash8(s: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let d = Sha256::digest(s.as_bytes());
+    format!("{:02x}{:02x}{:02x}{:02x}", d[0], d[1], d[2], d[3])
+}
+
 impl SqliteStore {
     pub fn open(path: &Path) -> Result<SqliteStore> {
         let conn = Connection::open(path)?;
@@ -223,9 +230,26 @@ impl SqliteStore {
         let tx = self.conn.unchecked_transaction()?;
         let mut inserted = 0usize;
         for e in evs {
-            let dedup_key = match &e.uuid {
+            // 논리 dedup 키 (데이터 위생 스펙 §3.1) — resume 포크 복제본과 다중 라인
+            // usage 반복이 DB에 들어오지 않게 한다. uuid는 복제 시 재발급되지만
+            // tool_use_id·message.id·ts는 보존된다 (2026-07-21 실데이터 검증).
+            // 식별자가 없으면 기존 uuid:offset 규칙으로 폴백.
+            let fallback = || match &e.uuid {
                 Some(u) => format!("{}:{}", u, e.source_offset),
                 None => format!("{}:{}", e.source_file, e.source_offset),
+            };
+            let dedup_key = match &e.kind {
+                EventKind::ToolCall { tool_use_id: Some(tid), .. } => {
+                    format!("tc:{}:{}", e.host, tid)
+                }
+                EventKind::ToolResult { tool_use_id, .. } if !tool_use_id.is_empty() => {
+                    format!("tr:{}:{}", e.host, tool_use_id)
+                }
+                EventKind::AssistantTurn { .. } => match &e.msg_id {
+                    Some(m) => format!("at:{}:{}", e.host, m),
+                    None => fallback(),
+                },
+                _ => fallback(),
             };
             // 세션 단위 필드는 sessions로만 라우팅 (events 미삽입)
             match &e.kind {
@@ -264,12 +288,20 @@ impl SqliteStore {
                         continue;
                     }
                     if let Some(norm60) = crate::rules::r6_repeated_prompts::normalize(preview) {
+                        // 포크 복제본은 ts·내용이 보존되므로 (host, project, ts, 내용해시)가
+                        // 논리 식별자 — 같은 물리적 입력은 세션 파일이 몇 개든 1행.
+                        let pe_key = match &e.ts {
+                            Some(ts) => format!(
+                                "up:{}:{}:{}:{}", e.host, e.project_id, ts, hash8(preview)
+                            ),
+                            None => dedup_key.clone(),
+                        };
                         self.conn.execute(
                             "INSERT OR IGNORE INTO prompt_events
                                (dedup_key, session_id, host, project_id, ts,
                                 source_file, source_offset, norm60, preview)
                              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
-                            params![dedup_key, e.session_id, e.host, e.project_id, e.ts,
+                            params![pe_key, e.session_id, e.host, e.project_id, e.ts,
                                     e.source_file, e.source_offset as i64, norm60, preview],
                         )?;
                     }
@@ -2962,5 +2994,130 @@ mod tests {
         let n: i64 = store.conn.query_row(
             "SELECT subagent_files FROM sessions WHERE session_id='solo'", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0);
+    }
+
+    /// 논리 dedup 키 테스트용 이벤트 — 포크 복제본은 uuid·session·file이 다르고
+    /// ts·message.id·tool_use_id가 보존된다 (2026-07-21 실데이터 검증).
+    fn hygiene_ev(
+        sess: &str, file: &str, uuid: &str, off: u64,
+        msg_id: Option<&str>, kind: crate::model::EventKind,
+    ) -> crate::model::NormalizedEvent {
+        crate::model::NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
+            uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-08T08:53:54.410Z".into()),
+            source_file: file.into(), source_offset: off,
+            msg_id: msg_id.map(Into::into), kind,
+        }
+    }
+
+    #[test]
+    fn resume_fork_copies_collapse_by_logical_identity() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let turn = || EventKind::AssistantTurn {
+            model: NormModel::from_raw_id("claude-opus-4-8"),
+            usage: TokenUsage { input: 10, output: 1556, cache_read: 0,
+                                cache_creation: 0, eph_1h: 0, eph_5m: 0 },
+            web_search: 0, web_fetch: 0,
+        };
+        for (i, (sess, file)) in
+            [("orig", "a.jsonl"), ("fork1", "b.jsonl"), ("fork2", "c.jsonl")].iter().enumerate()
+        {
+            store.upsert_events(&[
+                hygiene_ev(sess, file, &format!("u{i}a"), 0, Some("msg_A"), turn()),
+                hygiene_ev(sess, file, &format!("u{i}b"), 1, None, EventKind::ToolCall {
+                    kind: ToolKind::from_raw_name("Bash"), raw_name: "Bash".into(),
+                    target: Some("gh pr view".into()), tool_use_id: Some("toolu_X".into()),
+                }),
+                hygiene_ev(sess, file, &format!("u{i}c"), 2, None, EventKind::ToolResult {
+                    tool_use_id: "toolu_X".into(), status: ResultStatus::Ok, result_len: 10,
+                }),
+            ]).unwrap();
+        }
+        let count = |k: &str| -> i64 {
+            store.conn.query_row("SELECT COUNT(*) FROM events WHERE kind=?1",
+                rusqlite::params![k], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(count("assistant_turn"), 1, "포크 복제 AssistantTurn은 1행");
+        assert_eq!(count("tool_call"), 1, "포크 복제 ToolCall은 1행");
+        assert_eq!(count("tool_result"), 1, "포크 복제 ToolResult는 1행");
+        let out: i64 = store.conn.query_row(
+            "SELECT COALESCE(SUM(tok_output),0) FROM events", [], |r| r.get(0)).unwrap();
+        assert_eq!(out, 1556, "토큰 이중 계산 금지");
+    }
+
+    #[test]
+    fn multiline_assistant_message_counts_usage_once() {
+        use crate::model::*;
+        // 한 API 응답이 여러 assistant 라인으로 쪼개질 때 usage가 라인마다 반복된다
+        // (실측: assistant 601줄 = 메시지 233개). AssistantTurn은 msg.id당 1행,
+        // ToolCall은 tool_use_id가 블록마다 달라 전부 보존 (스펙 §3.1).
+        let store = SqliteStore::open_in_memory().unwrap();
+        let turn = || EventKind::AssistantTurn {
+            model: NormModel::from_raw_id("claude-opus-4-8"),
+            usage: TokenUsage { input: 10, output: 500, cache_read: 0,
+                                cache_creation: 0, eph_1h: 0, eph_5m: 0 },
+            web_search: 0, web_fetch: 0,
+        };
+        let call = |tid: &str| EventKind::ToolCall {
+            kind: ToolKind::from_raw_name("Read"), raw_name: "Read".into(),
+            target: Some("a.rs".into()), tool_use_id: Some(tid.into()),
+        };
+        store.upsert_events(&[
+            hygiene_ev("s1", "s1.jsonl", "u1", 0, Some("msg_B"), turn()),
+            hygiene_ev("s1", "s1.jsonl", "u2", 10, Some("msg_B"), turn()),
+            hygiene_ev("s1", "s1.jsonl", "u2t", 11, None, call("toolu_1")),
+            hygiene_ev("s1", "s1.jsonl", "u3", 20, Some("msg_B"), turn()),
+            hygiene_ev("s1", "s1.jsonl", "u3t", 21, None, call("toolu_2")),
+        ]).unwrap();
+        let turns: i64 = store.conn.query_row(
+            "SELECT COUNT(*) FROM events WHERE kind='assistant_turn'", [], |r| r.get(0)).unwrap();
+        let calls: i64 = store.conn.query_row(
+            "SELECT COUNT(*) FROM events WHERE kind='tool_call'", [], |r| r.get(0)).unwrap();
+        let out: i64 = store.conn.query_row(
+            "SELECT COALESCE(SUM(tok_output),0) FROM events", [], |r| r.get(0)).unwrap();
+        assert_eq!(turns, 1, "같은 msg.id의 AssistantTurn은 1행");
+        assert_eq!(calls, 2, "블록별 ToolCall은 전부 보존");
+        assert_eq!(out, 500, "usage 반복은 1회만 합산");
+    }
+
+    #[test]
+    fn assistant_without_message_id_falls_back_to_uuid_offset() {
+        use crate::model::*;
+        // <synthetic> 등 message.id 없는 라인은 기존 uuid:offset 규칙 유지
+        let store = SqliteStore::open_in_memory().unwrap();
+        let turn = || EventKind::AssistantTurn {
+            model: NormModel::from_raw_id("<synthetic>"),
+            usage: TokenUsage { input: 0, output: 0, cache_read: 0,
+                                cache_creation: 0, eph_1h: 0, eph_5m: 0 },
+            web_search: 0, web_fetch: 0,
+        };
+        store.upsert_events(&[
+            hygiene_ev("s1", "s1.jsonl", "u1", 0, None, turn()),
+            hygiene_ev("s1", "s1.jsonl", "u2", 10, None, turn()),
+        ]).unwrap();
+        let n: i64 = store.conn.query_row(
+            "SELECT COUNT(*) FROM events WHERE kind='assistant_turn'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 2, "식별자 없으면 병합하지 않는다 (폴백)");
+    }
+
+    #[test]
+    fn forked_prompt_copies_collapse_to_one_row() {
+        use crate::model::*;
+        // resume 포크: 같은 ts·내용의 프롬프트가 3개 세션 파일에 복제 → prompt_events 1행
+        // (R6 "3개 세션" 부풀림의 근본 원인 — 스펙 §1.1-1)
+        let store = SqliteStore::open_in_memory().unwrap();
+        for (i, (sess, file)) in
+            [("orig", "a.jsonl"), ("fork1", "b.jsonl"), ("fork2", "c.jsonl")].iter().enumerate()
+        {
+            store.upsert_events(&[hygiene_ev(sess, file, &format!("u{i}"), 0, None,
+                EventKind::UserPrompt { preview: "그 배포 버전 사내망에 올린 것 맞는지 확인해줘".into() },
+            )]).unwrap();
+        }
+        let n: i64 = store.conn.query_row(
+            "SELECT COUNT(*) FROM prompt_events", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1, "포크 복제 프롬프트는 1행");
     }
 }
