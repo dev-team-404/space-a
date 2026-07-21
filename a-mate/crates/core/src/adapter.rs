@@ -98,7 +98,7 @@ fn content_text(content: Option<&Value>) -> Option<String> {
 }
 
 /// Claude Code가 user 라인에 주입하는 합성 마커 — 사용자 지시가 아니다.
-/// (슬래시 커맨드 에코, 로컬 커맨드 출력, IDE 연동 이벤트, 훅/백그라운드 알림)
+/// (슬래시 커맨드 에코, 로컬 커맨드 출력, IDE 연동 이벤트, 훅/백그라운드 알림, 인터럽트 마커)
 fn is_synthetic_marker(text: &str) -> bool {
     let t = text.trim_start();
     t.starts_with("<command")
@@ -106,6 +106,7 @@ fn is_synthetic_marker(text: &str) -> bool {
         || t.starts_with("<ide_")
         || t.starts_with("<system-reminder")
         || t.starts_with("<task-notification")
+        || t.starts_with("[Request interrupted")
 }
 
 /// user 프롬프트 미리보기(첫 줄 ≤120자). content가 문자열이면 그대로, 블록 배열이면
@@ -212,6 +213,11 @@ impl SourceAdapter for ClaudeCodeAdapter {
             ts: v.get("timestamp").and_then(|x| x.as_str()).map(String::from),
             source_file: source_file.to_string(),
             source_offset: source_offset + off_bump,
+            msg_id: v
+                .get("message")
+                .and_then(|m| m.get("id"))
+                .and_then(|x| x.as_str())
+                .map(String::from),
             kind,
         };
 
@@ -394,6 +400,26 @@ mod tests {
     }
 
     #[test]
+    fn map_assistant_line_carries_message_id() {
+        // resume 포크 복제본에서도 보존되는 message.id — 논리 dedup 키 재료 (스펙 §3.1)
+        let line = r#"{"type":"assistant","sessionId":"s1","uuid":"u1",
+            "message":{"id":"msg_011Ccp9b","model":"claude-opus-4-8",
+            "usage":{"input_tokens":1,"output_tokens":2},
+            "content":[{"type":"text","text":"hi"}]}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        let turn = evs.iter().find(|e| matches!(e.kind, EventKind::AssistantTurn { .. })).unwrap();
+        assert_eq!(turn.msg_id.as_deref(), Some("msg_011Ccp9b"));
+    }
+
+    #[test]
+    fn map_user_line_has_no_message_id() {
+        let line = r#"{"type":"user","sessionId":"s1","uuid":"u2",
+            "message":{"role":"user","content":"이 함수 리팩토링 진행해줘"}}"#;
+        let evs = adapter().map(line, "s1.jsonl", 0);
+        assert!(evs.iter().all(|e| e.msg_id.is_none()));
+    }
+
+    #[test]
     fn map_skill_tool_use_captures_skill_name() {
         let line = r#"{"type":"assistant","sessionId":"s1","uuid":"u1","parentUuid":null,
             "isSidechain":false,"timestamp":"2026-07-01T10:00:00Z","cwd":"C:\\Users\\jibin",
@@ -503,6 +529,22 @@ mod tests {
             "message":{"role":"user","content":"<system-reminder>background task done</system-reminder>"}}"#;
         let evs = adapter().map(line, "s1.jsonl", 0);
         assert!(!evs.iter().any(|e| matches!(e.kind, crate::model::EventKind::UserPrompt { .. })));
+    }
+
+    #[test]
+    fn map_user_interrupt_markers_yield_no_prompt() {
+        // Claude Code가 인터럽트 시 합성하는 user 라인 — 지시가 아니다.
+        // 실사용: 43개 파일에 존재, R6 "27개 세션" junk 카드의 원인 (스펙 §1.1-3)
+        for text in ["[Request interrupted by user]", "[Request interrupted by user for tool use]"] {
+            let line = format!(
+                r#"{{"type":"user","sessionId":"s1","uuid":"u9","message":{{"role":"user","content":"{text}"}}}}"#
+            );
+            let evs = adapter().map(&line, "s1.jsonl", 0);
+            assert!(
+                !evs.iter().any(|e| matches!(e.kind, crate::model::EventKind::UserPrompt { .. })),
+                "인터럽트 마커가 프롬프트로 수집되면 안 됨: {text}"
+            );
+        }
     }
 
     #[test]

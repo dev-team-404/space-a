@@ -109,6 +109,7 @@ mod tests {
                 ts: Some(ts.into()),
                 source_file: "s.jsonl".into(),
                 source_offset: offset,
+                msg_id: None,
                 kind: EventKind::UserPrompt { preview: prompt.into() },
             }])
             .unwrap();
@@ -118,14 +119,19 @@ mod tests {
         seed_prompt_at(store, sess, prompt, ts, 0);
     }
 
+    /// 논리 dedup 키(ts+내용)가 같은 ts·내용을 한 행으로 접으므로,
+    /// "다른 세션의 실제 반복"은 반드시 서로 다른 ts로 시딩한다.
+    fn ts_at(i: i64) -> String {
+        (chrono::Utc::now() - chrono::Duration::minutes(i)).to_rfc3339()
+    }
+
     #[test]
     fn r6_fires_on_three_sessions_with_same_prompt() {
         let store = SqliteStore::open_in_memory().unwrap();
-        let now = chrono::Utc::now().to_rfc3339();
-        seed_session(&store, "s1", "매일 아침 판매 리포트 뽑아줘", &now);
-        seed_session(&store, "s2", "매일  아침 판매 리포트 뽑아줘 ", &now); // 공백 차이 → 동치
-        seed_session(&store, "s3", "매일 아침 판매 리포트 뽑아줘", &now);
-        seed_session(&store, "s4", "완전 다른 요청입니다", &now);
+        seed_session(&store, "s1", "매일 아침 판매 리포트 뽑아줘", &ts_at(0));
+        seed_session(&store, "s2", "매일  아침 판매 리포트 뽑아줘 ", &ts_at(1)); // 공백 차이 → 동치
+        seed_session(&store, "s3", "매일 아침 판매 리포트 뽑아줘", &ts_at(2));
+        seed_session(&store, "s4", "완전 다른 요청입니다", &ts_at(3));
         let findings = R6RepeatedPrompts::default().evaluate(&store).unwrap();
         assert_eq!(findings.len(), 1);
         let f = &findings[0];
@@ -139,10 +145,9 @@ mod tests {
     fn r6_fires_on_mid_session_repeats_across_sessions() {
         // 첫 프롬프트가 아니라 세션 중간에 반복되는 지시도 잡는다 (v2 — 스펙 §4.3)
         let store = SqliteStore::open_in_memory().unwrap();
-        let now = chrono::Utc::now().to_rfc3339();
         for (i, sess) in ["s1", "s2", "s3"].iter().enumerate() {
-            seed_prompt_at(&store, sess, &format!("서로 다른 작업 요청 {i}번"), &now, 0);
-            seed_prompt_at(&store, sess, "PR 리뷰 코멘트 종합 검토해서 조치해줘", &now, 10);
+            seed_prompt_at(&store, sess, &format!("서로 다른 작업 요청 {i}번"), &ts_at(i as i64 * 2), 0);
+            seed_prompt_at(&store, sess, "PR 리뷰 코멘트 종합 검토해서 조치해줘", &ts_at(i as i64 * 2 + 1), 10);
         }
         let findings = R6RepeatedPrompts::default().evaluate(&store).unwrap();
         assert_eq!(findings.len(), 1);
@@ -156,11 +161,10 @@ mod tests {
     fn r6_counts_session_once_despite_in_session_repeats() {
         // 한 세션 안에서 5번 반복 ≠ 5개 세션 — 세션당 1회만 센다 (스펙 §4.3)
         let store = SqliteStore::open_in_memory().unwrap();
-        let now = chrono::Utc::now().to_rfc3339();
-        for off in [0u64, 10, 20, 30, 40] {
-            seed_prompt_at(&store, "s1", "이 함수 리팩토링 진행해줘", &now, off);
+        for (i, off) in [0u64, 10, 20, 30, 40].iter().enumerate() {
+            seed_prompt_at(&store, "s1", "이 함수 리팩토링 진행해줘", &ts_at(i as i64), *off);
         }
-        seed_prompt_at(&store, "s2", "이 함수 리팩토링 진행해줘", &now, 0);
+        seed_prompt_at(&store, "s2", "이 함수 리팩토링 진행해줘", &ts_at(10), 0);
         assert!(R6RepeatedPrompts::default().evaluate(&store).unwrap().is_empty(),
             "세션 2개는 문턱(3) 미달이어야 함");
     }
@@ -168,12 +172,24 @@ mod tests {
     #[test]
     fn r6_ignores_short_or_rare_prompts() {
         let store = SqliteStore::open_in_memory().unwrap();
-        let now = chrono::Utc::now().to_rfc3339();
         for i in 0..4 {
-            seed_session(&store, &format!("a{i}"), "ㅇㅋ", &now); // 8자 미만 → 제외
+            seed_session(&store, &format!("a{i}"), "ㅇㅋ", &ts_at(i)); // 8자 미만 → 제외
         }
-        seed_session(&store, "b1", "이건 두 번뿐인 반복 요청", &now);
-        seed_session(&store, "b2", "이건 두 번뿐인 반복 요청", &now);
+        seed_session(&store, "b1", "이건 두 번뿐인 반복 요청", &ts_at(5));
+        seed_session(&store, "b2", "이건 두 번뿐인 반복 요청", &ts_at(6));
         assert!(R6RepeatedPrompts::default().evaluate(&store).unwrap().is_empty());
+    }
+
+    #[test]
+    fn r6_counts_forked_copies_once() {
+        // resume 포크: 같은 ts·내용 프롬프트가 3개 세션 파일에 복제돼도 "3개 세션"이
+        // 되면 안 된다 (2026-07-21 데이터 위생 스펙 §1.1-1 — 실사용 junk 카드의 주범)
+        let store = SqliteStore::open_in_memory().unwrap();
+        let ts = chrono::Utc::now().to_rfc3339();
+        for sess in ["orig", "fork1", "fork2"] {
+            seed_session(&store, sess, "그 배포 버전 어제 사내망에 올린 것 맞는지 확인해줘", &ts);
+        }
+        assert!(R6RepeatedPrompts::default().evaluate(&store).unwrap().is_empty(),
+            "포크 복제본이 세션 수로 계산되면 안 됨");
     }
 }

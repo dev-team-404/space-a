@@ -335,7 +335,7 @@ mod tests {
             host: "Windows".into(), project_id: "d--proj".into(),
             session_id: session.into(), uuid: Some(format!("{session}-{off}")), parent_uuid: None,
             is_sidechain: false, ts: Some("2026-07-06T10:00:00Z".into()),
-            source_file: "s.jsonl".into(), source_offset: off, kind,
+            source_file: "s.jsonl".into(), source_offset: off, msg_id: None, kind,
         }
     }
     fn read(session: &str, off: u64, path: &str) -> NormalizedEvent {

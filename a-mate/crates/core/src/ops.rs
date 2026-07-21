@@ -270,6 +270,7 @@ mod tests {
             session_id: sid.into(), uuid: Some(uuid.into()), parent_uuid: None,
             is_sidechain: false, ts: Some("2026-07-14T10:00:00Z".into()),
             source_file: "s.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id(model),
                 usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
@@ -382,6 +383,7 @@ mod tests {
                 host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
                 uuid: Some(format!("{sess}-u{off}")), parent_uuid: None, is_sidechain: false,
                 ts: Some(now.clone()), source_file: "s.jsonl".into(), source_offset: off,
+                msg_id: None,
                 kind: EventKind::ToolCall {
                     kind, raw_name: raw.into(), target: target.map(Into::into),
                     tool_use_id: Some(format!("{sess}-t{off}")),

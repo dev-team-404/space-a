@@ -82,6 +82,7 @@ mod tests {
             session_id: session.into(), uuid: Some(uuid.into()), parent_uuid: None,
             is_sidechain: false, ts: Some("2026-07-01T10:00:00Z".into()),
             source_file: "s.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage::default(), web_search: ws, web_fetch: wf,

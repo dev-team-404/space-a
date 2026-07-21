@@ -993,6 +993,7 @@ mod tests {
             uuid: Some("u1".into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2020-01-01T10:00:00Z".into()), // 확실한 과거 — today엔 안 걸린다
             source_file: "f.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage { input: 5, output: 5, ..Default::default() },
@@ -1035,6 +1036,7 @@ mod tests {
             uuid: Some("u1".into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-06T09:00:00Z".into()),
             source_file: "f.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
@@ -1078,6 +1080,7 @@ mod tests {
                 host: "Windows".into(), project_id: "d--proj".into(), session_id: sid.into(),
                 uuid: Some(format!("{sid}-u")), parent_uuid: None, is_sidechain: false,
                 ts: Some(ts.into()), source_file: "f.jsonl".into(), source_offset: 0,
+                msg_id: None,
                 kind: EventKind::AssistantTurn {
                     model: NormModel::from_raw_id("claude-opus-4-8"),
                     usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
@@ -1103,6 +1106,7 @@ mod tests {
                 uuid: Some("m1".into()), parent_uuid: None, is_sidechain: false,
                 ts: Some("2026-07-07T10:00:00Z".into()),
                 source_file: "s.jsonl".into(), source_offset: 0,
+                msg_id: None,
                 kind: EventKind::SessionMeta { cwd: "D:\\Project\\cowork".into(), git_branch: None },
             },
             NormalizedEvent {
@@ -1111,6 +1115,7 @@ mod tests {
                 uuid: Some("p1".into()), parent_uuid: None, is_sidechain: false,
                 ts: Some("2026-07-07T10:00:00Z".into()),
                 source_file: "s.jsonl".into(), source_offset: 10,
+                msg_id: None,
                 kind: EventKind::UserPrompt { preview: "커밋 요약해줘".into() },
             },
         ]).unwrap();

@@ -121,7 +121,8 @@ CREATE TABLE IF NOT EXISTS prompt_events (
 - `→ 3`: R23 특이 토큰 가드 도입에 따른 기존 R23 finding 정리 (재산출).
 - `→ 4`: prompt_events 사이드체인 제외 반영을 위한 전체 재수집.
 - `→ 5`: R23 카드 홍수 정리 — 활성('new')만 삭제, dismissed/resolved는 보존.
-- 신규 설치는 0→5 한 번에 통과 (중간 분기는 빈 DB에서 no-op).
+- `→ 6`: 논리 dedup 키 도입(데이터 위생 스펙 §3) — 전체 재수집 + R6/R23 'new' 정화.
+- 신규 설치는 0→6 한 번에 통과 (중간 분기는 빈 DB에서 no-op).
 
 ## 6. 테스트 계획
 

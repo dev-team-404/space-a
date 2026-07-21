@@ -117,6 +117,9 @@ pub struct NormalizedEvent {
     pub ts: Option<String>,
     pub source_file: String,
     pub source_offset: u64,
+    /// assistant 라인의 API message id (`msg_…`) — resume 포크 복제본·다중 라인에서
+    /// 보존되는 논리 식별자. AssistantTurn dedup 키 재료 (데이터 위생 스펙 §3.1).
+    pub msg_id: Option<String>,
     pub kind: EventKind,
 }
 

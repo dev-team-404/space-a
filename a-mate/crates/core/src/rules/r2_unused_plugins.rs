@@ -123,6 +123,7 @@ mod tests {
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-01T10:00:00Z".into()), source_file: "s.jsonl".into(),
             source_offset: 0,
+            msg_id: None,
             kind: EventKind::ToolCall {
                 kind: ToolKind::Skill { name: skill.into() },
                 raw_name: "Skill".into(), target: Some(skill.into()), tool_use_id: None,
@@ -137,6 +138,7 @@ mod tests {
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-01T10:00:00Z".into()), source_file: "s.jsonl".into(),
             source_offset: 0,
+            msg_id: None,
             kind: EventKind::ToolCall {
                 kind: ToolKind::McpCall { server: server.into(), tool: "x".into() },
                 raw_name: format!("mcp__{server}__x"), target: None, tool_use_id: None,

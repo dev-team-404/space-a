@@ -199,7 +199,26 @@ fn migrate(conn: &Connection) -> Result<()> {
              PRAGMA user_version = 5;",
         )?;
     }
+    // v3.6 재수집 — 논리 dedup 키 도입(데이터 위생 스펙 §3.1): resume 포크 복제본·
+    // 다중 라인 usage 반복을 기존 uuid:offset 행에서 소급 제거할 수 없어 전체 재수집한다.
+    // 오염된 데이터로 만들어진 R6/R23 활성('new') 카드도 정화 — dismissed/resolved는
+    // 사용자 기록(나깅 방지 쿨다운)이라 보존 (v5 전례).
+    if user_version < 6 {
+        conn.execute_batch(
+            "DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;
+             DELETE FROM prompt_events;
+             DELETE FROM findings WHERE rule_id IN ('R6','R23') AND status='new';
+             PRAGMA user_version = 6;",
+        )?;
+    }
     Ok(())
+}
+
+/// 논리 dedup 키용 내용 해시 — r6/r23의 hash8과 같은 규약 (sha256 앞 4바이트 hex).
+fn hash8(s: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let d = Sha256::digest(s.as_bytes());
+    format!("{:02x}{:02x}{:02x}{:02x}", d[0], d[1], d[2], d[3])
 }
 
 impl SqliteStore {
@@ -223,9 +242,26 @@ impl SqliteStore {
         let tx = self.conn.unchecked_transaction()?;
         let mut inserted = 0usize;
         for e in evs {
-            let dedup_key = match &e.uuid {
+            // 논리 dedup 키 (데이터 위생 스펙 §3.1) — resume 포크 복제본과 다중 라인
+            // usage 반복이 DB에 들어오지 않게 한다. uuid는 복제 시 재발급되지만
+            // tool_use_id·message.id·ts는 보존된다 (2026-07-21 실데이터 검증).
+            // 식별자가 없으면 기존 uuid:offset 규칙으로 폴백.
+            let fallback = || match &e.uuid {
                 Some(u) => format!("{}:{}", u, e.source_offset),
                 None => format!("{}:{}", e.source_file, e.source_offset),
+            };
+            let dedup_key = match &e.kind {
+                EventKind::ToolCall { tool_use_id: Some(tid), .. } => {
+                    format!("tc:{}:{}", e.host, tid)
+                }
+                EventKind::ToolResult { tool_use_id, .. } if !tool_use_id.is_empty() => {
+                    format!("tr:{}:{}", e.host, tool_use_id)
+                }
+                EventKind::AssistantTurn { .. } => match &e.msg_id {
+                    Some(m) => format!("at:{}:{}", e.host, m),
+                    None => fallback(),
+                },
+                _ => fallback(),
             };
             // 세션 단위 필드는 sessions로만 라우팅 (events 미삽입)
             match &e.kind {
@@ -264,12 +300,20 @@ impl SqliteStore {
                         continue;
                     }
                     if let Some(norm60) = crate::rules::r6_repeated_prompts::normalize(preview) {
+                        // 포크 복제본은 ts·내용이 보존되므로 (host, project, ts, 내용해시)가
+                        // 논리 식별자 — 같은 물리적 입력은 세션 파일이 몇 개든 1행.
+                        let pe_key = match &e.ts {
+                            Some(ts) => format!(
+                                "up:{}:{}:{}:{}", e.host, e.project_id, ts, hash8(preview)
+                            ),
+                            None => dedup_key.clone(),
+                        };
                         self.conn.execute(
                             "INSERT OR IGNORE INTO prompt_events
                                (dedup_key, session_id, host, project_id, ts,
                                 source_file, source_offset, norm60, preview)
                              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
-                            params![dedup_key, e.session_id, e.host, e.project_id, e.ts,
+                            params![pe_key, e.session_id, e.host, e.project_id, e.ts,
                                     e.source_file, e.source_offset as i64, norm60, preview],
                         )?;
                     }
@@ -1604,6 +1648,7 @@ mod tests {
             ts: Some("2026-07-01T10:00:00Z".into()),
             source_file: "s.jsonl".into(),
             source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage { cache_creation: cache_create, ..Default::default() },
@@ -1650,6 +1695,7 @@ mod tests {
             ts: Some("2026-07-01T10:00:00Z".into()),
             source_file: "s.jsonl".into(),
             source_offset: off,
+            msg_id: None,
             kind,
         };
         let evs = vec![
@@ -1730,6 +1776,7 @@ mod tests {
             host: "Windows".into(), project_id: "p".into(), session_id: sid.into(),
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some(ts.into()), source_file: "s.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
@@ -1817,6 +1864,7 @@ mod tests {
             host: host.into(), project_id: project.into(), session_id: session.into(),
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some(ts.into()), source_file: "s.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
@@ -1952,6 +2000,7 @@ mod tests {
             session_id: "s1".into(), uuid: Some("u1".into()), parent_uuid: None,
             is_sidechain: false, ts: Some("2026-07-02T10:00:00Z".into()),
             source_file: "s.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage { input: 100, output: 50, cache_read: 10, cache_creation: 5, eph_1h: 0, eph_5m: 0 },
@@ -2093,6 +2142,7 @@ mod tests {
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-05T10:00:00Z".into()),
             source_file: "f.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id(model),
                 usage: TokenUsage { input: inp, output: out, ..Default::default() },
@@ -2126,6 +2176,7 @@ mod tests {
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some(ts.into()),
             source_file: "f.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage { input: inp, output: 0, ..Default::default() },
@@ -2161,6 +2212,7 @@ mod tests {
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-03T10:00:00Z".into()),
             source_file: "f.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id(model),
                 usage: TokenUsage { input: inp, output: 0, ..Default::default() },
@@ -2186,6 +2238,7 @@ mod tests {
                 uuid: Some("m1".into()), parent_uuid: None, is_sidechain: false,
                 ts: Some("2026-07-07T10:00:00Z".into()),
                 source_file: "s1.jsonl".into(), source_offset: 0,
+                msg_id: None,
                 kind: EventKind::SessionMeta { cwd: "D:\\Project\\cowork".into(), git_branch: None },
             },
             NormalizedEvent {
@@ -2194,6 +2247,7 @@ mod tests {
                 uuid: Some("p1".into()), parent_uuid: None, is_sidechain: false,
                 ts: Some("2026-07-07T10:00:00Z".into()),
                 source_file: "s1.jsonl".into(), source_offset: 10,
+                msg_id: None,
                 kind: EventKind::UserPrompt { preview: "Run this exact Bash command".into() },
             },
         ]).unwrap();
@@ -2213,6 +2267,7 @@ mod tests {
             host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
             uuid: Some(format!("{sess}-{off}")), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-19T10:00:00Z".into()), source_file: "s.jsonl".into(), source_offset: off,
+            msg_id: None,
             kind: EventKind::ToolCall {
                 kind: ToolKind::from_raw_name(raw), raw_name: raw.into(), target: None,
                 tool_use_id: Some(format!("{sess}-{off}-t")),
@@ -2258,6 +2313,7 @@ mod tests {
             uuid: Some("u1".into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-07T10:00:00Z".into()),
             source_file: "C:\\proj\\s1.jsonl".into(), source_offset: 42,
+            msg_id: None,
             kind: EventKind::ToolResult { tool_use_id: "toolu_1".into(), status: ResultStatus::Denied, result_len: 4200 },
         };
         assert_eq!(store.upsert_events(&[ev]).unwrap(), 1);
@@ -2404,6 +2460,7 @@ mod tests {
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-20T10:00:00Z".into()),
             source_file: "s1.jsonl".into(), source_offset: off,
+            msg_id: None,
             kind: EventKind::UserPrompt { preview: preview.into() },
         };
         store.upsert_events(&[
@@ -2440,6 +2497,7 @@ mod tests {
             uuid: Some("sc1".into()), parent_uuid: None, is_sidechain: true,
             ts: Some("2026-07-20T10:00:00Z".into()),
             source_file: "s1.jsonl".into(), source_offset: 10,
+            msg_id: None,
             kind: EventKind::UserPrompt { preview: "서브에이전트 내부의 반복 프롬프트입니다".into() },
         }]).unwrap();
         let n: i64 = store.conn
@@ -2516,12 +2574,64 @@ mod tests {
             let mut stmt = store.conn.prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
             stmt.query_map([], |r| r.get(0)).unwrap().collect::<std::result::Result<_, _>>().unwrap()
         };
-        assert_eq!(keys, vec!["R23|Windows|muted".to_string(), "R6|Windows|ok".to_string()],
-            "new 홍수만 삭제, dismissed는 보존");
-        let n: i64 = store.conn.query_row("SELECT COUNT(*) FROM ingest_state", [], |r| r.get(0)).unwrap();
-        assert_eq!(n, 1, "v5 정리는 재수집을 유도하면 안 됨");
+        // v5(R23 new 삭제) 후 v6(R6/R23 new 삭제·재수집)까지 연쇄 실행된 결과 —
+        // dismissed는 어느 분기에서도 삭제되지 않는다는 것이 이 테스트의 핵심.
+        assert_eq!(keys, vec!["R23|Windows|muted".to_string()],
+            "dismissed는 v5·v6 연쇄에도 보존, new는 정화");
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(uv, 5);
+        assert!(uv >= 6, "밀린 분기 전부 통과 (mv2 테스트 전례)");
+    }
+
+    #[test]
+    fn migrate_v6_recollects_and_purges_repeat_junk() {
+        use crate::finding::{Finding, Severity};
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("mv6.db");
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(SCHEMA).unwrap();
+            conn.execute_batch(
+                "PRAGMA user_version = 5;
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 42);
+                 INSERT INTO prompt_events (dedup_key, session_id, host, project_id,
+                   source_file, source_offset, norm60, preview)
+                 VALUES ('old-key', 's1', 'Windows', 'p', 'f.jsonl', 0, 'x', 'x');",
+            ).unwrap();
+            let store = SqliteStore { conn };
+            let f = |rule: &str, key: &str| Finding {
+                rule_id: rule.into(), severity: Severity::Suggest,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "pattern".into(), scope_ref: format!("pattern:{key}"),
+                evidence: serde_json::json!({}), est_tokens_saved: 0,
+                prescription: None, dedup_key: key.into(),
+            };
+            store.upsert_finding(&f("R6", "R6|Windows|junk"), "2026-07-21T00:00:00Z").unwrap();
+            store.upsert_finding(&f("R23", "R23|Windows|junk"), "2026-07-21T00:00:00Z").unwrap();
+            store.upsert_finding(&f("R6", "R6|Windows|muted"), "2026-07-21T00:00:00Z").unwrap();
+            store.set_finding_status("R6|Windows|muted", "dismissed").unwrap();
+            store.upsert_finding(&f("R1", "R1|Windows|keep"), "2026-07-21T00:00:00Z").unwrap();
+        }
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v6 분기 발화
+        for table in ["ingest_state", "prompt_events", "events", "daily_rollup", "sessions"] {
+            let n: i64 = store.conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap();
+            assert_eq!(n, 0, "{table}는 재수집을 위해 비워져야 함");
+        }
+        let keys: Vec<String> = {
+            let mut stmt = store.conn
+                .prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
+            stmt.query_map([], |r| r.get(0)).unwrap()
+                .collect::<std::result::Result<_, _>>().unwrap()
+        };
+        assert_eq!(keys, vec!["R1|Windows|keep".to_string(), "R6|Windows|muted".to_string()],
+            "R6/R23 junk('new')만 삭제 — dismissed·타 룰은 보존");
+        let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(uv, 6);
+        // 멱등: 다시 열어도 변화 없음
+        drop(store);
+        let store = SqliteStore::open(&db).unwrap();
+        let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(uv, 6);
     }
 
     #[test]
@@ -2580,15 +2690,19 @@ mod tests {
                 evidence: serde_json::json!({"repeated_prompt": "매일 아침 판매 리포트 뽑아줘"}),
                 est_tokens_saved: 0, prescription: None, dedup_key: "R6|Windows|ok".into(),
             }, "2026-07-20T00:00:00Z").unwrap();
+            // v6까지 연쇄 실행되면 status='new'인 R6/R23은 전량 정화 대상이라, 이 finding이
+            // "R23만 삭제" 관찰을 견디려면 dismissed로 사용자 기록화해야 한다.
+            store.set_finding_status("R6|Windows|ok", "dismissed").unwrap();
         }
 
-        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v3 분기 발화
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v3 분기 발화 (이후 v6까지 연쇄)
 
         let keys: Vec<String> = {
             let mut stmt = store.conn.prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
             stmt.query_map([], |r| r.get(0)).unwrap().collect::<std::result::Result<_, _>>().unwrap()
         };
-        assert_eq!(keys, vec!["R6|Windows|ok".to_string()], "R23만 삭제돼 재산출을 기다려야 함");
+        assert_eq!(keys, vec!["R6|Windows|ok".to_string()],
+            "R23는 v3에서 즉시 삭제 — dismissed R6는 v6 연쇄까지 통과해도 보존");
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
         assert!(uv >= 3, "v3 분기를 지나야 함 (후속 분기로 더 올라갈 수 있음)");
     }
@@ -2623,9 +2737,12 @@ mod tests {
                 evidence: serde_json::json!({"repeated_prompt": "매일 아침 판매 리포트 뽑아줘", "session_count": 3}),
                 est_tokens_saved: 0, prescription: None, dedup_key: "R6|WSL:U|ok".into(),
             }, "2026-07-19T00:00:00Z").unwrap();
+            // v6까지 연쇄 실행되면 status='new'인 R6는 (합성 오염 여부와 무관히) 전량 정화
+            // 대상이라, "정상 R6는 보존" 관찰을 견디려면 dismissed로 사용자 기록화해야 한다.
+            store.set_finding_status("R6|WSL:U|ok", "dismissed").unwrap();
         }
 
-        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — 마커 부재로 발화
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — 마커 부재로 발화 (이후 v6까지 연쇄)
 
         // 전체 재수집 유도 + 오염 R6만 삭제
         for table in ["events", "sessions", "ingest_state", "daily_rollup"] {
@@ -2637,7 +2754,8 @@ mod tests {
             let mut stmt = store.conn.prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
             stmt.query_map([], |r| r.get(0)).unwrap().collect::<std::result::Result<_, _>>().unwrap()
         };
-        assert_eq!(keys, vec!["R6|WSL:U|ok".to_string()]);
+        assert_eq!(keys, vec!["R6|WSL:U|ok".to_string()],
+            "합성 마커 오염 R6는 v1에서 삭제 — dismissed R6는 v6 연쇄까지 통과해도 보존");
 
         // 마커가 설정돼 두 번째 open은 재수집을 다시 유도하지 않는다
         store.conn.execute(
@@ -2659,7 +2777,7 @@ mod tests {
             host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-07T10:00:00Z".into()),
-            source_file: "C:\\proj\\s1.jsonl".into(), source_offset: off, kind,
+            source_file: "C:\\proj\\s1.jsonl".into(), source_offset: off, msg_id: None, kind,
         };
         store.upsert_events(&[
             base("m1", 0, EventKind::SessionMeta { cwd: "D:\\Project\\cowork".into(), git_branch: Some("main".into()) }),
@@ -2694,7 +2812,7 @@ mod tests {
             host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: ts.map(|s| s.to_string()),
-            source_file: "s1.jsonl".into(), source_offset: off, kind,
+            source_file: "s1.jsonl".into(), source_offset: off, msg_id: None, kind,
         };
         // 1) ts 있는 이벤트로 first_ts/last_ts 설정
         store.upsert_events(&[
@@ -2782,7 +2900,7 @@ mod tests {
             host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
             uuid: None, parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-19T10:00:00Z".into()),
-            source_file: "s1.jsonl".into(), source_offset: off, kind,
+            source_file: "s1.jsonl".into(), source_offset: off, msg_id: None, kind,
         };
         store.upsert_events(&[
             mk(EventKind::PermissionMode { mode: "plan".into() }, 0),
@@ -2948,5 +3066,130 @@ mod tests {
         let n: i64 = store.conn.query_row(
             "SELECT subagent_files FROM sessions WHERE session_id='solo'", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0);
+    }
+
+    /// 논리 dedup 키 테스트용 이벤트 — 포크 복제본은 uuid·session·file이 다르고
+    /// ts·message.id·tool_use_id가 보존된다 (2026-07-21 실데이터 검증).
+    fn hygiene_ev(
+        sess: &str, file: &str, uuid: &str, off: u64,
+        msg_id: Option<&str>, kind: crate::model::EventKind,
+    ) -> crate::model::NormalizedEvent {
+        crate::model::NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
+            uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-08T08:53:54.410Z".into()),
+            source_file: file.into(), source_offset: off,
+            msg_id: msg_id.map(Into::into), kind,
+        }
+    }
+
+    #[test]
+    fn resume_fork_copies_collapse_by_logical_identity() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let turn = || EventKind::AssistantTurn {
+            model: NormModel::from_raw_id("claude-opus-4-8"),
+            usage: TokenUsage { input: 10, output: 1556, cache_read: 0,
+                                cache_creation: 0, eph_1h: 0, eph_5m: 0 },
+            web_search: 0, web_fetch: 0,
+        };
+        for (i, (sess, file)) in
+            [("orig", "a.jsonl"), ("fork1", "b.jsonl"), ("fork2", "c.jsonl")].iter().enumerate()
+        {
+            store.upsert_events(&[
+                hygiene_ev(sess, file, &format!("u{i}a"), 0, Some("msg_A"), turn()),
+                hygiene_ev(sess, file, &format!("u{i}b"), 1, None, EventKind::ToolCall {
+                    kind: ToolKind::from_raw_name("Bash"), raw_name: "Bash".into(),
+                    target: Some("gh pr view".into()), tool_use_id: Some("toolu_X".into()),
+                }),
+                hygiene_ev(sess, file, &format!("u{i}c"), 2, None, EventKind::ToolResult {
+                    tool_use_id: "toolu_X".into(), status: ResultStatus::Ok, result_len: 10,
+                }),
+            ]).unwrap();
+        }
+        let count = |k: &str| -> i64 {
+            store.conn.query_row("SELECT COUNT(*) FROM events WHERE kind=?1",
+                rusqlite::params![k], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(count("assistant_turn"), 1, "포크 복제 AssistantTurn은 1행");
+        assert_eq!(count("tool_call"), 1, "포크 복제 ToolCall은 1행");
+        assert_eq!(count("tool_result"), 1, "포크 복제 ToolResult는 1행");
+        let out: i64 = store.conn.query_row(
+            "SELECT COALESCE(SUM(tok_output),0) FROM events", [], |r| r.get(0)).unwrap();
+        assert_eq!(out, 1556, "토큰 이중 계산 금지");
+    }
+
+    #[test]
+    fn multiline_assistant_message_counts_usage_once() {
+        use crate::model::*;
+        // 한 API 응답이 여러 assistant 라인으로 쪼개질 때 usage가 라인마다 반복된다
+        // (실측: assistant 601줄 = 메시지 233개). AssistantTurn은 msg.id당 1행,
+        // ToolCall은 tool_use_id가 블록마다 달라 전부 보존 (스펙 §3.1).
+        let store = SqliteStore::open_in_memory().unwrap();
+        let turn = || EventKind::AssistantTurn {
+            model: NormModel::from_raw_id("claude-opus-4-8"),
+            usage: TokenUsage { input: 10, output: 500, cache_read: 0,
+                                cache_creation: 0, eph_1h: 0, eph_5m: 0 },
+            web_search: 0, web_fetch: 0,
+        };
+        let call = |tid: &str| EventKind::ToolCall {
+            kind: ToolKind::from_raw_name("Read"), raw_name: "Read".into(),
+            target: Some("a.rs".into()), tool_use_id: Some(tid.into()),
+        };
+        store.upsert_events(&[
+            hygiene_ev("s1", "s1.jsonl", "u1", 0, Some("msg_B"), turn()),
+            hygiene_ev("s1", "s1.jsonl", "u2", 10, Some("msg_B"), turn()),
+            hygiene_ev("s1", "s1.jsonl", "u2t", 11, None, call("toolu_1")),
+            hygiene_ev("s1", "s1.jsonl", "u3", 20, Some("msg_B"), turn()),
+            hygiene_ev("s1", "s1.jsonl", "u3t", 21, None, call("toolu_2")),
+        ]).unwrap();
+        let turns: i64 = store.conn.query_row(
+            "SELECT COUNT(*) FROM events WHERE kind='assistant_turn'", [], |r| r.get(0)).unwrap();
+        let calls: i64 = store.conn.query_row(
+            "SELECT COUNT(*) FROM events WHERE kind='tool_call'", [], |r| r.get(0)).unwrap();
+        let out: i64 = store.conn.query_row(
+            "SELECT COALESCE(SUM(tok_output),0) FROM events", [], |r| r.get(0)).unwrap();
+        assert_eq!(turns, 1, "같은 msg.id의 AssistantTurn은 1행");
+        assert_eq!(calls, 2, "블록별 ToolCall은 전부 보존");
+        assert_eq!(out, 500, "usage 반복은 1회만 합산");
+    }
+
+    #[test]
+    fn assistant_without_message_id_falls_back_to_uuid_offset() {
+        use crate::model::*;
+        // <synthetic> 등 message.id 없는 라인은 기존 uuid:offset 규칙 유지
+        let store = SqliteStore::open_in_memory().unwrap();
+        let turn = || EventKind::AssistantTurn {
+            model: NormModel::from_raw_id("<synthetic>"),
+            usage: TokenUsage { input: 0, output: 0, cache_read: 0,
+                                cache_creation: 0, eph_1h: 0, eph_5m: 0 },
+            web_search: 0, web_fetch: 0,
+        };
+        store.upsert_events(&[
+            hygiene_ev("s1", "s1.jsonl", "u1", 0, None, turn()),
+            hygiene_ev("s1", "s1.jsonl", "u2", 10, None, turn()),
+        ]).unwrap();
+        let n: i64 = store.conn.query_row(
+            "SELECT COUNT(*) FROM events WHERE kind='assistant_turn'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 2, "식별자 없으면 병합하지 않는다 (폴백)");
+    }
+
+    #[test]
+    fn forked_prompt_copies_collapse_to_one_row() {
+        use crate::model::*;
+        // resume 포크: 같은 ts·내용의 프롬프트가 3개 세션 파일에 복제 → prompt_events 1행
+        // (R6 "3개 세션" 부풀림의 근본 원인 — 스펙 §1.1-1)
+        let store = SqliteStore::open_in_memory().unwrap();
+        for (i, (sess, file)) in
+            [("orig", "a.jsonl"), ("fork1", "b.jsonl"), ("fork2", "c.jsonl")].iter().enumerate()
+        {
+            store.upsert_events(&[hygiene_ev(sess, file, &format!("u{i}"), 0, None,
+                EventKind::UserPrompt { preview: "그 배포 버전 사내망에 올린 것 맞는지 확인해줘".into() },
+            )]).unwrap();
+        }
+        let n: i64 = store.conn.query_row(
+            "SELECT COUNT(*) FROM prompt_events", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1, "포크 복제 프롬프트는 1행");
     }
 }

@@ -134,6 +134,7 @@ mod tests {
             session_id: session.into(), uuid: Some(format!("{tuid}-c")), parent_uuid: None,
             is_sidechain: false, ts: Some("2026-07-06T10:00:00Z".into()),
             source_file: "s.jsonl".into(), source_offset: off,
+            msg_id: None,
             kind: EventKind::ToolCall {
                 kind: ToolKind::from_raw_name(raw), raw_name: raw.into(),
                 target: Some(target.into()), tool_use_id: Some(tuid.into()),
@@ -147,6 +148,7 @@ mod tests {
             session_id: session.into(), uuid: Some(format!("{tuid}-r")), parent_uuid: None,
             is_sidechain: false, ts: Some("2026-07-06T10:00:00Z".into()),
             source_file: "s.jsonl".into(), source_offset: off,
+            msg_id: None,
             kind: EventKind::ToolResult { tool_use_id: tuid.into(), status, result_len: 0 },
         }
     }
