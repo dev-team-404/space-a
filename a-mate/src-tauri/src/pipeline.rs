@@ -106,6 +106,8 @@ mod runtime {
                 }
                 // 콘텐츠 큐레이션 — 피드 fetch(락 밖) → run_curation(락) → content:ready
                 maybe_curate_content(app, &state.store);
+                // R6 반복 지시 판정 — 엔진 없으면 no-op(pending 침묵), 실패는 조용히(다음 스캔 재시도)
+                maybe_judge_repeats(&state.store);
                 // 다이어리 실패는 조용히 — 다음 사이클에서 재시도
                 maybe_generate_diaries(app, &state.store);
                 // 오늘의 한마디 — 엔진 없으면 no-op, 실패는 조용히(다음 스캔 재시도)
@@ -164,6 +166,54 @@ mod runtime {
         // ③ 노출할 게 있으면 프론트에 알림
         if !visible.is_empty() {
             let _ = app.emit("content:ready", &visible);
+        }
+    }
+
+    /// R6 반복 지시 판정 패스(PR2 스펙 §4.2) — 스캔 편승. pending R6를 Engine으로 걸러
+    /// worthy→노출(new)/unworthy→영구 캐시(rejected)로 전환한다. 엔진 미설정이면
+    /// 그대로 반환(pending 잔류 = fail-safe 침묵). 락 규율은 diary와 동일.
+    fn maybe_judge_repeats(store_mutex: &std::sync::Mutex<SqliteStore>) {
+        // ① 엔진 해석 (짧은 락) — 미설정이면 침묵
+        let engine = match store_mutex.lock() {
+            Ok(store) => crate::resolve_engine(&store),
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        };
+        let Some(engine) = engine else { return; };
+
+        // ② 배치 + 판정 재료 수집 (짧은 락, SQL만) → 즉시 해제
+        let targets = match store_mutex.lock() {
+            Ok(store) => store
+                .pending_r6_for_judgment(10)
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|t| {
+                    agent_mentor::skill_draft::gather_context(&store, &t.host, &t.representative)
+                        .ok()
+                        .map(|ctx| (t, ctx))
+                })
+                .collect::<Vec<_>>(),
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        };
+        if targets.is_empty() { return; }
+
+        // ③ 락 밖: 판정 (LLM 네트워크 I/O)
+        let mut results = Vec::new();
+        for (t, ctx) in targets {
+            match agent_mentor::judge::judge_one(&engine, &ctx) {
+                Ok(res) => results.push((t.dedup_key, t.prev_attempts, res)),
+                // 전송 실패 — attempts 미증가, pending 잔류(다음 스캔 재시도)
+                Err(e) => log::warn!("R6 판정 전송 실패({}): {e}", t.dedup_key),
+            }
+        }
+
+        // ④ 결과 저장 (짧은 락)
+        if let Ok(store) = store_mutex.lock() {
+            for (key, prev, res) in results {
+                let (status, judgment) = agent_mentor::judge::judgment_record(prev, &res);
+                if let Err(e) = store.set_judgment(&key, status, &judgment) {
+                    log::warn!("set_judgment({key}) 실패: {e}");
+                }
+            }
         }
     }
 
