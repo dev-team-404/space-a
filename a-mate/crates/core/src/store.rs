@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS findings (
   scope_host TEXT, scope_project TEXT, scope_kind TEXT, scope_ref TEXT,
   evidence_json TEXT NOT NULL, est_tokens_saved INTEGER DEFAULT 0,
   prescription_json TEXT, status TEXT NOT NULL DEFAULT 'new',
-  first_seen TEXT, last_seen TEXT, occurrences INTEGER DEFAULT 1
+  first_seen TEXT, last_seen TEXT, occurrences INTEGER DEFAULT 1,
+  judgment_json TEXT
 );
 CREATE TABLE IF NOT EXISTS mcp_inventory (
   host TEXT NOT NULL, project_id TEXT NOT NULL, server TEXT NOT NULL,
@@ -154,6 +155,13 @@ fn migrate(conn: &Connection) -> Result<()> {
              DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;",
         )?;
     }
+    // R6 판정 레이어(PR2) — findings.judgment_json 부재 시 컬럼만 추가(재수집 불필요, 판정은 새로 채워짐).
+    let has_judgment = conn
+        .prepare("SELECT 1 FROM pragma_table_info('findings') WHERE name='judgment_json'")?
+        .exists([])?;
+    if !has_judgment {
+        conn.execute_batch("ALTER TABLE findings ADD COLUMN judgment_json TEXT;")?;
+    }
     // v3.1 재수집 — IDE 합성 블록(<ide_opened_file> 등) 프롬프트 오염 수정이 라인 재해석을 요구.
     // 스키마 변화가 없어 PRAGMA user_version(=1)으로 1회 트리거. 오염 preview에서 파생된
     // R6 finding만 삭제 (repeated_prompt가 '<'로 시작 = 합성 마커 확정).
@@ -209,6 +217,16 @@ fn migrate(conn: &Connection) -> Result<()> {
              DELETE FROM prompt_events;
              DELETE FROM findings WHERE rule_id IN ('R6','R23') AND status='new';
              PRAGMA user_version = 6;",
+        )?;
+    }
+    // v7 R6 판정 레이어(PR2 스펙 §4.6) — R23 룰 폐기: finding 전량 삭제(dismissed 포함,
+    // 룰이 사라져 쿨다운 기록도 무의미). PR1 배포로 노출됐던 R6 'new' 카드는 판정을 거치도록
+    // pending으로 되돌린다. dismissed/resolved는 사용자 기록이라 보존. 재수집 불필요.
+    if user_version < 7 {
+        conn.execute_batch(
+            "DELETE FROM findings WHERE rule_id='R23';
+             UPDATE findings SET status='pending' WHERE rule_id='R6' AND status='new';
+             PRAGMA user_version = 7;",
         )?;
     }
     Ok(())
@@ -441,12 +459,14 @@ impl SqliteStore {
             Some(p) => Some(serde_json::to_string(p)?),
             None => None,
         };
+        // R6은 판정 전 비노출(pending), 나머지는 기존대로 즉시 노출(new). ON CONFLICT는 status 불변.
+        let init_status = if f.rule_id == "R6" { "pending" } else { "new" };
         self.conn.execute(
             "INSERT INTO findings
                 (dedup_key, rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                  evidence_json, est_tokens_saved, prescription_json, status,
                  first_seen, last_seen, occurrences)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'new',?11,?11,1)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?12,?11,?11,1)
              ON CONFLICT(dedup_key) DO UPDATE SET
                 last_seen = ?11,
                 occurrences = occurrences + 1,
@@ -456,7 +476,8 @@ impl SqliteStore {
                 prescription_json = ?10",
             params![
                 f.dedup_key, f.rule_id, f.severity.as_str(), f.scope_host, f.scope_project,
-                f.scope_kind, f.scope_ref, evidence, f.est_tokens_saved as i64, presc, now_ts
+                f.scope_kind, f.scope_ref, evidence, f.est_tokens_saved as i64, presc, now_ts,
+                init_status
             ],
         )?;
         Ok(())
@@ -738,7 +759,7 @@ impl SqliteStore {
         let sql = format!(
             "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                     evidence_json, est_tokens_saved, prescription_json, dedup_key,
-                    last_seen, occurrences, status
+                    last_seen, occurrences, status, judgment_json
              FROM findings {}
              ORDER BY est_tokens_saved DESC, dedup_key",
             if include_hidden { "" } else { "WHERE status='new'" }
@@ -753,12 +774,13 @@ impl SqliteStore {
                 r.get::<_, Option<String>>(8)?, r.get::<_, String>(9)?,
                 r.get::<_, Option<String>>(10)?, r.get::<_, i64>(11)?,
                 r.get::<_, String>(12)?,
+                r.get::<_, Option<String>>(13)?,
             ))
         })?;
         let mut out = Vec::new();
         for row in rows {
             let (rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
-                 evidence_json, est, prescription_json, dedup_key, last_seen, occ, status) = row?;
+                 evidence_json, est, prescription_json, dedup_key, last_seen, occ, status, judgment_raw) = row?;
             out.push(FindingRow {
                 rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                 evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
@@ -767,6 +789,7 @@ impl SqliteStore {
                 dedup_key, last_seen,
                 occurrences: occ as u64,
                 status,
+                judgment: judgment_raw.and_then(|s| serde_json::from_str(&s).ok()),
             });
         }
         Ok(out)
@@ -779,6 +802,52 @@ impl SqliteStore {
             params![dedup_key, status],
         )?;
         Ok(n > 0)
+    }
+
+    /// R6 판정 배치 대상 — pending & 시도 3회 미만, 최근 활동 순 상한 LIMIT.
+    /// attempts는 judgment_json.$.attempts (NULL=0). (스펙 §4.2)
+    pub fn pending_r6_for_judgment(&self, limit: usize) -> Result<Vec<JudgmentTarget>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT dedup_key, scope_host,
+                    json_extract(evidence_json,'$.repeated_prompt'),
+                    COALESCE(json_extract(judgment_json,'$.attempts'), 0)
+             FROM findings
+             WHERE rule_id='R6' AND status='pending'
+               AND COALESCE(json_extract(judgment_json,'$.attempts'), 0) < 3
+             ORDER BY last_seen DESC
+             LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit as i64], |r| {
+            Ok(JudgmentTarget {
+                dedup_key: r.get(0)?,
+                host: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                representative: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                prev_attempts: r.get::<_, i64>(3)? as u32,
+            })
+        })?;
+        rows.collect::<std::result::Result<_, _>>().map_err(Into::into)
+    }
+
+    /// 판정 결과 저장. new_status=Some → status 전환(worthy→'new', unworthy→'rejected'),
+    /// None → status 불변(파싱 실패 시 pending 잔류). judgment_json은 항상 갱신.
+    pub fn set_judgment(
+        &self,
+        dedup_key: &str,
+        new_status: Option<&str>,
+        judgment: &serde_json::Value,
+    ) -> Result<()> {
+        let j = serde_json::to_string(judgment)?;
+        match new_status {
+            Some(s) => self.conn.execute(
+                "UPDATE findings SET status=?2, judgment_json=?3 WHERE dedup_key=?1",
+                params![dedup_key, s, j],
+            )?,
+            None => self.conn.execute(
+                "UPDATE findings SET judgment_json=?2 WHERE dedup_key=?1",
+                params![dedup_key, j],
+            )?,
+        };
+        Ok(())
     }
 
     /// v2 이행: 특정 룰의 특정 스코프 finding 일괄 삭제 (예: R7 세션 스코프 폐기 — 스펙 §3).
@@ -1358,7 +1427,7 @@ impl SqliteStore {
             .query_row(
                 "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                         evidence_json, est_tokens_saved, prescription_json, dedup_key,
-                        last_seen, occurrences, status
+                        last_seen, occurrences, status, judgment_json
                  FROM findings WHERE dedup_key=?1",
                 params![dedup_key],
                 |r| {
@@ -1370,13 +1439,14 @@ impl SqliteStore {
                         r.get::<_, Option<String>>(8)?, r.get::<_, String>(9)?,
                         r.get::<_, Option<String>>(10)?, r.get::<_, i64>(11)?,
                         r.get::<_, String>(12)?,
+                        r.get::<_, Option<String>>(13)?,
                     ))
                 },
             )
             .optional()?;
         Ok(row.map(
             |(rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
-              evidence_json, est, prescription_json, dedup_key, last_seen, occ, status)| {
+              evidence_json, est, prescription_json, dedup_key, last_seen, occ, status, judgment_raw)| {
                 FindingRow {
                     rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                     evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
@@ -1385,6 +1455,7 @@ impl SqliteStore {
                     dedup_key, last_seen,
                     occurrences: occ as u64,
                     status,
+                    judgment: judgment_raw.and_then(|s| serde_json::from_str(&s).ok()),
                 }
             },
         ))
@@ -1514,6 +1585,17 @@ pub struct FindingRow {
     pub last_seen: Option<String>,
     pub occurrences: u64,
     pub status: String,
+    /// R6 판정 결과({worthy,reason,suggested_name,attempts,tokens}). 미판정이면 None.
+    pub judgment: Option<serde_json::Value>,
+}
+
+/// R6 판정 배치 후보 — pending finding에서 뽑은 판정 재료 참조.
+#[derive(Debug, Clone)]
+pub struct JudgmentTarget {
+    pub dedup_key: String,
+    pub host: String,
+    pub representative: String,
+    pub prev_attempts: u32,
 }
 
 /// 한 파일을 offset부터 증분 수집. 반환값 = 신규 삽입 이벤트 수.
@@ -2133,6 +2215,112 @@ mod tests {
     }
 
     #[test]
+    fn upsert_seeds_r6_as_pending_others_as_new() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |rule: &str, key: &str| Finding {
+            rule_id: rule.into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "pattern".into(), scope_ref: "x".into(),
+            evidence: serde_json::json!({"repeated_prompt": "rep"}), est_tokens_saved: 0,
+            prescription: None, dedup_key: key.into(),
+        };
+        store.upsert_finding(&mk("R6", "R6|W|a"), "2026-07-21T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R11", "R11|W|b"), "2026-07-21T00:00:00Z").unwrap();
+        let status = |k: &str| -> String {
+            store.conn.query_row("SELECT status FROM findings WHERE dedup_key=?1",
+                rusqlite::params![k], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(status("R6|W|a"), "pending", "신규 R6은 판정 전 pending");
+        assert_eq!(status("R11|W|b"), "new", "다른 룰은 기존대로 new");
+
+        // 이미 판정돼 rejected가 된 R6은 재관측(upsert)돼도 status 불변 — 판정 캐시 유지
+        store.set_finding_status("R6|W|a", "rejected").unwrap();
+        store.upsert_finding(&mk("R6", "R6|W|a"), "2026-07-21T01:00:00Z").unwrap();
+        assert_eq!(status("R6|W|a"), "rejected", "ON CONFLICT는 status를 덮지 않아야 함");
+    }
+
+    #[test]
+    fn judgment_json_column_roundtrips_through_finding_row() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let f = Finding {
+            rule_id: "R6".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "pattern".into(), scope_ref: "pattern:abcd1234".into(),
+            evidence: serde_json::json!({"repeated_prompt": "판매 리포트 뽑아줘"}),
+            est_tokens_saved: 0, prescription: None, dedup_key: "R6|Windows|abcd1234".into(),
+        };
+        store.upsert_finding(&f, "2026-07-21T00:00:00Z").unwrap();
+        // 신규 컬럼에 직접 판정 결과를 써 넣고, 조회가 이를 실어오는지 검증
+        store.conn.execute(
+            "UPDATE findings SET judgment_json=?2 WHERE dedup_key=?1",
+            rusqlite::params!["R6|Windows|abcd1234", r#"{"worthy":true,"reason":"매일 반복되는 절차"}"#],
+        ).unwrap();
+        let rows = store.list_findings_current(true).unwrap();
+        let row = rows.iter().find(|r| r.dedup_key == "R6|Windows|abcd1234").unwrap();
+        let j = row.judgment.as_ref().expect("judgment_json이 FindingRow로 실려야 함");
+        assert_eq!(j["worthy"], serde_json::json!(true));
+        assert_eq!(j["reason"], serde_json::json!("매일 반복되는 절차"));
+    }
+
+    #[test]
+    fn pending_r6_batch_filters_attempts_and_limits() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |key: &str, rep: &str| Finding {
+            rule_id: "R6".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "pattern".into(), scope_ref: "x".into(),
+            evidence: serde_json::json!({"repeated_prompt": rep}), est_tokens_saved: 0,
+            prescription: None, dedup_key: key.into(),
+        };
+        // 14개 pending 시드 (유효 매칭 12개 > limit 10 → LIMIT truncation을 실제로 검증)
+        for i in 0..14 {
+            let ts = format!("2026-07-21T00:{:02}:00Z", i);
+            store.upsert_finding(&mk(&format!("R6|W|{i}"), &format!("반복 지시 {i}번")), &ts).unwrap();
+        }
+        // 하나는 attempts=3 도달 → 제외
+        store.set_judgment("R6|W|0", None, &serde_json::json!({"attempts": 3, "error": "malformed"})).unwrap();
+        // 하나는 이미 판정돼 new → pending 아님 → 제외
+        store.set_judgment("R6|W|1", Some("new"), &serde_json::json!({"worthy": true, "attempts": 1})).unwrap();
+
+        // 남은 유효 pending = 2..=13 (12개) > limit 10
+        let batch = store.pending_r6_for_judgment(10).unwrap();
+        assert_eq!(batch.len(), 10, "배치 상한 10 (유효 12개 중 최신 10개로 truncate)");
+        assert!(batch.iter().all(|t| t.dedup_key != "R6|W|0"), "attempts 3 도달분 제외");
+        assert!(batch.iter().all(|t| t.dedup_key != "R6|W|1"), "판정 완료(new) 제외");
+        // last_seen DESC → 최신(13)이 먼저, 가장 오래된 유효 2개(2,3)는 상한에 밀려 제외
+        assert_eq!(batch[0].dedup_key, "R6|W|13");
+        assert_eq!(batch[0].representative, "반복 지시 13번");
+        assert_eq!(batch[0].host, "Windows", "host 필드가 채워져야 함 (Task 7이 소비)");
+        assert_eq!(batch[0].prev_attempts, 0, "미시도는 attempts 0");
+        assert!(batch.iter().all(|t| t.dedup_key != "R6|W|2"), "상한에 밀린 오래된 유효 카드 제외");
+        assert!(batch.iter().all(|t| t.dedup_key != "R6|W|3"), "상한에 밀린 오래된 유효 카드 제외");
+    }
+
+    #[test]
+    fn set_judgment_transitions_status_or_keeps_pending() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let f = Finding {
+            rule_id: "R6".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "pattern".into(), scope_ref: "x".into(),
+            evidence: serde_json::json!({"repeated_prompt": "r"}), est_tokens_saved: 0,
+            prescription: None, dedup_key: "R6|W|k".into(),
+        };
+        store.upsert_finding(&f, "2026-07-21T00:00:00Z").unwrap();
+        // status 유지(파싱 실패) — judgment_json만 갱신
+        store.set_judgment("R6|W|k", None, &serde_json::json!({"attempts": 1, "error": "bad"})).unwrap();
+        let (st, j): (String, String) = store.conn.query_row(
+            "SELECT status, judgment_json FROM findings WHERE dedup_key='R6|W|k'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!(st, "pending");
+        assert!(j.contains("\"attempts\":1"));
+        // status 전환(판정 완료)
+        store.set_judgment("R6|W|k", Some("rejected"), &serde_json::json!({"worthy": false, "attempts": 1})).unwrap();
+        let st2: String = store.conn.query_row(
+            "SELECT status FROM findings WHERE dedup_key='R6|W|k'", [], |r| r.get(0)).unwrap();
+        assert_eq!(st2, "rejected");
+    }
+
+    #[test]
     fn model_mix_for_date_groups_by_family() {
         use crate::model::*;
         let store = SqliteStore::open_in_memory().unwrap();
@@ -2559,7 +2747,10 @@ mod tests {
                 evidence: serde_json::json!({"repeated_prompt": "매일 아침 판매 리포트 뽑아줘"}),
                 est_tokens_saved: 0, prescription: None, dedup_key: "R6|Windows|ok".into(),
             }, "2026-07-20T12:00:00Z").unwrap();
-            // 사용자가 무시한 R23 — 삭제하면 재스캔에서 'new'로 부활(나깅) → 보존해야 함
+            // PR2: upsert가 R6을 pending으로 넣으므로, v6(오염된 'new' 카드 정화) 검증을 위해 new로 복원
+            store.set_finding_status("R6|Windows|ok", "new").unwrap();
+            // v6까지는 dismissed R23이 나깅 방지용으로 보존됐으나, v7에서 R23 룰 자체가
+            // 폐기되며 dismissed 포함 전량 삭제 대상이 된다 (PR2 스펙 §4.6) — 아래 assert 참고.
             store.upsert_finding(&Finding {
                 rule_id: "R23".into(), severity: Severity::Suggest,
                 scope_host: Some("Windows".into()), scope_project: None,
@@ -2574,10 +2765,11 @@ mod tests {
             let mut stmt = store.conn.prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
             stmt.query_map([], |r| r.get(0)).unwrap().collect::<std::result::Result<_, _>>().unwrap()
         };
-        // v5(R23 new 삭제) 후 v6(R6/R23 new 삭제·재수집)까지 연쇄 실행된 결과 —
-        // dismissed는 어느 분기에서도 삭제되지 않는다는 것이 이 테스트의 핵심.
-        assert_eq!(keys, vec!["R23|Windows|muted".to_string()],
-            "dismissed는 v5·v6 연쇄에도 보존, new는 정화");
+        // v5(R23 new 삭제) → v6(R6/R23 new 삭제·재수집) → v7(R23 전량 삭제, dismissed 포함)까지
+        // 연쇄 실행된 결과 — R23|Windows|flood(new)는 v5/v6에서, R6|Windows|ok(new)는 v6에서,
+        // R23|Windows|muted(dismissed)는 v7에서 삭제되어 findings가 전부 빈다 (PR2 스펙 §4.6:
+        // R23 룰 폐기로 dismissed 쿨다운 기록도 무의미해짐).
+        assert!(keys.is_empty(), "v7 purges ALL R23 incl. dismissed (spec §4.6); R6 new purged by v6");
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
         assert!(uv >= 6, "밀린 분기 전부 통과 (mv2 테스트 전례)");
     }
@@ -2606,6 +2798,8 @@ mod tests {
                 prescription: None, dedup_key: key.into(),
             };
             store.upsert_finding(&f("R6", "R6|Windows|junk"), "2026-07-21T00:00:00Z").unwrap();
+            // PR2: upsert가 R6을 pending으로 넣으므로, v6(오염된 'new' 카드 정화) 검증을 위해 new로 복원
+            store.set_finding_status("R6|Windows|junk", "new").unwrap();
             store.upsert_finding(&f("R23", "R23|Windows|junk"), "2026-07-21T00:00:00Z").unwrap();
             store.upsert_finding(&f("R6", "R6|Windows|muted"), "2026-07-21T00:00:00Z").unwrap();
             store.set_finding_status("R6|Windows|muted", "dismissed").unwrap();
@@ -2626,12 +2820,57 @@ mod tests {
         assert_eq!(keys, vec!["R1|Windows|keep".to_string(), "R6|Windows|muted".to_string()],
             "R6/R23 junk('new')만 삭제 — dismissed·타 룰은 보존");
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(uv, 6);
+        assert!(uv >= 6, "v6 분기 통과 (v7 연쇄로 최종 7)");
         // 멱등: 다시 열어도 변화 없음
         drop(store);
         let store = SqliteStore::open(&db).unwrap();
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(uv, 6);
+        assert!(uv >= 6, "v6 분기 통과 (v7 연쇄로 최종 7)");
+    }
+
+    #[test]
+    fn migrate_v7_purges_r23_and_repends_r6() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("m7.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(SCHEMA).unwrap();
+            conn.execute_batch("PRAGMA user_version = 6;").unwrap();
+            let store = SqliteStore { conn };
+            let f = |rule: &str, key: &str| Finding {
+                rule_id: rule.into(), severity: Severity::Suggest,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "pattern".into(), scope_ref: "x".into(),
+                evidence: serde_json::json!({}), est_tokens_saved: 0,
+                prescription: None, dedup_key: key.into(),
+            };
+            store.upsert_finding(&f("R23", "R23|Windows|a"), "2026-07-21T00:00:00Z").unwrap();
+            store.upsert_finding(&f("R23", "R23|Windows|muted"), "2026-07-21T00:00:00Z").unwrap();
+            store.set_finding_status("R23|Windows|muted", "dismissed").unwrap();
+            store.upsert_finding(&f("R6", "R6|Windows|active"), "2026-07-21T00:00:00Z").unwrap();
+            store.set_finding_status("R6|Windows|active", "new").unwrap(); // PR1 시대 노출 카드
+            store.upsert_finding(&f("R6", "R6|Windows|kept"), "2026-07-21T00:00:00Z").unwrap();
+            store.set_finding_status("R6|Windows|kept", "dismissed").unwrap();
+            store.upsert_finding(&f("R11", "R11|Windows|keep"), "2026-07-21T00:00:00Z").unwrap();
+        }
+        // 재오픈 → migrate 실행
+        let store = SqliteStore::open(&path).unwrap();
+        let count = |sql: &str| -> i64 { store.conn.query_row(sql, [], |r| r.get(0)).unwrap() };
+        assert_eq!(count("SELECT COUNT(*) FROM findings WHERE rule_id='R23'"), 0, "R23 전량 삭제(dismissed 포함)");
+        let status = |k: &str| -> String {
+            store.conn.query_row("SELECT status FROM findings WHERE dedup_key=?1",
+                rusqlite::params![k], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(status("R6|Windows|active"), "pending", "노출 R6은 판정 대상으로 되돌림");
+        assert_eq!(status("R6|Windows|kept"), "dismissed", "R6 dismissed는 보존");
+        assert_eq!(status("R11|Windows|keep"), "new", "무관 룰은 불변");
+        let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(uv, 7);
+        // 멱등 — 재오픈해도 안전
+        drop(store);
+        let store2 = SqliteStore::open(&path).unwrap();
+        let uv2: i64 = store2.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(uv2, 7);
     }
 
     #[test]

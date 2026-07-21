@@ -1,7 +1,7 @@
 //! R6 v2 — 반복 지시 → 스킬/커맨드화 제안 (킥오프 3대 차별점).
 //! "같은 지시를 여러 세션에서 반복한다" = 커스텀 커맨드/스킬로 묶을 후보.
 //! v2는 prompt_events(세션 내 전체 프롬프트)의 정규화 동치로 판정, 세션당 1회 카운트
-//! (스펙: 2026-07-20-r6-v2-session-repeat-mining). tool-시퀀스 군집은 R23.
+//! (스펙: 2026-07-20-r6-v2-session-repeat-mining).
 //! ⚠ evidence에 프롬프트 원문(미리보기)이 들어가므로 허브 공유 화이트리스트 제외 유지.
 
 use crate::finding::{Finding, Prescription, Severity};

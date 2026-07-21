@@ -36,7 +36,6 @@ const COACH_TITLE: Record<string, string> = {
   R8: '큰 MCP 결과가 매번 컨텍스트를 잡아먹어요',
   R11: '거부한 뒤 결국 허용한 도구가 있어요',
   R12: '설치해둔 스킬이 놀고 있어요',
-  R23: '같은 도구 순서를 여러 세션에서 반복하고 있어요',
 };
 
 function subtypeOf(evidence: unknown): string | null {
@@ -50,4 +49,10 @@ export function coachTitle(ruleId: string, evidence: unknown): string {
     return '여러 세션에서 반복해 읽는 파일 — CLAUDE.md에 넣어두면 좋겠어요';
   }
   return COACH_TITLE[ruleId] ?? '아낄 수 있는 게 보여요';
+}
+
+/** 코치 탭 '숨긴 항목'에 보일 상태 — 사용자가 직접 처분한 것만.
+ * pending(판정 대기)·rejected(판정 탈락)는 내부 상태라 노출하지 않는다 (fail-safe 침묵). */
+export function isHiddenFinding(status: string): boolean {
+  return status === 'resolved' || status === 'dismissed';
 }

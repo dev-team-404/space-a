@@ -1,7 +1,7 @@
 <script lang="ts">
   import { listFindings, onNewFindings, setFindingStatus, sessionsCtx, generateSkillDraft, saveSkillDraft, type CoachFinding, type SessionCtxItem, type SkillDraft } from '../api';
   import SessionModal from './SessionModal.svelte';
-  import { coachTitle, ctxLine, sessionIdsOf, totalSessionsOf } from './coach-helpers';
+  import { coachTitle, ctxLine, isHiddenFinding, sessionIdsOf, totalSessionsOf } from './coach-helpers';
 
   let { focusKey = null, onChanged }: { focusKey?: string | null; onChanged?: () => void } = $props();
 
@@ -25,7 +25,7 @@
   }
 
   const active = $derived(all.filter((f) => f.status === 'new'));
-  const hidden = $derived(all.filter((f) => f.status !== 'new'));
+  const hidden = $derived(all.filter((f) => isHiddenFinding(f.status)));
 
   async function refresh() {
     all = await listFindings(true).catch(() => []);
@@ -76,20 +76,13 @@
 
   const icon = (s: CoachFinding['severity']) => (s === 'warn' ? '⚠' : s === 'suggest' ? '💡' : 'ℹ');
 
-  // R6/R23 → SKILL.md 초안: 반복 지시·도구 시퀀스를 재사용 스킬로 전환 ("반복 작업은 Skill로 전환된다")
+  // R6 → SKILL.md 초안: 반복 지시를 재사용 스킬로 전환 ("반복 작업은 Skill로 전환된다")
   const repeatedPromptOf = (f: CoachFinding): string | null => {
     const ev = f.evidence as { repeated_prompt?: string } | null;
     return ev?.repeated_prompt ?? null;
   };
-  const sequenceOf = (f: CoachFinding): string[] | null => {
-    const ev = f.evidence as { sequence?: unknown } | null;
-    const seq = ev?.sequence;
-    if (!Array.isArray(seq)) return null;
-    const items = seq.filter((x): x is string => typeof x === 'string');
-    return items.length > 0 ? items : null;
-  };
   const skillifiable = (f: CoachFinding): boolean =>
-    (f.rule_id === 'R6' && !!repeatedPromptOf(f)) || (f.rule_id === 'R23' && !!sequenceOf(f));
+    f.rule_id === 'R6' && !!repeatedPromptOf(f);
   let draft = $state<{
     key: string;
     loading: boolean;
@@ -101,11 +94,11 @@
 
   async function makeDraft(f: CoachFinding) {
     const rep = repeatedPromptOf(f);
-    const seq = f.rule_id === 'R23' ? sequenceOf(f) : null;
-    if (!rep && !seq) return;
+    if (!rep) return;
+    const suggested = f.judgment?.suggested_name ?? null;
     draft = { key: f.dedup_key, loading: true, result: null, error: null, savedPath: null, copied: false };
     try {
-      const r = await generateSkillDraft(f.scope_host ?? '', rep ?? '', seq);
+      const r = await generateSkillDraft(f.scope_host ?? '', rep, suggested);
       draft = { key: f.dedup_key, loading: false, result: r, error: null, savedPath: null, copied: false };
     } catch (e) {
       draft = { key: f.dedup_key, loading: false, result: null, error: String(e), savedPath: null, copied: false };
@@ -146,6 +139,9 @@
         </header>
         <!-- 집계(project) 카드의 occurrences는 스캔 횟수라 "N회 관측"이 오독을 유발 → 원본 데이터로 이동 -->
         <p class="why">{f.detail}{#if f.scope_kind === 'session'} · {f.occurrences}회 관측{/if}</p>
+        {#if f.judgment?.reason}
+          <p class="judgment">🧭 코치 판정: {f.judgment.reason}</p>
+        {/if}
         {#if sessionLine(f)}
           <p class="session">📂 {sessionLine(f)}</p>
         {:else if f.scope_kind === 'project' && f.scope_project}
@@ -261,6 +257,7 @@
   .title { font-weight: 600; }
   .save { color: var(--accent); font-size: 12px; white-space: nowrap; }
   .why { margin: 6px 0 2px; font-size: 12px; color: var(--ink-soft); }
+  .judgment { margin: 2px 0 6px; font-size: 12px; color: var(--accent); }
   .session { margin: 2px 0; font-size: 12px; color: var(--ink-soft); }
   .how { margin: 2px 0 8px; font-size: 13px; white-space: pre-line; }
   .actions { display: flex; gap: 6px; flex-wrap: wrap; }

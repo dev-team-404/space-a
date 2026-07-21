@@ -799,6 +799,7 @@ mod tests {
             last_seen: None,
             occurrences: occ,
             status: status.into(),
+            judgment: None,
         }
     }
 

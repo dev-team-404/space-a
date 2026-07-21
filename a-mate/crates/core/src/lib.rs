@@ -8,6 +8,7 @@ pub mod finding;
 pub mod hosts;
 pub mod hub;
 pub mod inventory;
+pub mod judge;
 pub mod mascot;
 pub mod sprite;
 pub mod model;

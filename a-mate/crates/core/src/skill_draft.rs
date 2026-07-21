@@ -55,39 +55,6 @@ pub fn gather_context(
     })
 }
 
-/// R23 finding의 evidence(도구 시퀀스)로 세션을 되짚어 재료를 모은다 (스펙 §3.3).
-/// 대표는 시퀀스를 사람이 읽는 형태로 잇고, 표본은 매칭 세션들의 첫 프롬프트.
-pub fn gather_context_for_sequence(
-    store: &SqliteStore,
-    host: &str,
-    sequence: &[String],
-) -> Result<DraftContext> {
-    if sequence.is_empty() {
-        return Err(anyhow!("도구 시퀀스가 비어 있어 초안 대상이 아닙니다"));
-    }
-    let days = crate::rules::r23_tool_sequences::R23ToolSequences::default().days;
-    let matched = crate::rules::r23_tool_sequences::sessions_containing(store, host, sequence, days)?;
-    let mut samples: Vec<String> = Vec::new();
-    for sid in &matched {
-        if samples.len() >= 5 {
-            break;
-        }
-        if let Some((_, _, _, Some(prompt))) = store.session_ctx(sid)? {
-            let trimmed = prompt.trim().to_string();
-            if !trimmed.is_empty() && !samples.iter().any(|s| s == &trimmed) {
-                samples.push(trimmed);
-            }
-        }
-    }
-    let top_tools = store.tool_usage_for_sessions(&matched)?;
-    Ok(DraftContext {
-        representative: sequence.join(" → "),
-        session_count: matched.len() as u64,
-        sample_prompts: samples,
-        top_tools,
-    })
-}
-
 /// 스킬 디렉터리/커맨드 이름용 슬러그 — 영숫자+하이픈, 소문자, 40자 컷.
 /// 한글 등 비ASCII만 남으면 안정적 해시 접미로 폴백(빈 이름 금지).
 pub fn slugify(name: &str) -> String {
@@ -246,6 +213,33 @@ fn extract_name(md: &str) -> Option<String> {
     None
 }
 
+/// 프런트매터(맨 위 `---`…`---`)의 `name:` 값을 주어진 슬러그로 교체한다.
+/// 판정이 제안한 이름으로 저장 슬러그를 바꿀 때 SKILL.md 안의 정체성(name)도 함께 맞춰
+/// 디렉터리 이름과 프런트매터가 어긋나지 않게 한다. name: 줄이 없으면 원본 그대로 반환.
+pub fn set_frontmatter_name(markdown: &str, slug: &str) -> String {
+    let mut lines: Vec<&str> = markdown.lines().collect();
+    let replaced = format!("name: {slug}");
+    let mut in_fm = false;
+    let mut target = None;
+    for (i, line) in lines.iter().enumerate() {
+        let t = line.trim();
+        if i == 0 {
+            if t == "---" { in_fm = true; continue; }
+            break; // 프런트매터 없음
+        }
+        if in_fm && t == "---" { break; } // 프런트매터 끝
+        if in_fm && t.starts_with("name:") { target = Some(i); break; }
+    }
+    match target {
+        Some(i) => {
+            lines[i] = &replaced;
+            let joined = lines.join("\n");
+            if markdown.ends_with('\n') { format!("{joined}\n") } else { joined }
+        }
+        None => markdown.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -308,44 +302,6 @@ mod tests {
     }
 
     #[test]
-    fn gather_for_sequence_matches_tool_streams() {
-        let store = SqliteStore::open_in_memory().unwrap();
-        // Bash(gh …) → Read/Edit → Skill(codex) 워크플로 2개 세션 + 무관 세션 1개
-        let now = chrono::Utc::now().to_rfc3339();
-        for sess in ["s1", "s2"] {
-            seed(&store, sess, &format!("{sess}에서 PR 마무리 작업"), &[]);
-            let mk = |i: u64, kind, raw: &str, target: Option<&str>| NormalizedEvent {
-                source_agent: "claude-code".into(), schema_version: "t".into(),
-                host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
-                uuid: Some(format!("{sess}-sq{i}")), parent_uuid: None, is_sidechain: false,
-                ts: Some(now.clone()), source_file: "s.jsonl".into(), source_offset: 100 + i,
-                msg_id: None,
-                kind: EventKind::ToolCall {
-                    kind, raw_name: raw.into(), target: target.map(Into::into),
-                    tool_use_id: Some(format!("{sess}-sqt{i}")),
-                },
-            };
-            store.upsert_events(&[
-                mk(0, ToolKind::from_raw_name("Bash"), "Bash", Some("gh pr create")),
-                mk(1, ToolKind::from_raw_name("Read"), "Read", Some("a.rs")),
-                mk(2, ToolKind::Skill { name: "codex:rescue".into() }, "Skill", Some("codex:rescue")),
-            ]).unwrap();
-        }
-        seed(&store, "s3", "무관한 세션", &["Grep"]);
-        let seq: Vec<String> =
-            ["bash:gh", "file-ops", "skill:codex:rescue"].iter().map(|s| s.to_string()).collect();
-        let ctx = gather_context_for_sequence(&store, "Windows", &seq).unwrap();
-        assert_eq!(ctx.session_count, 2);
-        assert_eq!(ctx.representative, "bash:gh → file-ops → skill:codex:rescue");
-        assert!(ctx.sample_prompts.iter().any(|p| p.contains("PR 마무리")));
-        let tool_names: Vec<&str> = ctx.top_tools.iter().map(|(t, _)| t.as_str()).collect();
-        assert!(tool_names.contains(&"Bash"));
-        assert!(!tool_names.contains(&"Grep")); // 무관 세션 도구 미포함
-        // 빈 시퀀스는 초안 대상이 아님
-        assert!(gather_context_for_sequence(&store, "Windows", &[]).is_err());
-    }
-
-    #[test]
     fn skeleton_is_valid_skill_md() {
         let ctx = DraftContext {
             representative: "매일 아침 판매 리포트 뽑아줘".into(),
@@ -403,6 +359,24 @@ mod tests {
     fn slugify_handles_korean_only() {
         assert!(slugify("판매 리포트").starts_with("workflow-"));
         assert_eq!(slugify("Daily Sales Report!!"), "daily-sales-report");
+    }
+
+    #[test]
+    fn set_frontmatter_name_syncs_identity_with_slug() {
+        let md = "---\nname: old-name\ndescription: 무언가\n---\n\n# old-name\n\n본문\n";
+        let out = set_frontmatter_name(md, "new-name");
+        assert!(out.contains("name: new-name"));
+        assert!(!out.contains("name: old-name"));
+        // 프런트매터 밖 본문의 텍스트는 건드리지 않는다
+        assert!(out.contains("# old-name"));
+        assert!(out.contains("description: 무언가"));
+        assert!(out.ends_with('\n'));
+    }
+
+    #[test]
+    fn set_frontmatter_name_noop_without_frontmatter() {
+        let md = "name: not-frontmatter\n본문뿐";
+        assert_eq!(set_frontmatter_name(md, "x"), md);
     }
 
     #[test]
