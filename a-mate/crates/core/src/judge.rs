@@ -2,6 +2,7 @@
 //! 채굴(SQL)이 잡은 pending R6를 Engine으로 걸러 precision을 확보한다.
 //! 순수 로직(프롬프트·파싱·결과 변환)만 여기 있고, 락·네트워크는 src-tauri가 조립한다.
 
+use crate::diary::engine::Engine;
 use crate::skill_draft::DraftContext;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
@@ -65,6 +66,60 @@ pub fn parse_judgment(text: &str) -> Result<Judgment> {
     Ok(j)
 }
 
+pub enum JudgeOutcome {
+    /// 파싱 성공 — worthy/unworthy 판정 확정.
+    Judged(Judgment),
+    /// 응답이 왔으나 JSON 파싱 실패 — 인프라 실패가 아님(재시도 대상, attempts 증가).
+    Malformed(String),
+}
+
+pub struct JudgeResult {
+    pub outcome: JudgeOutcome,
+    pub tokens: u64,
+}
+
+/// 후보 1건 판정 — 엔진 1회 호출. Err = **전송 실패**(엔진 다운·타임아웃)로,
+/// 상위는 attempts를 올리지 않고 pending에 남겨 다음 스캔에 재시도한다.
+pub fn judge_one(engine: &dyn Engine, ctx: &DraftContext) -> Result<JudgeResult> {
+    let (system, user) = judgment_prompt(ctx);
+    let out = engine.generate(&system, &user)?; // Err → 전송 실패
+    let outcome = match parse_judgment(&out.text) {
+        Ok(j) => JudgeOutcome::Judged(j),
+        Err(e) => JudgeOutcome::Malformed(e.to_string()),
+    };
+    Ok(JudgeResult { outcome, tokens: out.tokens_used })
+}
+
+/// 판정 결과를 (새 status, judgment_json)로 변환.
+/// - Judged(worthy)  → Some("new"),      {worthy,reason,suggested_name,attempts,tokens}
+/// - Judged(!worthy) → Some("rejected"), 〃 (영구 캐시)
+/// - Malformed       → None(status 유지),{attempts,error,tokens} — rejected로 오캐시 금지
+pub fn judgment_record(
+    prev_attempts: u32,
+    result: &JudgeResult,
+) -> (Option<&'static str>, serde_json::Value) {
+    let attempts = prev_attempts + 1;
+    match &result.outcome {
+        JudgeOutcome::Judged(j) => {
+            let status = if j.worthy { "new" } else { "rejected" };
+            (
+                Some(status),
+                serde_json::json!({
+                    "worthy": j.worthy,
+                    "reason": j.reason,
+                    "suggested_name": j.suggested_name,
+                    "attempts": attempts,
+                    "tokens": result.tokens,
+                }),
+            )
+        }
+        JudgeOutcome::Malformed(e) => (
+            None,
+            serde_json::json!({ "attempts": attempts, "error": e, "tokens": result.tokens }),
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,5 +161,58 @@ mod tests {
     fn parse_rejects_malformed() {
         assert!(parse_judgment("죄송하지만 판정할 수 없습니다").is_err());
         assert!(parse_judgment(r#"{"worthy":true}"#).is_err(), "필수 필드 누락은 실패");
+    }
+
+    use crate::diary::engine::{EngineOutput, MockEngine};
+
+    /// 전송 실패를 흉내내는 엔진.
+    struct FailEngine;
+    impl Engine for FailEngine {
+        fn name(&self) -> String { "fail".into() }
+        fn generate(&self, _s: &str, _u: &str) -> anyhow::Result<EngineOutput> {
+            Err(anyhow!("connection refused"))
+        }
+        fn chat(&self, _s: &str, _m: &[crate::diary::engine::ChatMessage]) -> anyhow::Result<EngineOutput> {
+            Err(anyhow!("n/a"))
+        }
+    }
+
+    #[test]
+    fn judge_one_worthy_then_record_promotes_to_new() {
+        let eng = MockEngine {
+            canned: r#"{"worthy":true,"reason":"매번 같은 릴리스 절차","suggested_name":"release-flow"}"#.into(),
+        };
+        let res = judge_one(&eng, &ctx()).unwrap();
+        assert!(matches!(res.outcome, JudgeOutcome::Judged(ref j) if j.worthy));
+        assert!(res.tokens > 0, "토큰 계량");
+        let (status, rec) = judgment_record(0, &res);
+        assert_eq!(status, Some("new"));
+        assert_eq!(rec["attempts"], serde_json::json!(1));
+        assert_eq!(rec["suggested_name"], serde_json::json!("release-flow"));
+    }
+
+    #[test]
+    fn judge_one_unworthy_records_rejected() {
+        let eng = MockEngine { canned: r#"{"worthy":false,"reason":"대화 접착제","suggested_name":"none"}"#.into() };
+        let (status, rec) = judgment_record(0, &judge_one(&eng, &ctx()).unwrap());
+        assert_eq!(status, Some("rejected"));
+        assert_eq!(rec["worthy"], serde_json::json!(false));
+    }
+
+    #[test]
+    fn judge_one_malformed_bumps_attempts_keeps_pending() {
+        let eng = MockEngine { canned: "판정 불가합니다".into() };
+        let res = judge_one(&eng, &ctx()).unwrap();
+        assert!(matches!(res.outcome, JudgeOutcome::Malformed(_)));
+        let (status, rec) = judgment_record(1, &res);
+        assert_eq!(status, None, "형식 불량은 status 유지(pending)");
+        assert_eq!(rec["attempts"], serde_json::json!(2), "attempts+1");
+        assert!(rec.get("error").is_some());
+    }
+
+    #[test]
+    fn judge_one_transport_failure_is_err() {
+        // 전송 실패는 Err → 상위에서 skip(attempts 미증가)
+        assert!(judge_one(&FailEngine, &ctx()).is_err());
     }
 }
