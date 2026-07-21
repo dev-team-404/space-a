@@ -29,6 +29,8 @@ export interface Finding {
   last_seen: string | null;
   occurrences: number;
   status: string;
+  /** R6 판정 결과(worthy만 노출됨). rejected/pending은 목록에 안 옴. */
+  judgment?: { worthy?: boolean; reason?: string; suggested_name?: string } | null;
 }
 
 export interface CoachFinding extends Finding {
@@ -296,13 +298,13 @@ export interface SkillDraft {
   session_count: number;
 }
 
-/** R6/R23 반복 패턴 → SKILL.md 초안 생성. R6는 대표 프롬프트, R23은 도구 시퀀스로 매칭. */
+/** R6 반복 지시 → SKILL.md 초안 생성. 판정이 제안한 이름(suggestedName)을 기본 슬러그로 쓴다. */
 export async function generateSkillDraft(
   host: string,
   representative: string,
-  sequence: string[] | null = null,
+  suggestedName: string | null = null,
 ): Promise<SkillDraft> {
-  return invoke<SkillDraft>('generate_skill_draft', { host, representative, sequence });
+  return invoke<SkillDraft>('generate_skill_draft', { host, representative, suggestedName });
 }
 
 /** 초안을 ~/.claude/skills/<slug>/SKILL.md 로 저장. 저장된 절대 경로 반환. */
