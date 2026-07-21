@@ -106,6 +106,7 @@ fn is_synthetic_marker(text: &str) -> bool {
         || t.starts_with("<ide_")
         || t.starts_with("<system-reminder")
         || t.starts_with("<task-notification")
+        || t.starts_with("[Request interrupted")
 }
 
 /// user 프롬프트 미리보기(첫 줄 ≤120자). content가 문자열이면 그대로, 블록 배열이면
@@ -528,6 +529,22 @@ mod tests {
             "message":{"role":"user","content":"<system-reminder>background task done</system-reminder>"}}"#;
         let evs = adapter().map(line, "s1.jsonl", 0);
         assert!(!evs.iter().any(|e| matches!(e.kind, crate::model::EventKind::UserPrompt { .. })));
+    }
+
+    #[test]
+    fn map_user_interrupt_markers_yield_no_prompt() {
+        // Claude Code가 인터럽트 시 합성하는 user 라인 — 지시가 아니다.
+        // 실사용: 43개 파일에 존재, R6 "27개 세션" junk 카드의 원인 (스펙 §1.1-3)
+        for text in ["[Request interrupted by user]", "[Request interrupted by user for tool use]"] {
+            let line = format!(
+                r#"{{"type":"user","sessionId":"s1","uuid":"u9","message":{{"role":"user","content":"{text}"}}}}"#
+            );
+            let evs = adapter().map(&line, "s1.jsonl", 0);
+            assert!(
+                !evs.iter().any(|e| matches!(e.kind, crate::model::EventKind::UserPrompt { .. })),
+                "인터럽트 마커가 프롬프트로 수집되면 안 됨: {text}"
+            );
+        }
     }
 
     #[test]
