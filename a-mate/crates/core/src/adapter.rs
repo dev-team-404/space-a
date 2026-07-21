@@ -98,7 +98,7 @@ fn content_text(content: Option<&Value>) -> Option<String> {
 }
 
 /// Claude Code가 user 라인에 주입하는 합성 마커 — 사용자 지시가 아니다.
-/// (슬래시 커맨드 에코, 로컬 커맨드 출력, IDE 연동 이벤트, 훅/백그라운드 알림)
+/// (슬래시 커맨드 에코, 로컬 커맨드 출력, IDE 연동 이벤트, 훅/백그라운드 알림, 인터럽트 마커)
 fn is_synthetic_marker(text: &str) -> bool {
     let t = text.trim_start();
     t.starts_with("<command")

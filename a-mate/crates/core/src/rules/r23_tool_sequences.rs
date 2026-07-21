@@ -589,8 +589,8 @@ mod tests {
 
     #[test]
     fn r23_ignores_env_prefixed_generic_loops() {
-        // 실사용 junk 재현: file-ops → bash:TEST_DATABASE_URL=… → bash:cd (스펙 §1.1-4).
-        // env 접두를 벗기면 pytest·cd·export 전부 일반 명령 → 특이 토큰 없음 → 침묵
+        // 실사용 junk 재현: file-ops → bash:TEST_DATABASE_URL=… → bash:export (스펙 §1.1-4).
+        // env 접두를 벗기면 pytest·export 전부 일반 명령 → 특이 토큰 없음 → 침묵
         let store = SqliteStore::open_in_memory().unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         for sess in ["e1", "e2", "e3"] {
