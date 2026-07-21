@@ -804,6 +804,52 @@ impl SqliteStore {
         Ok(n > 0)
     }
 
+    /// R6 판정 배치 대상 — pending & 시도 3회 미만, 최근 활동 순 상한 LIMIT.
+    /// attempts는 judgment_json.$.attempts (NULL=0). (스펙 §4.2)
+    pub fn pending_r6_for_judgment(&self, limit: usize) -> Result<Vec<JudgmentTarget>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT dedup_key, scope_host,
+                    json_extract(evidence_json,'$.repeated_prompt'),
+                    COALESCE(json_extract(judgment_json,'$.attempts'), 0)
+             FROM findings
+             WHERE rule_id='R6' AND status='pending'
+               AND COALESCE(json_extract(judgment_json,'$.attempts'), 0) < 3
+             ORDER BY last_seen DESC
+             LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit as i64], |r| {
+            Ok(JudgmentTarget {
+                dedup_key: r.get(0)?,
+                host: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                representative: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                prev_attempts: r.get::<_, i64>(3)? as u32,
+            })
+        })?;
+        rows.collect::<std::result::Result<_, _>>().map_err(Into::into)
+    }
+
+    /// 판정 결과 저장. new_status=Some → status 전환(worthy→'new', unworthy→'rejected'),
+    /// None → status 불변(파싱 실패 시 pending 잔류). judgment_json은 항상 갱신.
+    pub fn set_judgment(
+        &self,
+        dedup_key: &str,
+        new_status: Option<&str>,
+        judgment: &serde_json::Value,
+    ) -> Result<()> {
+        let j = serde_json::to_string(judgment)?;
+        match new_status {
+            Some(s) => self.conn.execute(
+                "UPDATE findings SET status=?2, judgment_json=?3 WHERE dedup_key=?1",
+                params![dedup_key, s, j],
+            )?,
+            None => self.conn.execute(
+                "UPDATE findings SET judgment_json=?2 WHERE dedup_key=?1",
+                params![dedup_key, j],
+            )?,
+        };
+        Ok(())
+    }
+
     /// v2 이행: 특정 룰의 특정 스코프 finding 일괄 삭제 (예: R7 세션 스코프 폐기 — 스펙 §3).
     /// 이번 평가에서 빠진 rule의 활성('new') finding을 내린다 — 순위 변동형 룰(R23)의
     /// host당 상한이 저장소에도 지켜지게. dismissed/resolved는 사용자 기록이라 보존.
@@ -1543,6 +1589,15 @@ pub struct FindingRow {
     pub judgment: Option<serde_json::Value>,
 }
 
+/// R6 판정 배치 후보 — pending finding에서 뽑은 판정 재료 참조.
+#[derive(Debug, Clone)]
+pub struct JudgmentTarget {
+    pub dedup_key: String,
+    pub host: String,
+    pub representative: String,
+    pub prev_attempts: u32,
+}
+
 /// 한 파일을 offset부터 증분 수집. 반환값 = 신규 삽입 이벤트 수.
 pub fn ingest_file(
     store: &SqliteStore,
@@ -2205,6 +2260,60 @@ mod tests {
         let j = row.judgment.as_ref().expect("judgment_json이 FindingRow로 실려야 함");
         assert_eq!(j["worthy"], serde_json::json!(true));
         assert_eq!(j["reason"], serde_json::json!("매일 반복되는 절차"));
+    }
+
+    #[test]
+    fn pending_r6_batch_filters_attempts_and_limits() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |key: &str, rep: &str| Finding {
+            rule_id: "R6".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "pattern".into(), scope_ref: "x".into(),
+            evidence: serde_json::json!({"repeated_prompt": rep}), est_tokens_saved: 0,
+            prescription: None, dedup_key: key.into(),
+        };
+        // 12개 pending 시드 (last_seen 순서 구분)
+        for i in 0..12 {
+            let ts = format!("2026-07-21T00:{:02}:00Z", i);
+            store.upsert_finding(&mk(&format!("R6|W|{i}"), &format!("반복 지시 {i}번")), &ts).unwrap();
+        }
+        // 하나는 attempts=3 도달 → 제외
+        store.set_judgment("R6|W|0", None, &serde_json::json!({"attempts": 3, "error": "malformed"})).unwrap();
+        // 하나는 이미 판정돼 new → pending 아님 → 제외
+        store.set_judgment("R6|W|1", Some("new"), &serde_json::json!({"worthy": true, "attempts": 1})).unwrap();
+
+        let batch = store.pending_r6_for_judgment(10).unwrap();
+        assert_eq!(batch.len(), 10, "배치 상한 10");
+        assert!(batch.iter().all(|t| t.dedup_key != "R6|W|0"), "attempts 3 도달분 제외");
+        assert!(batch.iter().all(|t| t.dedup_key != "R6|W|1"), "판정 완료(new) 제외");
+        // last_seen DESC → 가장 최근(11번)이 먼저
+        assert_eq!(batch[0].dedup_key, "R6|W|11");
+        assert_eq!(batch[0].representative, "반복 지시 11번");
+        assert_eq!(batch[0].prev_attempts, 0, "미시도는 attempts 0");
+    }
+
+    #[test]
+    fn set_judgment_transitions_status_or_keeps_pending() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let f = Finding {
+            rule_id: "R6".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "pattern".into(), scope_ref: "x".into(),
+            evidence: serde_json::json!({"repeated_prompt": "r"}), est_tokens_saved: 0,
+            prescription: None, dedup_key: "R6|W|k".into(),
+        };
+        store.upsert_finding(&f, "2026-07-21T00:00:00Z").unwrap();
+        // status 유지(파싱 실패) — judgment_json만 갱신
+        store.set_judgment("R6|W|k", None, &serde_json::json!({"attempts": 1, "error": "bad"})).unwrap();
+        let (st, j): (String, String) = store.conn.query_row(
+            "SELECT status, judgment_json FROM findings WHERE dedup_key='R6|W|k'", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!(st, "pending");
+        assert!(j.contains("\"attempts\":1"));
+        // status 전환(판정 완료)
+        store.set_judgment("R6|W|k", Some("rejected"), &serde_json::json!({"worthy": false, "attempts": 1})).unwrap();
+        let st2: String = store.conn.query_row(
+            "SELECT status FROM findings WHERE dedup_key='R6|W|k'", [], |r| r.get(0)).unwrap();
+        assert_eq!(st2, "rejected");
     }
 
     #[test]
