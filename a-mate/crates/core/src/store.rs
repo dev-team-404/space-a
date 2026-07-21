@@ -219,6 +219,16 @@ fn migrate(conn: &Connection) -> Result<()> {
              PRAGMA user_version = 6;",
         )?;
     }
+    // v7 R6 판정 레이어(PR2 스펙 §4.6) — R23 룰 폐기: finding 전량 삭제(dismissed 포함,
+    // 룰이 사라져 쿨다운 기록도 무의미). PR1 배포로 노출됐던 R6 'new' 카드는 판정을 거치도록
+    // pending으로 되돌린다. dismissed/resolved는 사용자 기록이라 보존. 재수집 불필요.
+    if user_version < 7 {
+        conn.execute_batch(
+            "DELETE FROM findings WHERE rule_id='R23';
+             UPDATE findings SET status='pending' WHERE rule_id='R6' AND status='new';
+             PRAGMA user_version = 7;",
+        )?;
+    }
     Ok(())
 }
 
@@ -2626,7 +2636,8 @@ mod tests {
             }, "2026-07-20T12:00:00Z").unwrap();
             // PR2: upsert가 R6을 pending으로 넣으므로, v6(오염된 'new' 카드 정화) 검증을 위해 new로 복원
             store.set_finding_status("R6|Windows|ok", "new").unwrap();
-            // 사용자가 무시한 R23 — 삭제하면 재스캔에서 'new'로 부활(나깅) → 보존해야 함
+            // v6까지는 dismissed R23이 나깅 방지용으로 보존됐으나, v7에서 R23 룰 자체가
+            // 폐기되며 dismissed 포함 전량 삭제 대상이 된다 (PR2 스펙 §4.6) — 아래 assert 참고.
             store.upsert_finding(&Finding {
                 rule_id: "R23".into(), severity: Severity::Suggest,
                 scope_host: Some("Windows".into()), scope_project: None,
@@ -2641,10 +2652,11 @@ mod tests {
             let mut stmt = store.conn.prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
             stmt.query_map([], |r| r.get(0)).unwrap().collect::<std::result::Result<_, _>>().unwrap()
         };
-        // v5(R23 new 삭제) 후 v6(R6/R23 new 삭제·재수집)까지 연쇄 실행된 결과 —
-        // dismissed는 어느 분기에서도 삭제되지 않는다는 것이 이 테스트의 핵심.
-        assert_eq!(keys, vec!["R23|Windows|muted".to_string()],
-            "dismissed는 v5·v6 연쇄에도 보존, new는 정화");
+        // v5(R23 new 삭제) → v6(R6/R23 new 삭제·재수집) → v7(R23 전량 삭제, dismissed 포함)까지
+        // 연쇄 실행된 결과 — R23|Windows|flood(new)는 v5/v6에서, R6|Windows|ok(new)는 v6에서,
+        // R23|Windows|muted(dismissed)는 v7에서 삭제되어 findings가 전부 빈다 (PR2 스펙 §4.6:
+        // R23 룰 폐기로 dismissed 쿨다운 기록도 무의미해짐).
+        assert!(keys.is_empty(), "v7 purges ALL R23 incl. dismissed (spec §4.6); R6 new purged by v6");
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
         assert!(uv >= 6, "밀린 분기 전부 통과 (mv2 테스트 전례)");
     }
@@ -2695,12 +2707,57 @@ mod tests {
         assert_eq!(keys, vec!["R1|Windows|keep".to_string(), "R6|Windows|muted".to_string()],
             "R6/R23 junk('new')만 삭제 — dismissed·타 룰은 보존");
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(uv, 6);
+        assert!(uv >= 6, "v6 분기 통과 (v7 연쇄로 최종 7)");
         // 멱등: 다시 열어도 변화 없음
         drop(store);
         let store = SqliteStore::open(&db).unwrap();
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(uv, 6);
+        assert!(uv >= 6, "v6 분기 통과 (v7 연쇄로 최종 7)");
+    }
+
+    #[test]
+    fn migrate_v7_purges_r23_and_repends_r6() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("m7.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(SCHEMA).unwrap();
+            conn.execute_batch("PRAGMA user_version = 6;").unwrap();
+            let store = SqliteStore { conn };
+            let f = |rule: &str, key: &str| Finding {
+                rule_id: rule.into(), severity: Severity::Suggest,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "pattern".into(), scope_ref: "x".into(),
+                evidence: serde_json::json!({}), est_tokens_saved: 0,
+                prescription: None, dedup_key: key.into(),
+            };
+            store.upsert_finding(&f("R23", "R23|Windows|a"), "2026-07-21T00:00:00Z").unwrap();
+            store.upsert_finding(&f("R23", "R23|Windows|muted"), "2026-07-21T00:00:00Z").unwrap();
+            store.set_finding_status("R23|Windows|muted", "dismissed").unwrap();
+            store.upsert_finding(&f("R6", "R6|Windows|active"), "2026-07-21T00:00:00Z").unwrap();
+            store.set_finding_status("R6|Windows|active", "new").unwrap(); // PR1 시대 노출 카드
+            store.upsert_finding(&f("R6", "R6|Windows|kept"), "2026-07-21T00:00:00Z").unwrap();
+            store.set_finding_status("R6|Windows|kept", "dismissed").unwrap();
+            store.upsert_finding(&f("R11", "R11|Windows|keep"), "2026-07-21T00:00:00Z").unwrap();
+        }
+        // 재오픈 → migrate 실행
+        let store = SqliteStore::open(&path).unwrap();
+        let count = |sql: &str| -> i64 { store.conn.query_row(sql, [], |r| r.get(0)).unwrap() };
+        assert_eq!(count("SELECT COUNT(*) FROM findings WHERE rule_id='R23'"), 0, "R23 전량 삭제(dismissed 포함)");
+        let status = |k: &str| -> String {
+            store.conn.query_row("SELECT status FROM findings WHERE dedup_key=?1",
+                rusqlite::params![k], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(status("R6|Windows|active"), "pending", "노출 R6은 판정 대상으로 되돌림");
+        assert_eq!(status("R6|Windows|kept"), "dismissed", "R6 dismissed는 보존");
+        assert_eq!(status("R11|Windows|keep"), "new", "무관 룰은 불변");
+        let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(uv, 7);
+        // 멱등 — 재오픈해도 안전
+        drop(store);
+        let store2 = SqliteStore::open(&path).unwrap();
+        let uv2: i64 = store2.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(uv2, 7);
     }
 
     #[test]
