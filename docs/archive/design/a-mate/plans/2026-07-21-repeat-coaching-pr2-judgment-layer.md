@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-21
+---
+
 # PR2 — R6 의미 판정 레이어 + R23 폐기 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
