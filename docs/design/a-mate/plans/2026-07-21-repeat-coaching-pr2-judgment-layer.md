@@ -17,6 +17,7 @@
 - **프라이버시.** R6 evidence·판정 프롬프트에는 프롬프트 원문 미리보기가 들어간다 → 외부 전송은 Engine(사내 on-prem 기본)으로만. 허브 공유 화이트리스트 제외 유지(이번 PR에서 R6를 공유 대상에 넣지 않는다).
 - **정밀도 우선(precision > recall).** 판정 프롬프트는 "확신이 없으면 `worthy=false`"를 명시한다.
 - **에이전트 추상화 유지.** 엔진은 `diary::engine::Engine` trait 뒤에서만 호출한다(하드코딩 금지).
+- **crate 이름 주의.** core 패키지명은 `agent-mentor`(하이픈), lib 크레이트명은 `agent_mentor`(언더스코어). 따라서 테스트는 `cargo test -p agent-mentor`(하이픈)로 실행한다. src-tauri 앱은 `agent-mentor-app`.
 - **커밋: Conventional Commits, 영어.** `<type>(<scope>): <subject>` (예: `feat(agent): add r6 judgment pass`). scope는 `agent`(core/src-tauri Rust) 또는 `frontend`(Svelte/TS).
 - **DoD:** 이 plan 완료 PR에서 `docs-archive` 스킬로 본 문서를 `docs/archive/`로 이관한다.
 
@@ -91,7 +92,7 @@ fn judgment_json_column_roundtrips_through_finding_row() {
 
 - [ ] **Step 2: 테스트 실패 확인**
 
-Run: `cargo test -p agent_mentor judgment_json_column_roundtrips`
+Run: `cargo test -p agent-mentor judgment_json_column_roundtrips`
 Expected: FAIL — `no field 'judgment' on type FindingRow` (컴파일 에러)
 
 - [ ] **Step 3: 스키마·구조체·조회에 컬럼 반영**
@@ -139,12 +140,12 @@ Expected: FAIL — `no field 'judgment' on type FindingRow` (컴파일 에러)
 
 - [ ] **Step 4: 테스트 통과 확인**
 
-Run: `cargo test -p agent_mentor judgment_json_column_roundtrips`
+Run: `cargo test -p agent-mentor judgment_json_column_roundtrips`
 Expected: PASS
 
 - [ ] **Step 5: 전체 store 테스트 회귀 확인** — `FindingRow` 필드 추가로 다른 생성부가 깨지지 않는지 (전부 `list_findings_current` 경유라 영향 없어야 함)
 
-Run: `cargo test -p agent_mentor --lib store`
+Run: `cargo test -p agent-mentor --lib store`
 Expected: PASS (모든 store 테스트)
 
 - [ ] **Step 6: 커밋**
@@ -199,7 +200,7 @@ fn upsert_seeds_r6_as_pending_others_as_new() {
 
 - [ ] **Step 2: 테스트 실패 확인**
 
-Run: `cargo test -p agent_mentor upsert_seeds_r6_as_pending`
+Run: `cargo test -p agent-mentor upsert_seeds_r6_as_pending`
 Expected: FAIL — `assertion failed: status("R6|W|a") == "pending"` (현재 항상 `new`)
 
 - [ ] **Step 3: `upsert_finding`에 룰별 초기 status 분기** (`store.rs:438`)
@@ -240,14 +241,14 @@ INSERT의 `status` 리터럴 `'new'`를 파라미터로 교체. 함수 상단에
 
 - [ ] **Step 4: 테스트 통과 확인**
 
-Run: `cargo test -p agent_mentor upsert_seeds_r6_as_pending`
+Run: `cargo test -p agent-mentor upsert_seeds_r6_as_pending`
 Expected: PASS
 
 - [ ] **Step 5: R6를 `new`로 가정하던 기존 마이그레이션 테스트 보정**
 
 `upsert_finding`이 R6를 pending으로 넣으므로, R6를 **활성(new)** 상태로 시드해 삭제/전환을 검증하던 기존 테스트가 깨진다. 먼저 전체를 돌려 실패 테스트를 특정:
 
-Run: `cargo test -p agent_mentor --lib`
+Run: `cargo test -p agent-mentor --lib`
 Expected: `migrate_v6_recollects_and_purges_repeat_junk` 등에서 FAIL 가능
 
 깨진 테스트에서 R6 finding 시드 **직후** status를 명시적으로 되돌린다. 예 — `migrate_v6_recollects_and_purges_repeat_junk`(`store.rs:2608` 부근) junk 시드 뒤:
@@ -262,7 +263,7 @@ Expected: `migrate_v6_recollects_and_purges_repeat_junk` 등에서 FAIL 가능
 
 - [ ] **Step 6: 전체 회귀 통과 확인**
 
-Run: `cargo test -p agent_mentor --lib`
+Run: `cargo test -p agent-mentor --lib`
 Expected: PASS
 
 - [ ] **Step 7: 커밋**
@@ -339,7 +340,7 @@ fn migrate_v7_purges_r23_and_repends_r6() {
 
 - [ ] **Step 2: 테스트 실패 확인**
 
-Run: `cargo test -p agent_mentor migrate_v7_purges_r23`
+Run: `cargo test -p agent-mentor migrate_v7_purges_r23`
 Expected: FAIL — R23 잔존 / `user_version == 6`
 
 - [ ] **Step 3: v7 블록 추가** — `migrate` 함수의 v6 블록(`store.rs:206-213`) **뒤**, `Ok(())` 앞
@@ -359,7 +360,7 @@ Expected: FAIL — R23 잔존 / `user_version == 6`
 
 - [ ] **Step 4: 테스트 통과 확인**
 
-Run: `cargo test -p agent_mentor migrate_v7_purges_r23`
+Run: `cargo test -p agent-mentor migrate_v7_purges_r23`
 Expected: PASS
 
 - [ ] **Step 5: 기존 v6 테스트의 `user_version` 단언 완화**
@@ -374,7 +375,7 @@ Expected: PASS
 
 - [ ] **Step 6: 마이그레이션 전체 회귀 확인**
 
-Run: `cargo test -p agent_mentor migrate`
+Run: `cargo test -p agent-mentor migrate`
 Expected: PASS (v1~v7 전 체인)
 
 - [ ] **Step 7: 커밋**
@@ -460,7 +461,7 @@ fn set_judgment_transitions_status_or_keeps_pending() {
 
 - [ ] **Step 2: 테스트 실패 확인**
 
-Run: `cargo test -p agent_mentor pending_r6_batch_filters`
+Run: `cargo test -p agent-mentor pending_r6_batch_filters`
 Expected: FAIL — `no method 'pending_r6_for_judgment'`
 
 - [ ] **Step 3: `JudgmentTarget` 구조체 + 두 메서드 구현** — `store.rs`의 `impl SqliteStore` 안(예: `set_finding_status` 근처, `store.rs:782` 뒤)
@@ -528,7 +529,7 @@ pub struct JudgmentTarget {
 
 - [ ] **Step 4: 테스트 통과 확인**
 
-Run: `cargo test -p agent_mentor pending_r6_batch_filters set_judgment_transitions`
+Run: `cargo test -p agent-mentor pending_r6_batch_filters set_judgment_transitions`
 Expected: PASS
 
 - [ ] **Step 5: 커밋**
@@ -629,7 +630,7 @@ mod tests {
 
 - [ ] **Step 3: 테스트 실패 확인**
 
-Run: `cargo test -p agent_mentor --lib judge::`
+Run: `cargo test -p agent-mentor --lib judge::`
 Expected: FAIL — `cannot find function 'judgment_prompt'`
 
 - [ ] **Step 4: `judgment_prompt` + `parse_judgment` 구현** — `judge.rs`의 `Judgment` 아래(`#[cfg(test)]` 위)
@@ -690,7 +691,7 @@ pub fn parse_judgment(text: &str) -> Result<Judgment> {
 
 - [ ] **Step 5: 테스트 통과 확인**
 
-Run: `cargo test -p agent_mentor --lib judge::`
+Run: `cargo test -p agent-mentor --lib judge::`
 Expected: PASS
 
 - [ ] **Step 6: 커밋**
@@ -777,7 +778,7 @@ git commit -m "feat(agent): add R6 judgment prompt and strict JSON parsing"
 
 - [ ] **Step 2: 테스트 실패 확인**
 
-Run: `cargo test -p agent_mentor --lib judge::`
+Run: `cargo test -p agent-mentor --lib judge::`
 Expected: FAIL — `cannot find function 'judge_one'`
 
 - [ ] **Step 3: `judge_one` + `judgment_record` 구현** — `judge.rs`의 `parse_judgment` 아래
@@ -844,7 +845,7 @@ pub fn judgment_record(
 
 - [ ] **Step 4: 테스트 통과 확인**
 
-Run: `cargo test -p agent_mentor --lib judge::`
+Run: `cargo test -p agent-mentor --lib judge::`
 Expected: PASS (7개 judge 테스트)
 
 - [ ] **Step 5: 커밋**
