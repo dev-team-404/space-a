@@ -449,12 +449,14 @@ impl SqliteStore {
             Some(p) => Some(serde_json::to_string(p)?),
             None => None,
         };
+        // R6은 판정 전 비노출(pending), 나머지는 기존대로 즉시 노출(new). ON CONFLICT는 status 불변.
+        let init_status = if f.rule_id == "R6" { "pending" } else { "new" };
         self.conn.execute(
             "INSERT INTO findings
                 (dedup_key, rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                  evidence_json, est_tokens_saved, prescription_json, status,
                  first_seen, last_seen, occurrences)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'new',?11,?11,1)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?12,?11,?11,1)
              ON CONFLICT(dedup_key) DO UPDATE SET
                 last_seen = ?11,
                 occurrences = occurrences + 1,
@@ -464,7 +466,8 @@ impl SqliteStore {
                 prescription_json = ?10",
             params![
                 f.dedup_key, f.rule_id, f.severity.as_str(), f.scope_host, f.scope_project,
-                f.scope_kind, f.scope_ref, evidence, f.est_tokens_saved as i64, presc, now_ts
+                f.scope_kind, f.scope_ref, evidence, f.est_tokens_saved as i64, presc, now_ts,
+                init_status
             ],
         )?;
         Ok(())
@@ -2147,6 +2150,31 @@ mod tests {
     }
 
     #[test]
+    fn upsert_seeds_r6_as_pending_others_as_new() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |rule: &str, key: &str| Finding {
+            rule_id: rule.into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "pattern".into(), scope_ref: "x".into(),
+            evidence: serde_json::json!({"repeated_prompt": "rep"}), est_tokens_saved: 0,
+            prescription: None, dedup_key: key.into(),
+        };
+        store.upsert_finding(&mk("R6", "R6|W|a"), "2026-07-21T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R11", "R11|W|b"), "2026-07-21T00:00:00Z").unwrap();
+        let status = |k: &str| -> String {
+            store.conn.query_row("SELECT status FROM findings WHERE dedup_key=?1",
+                rusqlite::params![k], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(status("R6|W|a"), "pending", "신규 R6은 판정 전 pending");
+        assert_eq!(status("R11|W|b"), "new", "다른 룰은 기존대로 new");
+
+        // 이미 판정돼 rejected가 된 R6은 재관측(upsert)돼도 status 불변 — 판정 캐시 유지
+        store.set_finding_status("R6|W|a", "rejected").unwrap();
+        store.upsert_finding(&mk("R6", "R6|W|a"), "2026-07-21T01:00:00Z").unwrap();
+        assert_eq!(status("R6|W|a"), "rejected", "ON CONFLICT는 status를 덮지 않아야 함");
+    }
+
+    #[test]
     fn judgment_json_column_roundtrips_through_finding_row() {
         let store = SqliteStore::open_in_memory().unwrap();
         let f = Finding {
@@ -2596,6 +2624,8 @@ mod tests {
                 evidence: serde_json::json!({"repeated_prompt": "매일 아침 판매 리포트 뽑아줘"}),
                 est_tokens_saved: 0, prescription: None, dedup_key: "R6|Windows|ok".into(),
             }, "2026-07-20T12:00:00Z").unwrap();
+            // PR2: upsert가 R6을 pending으로 넣으므로, v6(오염된 'new' 카드 정화) 검증을 위해 new로 복원
+            store.set_finding_status("R6|Windows|ok", "new").unwrap();
             // 사용자가 무시한 R23 — 삭제하면 재스캔에서 'new'로 부활(나깅) → 보존해야 함
             store.upsert_finding(&Finding {
                 rule_id: "R23".into(), severity: Severity::Suggest,
@@ -2643,6 +2673,8 @@ mod tests {
                 prescription: None, dedup_key: key.into(),
             };
             store.upsert_finding(&f("R6", "R6|Windows|junk"), "2026-07-21T00:00:00Z").unwrap();
+            // PR2: upsert가 R6을 pending으로 넣으므로, v6(오염된 'new' 카드 정화) 검증을 위해 new로 복원
+            store.set_finding_status("R6|Windows|junk", "new").unwrap();
             store.upsert_finding(&f("R23", "R23|Windows|junk"), "2026-07-21T00:00:00Z").unwrap();
             store.upsert_finding(&f("R6", "R6|Windows|muted"), "2026-07-21T00:00:00Z").unwrap();
             store.set_finding_status("R6|Windows|muted", "dismissed").unwrap();
