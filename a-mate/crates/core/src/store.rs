@@ -199,6 +199,18 @@ fn migrate(conn: &Connection) -> Result<()> {
              PRAGMA user_version = 5;",
         )?;
     }
+    // v3.6 재수집 — 논리 dedup 키 도입(데이터 위생 스펙 §3.1): resume 포크 복제본·
+    // 다중 라인 usage 반복을 기존 uuid:offset 행에서 소급 제거할 수 없어 전체 재수집한다.
+    // 오염된 데이터로 만들어진 R6/R23 활성('new') 카드도 정화 — dismissed/resolved는
+    // 사용자 기록(나깅 방지 쿨다운)이라 보존 (v5 전례).
+    if user_version < 6 {
+        conn.execute_batch(
+            "DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;
+             DELETE FROM prompt_events;
+             DELETE FROM findings WHERE rule_id IN ('R6','R23') AND status='new';
+             PRAGMA user_version = 6;",
+        )?;
+    }
     Ok(())
 }
 
@@ -2562,12 +2574,64 @@ mod tests {
             let mut stmt = store.conn.prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
             stmt.query_map([], |r| r.get(0)).unwrap().collect::<std::result::Result<_, _>>().unwrap()
         };
-        assert_eq!(keys, vec!["R23|Windows|muted".to_string(), "R6|Windows|ok".to_string()],
-            "new 홍수만 삭제, dismissed는 보존");
-        let n: i64 = store.conn.query_row("SELECT COUNT(*) FROM ingest_state", [], |r| r.get(0)).unwrap();
-        assert_eq!(n, 1, "v5 정리는 재수집을 유도하면 안 됨");
+        // v5(R23 new 삭제) 후 v6(R6/R23 new 삭제·재수집)까지 연쇄 실행된 결과 —
+        // dismissed는 어느 분기에서도 삭제되지 않는다는 것이 이 테스트의 핵심.
+        assert_eq!(keys, vec!["R23|Windows|muted".to_string()],
+            "dismissed는 v5·v6 연쇄에도 보존, new는 정화");
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(uv, 5);
+        assert!(uv >= 6, "밀린 분기 전부 통과 (mv2 테스트 전례)");
+    }
+
+    #[test]
+    fn migrate_v6_recollects_and_purges_repeat_junk() {
+        use crate::finding::{Finding, Severity};
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("mv6.db");
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(SCHEMA).unwrap();
+            conn.execute_batch(
+                "PRAGMA user_version = 5;
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 42);
+                 INSERT INTO prompt_events (dedup_key, session_id, host, project_id,
+                   source_file, source_offset, norm60, preview)
+                 VALUES ('old-key', 's1', 'Windows', 'p', 'f.jsonl', 0, 'x', 'x');",
+            ).unwrap();
+            let store = SqliteStore { conn };
+            let f = |rule: &str, key: &str| Finding {
+                rule_id: rule.into(), severity: Severity::Suggest,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "pattern".into(), scope_ref: format!("pattern:{key}"),
+                evidence: serde_json::json!({}), est_tokens_saved: 0,
+                prescription: None, dedup_key: key.into(),
+            };
+            store.upsert_finding(&f("R6", "R6|Windows|junk"), "2026-07-21T00:00:00Z").unwrap();
+            store.upsert_finding(&f("R23", "R23|Windows|junk"), "2026-07-21T00:00:00Z").unwrap();
+            store.upsert_finding(&f("R6", "R6|Windows|muted"), "2026-07-21T00:00:00Z").unwrap();
+            store.set_finding_status("R6|Windows|muted", "dismissed").unwrap();
+            store.upsert_finding(&f("R1", "R1|Windows|keep"), "2026-07-21T00:00:00Z").unwrap();
+        }
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v6 분기 발화
+        for table in ["ingest_state", "prompt_events", "events", "daily_rollup", "sessions"] {
+            let n: i64 = store.conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap();
+            assert_eq!(n, 0, "{table}는 재수집을 위해 비워져야 함");
+        }
+        let keys: Vec<String> = {
+            let mut stmt = store.conn
+                .prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
+            stmt.query_map([], |r| r.get(0)).unwrap()
+                .collect::<std::result::Result<_, _>>().unwrap()
+        };
+        assert_eq!(keys, vec!["R1|Windows|keep".to_string(), "R6|Windows|muted".to_string()],
+            "R6/R23 junk('new')만 삭제 — dismissed·타 룰은 보존");
+        let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(uv, 6);
+        // 멱등: 다시 열어도 변화 없음
+        drop(store);
+        let store = SqliteStore::open(&db).unwrap();
+        let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(uv, 6);
     }
 
     #[test]
@@ -2626,15 +2690,19 @@ mod tests {
                 evidence: serde_json::json!({"repeated_prompt": "매일 아침 판매 리포트 뽑아줘"}),
                 est_tokens_saved: 0, prescription: None, dedup_key: "R6|Windows|ok".into(),
             }, "2026-07-20T00:00:00Z").unwrap();
+            // v6까지 연쇄 실행되면 status='new'인 R6/R23은 전량 정화 대상이라, 이 finding이
+            // "R23만 삭제" 관찰을 견디려면 dismissed로 사용자 기록화해야 한다.
+            store.set_finding_status("R6|Windows|ok", "dismissed").unwrap();
         }
 
-        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v3 분기 발화
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v3 분기 발화 (이후 v6까지 연쇄)
 
         let keys: Vec<String> = {
             let mut stmt = store.conn.prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
             stmt.query_map([], |r| r.get(0)).unwrap().collect::<std::result::Result<_, _>>().unwrap()
         };
-        assert_eq!(keys, vec!["R6|Windows|ok".to_string()], "R23만 삭제돼 재산출을 기다려야 함");
+        assert_eq!(keys, vec!["R6|Windows|ok".to_string()],
+            "R23는 v3에서 즉시 삭제 — dismissed R6는 v6 연쇄까지 통과해도 보존");
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
         assert!(uv >= 3, "v3 분기를 지나야 함 (후속 분기로 더 올라갈 수 있음)");
     }
@@ -2669,9 +2737,12 @@ mod tests {
                 evidence: serde_json::json!({"repeated_prompt": "매일 아침 판매 리포트 뽑아줘", "session_count": 3}),
                 est_tokens_saved: 0, prescription: None, dedup_key: "R6|WSL:U|ok".into(),
             }, "2026-07-19T00:00:00Z").unwrap();
+            // v6까지 연쇄 실행되면 status='new'인 R6는 (합성 오염 여부와 무관히) 전량 정화
+            // 대상이라, "정상 R6는 보존" 관찰을 견디려면 dismissed로 사용자 기록화해야 한다.
+            store.set_finding_status("R6|WSL:U|ok", "dismissed").unwrap();
         }
 
-        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — 마커 부재로 발화
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — 마커 부재로 발화 (이후 v6까지 연쇄)
 
         // 전체 재수집 유도 + 오염 R6만 삭제
         for table in ["events", "sessions", "ingest_state", "daily_rollup"] {
@@ -2683,7 +2754,8 @@ mod tests {
             let mut stmt = store.conn.prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
             stmt.query_map([], |r| r.get(0)).unwrap().collect::<std::result::Result<_, _>>().unwrap()
         };
-        assert_eq!(keys, vec!["R6|WSL:U|ok".to_string()]);
+        assert_eq!(keys, vec!["R6|WSL:U|ok".to_string()],
+            "합성 마커 오염 R6는 v1에서 삭제 — dismissed R6는 v6 연쇄까지 통과해도 보존");
 
         // 마커가 설정돼 두 번째 open은 재수집을 다시 유도하지 않는다
         store.conn.execute(
