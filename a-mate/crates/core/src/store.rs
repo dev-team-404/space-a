@@ -2272,8 +2272,8 @@ mod tests {
             evidence: serde_json::json!({"repeated_prompt": rep}), est_tokens_saved: 0,
             prescription: None, dedup_key: key.into(),
         };
-        // 12개 pending 시드 (last_seen 순서 구분)
-        for i in 0..12 {
+        // 14개 pending 시드 (유효 매칭 12개 > limit 10 → LIMIT truncation을 실제로 검증)
+        for i in 0..14 {
             let ts = format!("2026-07-21T00:{:02}:00Z", i);
             store.upsert_finding(&mk(&format!("R6|W|{i}"), &format!("반복 지시 {i}번")), &ts).unwrap();
         }
@@ -2282,14 +2282,18 @@ mod tests {
         // 하나는 이미 판정돼 new → pending 아님 → 제외
         store.set_judgment("R6|W|1", Some("new"), &serde_json::json!({"worthy": true, "attempts": 1})).unwrap();
 
+        // 남은 유효 pending = 2..=13 (12개) > limit 10
         let batch = store.pending_r6_for_judgment(10).unwrap();
-        assert_eq!(batch.len(), 10, "배치 상한 10");
+        assert_eq!(batch.len(), 10, "배치 상한 10 (유효 12개 중 최신 10개로 truncate)");
         assert!(batch.iter().all(|t| t.dedup_key != "R6|W|0"), "attempts 3 도달분 제외");
         assert!(batch.iter().all(|t| t.dedup_key != "R6|W|1"), "판정 완료(new) 제외");
-        // last_seen DESC → 가장 최근(11번)이 먼저
-        assert_eq!(batch[0].dedup_key, "R6|W|11");
-        assert_eq!(batch[0].representative, "반복 지시 11번");
+        // last_seen DESC → 최신(13)이 먼저, 가장 오래된 유효 2개(2,3)는 상한에 밀려 제외
+        assert_eq!(batch[0].dedup_key, "R6|W|13");
+        assert_eq!(batch[0].representative, "반복 지시 13번");
+        assert_eq!(batch[0].host, "Windows", "host 필드가 채워져야 함 (Task 7이 소비)");
         assert_eq!(batch[0].prev_attempts, 0, "미시도는 attempts 0");
+        assert!(batch.iter().all(|t| t.dedup_key != "R6|W|2"), "상한에 밀린 오래된 유효 카드 제외");
+        assert!(batch.iter().all(|t| t.dedup_key != "R6|W|3"), "상한에 밀린 오래된 유효 카드 제외");
     }
 
     #[test]
