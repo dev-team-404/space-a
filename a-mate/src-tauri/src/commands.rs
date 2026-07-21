@@ -1367,9 +1367,12 @@ pub fn generate_skill_draft(
     };
     // 2) 초안 생성 (락 밖, LLM 네트워크 가능)
     let mut draft = agent_mentor::skill_draft::build_draft(&ctx, engine.as_ref().map(|e| e as &dyn Engine));
-    // 판정이 제안한 이름이 있으면 기본 슬러그로 사용(사용자가 저장 전 편집 가능)
+    // 판정이 제안한 이름이 있으면 기본 슬러그로 사용. 저장 디렉터리와 SKILL.md 정체성이
+    // 어긋나지 않도록 프런트매터 name: 도 같은 슬러그로 맞춘다.
     if let Some(name) = suggested_name.as_deref().filter(|s| !s.trim().is_empty()) {
-        draft.slug = agent_mentor::skill_draft::slugify(name);
+        let slug = agent_mentor::skill_draft::slugify(name);
+        draft.markdown = agent_mentor::skill_draft::set_frontmatter_name(&draft.markdown, &slug);
+        draft.slug = slug;
     }
     Ok(SkillDraftResult {
         markdown: draft.markdown,

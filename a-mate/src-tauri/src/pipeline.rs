@@ -107,7 +107,7 @@ mod runtime {
                 // 콘텐츠 큐레이션 — 피드 fetch(락 밖) → run_curation(락) → content:ready
                 maybe_curate_content(app, &state.store);
                 // R6 반복 지시 판정 — 엔진 없으면 no-op(pending 침묵), 실패는 조용히(다음 스캔 재시도)
-                maybe_judge_repeats(&state.store);
+                maybe_judge_repeats(app, &state.store);
                 // 다이어리 실패는 조용히 — 다음 사이클에서 재시도
                 maybe_generate_diaries(app, &state.store);
                 // 오늘의 한마디 — 엔진 없으면 no-op, 실패는 조용히(다음 스캔 재시도)
@@ -172,7 +172,9 @@ mod runtime {
     /// R6 반복 지시 판정 패스(PR2 스펙 §4.2) — 스캔 편승. pending R6를 Engine으로 걸러
     /// worthy→노출(new)/unworthy→영구 캐시(rejected)로 전환한다. 엔진 미설정이면
     /// 그대로 반환(pending 잔류 = fail-safe 침묵). 락 규율은 diary와 동일.
-    fn maybe_judge_repeats(store_mutex: &std::sync::Mutex<SqliteStore>) {
+    /// scan:done·coach:finding은 판정 전에 이미 나갔으므로, worthy 전환이 생기면
+    /// 스캔의 fresh-finding과 동일하게 재발행해 배지·CoachTab을 즉시 갱신한다.
+    fn maybe_judge_repeats(app: &AppHandle, store_mutex: &std::sync::Mutex<SqliteStore>) {
         // ① 엔진 해석 (짧은 락) — 미설정이면 침묵
         let engine = match store_mutex.lock() {
             Ok(store) => crate::resolve_engine(&store),
@@ -182,16 +184,30 @@ mod runtime {
 
         // ② 배치 + 판정 재료 수집 (짧은 락, SQL만) → 즉시 해제
         let targets = match store_mutex.lock() {
-            Ok(store) => store
-                .pending_r6_for_judgment(10)
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|t| {
-                    agent_mentor::skill_draft::gather_context(&store, &t.host, &t.representative)
-                        .ok()
-                        .map(|ctx| (t, ctx))
-                })
-                .collect::<Vec<_>>(),
+            Ok(store) => {
+                let mut targets = Vec::new();
+                for t in store.pending_r6_for_judgment(10).unwrap_or_default() {
+                    match agent_mentor::skill_draft::gather_context(&store, &t.host, &t.representative) {
+                        Ok(ctx) => targets.push((t, ctx)),
+                        // 재료 수집 실패(예: 대표 프롬프트가 너무 짧음 — 영구 실패)를 조용히 드롭하면
+                        // attempts가 안 늘어 다음 스캔에 같은 finding이 재조회되는 큐 막힘(HoL)이 된다.
+                        // 판정 시도로 계산해 attempts를 올리고 3회면 rejected로 마킹한다(파싱 실패 경로와 동형).
+                        Err(e) => {
+                            log::warn!("R6 판정 재료 수집 실패({}): {e}", t.dedup_key);
+                            let attempts = t.prev_attempts + 1;
+                            let status = if attempts >= 3 { Some("rejected") } else { None };
+                            let judgment = serde_json::json!({
+                                "attempts": attempts,
+                                "error": format!("gather_context_failed: {e}"),
+                            });
+                            if let Err(err) = store.set_judgment(&t.dedup_key, status, &judgment) {
+                                log::warn!("set_judgment({}) 실패: {err}", t.dedup_key);
+                            }
+                        }
+                    }
+                }
+                targets
+            }
             Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
         };
         if targets.is_empty() { return; }
@@ -206,14 +222,36 @@ mod runtime {
             }
         }
 
-        // ④ 결과 저장 (짧은 락)
-        if let Ok(store) = store_mutex.lock() {
-            for (key, prev, res) in results {
-                let (status, judgment) = agent_mentor::judge::judgment_record(prev, &res);
-                if let Err(e) = store.set_judgment(&key, status, &judgment) {
-                    log::warn!("set_judgment({key}) 실패: {e}");
+        // ④ 결과 저장 (짧은 락) — worthy(new)로 전환된 행을 모아 재발행 준비
+        let fresh_worthy = match store_mutex.lock() {
+            Ok(store) => {
+                let mut worthy_keys = Vec::new();
+                for (key, prev, res) in results {
+                    let (status, judgment) = agent_mentor::judge::judgment_record(prev, &res);
+                    match store.set_judgment(&key, status, &judgment) {
+                        Ok(()) if status == Some("new") => worthy_keys.push(key),
+                        Ok(()) => {}
+                        Err(e) => log::warn!("set_judgment({key}) 실패: {e}"),
+                    }
+                }
+                if worthy_keys.is_empty() {
+                    Vec::new()
+                } else {
+                    store.list_findings_current(false)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .filter(|f| worthy_keys.contains(&f.dedup_key))
+                        .collect::<Vec<_>>()
                 }
             }
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        }; // guard drops here — emit 전에 락 해제
+
+        // ⑤ 판정으로 새로 노출된 finding이 있으면 스캔의 fresh-finding과 동일 규율로 알림:
+        //    coach:finding(CoachTab·마스코트) + scan:done(셸 배지 activeCount) 재발행.
+        if !fresh_worthy.is_empty() {
+            let _ = app.emit("coach:finding", &fresh_worthy);
+            let _ = app.emit("scan:done", &chrono::Utc::now().to_rfc3339());
         }
     }
 

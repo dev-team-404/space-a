@@ -213,6 +213,33 @@ fn extract_name(md: &str) -> Option<String> {
     None
 }
 
+/// 프런트매터(맨 위 `---`…`---`)의 `name:` 값을 주어진 슬러그로 교체한다.
+/// 판정이 제안한 이름으로 저장 슬러그를 바꿀 때 SKILL.md 안의 정체성(name)도 함께 맞춰
+/// 디렉터리 이름과 프런트매터가 어긋나지 않게 한다. name: 줄이 없으면 원본 그대로 반환.
+pub fn set_frontmatter_name(markdown: &str, slug: &str) -> String {
+    let mut lines: Vec<&str> = markdown.lines().collect();
+    let replaced = format!("name: {slug}");
+    let mut in_fm = false;
+    let mut target = None;
+    for (i, line) in lines.iter().enumerate() {
+        let t = line.trim();
+        if i == 0 {
+            if t == "---" { in_fm = true; continue; }
+            break; // 프런트매터 없음
+        }
+        if in_fm && t == "---" { break; } // 프런트매터 끝
+        if in_fm && t.starts_with("name:") { target = Some(i); break; }
+    }
+    match target {
+        Some(i) => {
+            lines[i] = &replaced;
+            let joined = lines.join("\n");
+            if markdown.ends_with('\n') { format!("{joined}\n") } else { joined }
+        }
+        None => markdown.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -332,6 +359,24 @@ mod tests {
     fn slugify_handles_korean_only() {
         assert!(slugify("판매 리포트").starts_with("workflow-"));
         assert_eq!(slugify("Daily Sales Report!!"), "daily-sales-report");
+    }
+
+    #[test]
+    fn set_frontmatter_name_syncs_identity_with_slug() {
+        let md = "---\nname: old-name\ndescription: 무언가\n---\n\n# old-name\n\n본문\n";
+        let out = set_frontmatter_name(md, "new-name");
+        assert!(out.contains("name: new-name"));
+        assert!(!out.contains("name: old-name"));
+        // 프런트매터 밖 본문의 텍스트는 건드리지 않는다
+        assert!(out.contains("# old-name"));
+        assert!(out.contains("description: 무언가"));
+        assert!(out.ends_with('\n'));
+    }
+
+    #[test]
+    fn set_frontmatter_name_noop_without_frontmatter() {
+        let md = "name: not-frontmatter\n본문뿐";
+        assert_eq!(set_frontmatter_name(md, "x"), md);
     }
 
     #[test]
