@@ -1349,27 +1349,28 @@ pub struct SkillDraftResult {
     pub session_count: u64,
 }
 
-/// R6/R23 finding으로 반복 워크플로를 되짚어 SKILL.md 초안을 생성.
-/// R6는 host+대표 프롬프트, R23은 host+도구 시퀀스(sequence)로 매칭한다.
+/// R6 반복 지시로 반복 워크플로를 되짚어 SKILL.md 초안을 생성. host+대표 프롬프트로 매칭.
+/// 판정이 제안한 이름(suggested_name)이 있으면 초안 기본 슬러그로 쓴다.
 #[tauri::command(async)]
 pub fn generate_skill_draft(
     state: State<AppState>,
     host: String,
     representative: String,
-    sequence: Option<Vec<String>>,
+    suggested_name: Option<String>,
 ) -> Result<SkillDraftResult, String> {
     // 1) 재료 수집 + 엔진 구성 (락 안, SQL만)
     let (ctx, engine) = {
         let guard = lock(&state)?;
-        let ctx = match sequence.as_deref().filter(|s| !s.is_empty()) {
-            Some(seq) => agent_mentor::skill_draft::gather_context_for_sequence(&guard, &host, seq),
-            None => agent_mentor::skill_draft::gather_context(&guard, &host, &representative),
-        }
-        .map_err(|e| e.to_string())?;
+        let ctx = agent_mentor::skill_draft::gather_context(&guard, &host, &representative)
+            .map_err(|e| e.to_string())?;
         (ctx, resolve_engine(&guard))
     };
     // 2) 초안 생성 (락 밖, LLM 네트워크 가능)
-    let draft = agent_mentor::skill_draft::build_draft(&ctx, engine.as_ref().map(|e| e as &dyn Engine));
+    let mut draft = agent_mentor::skill_draft::build_draft(&ctx, engine.as_ref().map(|e| e as &dyn Engine));
+    // 판정이 제안한 이름이 있으면 기본 슬러그로 사용(사용자가 저장 전 편집 가능)
+    if let Some(name) = suggested_name.as_deref().filter(|s| !s.trim().is_empty()) {
+        draft.slug = agent_mentor::skill_draft::slugify(name);
+    }
     Ok(SkillDraftResult {
         markdown: draft.markdown,
         slug: draft.slug,

@@ -55,39 +55,6 @@ pub fn gather_context(
     })
 }
 
-/// R23 finding의 evidence(도구 시퀀스)로 세션을 되짚어 재료를 모은다 (스펙 §3.3).
-/// 대표는 시퀀스를 사람이 읽는 형태로 잇고, 표본은 매칭 세션들의 첫 프롬프트.
-pub fn gather_context_for_sequence(
-    store: &SqliteStore,
-    host: &str,
-    sequence: &[String],
-) -> Result<DraftContext> {
-    if sequence.is_empty() {
-        return Err(anyhow!("도구 시퀀스가 비어 있어 초안 대상이 아닙니다"));
-    }
-    let days = crate::rules::r23_tool_sequences::R23ToolSequences::default().days;
-    let matched = crate::rules::r23_tool_sequences::sessions_containing(store, host, sequence, days)?;
-    let mut samples: Vec<String> = Vec::new();
-    for sid in &matched {
-        if samples.len() >= 5 {
-            break;
-        }
-        if let Some((_, _, _, Some(prompt))) = store.session_ctx(sid)? {
-            let trimmed = prompt.trim().to_string();
-            if !trimmed.is_empty() && !samples.iter().any(|s| s == &trimmed) {
-                samples.push(trimmed);
-            }
-        }
-    }
-    let top_tools = store.tool_usage_for_sessions(&matched)?;
-    Ok(DraftContext {
-        representative: sequence.join(" → "),
-        session_count: matched.len() as u64,
-        sample_prompts: samples,
-        top_tools,
-    })
-}
-
 /// 스킬 디렉터리/커맨드 이름용 슬러그 — 영숫자+하이픈, 소문자, 40자 컷.
 /// 한글 등 비ASCII만 남으면 안정적 해시 접미로 폴백(빈 이름 금지).
 pub fn slugify(name: &str) -> String {
@@ -305,44 +272,6 @@ mod tests {
         let tool_names: Vec<&str> = ctx.top_tools.iter().map(|(t, _)| t.as_str()).collect();
         assert!(tool_names.contains(&"Bash"));
         assert!(!tool_names.contains(&"Grep")); // 다른 지시의 도구는 안 섞임
-    }
-
-    #[test]
-    fn gather_for_sequence_matches_tool_streams() {
-        let store = SqliteStore::open_in_memory().unwrap();
-        // Bash(gh …) → Read/Edit → Skill(codex) 워크플로 2개 세션 + 무관 세션 1개
-        let now = chrono::Utc::now().to_rfc3339();
-        for sess in ["s1", "s2"] {
-            seed(&store, sess, &format!("{sess}에서 PR 마무리 작업"), &[]);
-            let mk = |i: u64, kind, raw: &str, target: Option<&str>| NormalizedEvent {
-                source_agent: "claude-code".into(), schema_version: "t".into(),
-                host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
-                uuid: Some(format!("{sess}-sq{i}")), parent_uuid: None, is_sidechain: false,
-                ts: Some(now.clone()), source_file: "s.jsonl".into(), source_offset: 100 + i,
-                msg_id: None,
-                kind: EventKind::ToolCall {
-                    kind, raw_name: raw.into(), target: target.map(Into::into),
-                    tool_use_id: Some(format!("{sess}-sqt{i}")),
-                },
-            };
-            store.upsert_events(&[
-                mk(0, ToolKind::from_raw_name("Bash"), "Bash", Some("gh pr create")),
-                mk(1, ToolKind::from_raw_name("Read"), "Read", Some("a.rs")),
-                mk(2, ToolKind::Skill { name: "codex:rescue".into() }, "Skill", Some("codex:rescue")),
-            ]).unwrap();
-        }
-        seed(&store, "s3", "무관한 세션", &["Grep"]);
-        let seq: Vec<String> =
-            ["bash:gh", "file-ops", "skill:codex:rescue"].iter().map(|s| s.to_string()).collect();
-        let ctx = gather_context_for_sequence(&store, "Windows", &seq).unwrap();
-        assert_eq!(ctx.session_count, 2);
-        assert_eq!(ctx.representative, "bash:gh → file-ops → skill:codex:rescue");
-        assert!(ctx.sample_prompts.iter().any(|p| p.contains("PR 마무리")));
-        let tool_names: Vec<&str> = ctx.top_tools.iter().map(|(t, _)| t.as_str()).collect();
-        assert!(tool_names.contains(&"Bash"));
-        assert!(!tool_names.contains(&"Grep")); // 무관 세션 도구 미포함
-        // 빈 시퀀스는 초안 대상이 아님
-        assert!(gather_context_for_sequence(&store, "Windows", &[]).is_err());
     }
 
     #[test]
