@@ -37,13 +37,15 @@ pub(crate) fn tokenize(
     match tool_kind {
         // 시크릿 리댁션된 명령(<redacted: …>)은 내용을 알 수 없으니 일반 bash로 취급 —
         // 특이 토큰으로 오인해 무관한 시크릿 명령들이 한 패턴으로 뭉치는 것 방지 (Codex P2).
-        "execute" => match tool_target
+        // env 할당 접두(NAME=value cmd)는 명령이 아니다 — 실제 명령 단어를 찾는다.
+        // 접속 문자열(://)·시크릿 패턴이 명령 자리에 오면 evidence 노출 차단을 위해
+        // 일반 bash로 강등한다 (데이터 위생 스펙 §3.3).
+        "execute" => tool_target
             .filter(|t| !t.starts_with('<'))
-            .and_then(|t| t.split_whitespace().next())
-        {
-            Some(cmd) => format!("bash:{}", cmd.to_lowercase()),
-            None => "bash".into(),
-        },
+            .and_then(|t| t.split_whitespace().find(|w| !is_env_assignment(w)))
+            .filter(|c| !c.contains("://") && crate::curation::find_secret_patterns(c).is_empty())
+            .map(|c| format!("bash:{}", c.to_lowercase()))
+            .unwrap_or_else(|| "bash".into()),
         "mcp_call" => format!("mcp:{}", tool_server.unwrap_or("?")),
         "skill" => format!("skill:{}", tool_target.unwrap_or("?")),
         "sub_agent" => "agent".into(),
@@ -62,7 +64,18 @@ const GENERIC_BASH: &[&str] = &[
     "cargo", "rustc", "go", "pytest", "ls", "cd", "cat", "echo", "mkdir", "rm", "cp",
     "mv", "grep", "rg", "find", "sed", "awk", "head", "tail", "touch", "chmod",
     "curl", "wget", "powershell", "pwsh", "cmd", "dir", "type", "sh", "bash", "test",
+    "export", "set", "env",
 ];
+
+/// `NAME=value` 형태의 env 할당 접두인가 — 명령 앞의 환경변수 지정은 명령이 아니다.
+fn is_env_assignment(word: &str) -> bool {
+    match word.split_once('=') {
+        Some((name, _)) => !name.is_empty()
+            && name.chars().next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'),
+        None => false,
+    }
+}
 
 /// 사용자 의도가 실린 특이 토큰인가 — skill/MCP/서브에이전트 호출, 또는 일반 명령이 아닌
 /// bash(예: gh, codex, 배포 스크립트). 특이 토큰이 하나도 없는 시퀀스는 코칭 가치가 없다.
@@ -549,5 +562,44 @@ mod tests {
             }
         }
         assert!(R23ToolSequences::default().evaluate(&store).unwrap().is_empty());
+    }
+
+    #[test]
+    fn tokenize_skips_env_assignment_prefix() {
+        // 실사용 junk: bash:test_database_url=postgresql+asyncpg://… (스펙 §1.1-4)
+        assert_eq!(
+            tokenize("execute", None,
+                Some("TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/t pytest -q"),
+                Some("Bash")),
+            "bash:pytest"
+        );
+        assert_eq!(tokenize("execute", None, Some("FOO=1 BAR=2 make test"), Some("Bash")), "bash:make");
+        // 할당만 있고 명령이 없으면 일반 bash
+        assert_eq!(tokenize("execute", None, Some("FOO=bar"), Some("Bash")), "bash");
+    }
+
+    #[test]
+    fn tokenize_demotes_secretlike_command_token() {
+        // 접속 문자열/URL이 명령 자리에 오면 evidence에 노출하지 않는다 — 일반 bash로 강등
+        assert_eq!(
+            tokenize("execute", None, Some("postgresql://user:pass@h:5432/db"), Some("Bash")),
+            "bash"
+        );
+    }
+
+    #[test]
+    fn r23_ignores_env_prefixed_generic_loops() {
+        // 실사용 junk 재현: file-ops → bash:TEST_DATABASE_URL=… → bash:cd (스펙 §1.1-4).
+        // env 접두를 벗기면 pytest·cd·export 전부 일반 명령 → 특이 토큰 없음 → 침묵
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+        for sess in ["e1", "e2", "e3"] {
+            seed_tool(&store, sess, 0, &now, "Read", Some("conftest.py"));
+            seed_tool(&store, sess, 10, &now, "Bash",
+                Some("TEST_DATABASE_URL=postgresql://u:p@localhost/t pytest -q"));
+            seed_tool(&store, sess, 20, &now, "Bash", Some("export PATH=/x:$PATH"));
+        }
+        assert!(R23ToolSequences::default().evaluate(&store).unwrap().is_empty(),
+            "env 접두를 벗긴 일반 루프는 침묵해야 함");
     }
 }
