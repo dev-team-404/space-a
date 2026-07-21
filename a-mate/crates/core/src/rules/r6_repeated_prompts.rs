@@ -109,6 +109,7 @@ mod tests {
                 ts: Some(ts.into()),
                 source_file: "s.jsonl".into(),
                 source_offset: offset,
+                msg_id: None,
                 kind: EventKind::UserPrompt { preview: prompt.into() },
             }])
             .unwrap();

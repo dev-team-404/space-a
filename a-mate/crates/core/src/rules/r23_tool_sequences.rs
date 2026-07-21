@@ -307,6 +307,7 @@ mod tests {
                 ts: Some(ts.into()),
                 source_file: "s.jsonl".into(),
                 source_offset: off,
+                msg_id: None,
                 kind: EventKind::ToolCall {
                     kind,
                     raw_name: raw.into(),

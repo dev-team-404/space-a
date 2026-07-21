@@ -118,6 +118,7 @@ mod tests {
             session_id: session.into(), uuid: Some(uuid.into()), parent_uuid: None,
             is_sidechain: false, ts: Some(ts.into()),
             source_file: "s.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id(model),
                 usage: TokenUsage { output, ..Default::default() },
@@ -133,6 +134,7 @@ mod tests {
             session_id: session.into(), uuid: Some(uuid.into()), parent_uuid: None,
             is_sidechain: false, ts: Some(ts.into()),
             source_file: "s.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::ToolCall { kind, raw_name: raw.into(), target: target.map(String::from), tool_use_id: None },
         }
     }

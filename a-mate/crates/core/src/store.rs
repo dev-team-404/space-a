@@ -1604,6 +1604,7 @@ mod tests {
             ts: Some("2026-07-01T10:00:00Z".into()),
             source_file: "s.jsonl".into(),
             source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage { cache_creation: cache_create, ..Default::default() },
@@ -1650,6 +1651,7 @@ mod tests {
             ts: Some("2026-07-01T10:00:00Z".into()),
             source_file: "s.jsonl".into(),
             source_offset: off,
+            msg_id: None,
             kind,
         };
         let evs = vec![
@@ -1730,6 +1732,7 @@ mod tests {
             host: "Windows".into(), project_id: "p".into(), session_id: sid.into(),
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some(ts.into()), source_file: "s.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
@@ -1817,6 +1820,7 @@ mod tests {
             host: host.into(), project_id: project.into(), session_id: session.into(),
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some(ts.into()), source_file: "s.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
@@ -1952,6 +1956,7 @@ mod tests {
             session_id: "s1".into(), uuid: Some("u1".into()), parent_uuid: None,
             is_sidechain: false, ts: Some("2026-07-02T10:00:00Z".into()),
             source_file: "s.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage { input: 100, output: 50, cache_read: 10, cache_creation: 5, eph_1h: 0, eph_5m: 0 },
@@ -2093,6 +2098,7 @@ mod tests {
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-05T10:00:00Z".into()),
             source_file: "f.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id(model),
                 usage: TokenUsage { input: inp, output: out, ..Default::default() },
@@ -2126,6 +2132,7 @@ mod tests {
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some(ts.into()),
             source_file: "f.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage { input: inp, output: 0, ..Default::default() },
@@ -2161,6 +2168,7 @@ mod tests {
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-03T10:00:00Z".into()),
             source_file: "f.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id(model),
                 usage: TokenUsage { input: inp, output: 0, ..Default::default() },
@@ -2186,6 +2194,7 @@ mod tests {
                 uuid: Some("m1".into()), parent_uuid: None, is_sidechain: false,
                 ts: Some("2026-07-07T10:00:00Z".into()),
                 source_file: "s1.jsonl".into(), source_offset: 0,
+                msg_id: None,
                 kind: EventKind::SessionMeta { cwd: "D:\\Project\\cowork".into(), git_branch: None },
             },
             NormalizedEvent {
@@ -2194,6 +2203,7 @@ mod tests {
                 uuid: Some("p1".into()), parent_uuid: None, is_sidechain: false,
                 ts: Some("2026-07-07T10:00:00Z".into()),
                 source_file: "s1.jsonl".into(), source_offset: 10,
+                msg_id: None,
                 kind: EventKind::UserPrompt { preview: "Run this exact Bash command".into() },
             },
         ]).unwrap();
@@ -2213,6 +2223,7 @@ mod tests {
             host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
             uuid: Some(format!("{sess}-{off}")), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-19T10:00:00Z".into()), source_file: "s.jsonl".into(), source_offset: off,
+            msg_id: None,
             kind: EventKind::ToolCall {
                 kind: ToolKind::from_raw_name(raw), raw_name: raw.into(), target: None,
                 tool_use_id: Some(format!("{sess}-{off}-t")),
@@ -2258,6 +2269,7 @@ mod tests {
             uuid: Some("u1".into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-07T10:00:00Z".into()),
             source_file: "C:\\proj\\s1.jsonl".into(), source_offset: 42,
+            msg_id: None,
             kind: EventKind::ToolResult { tool_use_id: "toolu_1".into(), status: ResultStatus::Denied, result_len: 4200 },
         };
         assert_eq!(store.upsert_events(&[ev]).unwrap(), 1);
@@ -2404,6 +2416,7 @@ mod tests {
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-20T10:00:00Z".into()),
             source_file: "s1.jsonl".into(), source_offset: off,
+            msg_id: None,
             kind: EventKind::UserPrompt { preview: preview.into() },
         };
         store.upsert_events(&[
@@ -2440,6 +2453,7 @@ mod tests {
             uuid: Some("sc1".into()), parent_uuid: None, is_sidechain: true,
             ts: Some("2026-07-20T10:00:00Z".into()),
             source_file: "s1.jsonl".into(), source_offset: 10,
+            msg_id: None,
             kind: EventKind::UserPrompt { preview: "서브에이전트 내부의 반복 프롬프트입니다".into() },
         }]).unwrap();
         let n: i64 = store.conn
@@ -2659,7 +2673,7 @@ mod tests {
             host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-07T10:00:00Z".into()),
-            source_file: "C:\\proj\\s1.jsonl".into(), source_offset: off, kind,
+            source_file: "C:\\proj\\s1.jsonl".into(), source_offset: off, msg_id: None, kind,
         };
         store.upsert_events(&[
             base("m1", 0, EventKind::SessionMeta { cwd: "D:\\Project\\cowork".into(), git_branch: Some("main".into()) }),
@@ -2694,7 +2708,7 @@ mod tests {
             host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
             uuid: Some(uuid.into()), parent_uuid: None, is_sidechain: false,
             ts: ts.map(|s| s.to_string()),
-            source_file: "s1.jsonl".into(), source_offset: off, kind,
+            source_file: "s1.jsonl".into(), source_offset: off, msg_id: None, kind,
         };
         // 1) ts 있는 이벤트로 first_ts/last_ts 설정
         store.upsert_events(&[
@@ -2782,7 +2796,7 @@ mod tests {
             host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
             uuid: None, parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-19T10:00:00Z".into()),
-            source_file: "s1.jsonl".into(), source_offset: off, kind,
+            source_file: "s1.jsonl".into(), source_offset: off, msg_id: None, kind,
         };
         store.upsert_events(&[
             mk(EventKind::PermissionMode { mode: "plan".into() }, 0),

@@ -83,7 +83,7 @@ mod tests {
             source_agent: "claude-code".into(), schema_version: "t".into(),
             host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
             uuid: Some(uuid), parent_uuid: None, is_sidechain: false,
-            ts: Some(ts.into()), source_file: "s.jsonl".into(), source_offset: off, kind,
+            ts: Some(ts.into()), source_file: "s.jsonl".into(), source_offset: off, msg_id: None, kind,
         };
         vec![
             base(
@@ -151,6 +151,7 @@ mod tests {
                 host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
                 uuid: Some(format!("b-c{i}")), parent_uuid: None, is_sidechain: false,
                 ts: Some(now.clone()), source_file: "s.jsonl".into(), source_offset: i * 2,
+                msg_id: None,
                 kind: EventKind::ToolCall {
                     kind: ToolKind::Execute, raw_name: "Bash".into(),
                     target: None, tool_use_id: Some(tuid.clone()),
@@ -161,6 +162,7 @@ mod tests {
                 host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
                 uuid: Some(format!("b-r{i}")), parent_uuid: None, is_sidechain: false,
                 ts: Some(now.clone()), source_file: "s.jsonl".into(), source_offset: i * 2 + 1,
+                msg_id: None,
                 kind: EventKind::ToolResult { tool_use_id: tuid, status: ResultStatus::Ok, result_len: 20000 },
             });
         }

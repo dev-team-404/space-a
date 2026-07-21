@@ -901,6 +901,7 @@ mod tests {
                 session_id: sess.into(), uuid: Some(format!("{sess}-u{off}")), parent_uuid: None,
                 is_sidechain: false, ts: Some("2026-07-01T10:00:00Z".into()),
                 source_file: "s.jsonl".into(), source_offset: *off,
+                msg_id: None,
                 kind,
             });
             *off += 1;
@@ -985,6 +986,7 @@ mod tests {
             session_id: format!("s{i}"), uuid: Some(format!("u{i}")), parent_uuid: None,
             is_sidechain: false, ts: Some("2026-07-01T10:00:00Z".into()),
             source_file: "s.jsonl".into(), source_offset: i,
+            msg_id: None,
             kind: EventKind::ToolCall {
                 kind: ToolKind::McpCall { server: server.into(), tool: "t".into() },
                 raw_name: format!("mcp__{server}__t"),

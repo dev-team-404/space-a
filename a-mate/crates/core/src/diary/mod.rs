@@ -917,6 +917,7 @@ mod tests {
             session_id: "s1".into(), uuid: Some("u1".into()), parent_uuid: None,
             is_sidechain: false, ts: Some("2026-07-01T10:00:00Z".into()),
             source_file: "s.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage { input: 10, output: 20, cache_creation: 55000, ..Default::default() },
@@ -1000,6 +1001,7 @@ mod tests {
             session_id: "s1".into(), uuid: Some("u1".into()), parent_uuid: None,
             is_sidechain: false, ts: Some("2026-01-01T09:00:00Z".into()),
             source_file: "s.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
@@ -1031,6 +1033,7 @@ mod tests {
             session_id: session.into(), uuid: Some(uuid.into()), parent_uuid: None,
             is_sidechain: false, ts: Some(ts.into()),
             source_file: "s.jsonl".into(), source_offset: 0,
+            msg_id: None,
             kind: EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
@@ -1047,6 +1050,7 @@ mod tests {
             session_id: session.into(), uuid: None, parent_uuid: None,
             is_sidechain: false, ts: Some(ts.into()),
             source_file: "s.jsonl".into(), source_offset: off as u64,
+            msg_id: None,
             kind: EventKind::ToolCall {
                 kind, raw_name: raw.into(),
                 target: target.map(|s| s.to_string()), tool_use_id: None,

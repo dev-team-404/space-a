@@ -266,6 +266,7 @@ mod tests {
             ts: Some(now.clone()),
             source_file: "s.jsonl".into(),
             source_offset: 0,
+            msg_id: None,
             kind: EventKind::UserPrompt { preview: prompt.into() },
         }];
         for (i, t) in tools.iter().enumerate() {
@@ -281,6 +282,7 @@ mod tests {
                 ts: Some(now.clone()),
                 source_file: "s.jsonl".into(),
                 source_offset: (i + 1) as u64,
+                msg_id: None,
                 kind: EventKind::ToolCall {
                     kind: ToolKind::from_raw_name(t),
                     raw_name: (*t).into(),
@@ -317,6 +319,7 @@ mod tests {
                 host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
                 uuid: Some(format!("{sess}-sq{i}")), parent_uuid: None, is_sidechain: false,
                 ts: Some(now.clone()), source_file: "s.jsonl".into(), source_offset: 100 + i,
+                msg_id: None,
                 kind: EventKind::ToolCall {
                     kind, raw_name: raw.into(), target: target.map(Into::into),
                     tool_use_id: Some(format!("{sess}-sqt{i}")),
