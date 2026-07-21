@@ -171,6 +171,42 @@ AGENT_MENTOR_ENGINE_MODEL=gpt-4.1-mini
 
 ---
 
+## 배포 — 동료에게 설치 파일 전달
+
+동료 PC에 넘길 **Windows 설치 파일(NSIS `.exe`)**을 만드는 절차입니다. 아직 CI가 없으므로
+**로컬 Windows에서 수동 빌드**합니다. (`tauri.conf.json`의 `bundle.active: true`,
+`targets: ["nsis"]` 설정으로 `tauri build` 시 설치 파일이 생성됩니다.)
+
+```powershell
+cd a-mate
+npm install                 # 최초 1회 (또는 의존성 변경 시)
+npm run tauri build         # 프론트 빌드 → Rust 릴리스 컴파일 → NSIS 설치 파일 번들
+```
+
+산출물 위치:
+
+```
+a-mate/src-tauri/target/release/bundle/nsis/Agent Mentor_<버전>_x64-setup.exe
+```
+
+이 `*-setup.exe` 하나를 동료에게 전달하면 됩니다. 실행하면 시작 메뉴 등록·아이콘·제거
+기능이 있는 형태로 설치됩니다.
+
+### 배포 전 체크 & 주의사항
+
+| 항목 | 내용 |
+|------|------|
+| **버전 올리기** | 새로 배포할 땐 `src-tauri/tauri.conf.json`의 `version`을 먼저 올리세요. 파일명·설치 정보에 반영됩니다. |
+| **코드 서명 없음** | 현재 서명 인프라가 없어(설계상 3단계 보류) 설치 시 **Windows SmartScreen 경고**가 뜹니다. 동료는 "추가 정보 → 실행"으로 진행해야 합니다. |
+| **자동 업데이트 없음** | `updater` 미도입 상태입니다. 새 버전은 **다시 빌드 → 설치 파일 재전달 → 동료가 재설치**해야 반영됩니다. |
+| **WebView2 필요** | Windows 11엔 기본 포함. 없는 환경이면 NSIS 설치기가 안내하거나, [사전 요구사항 4](#4-webview2-런타임)를 먼저 설치해야 합니다. |
+
+> MSI도 함께 만들려면 `tauri.conf.json`의 `bundle.targets`를 `["nsis", "msi"]`로 두면
+> `bundle/msi/`에도 산출됩니다. 코드 서명·자동 업데이트 활성화는 서명 인프라가 확정되는
+> [로드맵 3단계](04-history-and-roadmap.md)에서 다룹니다.
+
+---
+
 ## 자주 쓰는 명령
 
 전부 `a-mate/` 디렉터리에서 실행합니다.
