@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS findings (
   scope_host TEXT, scope_project TEXT, scope_kind TEXT, scope_ref TEXT,
   evidence_json TEXT NOT NULL, est_tokens_saved INTEGER DEFAULT 0,
   prescription_json TEXT, status TEXT NOT NULL DEFAULT 'new',
-  first_seen TEXT, last_seen TEXT, occurrences INTEGER DEFAULT 1
+  first_seen TEXT, last_seen TEXT, occurrences INTEGER DEFAULT 1,
+  judgment_json TEXT
 );
 CREATE TABLE IF NOT EXISTS mcp_inventory (
   host TEXT NOT NULL, project_id TEXT NOT NULL, server TEXT NOT NULL,
@@ -153,6 +154,13 @@ fn migrate(conn: &Connection) -> Result<()> {
             "ALTER TABLE sessions ADD COLUMN subagent_files INTEGER NOT NULL DEFAULT 0;
              DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;",
         )?;
+    }
+    // R6 판정 레이어(PR2) — findings.judgment_json 부재 시 컬럼만 추가(재수집 불필요, 판정은 새로 채워짐).
+    let has_judgment = conn
+        .prepare("SELECT 1 FROM pragma_table_info('findings') WHERE name='judgment_json'")?
+        .exists([])?;
+    if !has_judgment {
+        conn.execute_batch("ALTER TABLE findings ADD COLUMN judgment_json TEXT;")?;
     }
     // v3.1 재수집 — IDE 합성 블록(<ide_opened_file> 등) 프롬프트 오염 수정이 라인 재해석을 요구.
     // 스키마 변화가 없어 PRAGMA user_version(=1)으로 1회 트리거. 오염 preview에서 파생된
@@ -738,7 +746,7 @@ impl SqliteStore {
         let sql = format!(
             "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                     evidence_json, est_tokens_saved, prescription_json, dedup_key,
-                    last_seen, occurrences, status
+                    last_seen, occurrences, status, judgment_json
              FROM findings {}
              ORDER BY est_tokens_saved DESC, dedup_key",
             if include_hidden { "" } else { "WHERE status='new'" }
@@ -753,12 +761,13 @@ impl SqliteStore {
                 r.get::<_, Option<String>>(8)?, r.get::<_, String>(9)?,
                 r.get::<_, Option<String>>(10)?, r.get::<_, i64>(11)?,
                 r.get::<_, String>(12)?,
+                r.get::<_, Option<String>>(13)?,
             ))
         })?;
         let mut out = Vec::new();
         for row in rows {
             let (rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
-                 evidence_json, est, prescription_json, dedup_key, last_seen, occ, status) = row?;
+                 evidence_json, est, prescription_json, dedup_key, last_seen, occ, status, judgment_raw) = row?;
             out.push(FindingRow {
                 rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                 evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
@@ -767,6 +776,7 @@ impl SqliteStore {
                 dedup_key, last_seen,
                 occurrences: occ as u64,
                 status,
+                judgment: judgment_raw.and_then(|s| serde_json::from_str(&s).ok()),
             });
         }
         Ok(out)
@@ -1358,7 +1368,7 @@ impl SqliteStore {
             .query_row(
                 "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                         evidence_json, est_tokens_saved, prescription_json, dedup_key,
-                        last_seen, occurrences, status
+                        last_seen, occurrences, status, judgment_json
                  FROM findings WHERE dedup_key=?1",
                 params![dedup_key],
                 |r| {
@@ -1370,13 +1380,14 @@ impl SqliteStore {
                         r.get::<_, Option<String>>(8)?, r.get::<_, String>(9)?,
                         r.get::<_, Option<String>>(10)?, r.get::<_, i64>(11)?,
                         r.get::<_, String>(12)?,
+                        r.get::<_, Option<String>>(13)?,
                     ))
                 },
             )
             .optional()?;
         Ok(row.map(
             |(rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
-              evidence_json, est, prescription_json, dedup_key, last_seen, occ, status)| {
+              evidence_json, est, prescription_json, dedup_key, last_seen, occ, status, judgment_raw)| {
                 FindingRow {
                     rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                     evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
@@ -1385,6 +1396,7 @@ impl SqliteStore {
                     dedup_key, last_seen,
                     occurrences: occ as u64,
                     status,
+                    judgment: judgment_raw.and_then(|s| serde_json::from_str(&s).ok()),
                 }
             },
         ))
@@ -1514,6 +1526,8 @@ pub struct FindingRow {
     pub last_seen: Option<String>,
     pub occurrences: u64,
     pub status: String,
+    /// R6 판정 결과({worthy,reason,suggested_name,attempts,tokens}). 미판정이면 None.
+    pub judgment: Option<serde_json::Value>,
 }
 
 /// 한 파일을 offset부터 증분 수집. 반환값 = 신규 삽입 이벤트 수.
@@ -2130,6 +2144,29 @@ mod tests {
         assert_eq!(severity, "info");
         assert!(prescription_json.is_none());
         assert_eq!(status, "dismissed");
+    }
+
+    #[test]
+    fn judgment_json_column_roundtrips_through_finding_row() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let f = Finding {
+            rule_id: "R6".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "pattern".into(), scope_ref: "pattern:abcd1234".into(),
+            evidence: serde_json::json!({"repeated_prompt": "판매 리포트 뽑아줘"}),
+            est_tokens_saved: 0, prescription: None, dedup_key: "R6|Windows|abcd1234".into(),
+        };
+        store.upsert_finding(&f, "2026-07-21T00:00:00Z").unwrap();
+        // 신규 컬럼에 직접 판정 결과를 써 넣고, 조회가 이를 실어오는지 검증
+        store.conn.execute(
+            "UPDATE findings SET judgment_json=?2 WHERE dedup_key=?1",
+            rusqlite::params!["R6|Windows|abcd1234", r#"{"worthy":true,"reason":"매일 반복되는 절차"}"#],
+        ).unwrap();
+        let rows = store.list_findings_current(true).unwrap();
+        let row = rows.iter().find(|r| r.dedup_key == "R6|Windows|abcd1234").unwrap();
+        let j = row.judgment.as_ref().expect("judgment_json이 FindingRow로 실려야 함");
+        assert_eq!(j["worthy"], serde_json::json!(true));
+        assert_eq!(j["reason"], serde_json::json!("매일 반복되는 절차"));
     }
 
     #[test]
