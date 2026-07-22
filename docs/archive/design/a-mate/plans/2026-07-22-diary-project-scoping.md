@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-22
+---
+
 # 다이어리 프로젝트 스코핑 구현 계획
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -8,7 +13,7 @@
 
 **Tech Stack:** Rust, rusqlite(SQLite), chrono, serde. 테스트는 `cargo test` + in-memory SQLite + 임시 git repo.
 
-**스펙:** `docs/design/a-mate/specs/2026-07-22-diary-project-scoping-design.md`
+**스펙:** `docs/archive/design/a-mate/specs/2026-07-22-diary-project-scoping-design.md`
 
 **작업 위치:** 워크트리 `D:\Project\space-a\.claude\worktrees\diary-project-scoping` (브랜치 `worktree-diary-project-scoping`). 아래 경로는 이 워크트리 루트 기준 상대경로.
 
