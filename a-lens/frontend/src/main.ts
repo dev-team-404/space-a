@@ -310,15 +310,15 @@ function watchDevicePixelRatio() {
   mq.addEventListener('change', onChange, { once: true })
 }
 
-const HUB_W = 340 // #hub 사이드바 폭 — 씬 가용 영역에서 제외
 const SCENE_PAD = 12 // 잘림 방지용 최소 여백 (px)
 function fitScene() {
   if (!currentScene || !appReady) return
   const b = currentScene.getLocalBounds()
-  // 가용 영역 = 전체 화면 − (열린 Hub 폭) − 상단 헤더 높이. 여백은 최소만 두고 방을 꽉 채운다.
+  // 가용 영역 = 전체 화면 − (열린 Hub 실제 폭) − 상단 헤더 높이. 여백은 최소만 두고 방을 꽉 채운다.
   const headerH = headerEl.hidden ? 0 : headerEl.offsetHeight
   // 창이 아주 작아도 가용 영역을 양수로 유지 — 음수 배율(씬 뒤집힘) 방지.
-  const availW = Math.max(10, app.screen.width - (hub.hidden ? 0 : HUB_W) - SCENE_PAD * 2)
+  const hubW = hub.hidden ? 0 : hub.offsetWidth // 리사이즈로 바뀐 현재 폭을 반영
+  const availW = Math.max(10, app.screen.width - hubW - SCENE_PAD * 2)
   const availH = Math.max(10, app.screen.height - headerH - SCENE_PAD * 2)
   // contain: 잘림 없이 가용 영역에 최대로 — 가로/세로 배율 중 작은 쪽.
   const s = Math.min(availW / b.width, availH / b.height)
@@ -769,6 +769,44 @@ function toggleHub(collapsed: boolean) {
 }
 $('hub-collapse').addEventListener('click', () => toggleHub(true))
 hubOpen.addEventListener('click', () => toggleHub(false))
+
+// ── Hub 너비 드래그 리사이즈 (localStorage 유지) ──
+const HUB_MIN = 300
+const HUB_MAX = 720
+let hubWidth = 400
+try {
+  const w = Number(localStorage.getItem('a-lens.hub.width'))
+  if (w) hubWidth = Math.min(HUB_MAX, Math.max(HUB_MIN, w))
+} catch (e) {
+  console.warn('localStorage 읽기 실패 — Hub 너비 기본값 사용', e)
+}
+function applyHubWidth() {
+  document.documentElement.style.setProperty('--hub-w', `${hubWidth}px`)
+  fitScene()
+}
+applyHubWidth()
+const hubResize = $('hub-resize')
+hubResize.addEventListener('pointerdown', (e: PointerEvent) => {
+  e.preventDefault()
+  hubResize.classList.add('dragging')
+  const onMove = (ev: PointerEvent) => {
+    // Hub는 오른쪽에 고정 — 왼쪽 가장자리를 끌면 너비 = 화면오른쪽 − 커서X
+    hubWidth = Math.min(HUB_MAX, Math.max(HUB_MIN, Math.round(window.innerWidth - ev.clientX)))
+    applyHubWidth()
+  }
+  const onUp = () => {
+    hubResize.classList.remove('dragging')
+    try {
+      localStorage.setItem('a-lens.hub.width', String(hubWidth))
+    } catch {
+      /* 저장 실패 무시 */
+    }
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+  }
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+})
 
 function renderHub(data: SpaceView) {
   hubTabs.innerHTML = HUB_TABS.map(
