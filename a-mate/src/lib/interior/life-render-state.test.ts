@@ -5,7 +5,7 @@ function view(): LifeViewPayload {
   return {
     me: { agent_id: 'a', name: 'A', my_life_id: 'life-a', life_id: 'life-b', cell: [1, 2] },
     life: {
-      life_id: 'life-b', owner_name: 'B', owner_mascot_seed: 'b', grid: { w: 24, h: 20 },
+      life_id: 'life-b', owner_agent_id: 'b', owner_name: 'B', owner_mascot_seed: 'b', grid: { w: 24, h: 20 },
       design: { wallpaper: 'w1', floor: 'f1', objects: [] },
       occupants: [{ agent_id: 'a', name: 'A', cell: [1, 2], is_owner: false, mascot_seed: 'a' }],
     },

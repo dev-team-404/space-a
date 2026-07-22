@@ -4,6 +4,19 @@ from life_server.life import LifeService
 from life_server.store import SqliteStore
 
 
+def test_mascot_png_survives_restart(tmp_path):
+    db = str(tmp_path / "life-mascot.db")
+    service = LifeService(store=SqliteStore(db))
+    agent, token, _ = service.register("mascot-owner", mascot_seed="seed")
+    png = b"\x89PNG\r\n\x1a\noriginal-image"
+
+    saved = service.set_mascot_image(token, png)
+    restarted = LifeService(store=SqliteStore(db))
+
+    assert saved["size"] == len(png)
+    assert restarted.mascot_image(token, agent.agent_id)[0] == png
+
+
 def test_state_survives_restart(tmp_path):
     db = str(tmp_path / "life.db")
     s1 = LifeService(store=SqliteStore(db))

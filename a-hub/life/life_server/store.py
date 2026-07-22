@@ -57,6 +57,12 @@ CREATE TABLE IF NOT EXISTS content_visibility (
   visibility TEXT NOT NULL,
   PRIMARY KEY (owner_agent_id, feature)
 );
+CREATE TABLE IF NOT EXISTS mascot_images (
+  agent_id    TEXT PRIMARY KEY,
+  png         BLOB NOT NULL,
+  sha256      TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS shared_diaries (
   life_id    TEXT NOT NULL,
   diary_date TEXT NOT NULL,
@@ -206,6 +212,25 @@ class SqliteStore:
             (owner_agent_id, feature, visibility),
         )
         self._conn.commit()
+
+    def save_mascot_image(self, agent_id: str, png: bytes, sha256: str, updated_at: str) -> None:
+        self._conn.execute(
+            "INSERT INTO mascot_images VALUES (?, ?, ?, ?) ON CONFLICT(agent_id) DO UPDATE SET "
+            "png = excluded.png, sha256 = excluded.sha256, updated_at = excluded.updated_at",
+            (agent_id, png, sha256, updated_at),
+        )
+        self._conn.commit()
+
+    def mascot_image(self, agent_id: str) -> tuple[bytes, str] | None:
+        row = self._conn.execute("SELECT png, sha256 FROM mascot_images WHERE agent_id = ?", (agent_id,)).fetchone()
+        return (bytes(row[0]), row[1]) if row else None
+
+    def mascot_image_hash(self, agent_id: str) -> str | None:
+        row = self._conn.execute("SELECT sha256 FROM mascot_images WHERE agent_id = ?", (agent_id,)).fetchone()
+        return row[0] if row else None
+
+    def load_mascot_image_hashes(self) -> dict[str, str]:
+        return dict(self._conn.execute("SELECT agent_id, sha256 FROM mascot_images"))
 
     def save_shared_diary(self, life_id: str, date: str, body: str, visibility: str) -> None:
         self._conn.execute(

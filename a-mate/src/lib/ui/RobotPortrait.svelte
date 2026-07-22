@@ -1,14 +1,22 @@
 <script lang="ts">
   import { listen } from '@tauri-apps/api/event';
-  import { getMascotSeed, getSprite, robotSpecForSeed } from '../api';
+  import { getMascotSeed, getSprite, lifeMascotImage, robotSpecForSeed } from '../api';
   import { drawRobot, type RobotSpec } from '../robot/render';
   import { frameAt } from '../robot/anim';
 
   // seed 지정 시 그 시드의 로봇(예: 방문 중인 미니홈피 주인), 미지정이면 내 마스코트
-  let { seed = null }: { seed?: string | null } = $props();
+  let { seed = null, agentId = null, imageVersion = null }: { seed?: string | null; agentId?: string | null; imageVersion?: string | null } = $props();
   let canvas = $state<HTMLCanvasElement | null>(null);
   // AI 스프라이트(내 캐릭터 전용 캐시) — 있으면 이미지, 없으면 절차 생성 폴백
   let sprite = $state<string | null>(null);
+
+  $effect(() => {
+    const id = agentId, version = imageVersion;
+    if (!seed) return;
+    sprite = null;
+    if (!id || !version) return;
+    lifeMascotImage(id).then((s) => (sprite = s)).catch(() => (sprite = null));
+  });
 
   $effect(() => {
     if (seed) return; // 남의 초상은 시드 절차 생성만
@@ -27,7 +35,7 @@
 </script>
 
 <div class="portrait">
-  {#if !seed && sprite}
+  {#if sprite}
     <img class="sprite" src={'data:image/png;base64,' + sprite} alt="내 캐릭터" />
   {:else}
     <canvas bind:this={canvas} width="128" height="128"></canvas>

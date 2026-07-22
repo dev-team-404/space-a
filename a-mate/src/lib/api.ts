@@ -146,12 +146,15 @@ export interface LifeOccupant {
   cell: [number, number];
   is_owner: boolean;
   mascot_seed: string;
+  mascot_image_sha256?: string | null;
   bubble?: string;
 }
 export interface LifeState {
   life_id: string;
+  owner_agent_id: string;
   owner_name: string;
   owner_mascot_seed: string; // 주인이 방을 비워도 프로필 로봇을 그릴 수 있게 서버가 항상 준다
+  owner_mascot_image_sha256?: string | null;
   grid: { w: number; h: number };
   design: { wallpaper: string; floor: string; objects: LifeObject[] };
   occupants: LifeOccupant[];
@@ -222,6 +225,8 @@ export const lifeGuestbook = (lifeId: string) => invoke<{entries: GuestbookEntry
 export const lifeAddGuestbook = (lifeId: string, body: string) => invoke<GuestbookEntry>('life_add_guestbook', { lifeId, body });
 export const lifeDeleteGuestbook = (entryId: string) => invoke('life_delete_guestbook', { entryId });
 export const lifeSetBubble = (body: string) => invoke<{bubble:string}>('life_set_bubble', { body }).then((v)=>{invalidateLifeView();return v});
+export const lifeSyncMascotImage = () => invoke<boolean>('life_sync_mascot_image');
+export const lifeMascotImage = (agentId: string) => invoke<string | null>('life_mascot_image', { agentId });
 export const robotSpecForSeed = (seed: string) => invoke<RobotSpec>('robot_spec_for_seed', { seed });
 export const openSettingsWindow = () => invoke<void>('open_settings_window');
 // 마스코트 창 확장/복귀 — 위치+크기를 네이티브에서 한 번에 적용 (중간 프레임 깜빡임 방지)

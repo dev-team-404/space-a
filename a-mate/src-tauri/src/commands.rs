@@ -603,6 +603,13 @@ fn hub_client(state: &State<AppState>) -> Result<Option<LifeClient>, String> {
     Ok(Some(LifeClient { base_url: url, token, api_key: opt_key(get("hub_api_key")) }))
 }
 
+fn upload_cached_mascot(app: &tauri::AppHandle, client: &LifeClient) -> Result<bool, String> {
+    use tauri::Manager as _;
+    let path = app.path().app_data_dir().map_err(|e| e.to_string())?.join("sprite.png");
+    let Ok(png) = std::fs::read(path) else { return Ok(false) };
+    client.upload_mascot_image(&png).map(|_| true).map_err(|e| e.to_string())
+}
+
 #[tauri::command(async)]
 pub fn hub_settings_get(state: State<AppState>) -> Result<HubSettings, String> {
     let guard = lock(&state)?;
@@ -649,6 +656,7 @@ pub fn hub_connect(
                 guard.set_setting("hub_user", &user).map_err(|e| e.to_string())?;
                 guard.set_setting("hub_api_key", &api_key).map_err(|e| e.to_string())?;
                 drop(guard);
+                let _ = upload_cached_mascot(&app, &client);
                 let _ = app.emit("settings:changed", ());
                 return hub_settings_get(state);
             }
@@ -683,6 +691,8 @@ pub fn hub_connect(
             guard.set_setting(k, val).map_err(|e| e.to_string())?;
         }
     }
+    let client = LifeClient { base_url: url.clone(), token: token.clone(), api_key: key_opt };
+    let _ = upload_cached_mascot(&app, &client);
     let _ = app.emit("settings:changed", ());
     hub_settings_get(state)
 }
@@ -856,6 +866,23 @@ pub async fn life_delete_guestbook(state: State<'_, AppState>, entry_id: String)
 pub async fn life_set_bubble(state: State<'_, AppState>, body: String) -> Result<serde_json::Value, String> {
     let Some(client) = hub_client(&state)? else { return Err("hub_not_connected".into()) };
     run_life_http("life_set_bubble", move || client.set_bubble(&body).map_err(|e| e.to_string())).await
+}
+
+#[tauri::command]
+pub async fn life_sync_mascot_image(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<bool, String> {
+    let Some(client) = hub_client(&state)? else { return Ok(false) };
+    run_life_http("life_sync_mascot_image", move || upload_cached_mascot(&app, &client)).await
+}
+
+#[tauri::command]
+pub async fn life_mascot_image(state: State<'_, AppState>, agent_id: String) -> Result<Option<String>, String> {
+    use base64::Engine as _;
+    let Some(client) = hub_client(&state)? else { return Ok(None) };
+    run_life_http("life_mascot_image", move || {
+        client.mascot_image(&agent_id)
+            .map(|value| value.map(|png| base64::engine::general_purpose::STANDARD.encode(png)))
+            .map_err(|e| e.to_string())
+    }).await
 }
 
 /// 임의 시드의 로봇 스펙 — 방 안 다른 에이전트 렌더용.
@@ -1329,6 +1356,9 @@ pub fn regenerate_sprite(app: tauri::AppHandle, state: State<AppState>) -> Resul
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     std::fs::write(dir.join("sprite.png"), png).map_err(|e| e.to_string())?;
+    if let Some(client) = hub_client(&state)? {
+        let _ = upload_cached_mascot(&app, &client);
+    }
     log::info!("캐릭터 재생성 완료");
     let _ = app.emit("sprite:ready", ());
     Ok(())
