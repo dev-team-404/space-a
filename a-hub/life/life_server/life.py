@@ -12,6 +12,7 @@
 import secrets
 import threading
 import uuid
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 
 from . import errors
@@ -68,6 +69,8 @@ class LifeAgent:
     at_life: str  # 현재 있는 방
     cell: Cell
     mascot_seed: str = ""  # 클라이언트 마스코트 시드 — 어느 방에서든 같은 로봇으로 보이게
+    bubble: str = ""
+    connected: bool = True
 
 
 @dataclass
@@ -97,8 +100,13 @@ class LifeService:
         self._life: dict[str, Life] = {}
         self._agents: dict[str, LifeAgent] = {}
         self._tokens: dict[str, str] = {}  # token -> agent_id
+        self._friends: set[tuple[str, str]] = set()
+        self._content_visibility: dict[tuple[str, str], str] = {}
+        self._diaries: dict[tuple[str, str], dict] = {}
+        self._guestbook: list[dict] = []
         if store is not None:
             self._life, self._agents, self._tokens = store.load()
+            self._friends, self._content_visibility, self._diaries, self._guestbook = store.load_social()
             # protocol v2에서는 창문 회전이 자유값이었다. v3부터 벽이 방향의 단일 원천이다.
             for life in self._life.values():
                 changed = False
@@ -120,6 +128,7 @@ class LifeService:
         with self._lock:
             existing = next((agent for agent in self._agents.values() if agent.name == name), None)
             if existing is not None:
+                existing.connected = True
                 existing.mascot_seed = mascot_seed or existing.mascot_seed
                 token = secrets.token_urlsafe(24)
                 self._tokens[token] = existing.agent_id
@@ -171,7 +180,7 @@ class LifeService:
                 {
                     "life_id": r.id,
                     "owner_name": r.owner_name,
-                    "occupants": sum(1 for a in self._agents.values() if a.at_life == r.id),
+                    "occupants": sum(1 for a in self._agents.values() if a.connected and a.at_life == r.id),
                 }
                 for r in self._life.values()
             ]
@@ -211,9 +220,10 @@ class LifeService:
                         "cell": list(a.cell),
                         "is_owner": a.agent_id == life.owner_agent_id,
                         "mascot_seed": a.mascot_seed,
+                        "bubble": a.bubble,
                     }
                     for a in self._agents.values()
-                    if a.at_life == life.id
+                    if a.connected and a.at_life == life.id
                 ],
             }
 
@@ -227,6 +237,155 @@ class LifeService:
                 "life_id": agent.at_life,
                 "cell": list(agent.cell),
             }
+
+    # --- 소셜 기능 ---
+
+    def people(self, token: str | None) -> list[dict]:
+        me = self._authed(token)
+        with self._lock:
+            return [
+                {"agent_id": a.agent_id, "name": a.name, "life_id": a.life_id,
+                 "is_friend": (me.agent_id, a.agent_id) in self._friends}
+                for a in self._agents.values() if a.agent_id != me.agent_id
+            ]
+
+    def set_friend(self, token: str | None, friend_agent_id: str, enabled: bool) -> dict:
+        me = self._authed(token)
+        with self._lock:
+            if friend_agent_id not in self._agents or friend_agent_id == me.agent_id:
+                raise errors.InvalidRequest("잘못된 일촌 대상")
+            key = (me.agent_id, friend_agent_id)
+            self._friends.add(key) if enabled else self._friends.discard(key)
+            if self._store:
+                self._store.set_friend(me.agent_id, friend_agent_id, enabled)
+        return {"friend_agent_id": friend_agent_id, "enabled": enabled}
+
+    def _can_view_locked(self, owner_agent_id: str, viewer_agent_id: str, visibility: str) -> bool:
+        """Life 콘텐츠 공통 공개 범위 판정. 호출자는 self._lock을 보유해야 한다."""
+        if owner_agent_id == viewer_agent_id:
+            return True
+        if visibility == "public":
+            return True
+        if visibility == "friends":
+            return (owner_agent_id, viewer_agent_id) in self._friends
+        return False
+
+    def set_content_visibility(self, token: str | None, feature: str, visibility: str) -> dict:
+        me = self._authed(token)
+        if feature != "diary":
+            raise errors.InvalidRequest("unsupported content feature")
+        if visibility not in ("private", "friends", "public"):
+            raise errors.InvalidRequest("visibility must be private, friends, or public")
+        with self._lock:
+            self._content_visibility[(me.agent_id, feature)] = visibility
+            if visibility == "private":
+                self._diaries = {key: row for key, row in self._diaries.items() if key[0] != me.life_id}
+            if self._store:
+                self._store.set_content_visibility(me.agent_id, feature, visibility)
+                if visibility == "private":
+                    self._store.clear_shared_diaries(me.life_id)
+        return {"feature": feature, "visibility": visibility}
+
+    def content_access(self, token: str | None, life_id: str) -> dict:
+        viewer = self._authed(token)
+        with self._lock:
+            life = self._life.get(life_id)
+            if life is None:
+                raise errors.NotFound(f"life '{life_id}' not found")
+            visibility = self._content_visibility.get((life.owner_agent_id, "diary"), "private")
+            return {"features": {"diary": {
+                "visibility": visibility,
+                "can_view": self._can_view_locked(life.owner_agent_id, viewer.agent_id, visibility),
+            }}}
+
+    def share_diary(self, token: str | None, date: str, body: str, visibility: str) -> dict:
+        me = self._authed(token)
+        if visibility not in ("friends", "public") or not date.strip() or not body.strip():
+            raise errors.InvalidRequest("날짜, 본문, 공개 범위를 확인하세요")
+        if len(body) > 100_000:
+            raise errors.InvalidRequest("다이어리 본문이 너무 큼")
+        row = {"date": date, "body": body, "visibility": visibility}
+        with self._lock:
+            self._diaries[(me.life_id, date)] = row
+            if self._store:
+                self._store.save_shared_diary(me.life_id, date, body, visibility)
+        return row
+
+    def unshare_diary(self, token: str | None, date: str) -> dict:
+        me = self._authed(token)
+        with self._lock:
+            self._diaries.pop((me.life_id, date), None)
+            if self._store:
+                self._store.delete_shared_diary(me.life_id, date)
+        return {"date": date, "visibility": "private"}
+
+    def shared_diaries(self, token: str | None, life_id: str) -> list[dict]:
+        viewer = self._authed(token)
+        with self._lock:
+            life = self._life.get(life_id)
+            if life is None:
+                raise errors.NotFound(f"life '{life_id}' not found")
+            owner = life.owner_agent_id
+            visibility = self._content_visibility.get((owner, "diary"), "private")
+            if not self._can_view_locked(owner, viewer.agent_id, visibility):
+                return []
+            return [dict(row) for (lid, _), row in sorted(self._diaries.items(), reverse=True)
+                    if lid == life_id]
+
+    def guestbook(self, life_id: str) -> list[dict]:
+        with self._lock:
+            if life_id not in self._life:
+                raise errors.NotFound(f"life '{life_id}' not found")
+            return [dict(row) for row in reversed(self._guestbook) if row["life_id"] == life_id]
+
+    def add_guestbook(self, token: str | None, life_id: str, body: str) -> dict:
+        author = self._authed(token)
+        body = body.strip()
+        if not body or len(body) > 500:
+            raise errors.InvalidRequest("방명록은 1~500자여야 함")
+        with self._lock:
+            if life_id not in self._life:
+                raise errors.NotFound(f"life '{life_id}' not found")
+            row = {"entry_id": f"gb_{uuid.uuid4().hex[:12]}", "life_id": life_id,
+                   "author_agent_id": author.agent_id, "author_name": author.name, "body": body,
+                   "created_at": datetime.now(timezone.utc).isoformat()}
+            self._guestbook.append(row)
+            if self._store:
+                self._store.save_guestbook_entry(row)
+            return dict(row)
+
+    def delete_guestbook(self, token: str | None, entry_id: str) -> dict:
+        actor = self._authed(token)
+        with self._lock:
+            row = next((r for r in self._guestbook if r["entry_id"] == entry_id), None)
+            if row is None:
+                raise errors.NotFound("방명록 항목을 찾을 수 없음")
+            life = self._life[row["life_id"]]
+            if actor.agent_id not in (row["author_agent_id"], life.owner_agent_id):
+                raise errors.Forbidden("작성자 또는 방 주인만 삭제할 수 있음")
+            self._guestbook.remove(row)
+            if self._store:
+                self._store.delete_guestbook_entry(entry_id)
+        return {"entry_id": entry_id, "deleted": True}
+
+    def set_bubble(self, token: str | None, body: str) -> dict:
+        agent = self._authed(token)
+        body = body.strip()
+        if len(body) > 120:
+            raise errors.InvalidRequest("말풍선은 120자 이하여야 함")
+        with self._lock:
+            agent.bubble = body
+            if self._store:
+                self._store.save_agent(agent)
+        return {"bubble": body}
+
+    def disconnect(self, token: str | None) -> dict:
+        agent = self._authed(token)
+        with self._lock:
+            agent.connected = False
+            if self._store:
+                self._store.save_agent(agent)
+        return {"disconnected": True}
 
     # --- 위치 변이 (전부 락 안에서 원자 처리) ---
 
@@ -243,6 +402,7 @@ class LifeService:
             # 이전 방 자동 퇴장 = at_life/cell 원자 교체
             agent.at_life = life_id
             agent.cell = target
+            agent.connected = True
             if self._store:
                 self._store.save_agent(agent)
         return self.me(token)

@@ -62,6 +62,23 @@ class LifeDesignBody(BaseModel):
     objects: list[dict] = []
 
 
+class FriendBody(BaseModel):
+    enabled: bool
+
+
+class DiaryShareBody(BaseModel):
+    body: str
+    visibility: str
+
+
+class VisibilityBody(BaseModel):
+    visibility: str
+
+
+class TextBody(BaseModel):
+    body: str = ""
+
+
 def _bearer(authorization: str | None) -> str:
     if not authorization or not authorization.startswith("Bearer "):
         raise errors.Unauthorized("missing bearer token")
@@ -124,9 +141,57 @@ def create_app(life: LifeService | None = None) -> FastAPI:
     def life_rename(body: LifeRegisterBody, authorization: str | None = Header(default=None)):
         return life.rename(_bearer(authorization), body.name)
 
+    @app.get("/life/people")
+    def life_people(authorization: str | None = Header(default=None)):
+        return {"people": life.people(_bearer(authorization))}
+
+    @app.put("/life/friends/{agent_id}")
+    def life_friend(agent_id: str, body: FriendBody, authorization: str | None = Header(default=None)):
+        return life.set_friend(_bearer(authorization), agent_id, body.enabled)
+
+    @app.put("/life/me/diaries/{date}")
+    def life_share_diary(date: str, body: DiaryShareBody, authorization: str | None = Header(default=None)):
+        return life.share_diary(_bearer(authorization), date, body.body, body.visibility)
+
+    @app.put("/life/me/content-visibility/{feature}")
+    def life_content_visibility(feature: str, body: VisibilityBody, authorization: str | None = Header(default=None)):
+        return life.set_content_visibility(_bearer(authorization), feature, body.visibility)
+
+    @app.delete("/life/me/diaries/{date}")
+    def life_unshare_diary(date: str, authorization: str | None = Header(default=None)):
+        return life.unshare_diary(_bearer(authorization), date)
+
+    @app.patch("/life/me/bubble")
+    def life_bubble(body: TextBody, authorization: str | None = Header(default=None)):
+        return life.set_bubble(_bearer(authorization), body.body)
+
+    @app.post("/life/me/disconnect")
+    def life_disconnect(authorization: str | None = Header(default=None)):
+        return life.disconnect(_bearer(authorization))
+
     @app.get("/life/{life_id}")
     def life_state(life_id: str):
         return life.life_state(life_id)
+
+    @app.get("/life/{life_id}/diaries")
+    def life_diaries(life_id: str, authorization: str | None = Header(default=None)):
+        return {"diaries": life.shared_diaries(_bearer(authorization), life_id)}
+
+    @app.get("/life/{life_id}/content-access")
+    def life_content_access(life_id: str, authorization: str | None = Header(default=None)):
+        return life.content_access(_bearer(authorization), life_id)
+
+    @app.get("/life/{life_id}/guestbook")
+    def life_guestbook(life_id: str):
+        return {"entries": life.guestbook(life_id)}
+
+    @app.post("/life/{life_id}/guestbook", status_code=201)
+    def life_guestbook_add(life_id: str, body: TextBody, authorization: str | None = Header(default=None)):
+        return life.add_guestbook(_bearer(authorization), life_id, body.body)
+
+    @app.delete("/life/guestbook/{entry_id}")
+    def life_guestbook_delete(entry_id: str, authorization: str | None = Header(default=None)):
+        return life.delete_guestbook(_bearer(authorization), entry_id)
 
     @app.post("/life/{life_id}/enter")
     def life_enter(life_id: str, body: LifeEnterBody, authorization: str | None = Header(default=None)):

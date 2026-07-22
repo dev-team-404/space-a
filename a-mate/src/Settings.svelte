@@ -77,6 +77,14 @@
     }
   }
 
+  async function disconnectHub() {
+    hubStatus = { kind: 'busy', text: '연결 종료 중…' };
+    try {
+      hub = await invoke<HubSettings>('hub_disconnect');
+      hubStatus = { kind: 'ok', text: 'Life 서버 연결을 종료했어요. 서버의 방과 공개 데이터는 유지됩니다.' };
+    } catch (e) { hubStatus = { kind: 'err', text: `${e}` }; }
+  }
+
   const sourceLabel = $derived(
     source === 'store' ? '설정 창에서 지정한 값 사용 중'
     : source === 'env' ? '.env 파일 값 사용 중 (아래에 저장하면 이 값을 덮어씁니다)'
@@ -217,6 +225,7 @@
   </label>
   <div class="actions">
     <button class="primary" onclick={connectHub} disabled={hubStatus.kind === 'busy'}>연결</button>
+    {#if hub?.connected}<button onclick={disconnectHub} disabled={hubStatus.kind === 'busy'}>연결 종료</button>{/if}
   </div>
   {#if hubStatus.text}
     <p class="status" data-kind={hubStatus.kind}>{hubStatus.text}</p>

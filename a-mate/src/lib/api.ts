@@ -146,6 +146,7 @@ export interface LifeOccupant {
   cell: [number, number];
   is_owner: boolean;
   mascot_seed: string;
+  bubble?: string;
 }
 export interface LifeState {
   life_id: string;
@@ -181,6 +182,7 @@ export interface LifeCapabilities { life_protocol: number; grid: { w: number; h:
 export const hubSettingsGet = () => invoke<HubSettings>('hub_settings_get');
 export const hubConnect = (url: string, user: string) =>
   invoke<HubSettings>('hub_connect', { url, user });
+export const hubDisconnect = () => invoke<HubSettings>('hub_disconnect');
 type LifeViewResponse = { me: LifeMe; life: LifeState };
 let lifeViewInFlight: Promise<LifeViewResponse> | null = null;
 let lifeViewCache: { at: number; value: LifeViewResponse } | null = null;
@@ -203,6 +205,23 @@ export const lifeGoto = (lifeId: string) => invoke<LifeMe>('life_goto', { lifeId
 export const lifeMoveCell = (x: number, y: number) => invoke<LifeMe>('life_move_cell', { x, y }).then((value) => { invalidateLifeView(); return value; });
 export const lifeSaveDesign = (lifeId: string, design: LifeState['design']) =>
   invoke<LifeState>('life_save_design', { lifeId, design }).then((value) => { invalidateLifeView(); return value; });
+export interface LifePerson { agent_id: string; name: string; life_id: string; is_friend: boolean }
+export interface SharedDiary { date: string; body: string; visibility: 'friends' | 'public' }
+export interface GuestbookEntry { entry_id: string; life_id: string; author_agent_id: string; author_name: string; body: string; created_at: string }
+export const lifePeople = () => invoke<{people: LifePerson[]}>('life_people');
+export const lifeSetFriend = (agentId: string, enabled: boolean) => invoke('life_set_friend', { agentId, enabled });
+export type ContentVisibility = 'private'|'friends'|'public';
+export interface ContentAccess { features: { diary: { visibility: ContentVisibility; can_view: boolean } } }
+export const lifeSetContentVisibility = (feature: string, visibility: ContentVisibility) =>
+  invoke('life_set_content_visibility', { feature, visibility });
+export const lifeContentAccess = (lifeId: string) => invoke<ContentAccess>('life_content_access', { lifeId });
+export const lifeSetDiaryVisibility = (date: string, body: string, visibility: 'private'|'friends'|'public') =>
+  invoke('life_set_diary_visibility', { date, body, visibility });
+export const lifeDiaries = (lifeId: string) => invoke<{diaries: SharedDiary[]}>('life_diaries', { lifeId });
+export const lifeGuestbook = (lifeId: string) => invoke<{entries: GuestbookEntry[]}>('life_guestbook', { lifeId });
+export const lifeAddGuestbook = (lifeId: string, body: string) => invoke<GuestbookEntry>('life_add_guestbook', { lifeId, body });
+export const lifeDeleteGuestbook = (entryId: string) => invoke('life_delete_guestbook', { entryId });
+export const lifeSetBubble = (body: string) => invoke<{bubble:string}>('life_set_bubble', { body }).then((v)=>{invalidateLifeView();return v});
 export const robotSpecForSeed = (seed: string) => invoke<RobotSpec>('robot_spec_for_seed', { seed });
 export const openSettingsWindow = () => invoke<void>('open_settings_window');
 // 마스코트 창 확장/복귀 — 위치+크기를 네이티브에서 한 번에 적용 (중간 프레임 깜빡임 방지)

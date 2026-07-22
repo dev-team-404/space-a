@@ -38,11 +38,39 @@ CREATE TABLE IF NOT EXISTS agents (
   at_life     TEXT NOT NULL,
   x           INTEGER NOT NULL,
   y           INTEGER NOT NULL,
-  mascot_seed TEXT NOT NULL DEFAULT ''
+  mascot_seed TEXT NOT NULL DEFAULT '',
+  bubble      TEXT NOT NULL DEFAULT '',
+  connected   INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS tokens (
   token    TEXT PRIMARY KEY,
   agent_id TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS friends (
+  owner_agent_id  TEXT NOT NULL,
+  friend_agent_id TEXT NOT NULL,
+  PRIMARY KEY (owner_agent_id, friend_agent_id)
+);
+CREATE TABLE IF NOT EXISTS content_visibility (
+  owner_agent_id TEXT NOT NULL,
+  feature TEXT NOT NULL,
+  visibility TEXT NOT NULL,
+  PRIMARY KEY (owner_agent_id, feature)
+);
+CREATE TABLE IF NOT EXISTS shared_diaries (
+  life_id    TEXT NOT NULL,
+  diary_date TEXT NOT NULL,
+  body       TEXT NOT NULL,
+  visibility TEXT NOT NULL,
+  PRIMARY KEY (life_id, diary_date)
+);
+CREATE TABLE IF NOT EXISTS guestbook (
+  entry_id        TEXT PRIMARY KEY,
+  life_id         TEXT NOT NULL,
+  author_agent_id TEXT NOT NULL,
+  author_name     TEXT NOT NULL,
+  body            TEXT NOT NULL,
+  created_at      TEXT NOT NULL
 );
 """
 
@@ -55,6 +83,11 @@ class SqliteStore:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(_SCHEMA)
         self._migrate_life_objects()
+        agent_columns = {row[1] for row in self._conn.execute("PRAGMA table_info(agents)")}
+        if "bubble" not in agent_columns:
+            self._conn.execute("ALTER TABLE agents ADD COLUMN bubble TEXT NOT NULL DEFAULT ''")
+        if "connected" not in agent_columns:
+            self._conn.execute("ALTER TABLE agents ADD COLUMN connected INTEGER NOT NULL DEFAULT 1")
         self._conn.commit()
 
     def _migrate_life_objects(self) -> None:
@@ -111,14 +144,34 @@ class SqliteStore:
         agents = {
             agent_id: LifeAgent(
                 agent_id=agent_id, name=name, life_id=life_id, at_life=at_life,
-                cell=(x, y), mascot_seed=mascot_seed,
+                cell=(x, y), mascot_seed=mascot_seed, bubble=bubble, connected=bool(connected),
             )
-            for agent_id, name, life_id, at_life, x, y, mascot_seed in c.execute(
-                "SELECT agent_id, name, life_id, at_life, x, y, mascot_seed FROM agents"
+            for agent_id, name, life_id, at_life, x, y, mascot_seed, bubble, connected in c.execute(
+                "SELECT agent_id, name, life_id, at_life, x, y, mascot_seed, bubble, connected FROM agents"
             )
         }
         tokens = dict(c.execute("SELECT token, agent_id FROM tokens"))
         return life, agents, tokens
+
+    def load_social(self) -> tuple[set[tuple[str, str]], dict[tuple[str, str], str], dict[tuple[str, str], dict], list[dict]]:
+        friends = set(self._conn.execute("SELECT owner_agent_id, friend_agent_id FROM friends"))
+        visibility = {(owner, feature): value for owner, feature, value in self._conn.execute(
+            "SELECT owner_agent_id, feature, visibility FROM content_visibility"
+        )}
+        diaries = {
+            (life_id, diary_date): {"date": diary_date, "body": body, "visibility": visibility}
+            for life_id, diary_date, body, visibility in self._conn.execute(
+                "SELECT life_id, diary_date, body, visibility FROM shared_diaries"
+            )
+        }
+        guestbook = [
+            {"entry_id": entry_id, "life_id": life_id, "author_agent_id": author_id,
+             "author_name": author_name, "body": body, "created_at": created_at}
+            for entry_id, life_id, author_id, author_name, body, created_at in self._conn.execute(
+                "SELECT entry_id, life_id, author_agent_id, author_name, body, created_at FROM guestbook"
+            )
+        ]
+        return friends, visibility, diaries, guestbook
 
     # --- 변이별 반영 (호출자 = LifeService, 락 보유) ---
 
@@ -137,6 +190,48 @@ class SqliteStore:
 
     def save_token(self, token: str, agent_id: str) -> None:
         self._conn.execute("INSERT INTO tokens VALUES (?, ?)", (token, agent_id))
+        self._conn.commit()
+
+    def set_friend(self, owner_agent_id: str, friend_agent_id: str, enabled: bool) -> None:
+        if enabled:
+            self._conn.execute("INSERT OR IGNORE INTO friends VALUES (?, ?)", (owner_agent_id, friend_agent_id))
+        else:
+            self._conn.execute("DELETE FROM friends WHERE owner_agent_id = ? AND friend_agent_id = ?", (owner_agent_id, friend_agent_id))
+        self._conn.commit()
+
+    def set_content_visibility(self, owner_agent_id: str, feature: str, visibility: str) -> None:
+        self._conn.execute(
+            "INSERT INTO content_visibility VALUES (?, ?, ?) ON CONFLICT(owner_agent_id, feature) "
+            "DO UPDATE SET visibility = excluded.visibility",
+            (owner_agent_id, feature, visibility),
+        )
+        self._conn.commit()
+
+    def save_shared_diary(self, life_id: str, date: str, body: str, visibility: str) -> None:
+        self._conn.execute(
+            "INSERT INTO shared_diaries VALUES (?, ?, ?, ?) ON CONFLICT(life_id, diary_date) "
+            "DO UPDATE SET body = excluded.body, visibility = excluded.visibility",
+            (life_id, date, body, visibility),
+        )
+        self._conn.commit()
+
+    def delete_shared_diary(self, life_id: str, date: str) -> None:
+        self._conn.execute("DELETE FROM shared_diaries WHERE life_id = ? AND diary_date = ?", (life_id, date))
+        self._conn.commit()
+
+    def clear_shared_diaries(self, life_id: str) -> None:
+        self._conn.execute("DELETE FROM shared_diaries WHERE life_id = ?", (life_id,))
+        self._conn.commit()
+
+    def save_guestbook_entry(self, entry: dict) -> None:
+        self._conn.execute(
+            "INSERT INTO guestbook VALUES (?, ?, ?, ?, ?, ?)",
+            (entry["entry_id"], entry["life_id"], entry["author_agent_id"], entry["author_name"], entry["body"], entry["created_at"]),
+        )
+        self._conn.commit()
+
+    def delete_guestbook_entry(self, entry_id: str) -> None:
+        self._conn.execute("DELETE FROM guestbook WHERE entry_id = ?", (entry_id,))
         self._conn.commit()
 
     def save_owner_name(self, life: Life) -> None:
@@ -167,12 +262,12 @@ class SqliteStore:
 
     def _save_agent_row(self, agent: LifeAgent) -> None:
         self._conn.execute(
-            "INSERT INTO agents VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "INSERT INTO agents (agent_id, name, life_id, at_life, x, y, mascot_seed, bubble, connected) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(agent_id) DO UPDATE SET "
             "name = excluded.name, at_life = excluded.at_life, x = excluded.x, y = excluded.y, "
-            "mascot_seed = excluded.mascot_seed",
+            "mascot_seed = excluded.mascot_seed, bubble = excluded.bubble, connected = excluded.connected",
             (
                 agent.agent_id, agent.name, agent.life_id, agent.at_life,
-                agent.cell[0], agent.cell[1], agent.mascot_seed,
+                agent.cell[0], agent.cell[1], agent.mascot_seed, agent.bubble, int(agent.connected),
             ),
         )
