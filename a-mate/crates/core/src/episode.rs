@@ -27,7 +27,10 @@ pub struct Episode {
     /// 에피소드 시작 ts (= lead 프롬프트 ts). 없으면 None.
     pub first_ts: Option<String>,
     /// 이 에피소드의 첫 main-chain AssistantTurn이 물려받은 컨텍스트
-    /// = tok_input + tok_cache_read. 그런 턴이 없으면 0.
+    /// = tok_input + tok_cache_read + tok_cache_create (세 input 범주 전부).
+    /// cache_create를 포함하는 이유: 캐시 만료·재생성(작업 경계의 시간 간격에서 흔함) 시
+    /// 물려받은 컨텍스트가 cache_read가 아닌 cache_create로 청구된다 — 빼면 캐시 미스 턴의
+    /// 대용량 상속이 작게 보여 F 발화가 억제된다. 그런 턴이 없으면 0.
     pub inherited_ctx: u64,
     /// 에피소드 범위 안에 (main-chain) Compaction 이벤트가 있었는지 (보조 신호).
     pub had_compaction: bool,
@@ -84,7 +87,7 @@ pub fn segment_all(store: &SqliteStore) -> Result<Vec<Episode>> {
     let mut evs: BTreeMap<String, Vec<EvRow>> = BTreeMap::new();
     {
         let mut stmt = store.conn.prepare(
-            "SELECT session_id, kind, ts, source_offset, is_sidechain, tok_input, tok_cache_read
+            "SELECT session_id, kind, ts, source_offset, is_sidechain, tok_input, tok_cache_read, tok_cache_create
              FROM events WHERE kind IN ('assistant_turn','compaction')",
         )?;
         let rows = stmt.query_map([], |r| {
@@ -95,10 +98,12 @@ pub fn segment_all(store: &SqliteStore) -> Result<Vec<Episode>> {
             let is_side = r.get::<_, i64>(4)? != 0;
             let ti = r.get::<_, i64>(5)? as u64;
             let tcr = r.get::<_, i64>(6)? as u64;
+            let tcc = r.get::<_, i64>(7)? as u64;
             // main-chain만: sidechain(서브에이전트) 활동은 사용자 컨텍스트가 아니다.
+            // inherited = 세 input 범주 전부(cache_create 포함) — 캐시 미스 턴 누락 방지.
             let ev = match (kind.as_str(), is_side) {
                 ("compaction", false) => Some(Ev::Compaction),
-                ("assistant_turn", false) => Some(Ev::Turn { inherited: ti + tcr }),
+                ("assistant_turn", false) => Some(Ev::Turn { inherited: ti + tcr + tcc }),
                 _ => None,
             };
             Ok((sid, ev.map(|ev| EvRow { key: (ts.unwrap_or_default(), offset), ev })))
@@ -206,6 +211,26 @@ mod tests {
             source_file: "s.jsonl".into(), source_offset: offset, msg_id: None,
             kind: EventKind::Compaction,
         }
+    }
+
+    #[test]
+    fn inherited_context_includes_cache_creation() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 캐시 미스 턴: 물려받은 컨텍스트가 cache_create로 청구됨(input·cache_read는 작음).
+        let mut t = turn("s1", 1, 5_000, 0, "2026-07-01T10:00:01Z");
+        if let EventKind::AssistantTurn { usage, .. } = &mut t.kind {
+            usage.cache_creation = 55_000;
+        }
+        store
+            .upsert_events(&[prompt("s1", 0, "캐시 미스로 시작하는 실질 작업 지시", "2026-07-01T10:00:00Z"), t])
+            .unwrap();
+
+        let eps = segment_all(&store).unwrap();
+        assert_eq!(eps.len(), 1);
+        assert_eq!(
+            eps[0].inherited_ctx, 60_000,
+            "inherited = tok_input + tok_cache_read + tok_cache_create"
+        );
     }
 
     #[test]

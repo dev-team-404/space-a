@@ -66,27 +66,32 @@ impl Rule for R24ContextHygiene {
         // 세션별 carry-ratio → 위생 나쁜 세션 추림.
         let mut bad: Vec<BadSession> = Vec::new();
         for (session_id, eps) in by_session {
-            // 관찰창: 세션 최초 ts ≥ cutoff. ts 없는 세션 제외 (R7 관행).
-            let first_ts = eps.iter().filter_map(|e| e.first_ts.clone()).min();
-            match first_ts.as_deref() {
-                Some(ts) if ts >= cutoff.as_str() => {}
-                _ => continue,
-            }
-            let n = eps.len();
+            // 관찰창: 개별 에피소드 기준. never-clear 장기 세션(F의 주 타깃)은 세션 시작이
+            // 14일 전이어도 최근 에피소드가 계속 쌓이므로, 세션 시작(min ts)으로 거르면
+            // 정작 겨냥한 그 세션들을 놓친다 — 창 안 에피소드만 남겨 최근 위생을 잰다.
+            // ts 없는 에피소드는 최근인지 확인 불가라 제외 (R7 관행).
+            let in_window: Vec<&Episode> = eps
+                .iter()
+                .filter(|e| e.first_ts.as_deref().map(|ts| ts >= cutoff.as_str()).unwrap_or(false))
+                .collect();
+            let n = in_window.len();
             if n < self.min_episodes {
                 continue;
             }
-            let carry_count =
-                eps.iter().filter(|e| e.inherited_ctx >= self.inherited_ctx_threshold).count();
+            let carry_count = in_window
+                .iter()
+                .filter(|e| e.inherited_ctx >= self.inherited_ctx_threshold)
+                .count();
             let ratio = carry_count as f64 / n as f64;
             if ratio < self.carry_ratio {
                 continue;
             }
-            let max_inherited = eps.iter().map(|e| e.inherited_ctx).max().unwrap_or(0);
-            let host = eps[0].host.clone();
-            let project_id = eps[0].project_id.clone();
+            let max_inherited = in_window.iter().map(|e| e.inherited_ctx).max().unwrap_or(0);
+            let host = in_window[0].host.clone();
+            let project_id = in_window[0].project_id.clone();
+            let first_ts = in_window.iter().filter_map(|e| e.first_ts.clone()).min();
             // 근거 인용: inherited_ctx 큰 순 상위 3개 에피소드의 lead preview.
-            let mut sorted = eps.clone();
+            let mut sorted = in_window.clone();
             sorted.sort_by(|a, b| b.inherited_ctx.cmp(&a.inherited_ctx));
             let sample_prompts =
                 sorted.iter().take(3).map(|e| e.lead_preview.clone()).collect::<Vec<_>>();
@@ -247,6 +252,32 @@ mod tests {
         // base_h = 24*20 시간 전(=20일 전) → 관찰창(14일) 밖.
         store.upsert_events(&session_with_episodes("s1", 6, 60_000, 24 * 20)).unwrap();
         assert!(R24ContextHygiene::default().evaluate(&store).unwrap().is_empty());
+    }
+
+    #[test]
+    fn fires_for_active_long_lived_session_started_before_window() {
+        // never-clear 장기 세션: 20일 전 시작(창 밖)했지만 최근 14일 내에도 계속 활동.
+        // 세션 시작(min ts) 기준으로 거르면 통째로 스킵돼 F가 정작 타깃을 놓친다(P1 회귀).
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mut evs = Vec::new();
+        // 창 밖 오래된 에피소드 3개 (~20일 전) — 제외돼야 함
+        for i in 0..3u64 {
+            let ts = recent(24 * 20 - i as i64);
+            evs.push(prompt("s1", i * 2, &format!("오래된 에피소드 {i} 실질 지시 문장"), &ts));
+            evs.push(turn("s1", i * 2 + 1, 60_000, &ts));
+        }
+        // 창 안 최근 에피소드 6개 (몇 시간 전) — 큰 상속
+        for i in 0..6u64 {
+            let ts = recent(20 - i as i64);
+            evs.push(prompt("s1", 6 + i * 2, &format!("최근 에피소드 {i} 실질 지시 문장"), &ts));
+            evs.push(turn("s1", 6 + i * 2 + 1, 60_000, &ts));
+        }
+        store.upsert_events(&evs).unwrap();
+
+        let f = R24ContextHygiene::default().evaluate(&store).unwrap();
+        assert_eq!(f.len(), 1, "장기 세션의 최근 에피소드로 발화해야");
+        assert_eq!(f[0].evidence["worst_episodes"], 6, "창 안 에피소드만 계상");
+        assert_eq!(f[0].evidence["worst_carry_ratio_pct"], 100);
     }
 
     #[test]
