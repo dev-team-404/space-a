@@ -331,7 +331,7 @@ mod tests {
             evidence: serde_json::json!({}), est_tokens_saved: 0,
             prescription: None, dedup_key: key.into(),
         };
-        // v2 폐기분(R5 전 스코프) + v3 은퇴분(R1·R2·R9·R12) + 생존 R11
+        // v2 폐기분(R5 전 스코프) + v3 은퇴분(R1·R2·R9·R12·R11)
         // (R7 session은 더 이상 run_rules가 사전 정리하지 않음 — 판정 캐시 보존, 아래 별도 테스트)
         store.upsert_finding(&mk("R5", "session", "R5|s1|a.md"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R5", "project", "R5|W|proj|cross_session_claude_md"), "2026-07-06T00:00:00Z").unwrap();

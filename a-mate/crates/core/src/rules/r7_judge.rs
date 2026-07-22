@@ -49,7 +49,7 @@ over_modeled=false: 복잡한 추론·설계·큰 구현 등 Opus가 정당. **�
     }
 
     fn rollup(&self, store: &SqliteStore) -> Result<Vec<String>> {
-        crate::rules::r7_judge::rollup_project_cards(store) // Task 6에서 구현
+        rollup_project_cards(store)
     }
 }
 

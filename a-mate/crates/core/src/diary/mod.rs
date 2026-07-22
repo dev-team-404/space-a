@@ -136,19 +136,14 @@ pub fn finding_advice(
             (detail, format!("안 쓰는 `{server}`를 설정에서 제거하면 매 세션 상주 토큰을 아껴요"))
         }
         "R7" => {
-            let ratio = evidence.get("ratio_pct").and_then(|v| v.as_u64()).unwrap_or(0);
-            let n = evidence.get("total_sessions").and_then(|v| v.as_u64()).unwrap_or(0);
-            let mut detail = format!(
-                "이 프로젝트 세션의 {ratio}%({n}건)가 Opus로 처리한 가벼운 잔심부름이었어요 (~{est_tokens_saved}토큰 비용-등가)"
+            // v3 프로젝트 카드: over_modeled_sessions/example_session_ids/note만 낸다.
+            // est_tokens_saved는 설계상 0(LLM 판정 근거일 뿐 실측 아님) — 여기서 인용하지 않는다.
+            let n = evidence.get("over_modeled_sessions").and_then(|v| v.as_u64()).unwrap_or(0);
+            let detail = format!(
+                "이 프로젝트에서 Opus로 처리했지만 Sonnet으로 충분했을 세션이 {n}건 있었어요"
             );
-            if let Some(m) = evidence.get("default_model").and_then(|v| v.as_str()) {
-                detail.push_str(&format!(" · 기본 모델 {m}"));
-            }
-            let mut action =
+            let action =
                 "다음엔 `claude --model sonnet`으로 시작하거나 settings.json에서 기본 모델을 낮춰보세요".to_string();
-            if let Some(e) = evidence.get("effort_level").and_then(|v| v.as_str()) {
-                action.push_str(&format!(" — effort({e})도 작업 난이도에 맞게 낮출 수 있어요"));
-            }
             (detail, action)
         }
         "R9" => {
@@ -1613,27 +1608,22 @@ mod tests {
     }
 
     #[test]
-    fn finding_advice_r7_v2_project_aggregate() {
+    fn finding_advice_r7_project_card_renders_session_count() {
+        // v3 R7 프로젝트 카드는 over_modeled_sessions/example_session_ids/note만 낸다(ratio_pct 등 폐기).
+        // est_tokens_saved는 설계상 0 — detail에 "비용-등가" 등 무근거 수치를 붙이면 안 됨.
         let (detail, action) = super::finding_advice(
             "R7",
-            &serde_json::json!({"ratio_pct": 75, "total_sessions": 3, "project_session_count": 4}),
-            48320,
+            &serde_json::json!({
+                "over_modeled_sessions": 4,
+                "example_session_ids": ["s1", "s2"],
+                "note": "LLM 판정: 이 프로젝트의 Opus 세션 상당수가 Sonnet으로 충분",
+            }),
+            0,
         );
-        assert!(detail.contains("75"));
-        assert!(detail.contains("3건"));
+        assert!(detail.contains("4건"), "세션 수 포함해야: {detail}");
+        assert!(!detail.contains("0%"), "퍼센트 언급 금지: {detail}");
+        assert!(!detail.contains("비용-등가"), "무근거 토큰-등가 문구 금지: {detail}");
         assert!(action.contains("claude --model sonnet"));
-    }
-
-    #[test]
-    fn finding_advice_r7_mentions_default_model_and_effort_when_present() {
-        let (detail, action) = super::finding_advice(
-            "R7",
-            &serde_json::json!({"ratio_pct": 75, "total_sessions": 3,
-                "default_model": "claude-fable-5[1m]", "effort_level": "xhigh"}),
-            48320,
-        );
-        assert!(detail.contains("claude-fable-5[1m]"));
-        assert!(action.contains("effort(xhigh)"));
     }
 
     #[test]
