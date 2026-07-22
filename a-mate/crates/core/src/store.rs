@@ -459,8 +459,13 @@ impl SqliteStore {
             Some(p) => Some(serde_json::to_string(p)?),
             None => None,
         };
-        // R6은 판정 전 비노출(pending), 나머지는 기존대로 즉시 노출(new). ON CONFLICT는 status 불변.
-        let init_status = if f.rule_id == "R6" { "pending" } else { "new" };
+        // 판정 패스를 거치는 후보는 비노출(pending)로 시작 — R6 패턴, R7 세션 후보.
+        // R7 프로젝트 카드는 롤업이 만드는 노출물이므로 'new'.
+        let init_status = match (f.rule_id.as_str(), f.scope_kind.as_str()) {
+            ("R6", _) => "pending",
+            ("R7", "session") => "pending",
+            _ => "new",
+        };
         self.conn.execute(
             "INSERT INTO findings
                 (dedup_key, rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
@@ -2237,6 +2242,25 @@ mod tests {
         store.set_finding_status("R6|W|a", "rejected").unwrap();
         store.upsert_finding(&mk("R6", "R6|W|a"), "2026-07-21T01:00:00Z").unwrap();
         assert_eq!(status("R6|W|a"), "rejected", "ON CONFLICT는 status를 덮지 않아야 함");
+    }
+
+    #[test]
+    fn r7_session_finding_starts_pending_project_starts_new() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |kind: &str, key: &str| crate::finding::Finding {
+            rule_id: "R7".into(), severity: crate::finding::Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: Some("p".into()),
+            scope_kind: kind.into(), scope_ref: "r".into(),
+            evidence: serde_json::json!({}), est_tokens_saved: 0,
+            prescription: None, dedup_key: key.into(),
+        };
+        store.upsert_finding(&mk("session", "R7|sess|Windows|s1"), "2026-07-06T10:00:00Z").unwrap();
+        store.upsert_finding(&mk("project", "R7|Windows|p"), "2026-07-06T10:00:00Z").unwrap();
+        let status = |key: &str| -> String {
+            store.conn.query_row("SELECT status FROM findings WHERE dedup_key=?1", [key], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(status("R7|sess|Windows|s1"), "pending", "세션 후보는 판정 전 비노출");
+        assert_eq!(status("R7|Windows|p"), "new", "프로젝트 롤업 카드는 즉시 노출");
     }
 
     #[test]
