@@ -61,7 +61,9 @@ def _rule(title: str, body: str, kind: str) -> dict:
     else:
         cat = "note"
     narrative = f"‘{title}’ 내용을 정리해 팀에 공유했어요." if title else None
-    return {"category": cat, "summary": (body or "")[:120], "narrative": narrative}
+    # 규칙 폴백 제목: 원문 제목의 첫 줄을 짧게 자른다(명사형 변환은 LLM만 가능).
+    t = (title or "").strip().splitlines()[0][:40] if title else ""
+    return {"title": t or "제목 없음", "category": cat, "summary": (body or "")[:120], "narrative": narrative}
 
 
 def _extract_json(s: str) -> dict:
@@ -82,8 +84,11 @@ def _llm(cfg: dict, title: str, body: str, kind: str) -> dict:
     style = _STYLE.get(cfg.get("summary_style", "brief"), _STYLE["brief"])
     user = (
         f"제목: {title}\n종류: {kind}\n본문:\n{(body or '')[:4000]}\n\n"
-        "위 문서를 번역해 아래 JSON만 출력해라. 요약·서사는 사실 위주로 미사여구 없이 담백하게 쓴다.\n"
-        f'{{"category": <{"|".join(CATEGORIES)} 중 하나>, '
+        "위 문서를 번역해 아래 JSON만 출력해라. 제목·요약·서사는 사실 위주로 미사여구 없이 담백하게 쓴다.\n"
+        "title은 한 문장을 넘기지 말고, 마침표·서술어 없이 명사구로 끝맺는다"
+        ' (예: "레포 파악 및 PC 초기 셋업, 도구 오류 정리").\n'
+        f'{{"title": "간결한 명사형 제목", '
+        f'"category": <{"|".join(CATEGORIES)} 중 하나>, '
         f'"summary": "{style} 쓴 한국어 요약", '
         '"narrative": "누가 무엇을 했는지 한 줄로"}'
     )
@@ -103,6 +108,7 @@ def _llm(cfg: dict, title: str, body: str, kind: str) -> dict:
     if cat not in CATEGORIES:
         cat = "note"
     return {
+        "title": (obj.get("title") or (title or "")[:40]).strip(),
         "category": cat,
         "summary": (obj.get("summary") or (body or "")[:120]).strip(),
         "narrative": (obj.get("narrative") or None),

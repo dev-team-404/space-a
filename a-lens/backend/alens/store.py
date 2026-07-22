@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS knowledge_translation (
   body          TEXT,   -- 원문 본문 (허브 재조회 스킵용 — updated_at 그대로면 재fetch 안 함)
   visibility    TEXT,
   author_agent  TEXT,
+  title         TEXT,   -- LLM이 생성한 명사형 제목 (원문 제목이 길거나 깨졌을 때 대체 표시)
   category      TEXT,   -- ① 분류
   summary       TEXT,   -- ② 요약
   narrative     TEXT,   -- ③ 서사
@@ -34,13 +35,15 @@ CREATE TABLE IF NOT EXISTS knowledge_translation (
 """
 
 # 기존 DB(구 스키마)에 추가된 컬럼 — 있으면 건너뛰고 없으면 ALTER로 붙인다.
-_ADDED_COLUMNS = ("body", "visibility", "author_agent")
+_ADDED_COLUMNS = ("body", "visibility", "author_agent", "title")
+_ISSUE_ADDED_COLUMNS = ("gen_title",)
 
 # 이슈 번역 캐시 — 제목(title)이 번역 대상. 상태(open→resolved)가 바뀌어도 제목 그대로면 재번역 안 함.
 _ISSUE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS issue_translation (
   issue_id      TEXT PRIMARY KEY,
-  title         TEXT,
+  title         TEXT,   -- 원문 이슈 제목 (재번역 판정 키)
+  gen_title     TEXT,   -- LLM이 생성한 명사형 제목 (표시용)
   category      TEXT,
   summary       TEXT,
   narrative     TEXT,
@@ -64,10 +67,14 @@ class TranslationStore:
 
     @staticmethod
     def _migrate(c: sqlite3.Connection) -> None:
-        cols = {r["name"] for r in c.execute("PRAGMA table_info(knowledge_translation)")}
-        for col in _ADDED_COLUMNS:
-            if col not in cols:
-                c.execute(f"ALTER TABLE knowledge_translation ADD COLUMN {col} TEXT")
+        def add(table: str, columns: tuple) -> None:
+            cols = {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
+            for col in columns:
+                if col not in cols:
+                    c.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT")
+
+        add("knowledge_translation", _ADDED_COLUMNS)
+        add("issue_translation", _ISSUE_ADDED_COLUMNS)
 
     def _connect(self) -> sqlite3.Connection:
         c = sqlite3.connect(self._path, timeout=5)
@@ -89,15 +96,15 @@ class TranslationStore:
                 """
                 INSERT INTO knowledge_translation
                   (page_id, space_id, updated_at, source_hash, body, visibility,
-                   author_agent, category, summary, narrative, model, translated_at)
+                   author_agent, title, category, summary, narrative, model, translated_at)
                 VALUES
                   (:page_id, :space_id, :updated_at, :source_hash, :body, :visibility,
-                   :author_agent, :category, :summary, :narrative, :model, :translated_at)
+                   :author_agent, :title, :category, :summary, :narrative, :model, :translated_at)
                 ON CONFLICT(page_id) DO UPDATE SET
                   space_id=excluded.space_id, updated_at=excluded.updated_at,
                   source_hash=excluded.source_hash, body=excluded.body,
                   visibility=excluded.visibility, author_agent=excluded.author_agent,
-                  category=excluded.category, summary=excluded.summary,
+                  title=excluded.title, category=excluded.category, summary=excluded.summary,
                   narrative=excluded.narrative, model=excluded.model,
                   translated_at=excluded.translated_at
                 """,
@@ -122,12 +129,12 @@ class TranslationStore:
             c.execute(
                 """
                 INSERT INTO issue_translation
-                  (issue_id, title, category, summary, narrative, model, translated_at)
+                  (issue_id, title, gen_title, category, summary, narrative, model, translated_at)
                 VALUES
-                  (:issue_id, :title, :category, :summary, :narrative, :model, :translated_at)
+                  (:issue_id, :title, :gen_title, :category, :summary, :narrative, :model, :translated_at)
                 ON CONFLICT(issue_id) DO UPDATE SET
-                  title=excluded.title, category=excluded.category, summary=excluded.summary,
-                  narrative=excluded.narrative, model=excluded.model,
+                  title=excluded.title, gen_title=excluded.gen_title, category=excluded.category,
+                  summary=excluded.summary, narrative=excluded.narrative, model=excluded.model,
                   translated_at=excluded.translated_at
                 """,
                 row,

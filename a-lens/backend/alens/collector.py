@@ -147,6 +147,13 @@ def _hub_get(client: httpx.Client, path: str) -> dict:
 # 개별 호출에서 "빈 값으로 강등" 처리할 예외 — HTTP 오류 + 비정상 JSON
 _DEGRADE = (httpx.HTTPError, ValueError)
 
+# 공간 이름 오버라이드 — 허브 원문이 mojibake(복구 불가)인 경우 표시용으로 교정한다.
+_NAME_OVERRIDES = {"sw-innov": "S/W 혁신팀"}
+
+
+def _space_name(sid: str, raw: str | None) -> str:
+    return _NAME_OVERRIDES.get(sid) or (raw or sid)
+
 
 def _id_seq(entity_id: str) -> int:
     """'page_12' → 12. 타임스탬프 부재(#40 대기) 동안 id 순서를 의사 시간으로 쓴다."""
@@ -248,6 +255,7 @@ def _issue_doc(it: dict, member_name: dict[str, str]) -> dict:
             row.get("summary"),
             row.get("narrative"),
         )
+        vm["title"] = row.get("gen_title") or title
         return vm
     # 이슈는 본문이 없어 제목을 내용으로 번역한다(제목을 body 자리에도 넣어 맥락 확보).
     res, model = translator.translate_text(title, title, "issue")
@@ -256,11 +264,13 @@ def _issue_doc(it: dict, member_name: dict[str, str]) -> dict:
         res["summary"],
         res.get("narrative"),
     )
+    vm["title"] = res.get("title") or title
     if st is not None:
         st.upsert_issue(
             {
                 "issue_id": vm["issue_id"],
                 "title": title,
+                "gen_title": res.get("title"),
                 "category": res["category"],
                 "summary": res["summary"],
                 "narrative": res.get("narrative"),
@@ -290,6 +300,7 @@ def _page_doc(client: httpx.Client, node: dict, space_id: str, member_name: dict
     # 완전 캐시(본문까지) — 허브·LLM 모두 스킵
     if fresh and row.get("body") is not None:
         body = row.get("body") or ""
+        doc["title"] = row.get("title") or doc["title"]
         doc["body"] = body
         doc["visibility"] = row.get("visibility") or "org"
         doc["author_agent"] = row.get("author_agent") or ""
@@ -312,14 +323,17 @@ def _page_doc(client: httpx.Client, node: dict, space_id: str, member_name: dict
     author = page.get("created_by_name") or member_name.get(creator, creator) or ""
 
     if fresh:  # 번역은 이미 있으니 LLM 스킵, 본문만 채워 캐시 보강
+        title_out = row.get("title") or node.get("title", "")
         category, summary, narrative = row.get("category"), row.get("summary"), row.get("narrative")
         model = row.get("model") or "cache"
     else:  # 새/변경 문서만 LLM(또는 규칙)로 번역
         res, model = translator.translate_text(
             node.get("title", ""), body, node.get("source", "authored")
         )
+        title_out = res.get("title") or node.get("title", "")
         category, summary, narrative = res["category"], res["summary"], res.get("narrative")
 
+    doc["title"] = title_out
     doc["body"] = body
     doc["visibility"] = visibility
     doc["author_agent"] = author
@@ -337,6 +351,7 @@ def _page_doc(client: httpx.Client, node: dict, space_id: str, member_name: dict
                 "body": body,
                 "visibility": visibility,
                 "author_agent": author,
+                "title": title_out,
                 "category": category,
                 "summary": summary,
                 "narrative": narrative,
@@ -369,6 +384,7 @@ def _hub_snapshot() -> dict:
             sid = s.get("id")
             if not sid:
                 continue
+            sname = _space_name(sid, s.get("name"))
             # 비멤버 공간·권한 부족·깨진 응답은 빈 목록으로 강등 (전체 스냅숏은 살린다)
             try:
                 pages = _flatten_tree(_hub_get(client, f"/spaces/{sid}/tree").get("tree", []))
@@ -414,7 +430,7 @@ def _hub_snapshot() -> dict:
             floors.append(
                 {
                     "space_id": sid,
-                    "name": s.get("name", sid),
+                    "name": sname,
                     "floor": i + 1,
                     "activity": activity,
                     # reuse: 허브에 ReuseEvent 조회 endpoint가 아직 없다 (#40 후속 요청 후보)
@@ -444,7 +460,7 @@ def _hub_snapshot() -> dict:
                 "knowledge": knowledge_docs,
             }
             for p in pages:
-                all_pages.append({**p, "space_id": sid, "space_name": s.get("name", sid)})
+                all_pages.append({**p, "space_id": sid, "space_name": sname})
 
     # 활동 피드 합성: knowledge_created만 (타임스탬프·재사용 피드는 #40·후속 대기).
     # 서사 문장은 구조 필드로 소비자가 조합 — 계약 consumerAutonomy가 허용하는 방식.
