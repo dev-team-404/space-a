@@ -110,18 +110,18 @@ component: a-mate
 
 | 토큰 | light | dark |
 |------|-------|------|
-| `--bg` | `#eef5fc` | `#0f1626` |
-| `--frame` | `#ffffff` | `#1b2544` |
-| `--frame-2` | `#e6edf7` | `#131b31` |
-| `--surface-inset` | `#eef3fb` | `#243050` |
-| `--line` | `#d9e2f1` | `#313d61` |
+| `--bg` | `#e8eff8` | `#0f1626` |
+| `--frame` | `#f5f8fc` | `#1b2544` |
+| `--frame-2` | `#dce6f1` | `#131b31` |
+| `--surface-inset` | `#e6edf7` | `#243050` |
+| `--line` | `#d3ddec` | `#313d61` |
 | `--text` | `#26303f` | `#e6ecf8` |
 | `--text-soft` | `#66738a` | `#98a4c6` |
 | `--accent` | `#84c9ef` | `#7fc9f0` |
 | `--accent-ink` | `#0e2230` | `#0c1826` |
 | `--accent-strong` | `#1670b8` | `#7fc9f0` |
-| `--accent-tint` | `#e3f2fc` | `rgba(127,201,240,.12)` |
-| `--accent-tint-b` | `#bfe2f6` | `rgba(127,201,240,.30)` |
+| `--accent-tint` | `#dcedf9` | `rgba(127,201,240,.12)` |
+| `--accent-tint-b` | `#b8ddf2` | `rgba(127,201,240,.30)` |
 
 **민트 (mint)**
 

@@ -28,10 +28,10 @@
    --pastel-lav는 보더·표면 이중사용이었으나 별칭은 보더(--line)로 두고,
    인스코프 표면 용도는 마이그레이션에서 --lav-surface로 정정. */
 :root[data-skin="sky"][data-theme="light"] {
-  --bg: #eef5fc; --frame: #ffffff; --frame-2: #e6edf7; --surface-inset: #eef3fb;
-  --line: #d9e2f1; --text: #26303f; --text-soft: #66738a;
+  --bg: #e8eff8; --frame: #f5f8fc; --frame-2: #dce6f1; --surface-inset: #e6edf7;
+  --line: #d3ddec; --text: #26303f; --text-soft: #66738a;
   --accent: #84c9ef; --accent-ink: #0e2230; --accent-strong: #1670b8;
-  --accent-tint: #e3f2fc; --accent-tint-b: #bfe2f6;
+  --accent-tint: #dcedf9; --accent-tint-b: #b8ddf2;
   --bg-grad: var(--bg); --frame-bg: var(--frame); --panel2: var(--surface-inset);
   --ink: var(--text); --ink-soft: var(--text-soft);
   --pastel-mint: var(--accent); --pastel-coral: var(--coral); --pastel-cream: var(--cream);
