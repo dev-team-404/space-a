@@ -20,7 +20,7 @@ import { openBuilder } from './builder'
 import { loadKit } from './life/kit'
 import { buildLifeScene } from './life/renderer'
 import type { LifeConfig } from './life/types'
-import { deleteLife, getLife, loadLife, saveLife } from './store'
+import { deleteLife, getLife, loadLife, loadRooms, saveLife } from './store'
 
 const $ = <T extends HTMLElement>(id: string): T => {
   const el = document.getElementById(id)
@@ -947,5 +947,7 @@ function route() {
   else void renderHome()
 }
 window.addEventListener('hashchange', route)
-// 스프라이트 킷(있으면)을 먼저 로드하고 첫 라우팅 — 없으면 Graphics 폴백
-void loadKit().then(route)
+// 스프라이트 킷 + 서버의 공유 방 목록을 먼저 로드하고 첫 라우팅 — 킷 없으면 Graphics 폴백
+void loadKit()
+  .then(loadRooms)
+  .then(route)

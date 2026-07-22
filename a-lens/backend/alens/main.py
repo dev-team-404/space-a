@@ -9,7 +9,7 @@ import httpx
 from fastapi import Body, FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from . import collector, pipeline, settings, store
+from . import collector, pipeline, rooms, settings, store
 
 _A_LENS = Path(__file__).resolve().parents[2]
 _FRONT_DIST = _A_LENS / "frontend" / "dist"
@@ -77,6 +77,21 @@ def create_app() -> FastAPI:
         except Exception as e:  # noqa: BLE001
             out["llm"] = {"ok": False, "error": str(e)[:160]}
         return out
+
+    # ── 방(life 꾸미기) 공유 저장 — 모든 뷰어가 같은 방을 본다 ──
+    @app.get("/api/life")
+    def list_life():
+        return {"rooms": rooms.list_rooms()}
+
+    @app.post("/api/life")
+    def save_life(config: dict = Body(...)):
+        rooms.save_room(config)
+        return {"ok": True}
+
+    @app.delete("/api/life/{space_id}")
+    def delete_life(space_id: str):
+        rooms.delete_room(space_id)
+        return {"ok": True}
 
     if _ASSETS.is_dir():
         app.mount("/assets", StaticFiles(directory=_ASSETS), name="assets")
