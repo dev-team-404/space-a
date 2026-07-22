@@ -24,8 +24,8 @@ pub struct DraftContext {
     pub top_tools: Vec<(String, u64)>,
 }
 
-/// R6 finding의 evidence(대표 프롬프트)로 세션을 되짚어 재료를 모은다.
-/// v2 — 첫 프롬프트뿐 아니라 세션 내 아무 위치의 반복 지시(prompt_events)를 매칭한다.
+/// R6 finding의 evidence(대표 프롬프트)로 세션을 되짚어 재료를 모은다(단일 norm).
+/// 3개 호출부(judge·CLI·make-draft 커맨드) 호환용 — 내부적으로 gather_context_multi에 위임.
 pub fn gather_context(
     store: &SqliteStore,
     host: &str,
@@ -34,9 +34,20 @@ pub fn gather_context(
     let Some(target) = normalize(representative) else {
         return Err(anyhow!("대표 프롬프트가 너무 짧아 초안 대상이 아닙니다"));
     };
+    gather_context_multi(store, host, representative, &[target])
+}
+
+/// A — 느슨한 묶음의 **여러 변형(norm60)** 세션을 되짚어 재료를 모은다.
+/// 세션·원문 중복 제거 후 표본 5개, 도구 상위 집계. representative는 표시용 대표(앵커).
+pub fn gather_context_multi(
+    store: &SqliteStore,
+    host: &str,
+    representative: &str,
+    norms: &[String],
+) -> Result<DraftContext> {
     let mut matched_ids: Vec<String> = Vec::new();
     let mut samples: Vec<String> = Vec::new();
-    for (sid, preview) in store.prompt_sessions_for_norm(host, &target)? {
+    for (sid, preview) in store.prompt_sessions_for_norms(host, norms)? {
         if !matched_ids.iter().any(|s| s == &sid) {
             matched_ids.push(sid);
         }

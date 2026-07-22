@@ -1408,19 +1408,6 @@ impl SqliteStore {
         Ok(out)
     }
 
-    /// R6 스킬 초안용 — 특정 host에서 정규화 지시(norm60)가 일치하는 (session_id, preview) 전량.
-    /// 세션·원문 중복 제거는 호출부(skill_draft)가 수행한다.
-    pub fn prompt_sessions_for_norm(&self, host: &str, norm60: &str) -> Result<Vec<(String, String)>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT session_id, preview FROM prompt_events
-             WHERE host = ?1 AND norm60 = ?2 ORDER BY id",
-        )?;
-        let rows = stmt.query_map(params![host, norm60], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-        })?;
-        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
-    }
-
     /// R6 채굴(A) — 관찰창 내 (host, norm60, session)별 등장수 + 대표 preview.
     /// 미더가 Rust에서 norm 단위 집계 + 느슨한 군집화에 쓴다. ts NULL 행은 제외(기존 R6 SQL 동치).
     pub fn prompt_occurrence_rows(&self, cutoff: &str) -> Result<Vec<PromptOccRow>> {
