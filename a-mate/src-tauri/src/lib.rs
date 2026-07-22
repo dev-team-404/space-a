@@ -218,6 +218,8 @@ pub fn run() {
                 None,
             ))
             .plugin(tauri_plugin_opener::init()) // 공식 가이드 링크를 시스템 브라우저로 열기
+            .plugin(tauri_plugin_updater::Builder::new().build()) // 인앱 자동 업데이트
+            .plugin(tauri_plugin_process::init()) // 업데이트 후 재시작
             .on_window_event(|window, event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     // 상주: destroy 대신 hide (스펙 §3). settings도 동일 — destroy되면 트레이에서 재오픈 불가

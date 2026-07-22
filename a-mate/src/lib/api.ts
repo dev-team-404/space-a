@@ -263,6 +263,9 @@ export const onSettingsChanged = (cb: () => void): Promise<UnlistenFn> =>
   listen('settings:changed', () => cb());
 export const onContentReady = (cb: (rows: ContentItem[]) => void): Promise<UnlistenFn> =>
   listen<ContentItem[]>('content:ready', (e) => cb(e.payload));
+/** 트레이 "업데이트 확인" → chat 창에서 수동 업데이트 체크를 트리거 */
+export const onUpdateCheckRequested = (cb: () => void): Promise<UnlistenFn> =>
+  listen('update:check', () => cb());
 
 /** AI 스프라이트(캐시) base64 — 없으면 null (절차 생성 폴백). */
 export async function getSprite(): Promise<string | null> {
