@@ -903,6 +903,31 @@ impl SqliteStore {
         Ok(n)
     }
 
+    /// R6 채굴(A) — 이번 스캔에서 방출되지 않은 **활성(new/pending)** R6 패턴 카드를 정리한다.
+    /// 느슨한 묶기로 앵커 키가 바뀌거나(별개 norm 병합·더 작은 norm이 앵커 교체) 관찰창 밖으로
+    /// 밀려난 카드가 중복·유령으로 남는 것을 막는다(R7/R23 recency-prune 선례). 판정 캐시
+    /// (rejected)와 사용자 기록(dismissed/resolved)은 보존한다 — 재판정 금지·사용자 의사 존중.
+    pub fn prune_stale_r6_patterns(&self, emitted_keys: &[String]) -> Result<usize> {
+        let mut stmt = self.conn.prepare(
+            "SELECT dedup_key FROM findings
+             WHERE rule_id='R6' AND scope_kind='pattern' AND status IN ('new','pending')",
+        )?;
+        let existing: Vec<String> = stmt
+            .query_map([], |r| r.get::<_, String>(0))?
+            .collect::<std::result::Result<_, _>>()?;
+        let emitted: std::collections::HashSet<&str> =
+            emitted_keys.iter().map(|s| s.as_str()).collect();
+        let mut removed = 0;
+        for key in &existing {
+            if !emitted.contains(key.as_str()) {
+                self.conn
+                    .execute("DELETE FROM findings WHERE dedup_key=?1", [key])?;
+                removed += 1;
+            }
+        }
+        Ok(removed)
+    }
+
     /// 큐레이션 콘텐츠를 현재 랭킹으로 upsert. findings 선례처럼 **사용자 status는 보존**
     /// (dismissed는 재스캔에도 유지 — 나깅 방지). 점수·본문·last_seen만 갱신.
     pub fn replace_content_items(
