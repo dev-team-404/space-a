@@ -109,7 +109,7 @@
   }
   .head { display: flex; align-items: center; gap: 8px; }
   .badge {
-    font-size: 10px; font-weight: 700; color: #0b3327; white-space: nowrap;
+    font-size: 10px; font-weight: 700; color: var(--accent-ink); white-space: nowrap;
     background: var(--pastel-mint); border-radius: 999px; padding: 3px 10px;
   }
   .label { font-size: 11px; color: var(--ink-soft); }

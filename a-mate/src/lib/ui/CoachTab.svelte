@@ -272,7 +272,7 @@
     font: inherit; font-size: 11px; color: var(--ink-soft); padding: 0;
   }
   pre {
-    background: #f4f1fa; border-radius: var(--radius-s);
+    background: var(--surface-inset); color: var(--text); border-radius: var(--radius-s);
     padding: 8px; overflow-x: auto; font-size: 11px; margin: 6px 0 0;
   }
   .hidden-toggle {
@@ -304,7 +304,7 @@
   .draft-msg { font-size: 12px; color: var(--ink-soft); margin: 8px 0; }
   .draft-msg.err { color: var(--pastel-coral); }
   .draft-body {
-    background: #f4f1fa; border-radius: var(--radius-s); padding: 10px;
+    background: var(--surface-inset); color: var(--text); border-radius: var(--radius-s); padding: 10px;
     overflow: auto; font-size: 11.5px; line-height: 1.5; margin: 0; white-space: pre-wrap; flex: 1;
   }
   .draft-actions { display: flex; gap: 8px; margin-top: 10px; }
@@ -314,5 +314,5 @@
   }
   .draft-actions .primary { background: var(--pastel-mint); font-weight: 600; }
   .draft-saved { font-size: 11px; color: var(--ink-soft); margin: 8px 0 0; word-break: break-all; }
-  .draft-saved code { background: #f4f1fa; padding: 1px 4px; border-radius: 3px; }
+  .draft-saved code { background: var(--surface-inset); padding: 1px 4px; border-radius: 3px; }
 </style>

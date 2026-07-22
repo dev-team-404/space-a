@@ -76,10 +76,10 @@
   .empty { color: var(--ink-soft); }
   article {
     border-left: 3px solid var(--pastel-cream);
-    background: #fdf9ef44;
+    background: var(--cream); color: var(--cream-ink);
     border-radius: var(--radius-s); padding: 8px 10px;
   }
-  article.assistant { border-left-color: var(--pastel-mint); background: #eef7f344; }
+  article.assistant { border-left-color: var(--accent); background: var(--accent-tint); }
   .meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-soft); }
   .who { font-weight: 600; }
   .text { margin: 4px 0 0; font-size: 12px; white-space: pre-wrap; word-break: break-word; }

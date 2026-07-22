@@ -240,10 +240,10 @@
     box-shadow: var(--shadow-soft);
     display: flex; align-items: center; gap: 5px;
   }
-  .tabs button.active { background: var(--accent); font-weight: 700; color: #0b3327; border-color: transparent; }
+  .tabs button.active { background: var(--accent); font-weight: 700; color: var(--accent-ink); border-color: transparent; }
   .badge {
     writing-mode: horizontal-tb;
-    background: var(--pastel-coral); color: #3a1512; font-weight: 700;
+    background: var(--coral); color: var(--coral-ink); font-weight: 700;
     border-radius: 999px; font-size: 10px; padding: 1px 5px;
   }
 </style>
