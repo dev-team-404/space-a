@@ -683,7 +683,7 @@ fn collect_work_log(store: &SqliteStore, date: &str) -> WorkLog {
         let eff_cwd = cwd.clone().or_else(|| known.get(&(host.clone(), pid.clone())).cloned());
         let (key, name) = match &eff_cwd {
             Some(c) => project_identity(host, c),
-            None => (format!("pid:{pid}"), pid.clone()),
+            None => (format!("pid:{host}:{pid}"), pid.clone()),
         };
         let acc = projects.entry(key.clone()).or_insert_with(|| {
             order.push(key.clone());
@@ -741,9 +741,31 @@ fn collect_work_log(store: &SqliteStore, date: &str) -> WorkLog {
     let mut commits_by_key: HashMap<String, Vec<String>> =
         balance_commits(commit_groups).into_iter().collect();
 
-    // concurrent: 서로 다른 프로젝트 세션 구간이 겹치는가.
+    // ProjectWork 조립 + 노이즈 필터 → retained 프로젝트만.
+    let mut works: Vec<(Option<DateTime<FixedOffset>>, String, ProjectWork)> = Vec::new();
+    for key in &order {
+        let acc = &projects[key];
+        let commits = commits_by_key.remove(key).unwrap_or_default();
+        let mut topics = acc.topics.clone();
+        topics.sort();
+        topics.dedup();
+        topics.truncate(WORK_LOG_TOPIC_CAP);
+        if commits.is_empty() && topics.is_empty() {
+            continue; // 노이즈(temp/드라이브 루트/홈 등) 제외
+        }
+        let start = acc.starts.iter().min().copied();
+        works.push((start, key.clone(), ProjectWork { name: acc.name.clone(), commits, topics }));
+    }
+
+    // concurrent: retained(노이즈 필터 통과) 프로젝트의 세션 구간만으로 판정 —
+    // 제거된 노이즈 프로젝트의 겹침이 허위 동시작업을 만들지 않도록.
+    let retained: std::collections::HashSet<String> =
+        works.iter().map(|(_, k, _)| k.clone()).collect();
     let mut spans: Vec<(&String, DateTime<FixedOffset>, DateTime<FixedOffset>)> = Vec::new();
     for (key, acc) in &projects {
+        if !retained.contains(key) {
+            continue;
+        }
         for (st, en) in &acc.spans {
             spans.push((key, *st, *en));
         }
@@ -758,28 +780,14 @@ fn collect_work_log(store: &SqliteStore, date: &str) -> WorkLog {
         }
     }
 
-    // ProjectWork 조립 + 노이즈 필터 + 첫 활동 시각순 정렬.
-    let mut works: Vec<(Option<DateTime<FixedOffset>>, ProjectWork)> = Vec::new();
-    for key in &order {
-        let acc = &projects[key];
-        let commits = commits_by_key.remove(key).unwrap_or_default();
-        let mut topics = acc.topics.clone();
-        topics.sort();
-        topics.dedup();
-        topics.truncate(WORK_LOG_TOPIC_CAP);
-        if commits.is_empty() && topics.is_empty() {
-            continue; // 노이즈(temp/드라이브 루트/홈 등) 제외
-        }
-        let start = acc.starts.iter().min().copied();
-        works.push((start, ProjectWork { name: acc.name.clone(), commits, topics }));
-    }
+    // 첫 활동 시각순 정렬.
     works.sort_by(|a, b| match (a.0, b.0) {
         (Some(x), Some(y)) => x.cmp(&y),
         (Some(_), None) => std::cmp::Ordering::Less,
         (None, Some(_)) => std::cmp::Ordering::Greater,
         (None, None) => std::cmp::Ordering::Equal,
     });
-    let projects_out = works.into_iter().map(|(_, w)| w).collect();
+    let projects_out = works.into_iter().map(|(_, _, w)| w).collect();
 
     WorkLog { projects: projects_out, commit_count, concurrent }
 }
@@ -1397,6 +1405,43 @@ mod tests {
         let wl = super::collect_work_log(&store, "2026-07-20");
         assert_eq!(wl.projects.len(), 1, "노이즈 프로젝트 제외: {wl:?}");
         assert_eq!(wl.projects[0].name, "space-a");
+    }
+
+    #[test]
+    fn collect_work_log_noise_overlap_does_not_flag_concurrent() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 노이즈 세션(커밋·topic 없음)이 실제 프로젝트와 시간 겹침 →
+        // 노이즈는 제외되고 실제 프로젝트 하나만 남으므로 concurrent=false 여야 한다.
+        store.conn.execute(
+            "INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, git_branch, cwd, first_prompt_preview)
+             VALUES ('n1','Windows','pN','claude-code','2026-07-20T01:00:00Z','2026-07-20T04:00:00Z','main',?1,'<task-notification>')",
+            rusqlite::params![r"C:\Users\jibin\AppData\Local\Temp\noise"],
+        ).unwrap();
+        seed_session(&store, "s1", "Windows", "pA", r"D:\Project\space-a",
+            "feat/diary", "2026-07-20T02:00:00Z", "2026-07-20T03:00:00Z");
+
+        let wl = super::collect_work_log(&store, "2026-07-20");
+        assert_eq!(wl.projects.len(), 1, "노이즈 제외 후 프로젝트 하나: {wl:?}");
+        assert!(!wl.concurrent, "노이즈 프로젝트 겹침은 concurrent 아님: {wl:?}");
+    }
+
+    #[test]
+    fn collect_work_log_keeps_hosts_distinct_in_cwdless_fallback() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 같은 project_id, cwd 없음, 서로 다른 host(두 distro) → 별도 프로젝트로 유지.
+        store.conn.execute(
+            "INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, git_branch, cwd)
+             VALUES ('a','wsl:Ubuntu-22.04','samepid','claude-code','2026-07-20T01:00:00Z','2026-07-20T02:00:00Z','feat/a',NULL)",
+            [],
+        ).unwrap();
+        store.conn.execute(
+            "INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, git_branch, cwd)
+             VALUES ('b','wsl:Debian','samepid','claude-code','2026-07-20T03:00:00Z','2026-07-20T04:00:00Z','feat/b',NULL)",
+            [],
+        ).unwrap();
+
+        let wl = super::collect_work_log(&store, "2026-07-20");
+        assert_eq!(wl.projects.len(), 2, "다른 host의 동일 project_id는 분리: {wl:?}");
     }
 
     #[test]
