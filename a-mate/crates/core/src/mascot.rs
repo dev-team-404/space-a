@@ -403,6 +403,7 @@ mod daily_line_tests {
             findings: (0..n_findings)
                 .map(|i| (format!("detail {i}"), format!("action {i}")))
                 .collect(),
+            memories: vec![],
         }
     }
 
@@ -499,6 +500,7 @@ mod chatter_tests {
             findings: (0..n_findings)
                 .map(|i| (format!("detail {i}"), format!("action {i}")))
                 .collect(),
+            memories: vec![],
         }
     }
 

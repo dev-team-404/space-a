@@ -759,7 +759,19 @@ fn diary_length(commit_count: usize) -> (usize, &'static str) {
     }
 }
 
-pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize) -> String {
+/// 일기용 메모리 섹션(비면 빈 문자열).
+fn memory_section(memories: &[String]) -> String {
+    let block = crate::memory::memory_block(memories);
+    if block.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\n\n[주인에 대해 기억한 것 — 관련되면 자연스럽게 녹이되, 억지로 넣거나 없는 사실을 지어내지 말 것]\n{block}"
+        )
+    }
+}
+
+pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize, memories: &[String]) -> String {
     let (target, paras) = diary_length(commit_count);
     format!(
         "당신은 사용자의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
@@ -803,12 +815,13 @@ pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize) -> String {
          형식: 일기는 {paras}문단 내외, 전체 {target}자 안팎으로 쓰세요 \
          (작업 내용을 담느라 한 문단 늘어도 좋지만 여전히 간결하게). \
          그날의 핵심을 골라 쓰고 덜 중요한 사실은 과감히 버리세요. \
-         이모지는 문단마다 1~2개, 감정이 실리는 자연스러운 자리에 넣되 같은 이모지를 반복하지 마세요.",
+         이모지는 문단마다 1~2개, 감정이 실리는 자연스러운 자리에 넣되 같은 이모지를 반복하지 마세요.{mem}",
         honorific = cfg.honorific,
         tone = cfg.tone,
         voice = voice_guidance(),
         target = target,
         paras = paras,
+        mem = memory_section(memories),
     )
 }
 
@@ -824,8 +837,8 @@ fn diary_body(text: &str, tokens: u64, engine: &str) -> String {
 }
 
 /// 네트워크(LLM)만 — store 접근 없음. 락 밖에서 호출 가능.
-pub fn render_diary(engine: &dyn Engine, brief: &Brief, cfg: &DiaryConfig) -> Result<RenderedDiary> {
-    let system = build_system_prompt(cfg, brief.work_log.commit_count);
+pub fn render_diary(engine: &dyn Engine, brief: &Brief, cfg: &DiaryConfig, memories: &[String]) -> Result<RenderedDiary> {
+    let system = build_system_prompt(cfg, brief.work_log.commit_count, memories);
     let user = serde_json::to_string_pretty(brief)?;
     let out = engine.generate(&system, &user)?;
     Ok(RenderedDiary {
@@ -845,7 +858,7 @@ pub struct IdleContext {
 }
 
 /// 무활동일 일기 시스템 프롬프트 — 작업 사실 없이 마스코트의 자유 시간을 능청스러운 상상 일기로.
-pub fn build_idle_prompt(cfg: &DiaryConfig) -> String {
+pub fn build_idle_prompt(cfg: &DiaryConfig, memories: &[String]) -> String {
     format!(
         "당신은 {honorific}의 AI 코딩 여정을 함께하는 마스코트입니다. \
          오늘은 {honorific}이 한 번도 찾아오지 않은 '조용한 날' — 나(마스코트)의 자유 시간입니다. \
@@ -857,15 +870,16 @@ pub fn build_idle_prompt(cfg: &DiaryConfig) -> String {
          `occasions`에 명절·기념일이 있으면 그 분위기에 맞춰 특별하게 \
          (추석이면 이웃 에이전트들과 송편 빚기, 크리스마스면 다 같이 트리 장식 등). \
          `days_idle`(며칠째 조용한지)·`is_weekend`도 살려 {honorific}의 안부를 슬쩍 궁금해하세요('그나저나 주인 잘 노나?'). \
-         짧게 — 1~2문장(특별한 날은 2~3문장까지), 한 문단. 이모지는 0~1개. 그날 컨텍스트로 매번 다르게.",
+         짧게 — 1~2문장(특별한 날은 2~3문장까지), 한 문단. 이모지는 0~1개. 그날 컨텍스트로 매번 다르게.{mem}",
         honorific = cfg.honorific,
         voice = voice_guidance(),
+        mem = memory_section(memories),
     )
 }
 
 /// 무활동일 일기 렌더 — 네트워크(LLM)만, store 접근 없음. 락 밖에서 호출 가능.
-pub fn render_idle_diary(engine: &dyn Engine, idle: &IdleContext, cfg: &DiaryConfig) -> Result<RenderedDiary> {
-    let system = build_idle_prompt(cfg);
+pub fn render_idle_diary(engine: &dyn Engine, idle: &IdleContext, cfg: &DiaryConfig, memories: &[String]) -> Result<RenderedDiary> {
+    let system = build_idle_prompt(cfg, memories);
     let user = serde_json::to_string_pretty(idle)?;
     let out = engine.generate(&system, &user)?;
     Ok(RenderedDiary {
@@ -896,7 +910,8 @@ pub fn generate_diary(
     brief: &Brief,
     cfg: &DiaryConfig,
 ) -> Result<DiaryOutput> {
-    let rendered = render_diary(engine, brief, cfg)?;
+    let memories: Vec<String> = store.list_memories()?.into_iter().map(|m| m.text).collect();
+    let rendered = render_diary(engine, brief, cfg, &memories)?;
     persist_diary(store, &brief.date, &brief.host, &rendered, cfg)
 }
 
@@ -985,7 +1000,7 @@ mod tests {
     #[test]
     fn system_prompt_injects_tone_and_honorific() {
         let cfg = DiaryConfig::default();
-        let p = build_system_prompt(&cfg, 0);
+        let p = build_system_prompt(&cfg, 0, &[]);
         assert!(p.contains("주인"));
         assert!(p.contains("B"));
     }
@@ -1318,7 +1333,7 @@ mod tests {
 
     #[test]
     fn idle_prompt_directs_imaginative_persona() {
-        let p = build_idle_prompt(&DiaryConfig::default());
+        let p = build_idle_prompt(&DiaryConfig::default(), &[]);
         assert!(p.contains("조용한 날"));        // 무활동일 프레이밍
         assert!(p.contains("지어내"));           // 상상 일기(사실 규율 해제)
         assert!(p.contains("에이전트 친구"));    // 동료 에이전트 설정
@@ -1334,7 +1349,7 @@ mod tests {
             date: "2026-07-11".into(), is_weekend: true, days_idle: Some(2), occasions: vec![],
         };
         let engine = MockEngine { canned: "옆 동네 봇이랑 놀았다.".into() };
-        let r = render_idle_diary(&engine, &idle, &cfg).unwrap();
+        let r = render_idle_diary(&engine, &idle, &cfg, &[]).unwrap();
         assert!(r.body.contains("옆 동네 봇이랑 놀았다."));
         assert!(r.body.contains("토큰"), "footer meters tokens");
     }
@@ -1520,7 +1535,7 @@ mod tests {
 
     #[test]
     fn system_prompt_uses_self_diary_perspective() {
-        let p = build_system_prompt(&DiaryConfig::default(), 0);
+        let p = build_system_prompt(&DiaryConfig::default(), 0, &[]);
         assert!(p.contains("1인칭"));         // 자기 일기 관점
         assert!(p.contains("회고") || p.contains("다짐")); // 코칭을 자기 회고로
         assert!(p.contains("3인칭"));         // 주인을 3인칭으로 지칭
@@ -1550,13 +1565,13 @@ mod tests {
 
     #[test]
     fn build_system_prompt_embeds_voice_guidance() {
-        let p = build_system_prompt(&DiaryConfig::default(), 0);
+        let p = build_system_prompt(&DiaryConfig::default(), 0, &[]);
         assert!(p.contains(super::voice_guidance())); // 조각이 그대로 배선됨
     }
 
     #[test]
     fn system_prompt_has_humor_evidence_and_occasions_instructions() {
-        let p = build_system_prompt(&DiaryConfig::default(), 0);
+        let p = build_system_prompt(&DiaryConfig::default(), 0, &[]);
         assert!(p.contains("주인"));   // 호칭
         assert!(p.contains("유머"));   // 유머 지시
         assert!(p.contains("detail")); // 근거 필드 사용 지시
@@ -1566,7 +1581,7 @@ mod tests {
 
     #[test]
     fn system_prompt_directs_short_length_and_moderate_emoji() {
-        let p = build_system_prompt(&DiaryConfig::default(), 0);
+        let p = build_system_prompt(&DiaryConfig::default(), 0, &[]);
         assert!(p.contains("2~3문단"));   // 길이 밴드(문단, commit_count=0 기준)
         assert!(p.contains("400자"));     // 길이 밴드(글자, commit_count=0 기준)
         assert!(p.contains("골라"));      // 핵심만 골라 쓰기(장황함 차단)
@@ -1587,14 +1602,14 @@ mod tests {
     #[test]
     fn build_system_prompt_length_adapts_to_commit_count() {
         let cfg = DiaryConfig::default();
-        assert!(super::build_system_prompt(&cfg, 2).contains("400자"), "가벼운 날 400자");
-        assert!(super::build_system_prompt(&cfg, 7).contains("550자"), "보통 날 550자");
-        assert!(super::build_system_prompt(&cfg, 20).contains("750자"), "바쁜 날 750자 상한");
+        assert!(super::build_system_prompt(&cfg, 2, &[]).contains("400자"), "가벼운 날 400자");
+        assert!(super::build_system_prompt(&cfg, 7, &[]).contains("550자"), "보통 날 550자");
+        assert!(super::build_system_prompt(&cfg, 20, &[]).contains("750자"), "바쁜 날 750자 상한");
     }
 
     #[test]
     fn system_prompt_directs_context_signals_and_comfort() {
-        let p = build_system_prompt(&DiaryConfig::default(), 0);
+        let p = build_system_prompt(&DiaryConfig::default(), 0, &[]);
         assert!(p.contains("상시 이슈"));         // 이미 다룬 상시 이슈 제외 언급
         assert!(p.contains("tool_usage"));        // 도구 텍스처 지시
         assert!(p.contains("work_context"));      // 근무 맥락
@@ -1606,7 +1621,7 @@ mod tests {
 
     #[test]
     fn system_prompt_directs_recent_diary_variety() {
-        let p = build_system_prompt(&DiaryConfig::default(), 0);
+        let p = build_system_prompt(&DiaryConfig::default(), 0, &[]);
         assert!(p.contains("recent_diaries")); // 최근 일기 참조 지시
         assert!(p.contains("되풀이하지"));      // 이미 다룬 화제 반복 금지
         assert!(p.contains("다른 이야기"));     // 어제와 다른 서사
@@ -1828,7 +1843,7 @@ mod tests {
         let cfg = DiaryConfig { vault_dir: tmp.path().to_path_buf(), ..DiaryConfig::default() };
         let brief = assemble_brief(&store, "Windows", "2026-07-04", &cfg).unwrap();
         let engine = MockEngine { canned: "분리 테스트 일기".into() };
-        let rendered = render_diary(&engine, &brief, &cfg).unwrap();
+        let rendered = render_diary(&engine, &brief, &cfg, &[]).unwrap();
         assert!(rendered.body.contains("분리 테스트 일기"));
         let out = persist_diary(&store, &brief.date, &brief.host, &rendered, &cfg).unwrap();
         assert!(out.path.exists());
@@ -1849,5 +1864,28 @@ mod tests {
             chrono::NaiveDate::from_ymd_opt(2026, 7, 1)
         );
         assert_eq!(super::local_date_of("junk"), None);
+    }
+
+    // ── Task 6: 일기 프롬프트 메모리 주입 ──
+
+    #[test]
+    fn diary_system_prompt_injects_memories() {
+        let cfg = DiaryConfig::default();
+        let mems = vec!["주인은 비건임".to_string()];
+        let p = build_system_prompt(&cfg, 0, &mems);
+        assert!(p.contains("[주인에 대해 기억한 것"));
+        assert!(p.contains("주인은 비건임"));
+    }
+
+    #[test]
+    fn diary_system_prompt_no_memory_section_when_empty() {
+        let p = build_system_prompt(&DiaryConfig::default(), 0, &[]);
+        assert!(!p.contains("[주인에 대해 기억한 것"));
+    }
+
+    #[test]
+    fn idle_prompt_injects_memories() {
+        let p = build_idle_prompt(&DiaryConfig::default(), &["주인은 고양이를 키움".to_string()]);
+        assert!(p.contains("주인은 고양이를 키움"));
     }
 }
