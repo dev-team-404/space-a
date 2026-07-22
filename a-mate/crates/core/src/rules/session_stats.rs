@@ -66,6 +66,7 @@ pub fn collect_session_stats(store: &SqliteStore) -> Result<Vec<SessionStat>> {
                 ) THEN 1 ELSE 0 END) AS temp_hits,
                 GROUP_CONCAT(DISTINCT model_raw) AS model_raws
          FROM events
+         WHERE is_sidechain = 0
          GROUP BY session_id",
     )?;
     let rows = stmt.query_map([], |r| {
@@ -230,6 +231,20 @@ mod tests {
         assert_eq!(s.skill_calls, 1);
         assert_eq!(s.first_ts.as_deref(), Some("2026-07-06T09:00:00Z"));
         assert_eq!(s.model_raws.len(), 2); // opus + sonnet
+    }
+
+    #[test]
+    fn collect_stats_excludes_sidechain_turns() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // main-chain 턴 1개(출력 300) + sidechain 턴 1개(출력 9000)
+        let main = turn_at("s1", "u1", "claude-opus-4-8", 300, "2026-07-06T09:00:00Z");
+        let mut side = turn_at("s1", "u2", "claude-opus-4-8", 9000, "2026-07-06T09:05:00Z");
+        side.is_sidechain = true;
+        store.upsert_events(&[main, side]).unwrap();
+        let stats = collect_session_stats(&store).unwrap();
+        assert_eq!(stats.len(), 1);
+        assert_eq!(stats[0].assistant_turns, 1, "sidechain 턴 제외");
+        assert_eq!(stats[0].tok_output, 300, "sidechain 토큰 제외");
     }
 
     #[test]

@@ -459,8 +459,13 @@ impl SqliteStore {
             Some(p) => Some(serde_json::to_string(p)?),
             None => None,
         };
-        // R6은 판정 전 비노출(pending), 나머지는 기존대로 즉시 노출(new). ON CONFLICT는 status 불변.
-        let init_status = if f.rule_id == "R6" { "pending" } else { "new" };
+        // 판정 패스를 거치는 후보는 비노출(pending)로 시작 — R6 패턴, R7 세션 후보.
+        // R7 프로젝트 카드는 롤업이 만드는 노출물이므로 'new'.
+        let init_status = match (f.rule_id.as_str(), f.scope_kind.as_str()) {
+            ("R6", _) => "pending",
+            ("R7", "session") => "pending",
+            _ => "new",
+        };
         self.conn.execute(
             "INSERT INTO findings
                 (dedup_key, rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
@@ -680,12 +685,15 @@ impl SqliteStore {
 
     /// findings_for_date의 전 host 합산 버전 — 다이어리는 주인의 하루(Windows+WSL)라 host를 고정하지 않고
     /// finding의 scope_host가 그날 활동한 host와 일치하면 포함한다.
+    /// status='new'만 — 판정 대기·판정 캐시(pending/confirmed/rejected 등 숨김 상태)는 다이어리에
+    /// 새는 걸 막는다(스펙 §4 B ⓓ: 세션별 후보 카드는 다이어리에 안 띄움).
     pub fn findings_for_date_all(&self, date: &str) -> Result<Vec<Finding>> {
         let mut stmt = self.conn.prepare(
             "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                     evidence_json, est_tokens_saved, prescription_json, dedup_key
              FROM findings f
-             WHERE EXISTS (
+             WHERE f.status = 'new'
+               AND EXISTS (
                  SELECT 1 FROM sessions s
                  WHERE date(s.first_ts, 'localtime') = ?1 AND s.host = f.scope_host
                    AND ( (f.scope_kind = 'session' AND s.session_id = f.scope_ref)
@@ -823,6 +831,30 @@ impl SqliteStore {
                 host: r.get::<_, Option<String>>(1)?.unwrap_or_default(),
                 representative: r.get::<_, Option<String>>(2)?.unwrap_or_default(),
                 prev_attempts: r.get::<_, i64>(3)? as u32,
+            })
+        })?;
+        rows.collect::<std::result::Result<_, _>>().map_err(Into::into)
+    }
+
+    /// 범용 판정 배치 대상 — 주어진 rule_id의 pending & 시도 3회 미만, 최근 활동 순 상한.
+    pub fn pending_for_judgment(&self, rule_id: &str, limit: usize) -> Result<Vec<crate::judge::PendingCandidate>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT dedup_key, COALESCE(scope_host,''), scope_project, evidence_json,
+                    COALESCE(json_extract(judgment_json,'$.attempts'), 0)
+             FROM findings
+             WHERE rule_id=?1 AND status='pending'
+               AND COALESCE(json_extract(judgment_json,'$.attempts'), 0) < 3
+             ORDER BY last_seen DESC
+             LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![rule_id, limit as i64], |r| {
+            let ev: String = r.get(3)?;
+            Ok(crate::judge::PendingCandidate {
+                dedup_key: r.get(0)?,
+                scope_host: r.get(1)?,
+                scope_project: r.get::<_, Option<String>>(2)?,
+                evidence: serde_json::from_str(&ev).unwrap_or(serde_json::Value::Null),
+                prev_attempts: r.get::<_, i64>(4)? as u32,
             })
         })?;
         rows.collect::<std::result::Result<_, _>>().map_err(Into::into)
@@ -1359,6 +1391,20 @@ impl SqliteStore {
                 last_result_ok: last_status.as_deref() == Some("ok"),
             });
         }
+        Ok(out)
+    }
+
+    /// 한 세션의 사용자 프롬프트(최근 N개, 시간순). prompt_events는 이미 sidechain·meta·도구결과 제외.
+    /// DESC로 최근 N개를 뽑은 뒤 reverse해 LLM 심사관에게는 시간 순서대로 보이게 한다.
+    pub fn session_user_prompts(&self, session_id: &str, limit: usize) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT preview FROM prompt_events WHERE session_id=?1
+             ORDER BY id DESC LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![session_id, limit as i64], |r| r.get::<_, String>(0))?;
+        let mut out: Vec<String> = rows.collect::<std::result::Result<_, _>>()?;
+        out.retain(|p| !p.trim().is_empty());
+        out.reverse();
         Ok(out)
     }
 
@@ -1999,6 +2045,47 @@ mod tests {
     }
 
     #[test]
+    fn findings_for_date_all_hides_non_new_status_but_shows_project_card() {
+        // 스펙 §4 B ⓓ: 세션별 후보 카드는 다이어리에 안 띄운다(숨김 상태: pending/confirmed/rejected).
+        // R7 프로젝트 카드(status='new')는 그대로 노출돼야 한다.
+        use crate::finding::{Finding, Severity};
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_events(&[
+            sess_turn("Windows", "p", "s1", "u1", "2026-07-01T10:00:00Z"),
+        ]).unwrap();
+
+        // R7 세션 후보 — upsert_finding이 init 'pending'(숨김)으로 넣는다.
+        store.upsert_finding(&Finding {
+            rule_id: "R7".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: Some("p".into()),
+            scope_kind: "session".into(), scope_ref: "s1".into(),
+            evidence: serde_json::json!({"session_id":"s1"}), est_tokens_saved: 0,
+            prescription: None, dedup_key: "R7|sess|Windows|s1".into(),
+        }, "2026-07-01T10:00:00Z").unwrap();
+        assert!(store.findings_for_date_all("2026-07-01").unwrap()
+            .iter().all(|f| f.dedup_key != "R7|sess|Windows|s1"), "pending 세션 후보는 숨겨야");
+
+        // 판정 후 confirmed로 전환돼도 여전히 숨김(세션별 후보는 항상 비노출).
+        store.set_judgment("R7|sess|Windows|s1", Some("confirmed"), &serde_json::json!({"over_modeled": true})).unwrap();
+        assert!(store.findings_for_date_all("2026-07-01").unwrap()
+            .iter().all(|f| f.dedup_key != "R7|sess|Windows|s1"), "confirmed 세션 후보도 숨겨야");
+
+        // R7 프로젝트 카드 — scope_kind='project'라 init 'new'(노출).
+        store.upsert_finding(&Finding {
+            rule_id: "R7".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: Some("p".into()),
+            scope_kind: "project".into(), scope_ref: "p".into(),
+            evidence: serde_json::json!({
+                "total_sessions": 3, "session_ids": ["s1"],
+                "note": "LLM 판정: 이 프로젝트의 Opus 세션 상당수가 Sonnet으로 충분",
+            }),
+            est_tokens_saved: 0, prescription: None, dedup_key: "R7|Windows|p".into(),
+        }, "2026-07-01T10:00:00Z").unwrap();
+        let all = store.findings_for_date_all("2026-07-01").unwrap();
+        assert!(all.iter().any(|f| f.dedup_key == "R7|Windows|p"), "프로젝트 카드는 노출돼야");
+    }
+
+    #[test]
     fn replace_plugin_inventory_atomic_swap() {
         use crate::inventory::PluginRecord;
         let mut store = SqliteStore::open_in_memory().unwrap();
@@ -2240,6 +2327,25 @@ mod tests {
     }
 
     #[test]
+    fn r7_session_finding_starts_pending_project_starts_new() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |kind: &str, key: &str| crate::finding::Finding {
+            rule_id: "R7".into(), severity: crate::finding::Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: Some("p".into()),
+            scope_kind: kind.into(), scope_ref: "r".into(),
+            evidence: serde_json::json!({}), est_tokens_saved: 0,
+            prescription: None, dedup_key: key.into(),
+        };
+        store.upsert_finding(&mk("session", "R7|sess|Windows|s1"), "2026-07-06T10:00:00Z").unwrap();
+        store.upsert_finding(&mk("project", "R7|Windows|p"), "2026-07-06T10:00:00Z").unwrap();
+        let status = |key: &str| -> String {
+            store.conn.query_row("SELECT status FROM findings WHERE dedup_key=?1", [key], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(status("R7|sess|Windows|s1"), "pending", "세션 후보는 판정 전 비노출");
+        assert_eq!(status("R7|Windows|p"), "new", "프로젝트 롤업 카드는 즉시 노출");
+    }
+
+    #[test]
     fn judgment_json_column_roundtrips_through_finding_row() {
         let store = SqliteStore::open_in_memory().unwrap();
         let f = Finding {
@@ -2294,6 +2400,27 @@ mod tests {
         assert_eq!(batch[0].prev_attempts, 0, "미시도는 attempts 0");
         assert!(batch.iter().all(|t| t.dedup_key != "R6|W|2"), "상한에 밀린 오래된 유효 카드 제외");
         assert!(batch.iter().all(|t| t.dedup_key != "R6|W|3"), "상한에 밀린 오래된 유효 카드 제외");
+    }
+
+    #[test]
+    fn pending_for_judgment_returns_generic_candidates() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // pending R7 세션 후보 2개 시드 (evidence에 session_id)
+        let mk = |key: &str, sid: &str| crate::finding::Finding {
+            rule_id: "R7".into(), severity: crate::finding::Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: Some("p".into()),
+            scope_kind: "session".into(), scope_ref: sid.into(),
+            evidence: serde_json::json!({"session_id": sid}),
+            est_tokens_saved: 0, prescription: None, dedup_key: key.into(),
+        };
+        store.upsert_finding(&mk("R7|sess|Windows|s1", "s1"), "2026-07-06T10:00:00Z").unwrap();
+        store.upsert_finding(&mk("R7|sess|Windows|s2", "s2"), "2026-07-06T11:00:00Z").unwrap();
+        let batch = store.pending_for_judgment("R7", 10).unwrap();
+        assert_eq!(batch.len(), 2);
+        assert!(batch.iter().all(|c| c.prev_attempts == 0));
+        assert!(batch.iter().any(|c| c.evidence["session_id"] == "s2"));
+        // R6 후보는 안 섞임
+        assert!(store.pending_for_judgment("R6", 10).unwrap().is_empty());
     }
 
     #[test]
@@ -2672,6 +2799,57 @@ mod tests {
             "SELECT first_prompt_preview FROM sessions WHERE session_id='s1'",
             [], |r| r.get(0)).unwrap();
         assert_eq!(first.as_deref(), Some("매일 아침 판매 리포트 뽑아줘"));
+    }
+
+    #[test]
+    fn session_user_prompts_returns_full_text_main_chain() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 실질 프롬프트 2개 (deref는 source_file+offset 필요 없이 preview로 폴백 확인)
+        store.upsert_events(&[
+            NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(), host: "Windows".into(),
+                project_id: "p".into(), session_id: "s1".into(), uuid: Some("u1".into()), parent_uuid: None,
+                is_sidechain: false, ts: Some("2026-07-06T10:00:00Z".into()),
+                source_file: "s.jsonl".into(), source_offset: 0, msg_id: None,
+                kind: EventKind::UserPrompt { preview: "이 파일 이름만 바꿔줘".into() },
+            },
+        ]).unwrap();
+        let ps = store.session_user_prompts("s1", 5).unwrap();
+        assert_eq!(ps.len(), 1);
+        assert!(ps[0].contains("이름만 바꿔줘"));
+    }
+
+    #[test]
+    fn session_user_prompts_returns_chronological_order() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_events(&[
+            NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(), host: "Windows".into(),
+                project_id: "p".into(), session_id: "s1".into(), uuid: Some("u1".into()), parent_uuid: None,
+                is_sidechain: false, ts: Some("2026-07-06T10:00:00Z".into()),
+                source_file: "s.jsonl".into(), source_offset: 0, msg_id: None,
+                kind: EventKind::UserPrompt { preview: "첫번째로 파일을 읽어줘".into() },
+            },
+            NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(), host: "Windows".into(),
+                project_id: "p".into(), session_id: "s1".into(), uuid: Some("u2".into()), parent_uuid: None,
+                is_sidechain: false, ts: Some("2026-07-06T10:01:00Z".into()),
+                source_file: "s.jsonl".into(), source_offset: 1, msg_id: None,
+                kind: EventKind::UserPrompt { preview: "두번째로 코드를 수정해줘".into() },
+            },
+            NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(), host: "Windows".into(),
+                project_id: "p".into(), session_id: "s1".into(), uuid: Some("u3".into()), parent_uuid: None,
+                is_sidechain: false, ts: Some("2026-07-06T10:02:00Z".into()),
+                source_file: "s.jsonl".into(), source_offset: 2, msg_id: None,
+                kind: EventKind::UserPrompt { preview: "세번째로 테스트를 실행해줘".into() },
+            },
+        ]).unwrap();
+        let ps = store.session_user_prompts("s1", 5).unwrap();
+        assert_eq!(ps, vec!["첫번째로 파일을 읽어줘", "두번째로 코드를 수정해줘", "세번째로 테스트를 실행해줘"],
+            "심사관은 시간순(오래된 것부터)으로 봐야 함");
     }
 
     #[test]

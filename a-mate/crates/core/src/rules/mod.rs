@@ -2,6 +2,7 @@ pub mod r1_unused_mcp;
 pub mod r2_unused_plugins;
 pub mod r5_repeated_read;
 pub mod r6_repeated_prompts;
+pub mod r7_judge;
 pub mod r7_opus_trivial;
 pub mod r8_mcp_large_result;
 pub mod r9_web_overuse;
