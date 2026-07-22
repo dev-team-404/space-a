@@ -215,11 +215,11 @@ def _humanize_activity(item: dict | None) -> dict | None:
     # 말풍선(brief)은 가장 최근 업무의 한 줄 요약 — 제목 기반. 길면 렌더러가 말줄임 처리.
     # 상세(detail)는 문장으로 풀어쓴다.
     if item.get("kind") == "issue":
-        brief = f"‘{title}’ 이슈 해결 중"
-        detail = f"최근에 ‘{title}’ 문제를 이슈로 등록했어요. 팀이 함께 살펴보는 중이에요."
+        brief = f"‘{title}’ 이슈 등록"
+        detail = f"최근에 ‘{title}’ 이슈를 등록했어요."
     else:  # knowledge
-        brief = f"‘{title}’ 지식 공유 중"
-        detail = f"최근에 ‘{title}’ 내용을 정리해 팀에 공유했어요. 다른 사람이 참고해 재사용할 수 있어요."
+        brief = f"‘{title}’ 지식 작성"
+        detail = f"최근에 ‘{title}’ 지식을 작성했어요."
     return {"brief": brief, "detail": detail}
 
 
