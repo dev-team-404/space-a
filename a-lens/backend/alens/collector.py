@@ -173,7 +173,12 @@ def _parse_ts(ts: str | None) -> datetime | None:
 
 
 def _bump_activity(
-    activity: dict[str, dict], agent_id: str | None, ts: str | None, kind: str, title: str
+    activity: dict[str, dict],
+    agent_id: str | None,
+    ts: str | None,
+    kind: str,
+    title: str,
+    ref_id: str | None = None,
 ) -> None:
     """agent_id의 최근 활동을 갱신 — 더 최신 write면 항목(시각·종류·제목)을 통째로 덮어쓴다.
     kind: 'knowledge'(page 작성) | 'issue'(이슈 열기). 사람이 읽을 문장 합성의 재료."""
@@ -184,7 +189,7 @@ def _bump_activity(
         return
     prev = activity.get(agent_id)
     if prev is None or dt > prev["at"]:
-        activity[agent_id] = {"at": dt, "kind": kind, "title": title}
+        activity[agent_id] = {"at": dt, "kind": kind, "title": title, "ref_id": ref_id}
 
 
 def _flatten_tree(nodes: list[dict]) -> list[dict]:
@@ -211,7 +216,21 @@ _ISSUE_STEP_LABEL = {"open": "이슈 발생", "knowledge_linked": "지식 연결
 def _humanize_activity(item: dict | None) -> dict | None:
     if not item:
         return None
-    title = (item.get("title") or "").strip() or "이름 없는 문서"
+    title = (item.get("title") or "").strip()
+    # 말풍선도 카드처럼 짧게 — store에 생성된 명사형 제목이 있으면 그걸 쓴다(없으면 원문).
+    ref_id = item.get("ref_id")
+    if ref_id:
+        st = store.get_store()
+        if st is not None:
+            if item.get("kind") == "issue":
+                row = st.get_issue(ref_id)
+                if row and row.get("gen_title"):
+                    title = row["gen_title"]
+            else:
+                row = st.get(ref_id)
+                if row and row.get("title"):
+                    title = row["title"]
+    title = title or "이름 없는 문서"
     # 말풍선(brief)은 가장 최근 업무의 한 줄 요약 — 제목 기반. 길면 렌더러가 말줄임 처리.
     # 상세(detail)는 문장으로 풀어쓴다.
     if item.get("kind") == "issue":
@@ -410,12 +429,12 @@ def _hub_snapshot() -> dict:
             for p in pages:
                 _bump_activity(
                     last_write, p.get("created_by"), p.get("updated_at") or p.get("created_at"),
-                    "knowledge", p.get("title", ""),
+                    "knowledge", p.get("title", ""), p.get("page_id"),
                 )
             for it in issues:
                 _bump_activity(
                     last_write, it.get("opened_by"), it.get("updated_at") or it.get("created_at"),
-                    "issue", it.get("title", ""),
+                    "issue", it.get("title", ""), it.get("issue_id"),
                 )
 
             resolved = sum(1 for it in issues if it.get("status") == "resolved")
