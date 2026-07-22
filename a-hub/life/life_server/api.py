@@ -46,6 +46,8 @@ def _api_key_ok(path: str, provided: str | None) -> bool:
 class LifeRegisterBody(BaseModel):
     name: str
     mascot_seed: str = ""
+    org: str = ""  # 조직 (클라이언트 프로필, 선택)
+    agent_uuid: str = ""  # 클라이언트 고유 ID (서버 agent_id와 별개, 선택)
 
 
 class LifeEnterBody(BaseModel):
@@ -126,7 +128,9 @@ def create_app(life: LifeService | None = None) -> FastAPI:
 
     @app.post("/life/register", status_code=201)
     def life_register(body: LifeRegisterBody):
-        agent, token, created_life = life.register(body.name, body.mascot_seed)
+        agent, token, created_life = life.register(
+            body.name, body.mascot_seed, body.org, body.agent_uuid
+        )
         return {"agent_id": agent.agent_id, "token": token, "life_id": created_life.id}
 
     @app.get("/life")

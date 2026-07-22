@@ -54,10 +54,30 @@ fn with_api_key(req: ureq::Request, api_key: Option<&str>) -> ureq::Request {
 /// (어느 방에서든 내 데스크톱 마스코트와 같은 모습으로 보이게).
 /// api_key는 관문이 켜진 서버용 — 비우면 미첨부.
 pub fn register(base_url: &str, api_key: Option<&str>, name: &str, mascot_seed: &str) -> Result<Value> {
+    register_profile(base_url, api_key, name, mascot_seed, "", "")
+}
+
+/// 프로필 포함 등록 — org·agent_uuid를 함께 보낸다. 현재 서버는 모르는 필드를 무시하므로
+/// 하위호환이며, 서버가 프로필을 저장하도록 확장되면 그대로 쓰인다. 빈 값은 생략한다.
+pub fn register_profile(
+    base_url: &str,
+    api_key: Option<&str>,
+    name: &str,
+    mascot_seed: &str,
+    org: &str,
+    agent_uuid: &str,
+) -> Result<Value> {
+    let mut body = json!({ "name": name, "mascot_seed": mascot_seed });
+    if !org.trim().is_empty() {
+        body["org"] = json!(org);
+    }
+    if !agent_uuid.trim().is_empty() {
+        body["agent_uuid"] = json!(agent_uuid);
+    }
     let req = ureq::post(&format!("{}/life/register", base(base_url)))
         .timeout(std::time::Duration::from_secs(10));
     with_api_key(req, api_key)
-        .send_json(json!({ "name": name, "mascot_seed": mascot_seed }))
+        .send_json(body)
         .map_err(err_of)?
         .into_json()
         .map_err(Into::into)

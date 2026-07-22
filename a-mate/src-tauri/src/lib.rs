@@ -369,6 +369,8 @@ pub fn run() {
                 commands::request_occupant_sprite,
                 commands::image_settings_get,
                 commands::image_settings_set,
+                commands::profile_get,
+                commands::profile_set,
                 commands::regenerate_sprite,
                 commands::generate_skill_draft,
                 commands::save_skill_draft,

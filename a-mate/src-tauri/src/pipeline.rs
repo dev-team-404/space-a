@@ -652,16 +652,21 @@ mod runtime {
         let Ok(dir) = app.path().app_data_dir() else { return };
         let path = dir.join("sprite.png");
         if path.exists() { return; }
-        // 설정창(image_*) → env 순 해석. 락은 해석 동안만 (네트워크 전 해제 규율).
+        // 설정창(image_*) → env 순 해석 + 프로필(uuid·mbti). 락은 해석 동안만 (네트워크 전 해제 규율).
         let state = app.state::<crate::AppState>();
-        let cfg = match state.store.lock() {
-            Ok(store) => crate::resolve_sprite_cfg(&store),
+        let (cfg, uuid, mbti) = match state.store.lock() {
+            Ok(store) => {
+                let cfg = crate::resolve_sprite_cfg(&store);
+                match crate::commands::sprite_identity(&store) {
+                    Ok((u, m)) => (cfg, u, m),
+                    Err(e) => { log::warn!("프로필 해석 실패: {e}"); return; }
+                }
+            }
             Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
         };
         let Some(cfg) = cfg else { return };
-        let identity = agent_mentor::mascot::stable_identity();
-        let spec = agent_mentor::mascot::robot_spec_for(&identity);
-        let desc = sprite::character_description(&spec, &identity);
+        let spec = agent_mentor::mascot::robot_spec_from_profile(&uuid, mbti.as_deref());
+        let desc = sprite::character_description(&spec, &uuid);
         match sprite::generate(&cfg, &desc) {
             Ok(png) => {
                 let _ = std::fs::create_dir_all(&dir);
