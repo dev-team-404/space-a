@@ -2,7 +2,7 @@ pub mod engine;
 pub mod occasions;
 
 use crate::diary::engine::Engine;
-use crate::diary::occasions::{compute_occasions, Occasion};
+use crate::diary::occasions::{compute_occasions, korean_public_holiday, Occasion};
 use crate::store::SqliteStore;
 use anyhow::Result;
 use chrono::{DateTime, Datelike, FixedOffset, NaiveDate};
@@ -31,6 +31,7 @@ pub struct ToolUsage {
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct WorkContext {
     pub is_weekend: bool,
+    pub is_holiday: bool,  // 한국 법정공휴일(ko 로케일)인지 — 쉬는 날 판정
     pub active_hours: f64, // 몰입 시간(연속 이벤트 간 30분 이하 간격 합, 시간·소수 1자리)
     pub long_work: bool,   // active_hours >= LONG_WORK_HOURS
 }
@@ -343,10 +344,13 @@ pub fn assemble_brief(
     };
 
     let tool_usage = collect_tool_usage(store, date);
-    let work_context = match today {
+    let mut work_context = match today {
         Some(d) => collect_work_context(store, date, d),
         None => WorkContext::default(),
     };
+    work_context.is_holiday = today
+        .map(|d| korean_public_holiday(d, &locale).is_some())
+        .unwrap_or(false);
     let work_log = collect_work_log(store, date);
 
     Ok(Brief {
@@ -455,6 +459,7 @@ pub fn collect_work_context(store: &SqliteStore, date: &str, today: NaiveDate) -
     let active_hours = (engaged_secs / 3600.0 * 10.0).round() / 10.0;
     WorkContext {
         is_weekend: matches!(today.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun),
+        is_holiday: false, // locale 미상 — assemble_brief에서 세팅
         active_hours,
         long_work: active_hours >= LONG_WORK_HOURS,
     }
@@ -1237,6 +1242,42 @@ mod tests {
         assert!(!brief.work_context.is_weekend, "07-08은 수요일");
         assert!((brief.work_context.active_hours - 0.5).abs() < 0.05, "긴 공백 제외 → 0.5h");
         assert!(!brief.work_context.long_work);
+    }
+
+    #[test]
+    fn assemble_brief_flags_korean_holiday_as_rest_day() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 제헌절 2026-07-17(금) — ko. 활동 0이어도 is_holiday=true → 평일 idle 오판 방지.
+        let cfg = DiaryConfig {
+            vault_dir: tmp.path().to_path_buf(),
+            locale: Some("ko-KR".into()),
+            ..DiaryConfig::default()
+        };
+        let brief = assemble_brief(&store, "Windows", "2026-07-17", &cfg).unwrap();
+        assert!(brief.work_context.is_holiday, "제헌절은 공휴일");
+        assert!(!brief.work_context.is_weekend, "07-17은 금요일");
+        assert!(brief.occasions.iter().any(|o| o.label == "제헌절"), "언급 채널에도 등장");
+    }
+
+    #[test]
+    fn assemble_brief_holiday_gated_by_locale_and_plain_weekday() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let en = DiaryConfig {
+            vault_dir: tmp.path().to_path_buf(),
+            locale: Some("en-US".into()),
+            ..DiaryConfig::default()
+        };
+        assert!(!assemble_brief(&store, "Windows", "2026-07-17", &en).unwrap().work_context.is_holiday,
+            "en 로케일 → 한국 공휴일 미적용");
+        let ko = DiaryConfig {
+            vault_dir: tmp.path().to_path_buf(),
+            locale: Some("ko-KR".into()),
+            ..DiaryConfig::default()
+        };
+        assert!(!assemble_brief(&store, "Windows", "2026-07-16", &ko).unwrap().work_context.is_holiday,
+            "07-16 목요일 비공휴일 → false");
     }
 
     #[test]
