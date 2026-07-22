@@ -313,6 +313,21 @@ pub fn assemble_brief(
         .map(|f| f.dedup_key)
         .collect();
 
+    // recent_keys(위)는 3일 창 기준 그대로 — finding 억제 동작 불변.
+    // 같은 성격(주말·공휴일·idle) 최근 일기를 서사 반복 방지용으로만 병합.
+    let recent_diaries = {
+        let mut rd = recent_diaries;
+        if let Some(d) = today {
+            let seen: std::collections::HashSet<String> = rd.iter().map(|r| r.date.clone()).collect();
+            for sim in collect_similar_diaries(store, host, d, &locale) {
+                if !seen.contains(&sim.date) {
+                    rd.push(sim);
+                }
+            }
+        }
+        rd
+    };
+
     let findings = store
         .findings_for_date_all(date)?
         .into_iter()
@@ -369,6 +384,72 @@ pub fn assemble_brief(
 /// 직전 며칠간 서사 반복을 막기 위해 브리프에 싣는 최근 일기 발췌 파라미터.
 const RECENT_DIARY_LOOKBACK: i64 = 3;
 const RECENT_DIARY_EXCERPT_CAP: usize = 500;
+const SIMILAR_LOOKBACK: i64 = 28; // 같은 성격 일기 최대 소급 일수
+const SIMILAR_MAX: usize = 2;     // 병합할 같은 성격 일기 최대 편수
+
+#[derive(Clone, Copy, PartialEq)]
+enum DayKind {
+    Idle,       // 활동 0
+    RestActive, // 활동 있으나 주말·공휴일
+    Plain,      // 평일 활동일 (단조로움 문제 아님 — 보강 안 함)
+}
+
+/// 그날 활동이 전혀 없었나(rollup 세션 0). idle 판정용.
+fn date_was_idle(store: &SqliteStore, date: &str) -> bool {
+    store
+        .conn
+        .query_row(
+            "SELECT COALESCE(SUM(session_count),0) FROM daily_rollup WHERE date=?1",
+            params![date],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0)
+        == 0
+}
+
+fn day_kind(store: &SqliteStore, date_str: &str, date: NaiveDate, locale: &str) -> DayKind {
+    if date_was_idle(store, date_str) {
+        return DayKind::Idle;
+    }
+    let rest = matches!(date.weekday(), chrono::Weekday::Sat | chrono::Weekday::Sun)
+        || korean_public_holiday(date, locale).is_some();
+    if rest {
+        DayKind::RestActive
+    } else {
+        DayKind::Plain
+    }
+}
+
+/// 오늘과 같은 성격(idle / 주말·공휴일 활동일)의 최근 일기를 최대 SIMILAR_MAX편 모은다.
+/// 매주 토요일·매 공휴일처럼 3일 창엔 안 잡히는 반복을 반복 방지 컨텍스트에 넣기 위함.
+/// 평일 활동일(Plain)은 보강하지 않는다.
+fn collect_similar_diaries(store: &SqliteStore, host: &str, today: NaiveDate, locale: &str) -> Vec<RecentDiary> {
+    let today_str = today.format("%Y-%m-%d").to_string();
+    let kind = day_kind(store, &today_str, today, locale);
+    if kind == DayKind::Plain {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for i in 1..=SIMILAR_LOOKBACK {
+        if out.len() >= SIMILAR_MAX {
+            break;
+        }
+        let day = today - chrono::Duration::days(i);
+        let date = day.format("%Y-%m-%d").to_string();
+        if day_kind(store, &date, day, locale) != kind {
+            continue;
+        }
+        let Some(path) = store.diary_path_for_scope(&date, host).ok().flatten() else {
+            continue;
+        };
+        let Ok(body) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let narrative = body.split("\n\n*—").next().unwrap_or(&body).trim();
+        out.push(RecentDiary { date, excerpt: cap_chars(narrative, RECENT_DIARY_EXCERPT_CAP) });
+    }
+    out
+}
 
 /// 직전 N일(오래된 것부터) 중 해당 host의 vault 일기 본문을 발췌해 온다.
 /// backfill이 오래된 날짜부터 재생성하므로(missing_diary_dates) 오늘 생성 시 직전 날짜 일기는 이미 존재.
@@ -1647,6 +1728,29 @@ mod tests {
         let r = render_idle_diary(&engine, &idle, &cfg).unwrap();
         assert!(r.body.contains("옆 동네 봇이랑 놀았다."));
         assert!(r.body.contains("토큰"), "footer meters tokens");
+    }
+
+    #[test]
+    fn similar_diaries_pulls_recent_idle_outside_3day_window() {
+        let tmp = tempfile::tempdir().unwrap();
+        let store = SqliteStore::open_in_memory().unwrap();
+        let cfg = DiaryConfig {
+            vault_dir: tmp.path().to_path_buf(),
+            locale: Some("ko-KR".into()),
+            ..DiaryConfig::default()
+        };
+        // 14일 전(3일 창 밖) idle 일기 하나 — 이벤트 없음 → idle. 파일·인덱스는 persist_diary로 생성.
+        let past = RenderedDiary {
+            body: "심심해서 옆 동네 봇이랑 놀았다.\n\n*— ~10 토큰 (엔진: mock)*\n".into(),
+            tokens_used: 10,
+            engine_name: "mock".into(),
+        };
+        persist_diary(&store, "2026-07-16", "Windows", &past, &cfg).unwrap();
+        // 오늘 2026-07-30 도 idle(이벤트 없음) → 같은 성격 병합
+        let brief = assemble_brief(&store, "Windows", "2026-07-30", &cfg).unwrap();
+        let hit = brief.recent_diaries.iter().find(|r| r.date == "2026-07-16");
+        assert!(hit.is_some(), "같은 성격(idle) 최근 일기 병합");
+        assert_eq!(hit.unwrap().excerpt, "심심해서 옆 동네 봇이랑 놀았다.", "토큰 푸터 제외");
     }
 
     #[test]
