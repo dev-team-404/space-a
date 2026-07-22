@@ -4,8 +4,6 @@ use crate::finding::Finding;
 use crate::hosts::enumerate_hosts;
 use crate::inventory::{collect_host_inventory, scan_plugin_inventory};
 use crate::rules::r7_opus_trivial::R7OpusTrivial;
-use crate::rules::r10_automation_burst::R10AutomationBurst;
-use crate::rules::r11_permission_friction::R11PermissionFriction;
 use crate::rules::RuleEngine;
 use crate::store::{ingest_file, SqliteStore};
 use anyhow::Result;
@@ -162,14 +160,16 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     store.delete_findings_by_rule_and_scope("R2", "host")?;
     store.delete_findings_by_rule_and_scope("R9", "session")?;
     store.delete_findings_by_rule_and_scope("R12", "project")?;
+    // 코칭 가치 재설계: R10(관찰 카드)·R11(권한 마찰) 은퇴 — 코드·테스트는 보존.
+    store.delete_findings_by_rule_and_scope("R10", "project")?;
+    store.delete_findings_by_rule_and_scope("R11", "project")?;
     let engine = RuleEngine::new(vec![
         // R6(반복 지시 → 스킬/커맨드화)은 v3 은퇴 대상 아님 — 킥오프 차별점 신규 등록
         Box::new(crate::rules::r6_repeated_prompts::R6RepeatedPrompts::default()),
         Box::new(R7OpusTrivial::default()),
         // R8(MCP 대형 결과) — result_len 수집 승격, 2026-07-19
         Box::new(crate::rules::r8_mcp_large_result::R8McpLargeResult::default()),
-        Box::new(R10AutomationBurst::default()),
-        Box::new(R11PermissionFriction::default()),
+        // R10·R11 은퇴 (코칭 가치 재설계) — detect_bursts는 R7 후보 제외에 계속 사용
     ]);
     let findings = engine.run(store)?;
     let now = chrono::Utc::now().to_rfc3339();
@@ -340,10 +340,16 @@ mod tests {
         store.upsert_finding(&mk("R2", "host", "R2|W|superpowers@mp"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R9", "session", "R9|s9"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R12", "project", "R12|W|proj"), "2026-07-06T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R10", "project", "R10|W|proj"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R11", "project", "R11|W|proj"), "2026-07-06T00:00:00Z").unwrap();
 
         run_rules(&store).unwrap();
-        assert_eq!(store.count_findings().unwrap(), 1, "R11만 생존해야 함");
+        // 은퇴 룰(R10·R11 포함)·구폐기분 전부 purge. R7 세션 후보는 이 테스트에 시드 안 함.
+        for key in ["R10|W|proj", "R11|W|proj"] {
+            let n: i64 = store.conn.query_row(
+                "SELECT COUNT(*) FROM findings WHERE dedup_key=?1", [key], |r| r.get(0)).unwrap();
+            assert_eq!(n, 0, "{key} purge되어야");
+        }
     }
 
     #[test]
