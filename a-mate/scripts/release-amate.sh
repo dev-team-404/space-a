@@ -14,7 +14,8 @@ WIN_BUILD_WSL=/mnt/c/Users/salt.jeong/amate-build/a-mate
 WIN_BUILD_WIN='C:\Users\salt.jeong\amate-build\a-mate'
 RELEASE_REPO="dev-team-404/a-mate-releases"
 KEY_FILE="$HOME/.tauri/a-mate-updater.key"
-KEY_PW="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"   # 키에 암호를 걸었으면 env로 주입
+# 암호는 저장소 밖(~/.tauri/a-mate-updater.pass)에 보관. env로도 덮어쓸 수 있음.
+KEY_PW="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-$(cat "$HOME/.tauri/a-mate-updater.pass" 2>/dev/null || echo '')}"
 
 CONF="$REPO/a-mate/src-tauri/tauri.conf.json"
 CARGO="$REPO/a-mate/src-tauri/Cargo.toml"
