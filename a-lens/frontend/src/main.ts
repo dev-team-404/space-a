@@ -113,7 +113,7 @@ function typeLines(lines: { label: string; value: string }[]) {
 
   let li = 0
   let ci = 0
-  const SPEED = 38 // ms/글자
+  const SPEED = 14 // ms/글자 (타이핑 속도 — 낮을수록 빠름)
   const step = () => {
     if (li >= lines.length) {
       caret.remove()
