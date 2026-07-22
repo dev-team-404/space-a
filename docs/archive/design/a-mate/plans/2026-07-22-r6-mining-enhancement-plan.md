@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-23
+---
+
 # A — R6 채굴 강화 (워크플로 레버리지) 구현 계획
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
