@@ -503,7 +503,7 @@ mod chatter_tests {
     }
 
     fn work(is_weekend: bool, active_hours: f64, long_work: bool) -> crate::diary::WorkContext {
-        crate::diary::WorkContext { is_weekend, active_hours, long_work }
+        crate::diary::WorkContext { is_weekend, is_holiday: false, active_hours, long_work }
     }
 
     #[test]

@@ -158,6 +158,16 @@ pub(crate) fn valid_content_status(s: &str) -> bool {
     matches!(s, "new" | "shown" | "dismissed")
 }
 
+/// occasionBubble("오늘 …이래요! 🎉")은 축하 톤이라 추모일(mood=solemn, 예: 현충일)엔 부적절 →
+/// 통지 라벨에서 제외한다. (다이어리는 mood로 톤을 맞추므로 별개 경로.)
+fn notifiable_labels(occasions: Vec<agent_mentor::diary::occasions::Occasion>) -> Vec<String> {
+    occasions
+        .into_iter()
+        .filter(|o| o.mood.as_deref() != Some("solemn"))
+        .map(|o| o.label)
+        .collect()
+}
+
 /// 오늘 occasions — 하루 1회 게이트 포함. 반환하는 순간 통지된 것으로 마킹한다
 /// (호출자는 mascot 웹뷰 = 표시 주체). 이미 통지됐으면 빈 벡터.
 pub fn today_occasions_inner(store: &SqliteStore) -> anyhow::Result<Vec<String>> {
@@ -173,8 +183,7 @@ pub fn today_occasions_inner(store: &SqliteStore) -> anyhow::Result<Vec<String>>
         agent_mentor::diary::local_date_of(&ts)
     });
     let locale = resolve_locale(&DiaryConfig::default());
-    let labels: Vec<String> = compute_occasions(date, anchor, &locale, true)
-        .into_iter().map(|o| o.label).collect();
+    let labels = notifiable_labels(compute_occasions(date, anchor, &locale, true));
     if !labels.is_empty() {
         store.set_setting("occasion_notified_date", &today)?;
     }
@@ -1248,6 +1257,21 @@ mod tests {
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
         store.set_setting("occasion_notified_date", &today).unwrap();
         assert!(today_occasions_inner(&store).unwrap().is_empty());
+    }
+
+    #[test]
+    fn notifiable_labels_drops_solemn_occasions() {
+        use agent_mentor::diary::occasions::Occasion;
+        // 현충일(solemn)은 축하 톤 버블에 부적절 → 제외. 나머지는 유지.
+        let occ = vec![
+            Occasion { category: "holiday".into(), label: "현충일".into(), mood: Some("solemn".into()) },
+            Occasion { category: "holiday".into(), label: "제헌절".into(), mood: Some("national".into()) },
+            Occasion { category: "milestone".into(), label: "함께한 지 100일".into(), mood: None },
+        ];
+        let labels = notifiable_labels(occ);
+        assert!(!labels.contains(&"현충일".to_string()), "추모일 제외");
+        assert!(labels.contains(&"제헌절".to_string()));
+        assert!(labels.contains(&"함께한 지 100일".to_string()));
     }
 
     #[test]
