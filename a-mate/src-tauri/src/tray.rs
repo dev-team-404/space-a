@@ -56,10 +56,11 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .build()?;
     let scan = MenuItem::with_id(app, "scan", "지금 스캔", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "설정", true, None::<&str>)?;
+    let check_update = MenuItem::with_id(app, "check_update", "업데이트 확인", true, None::<&str>)?;
     let auto_on = app.autolaunch().is_enabled().unwrap_or(false);
     let autostart = CheckMenuItem::with_id(app, "autostart", "시작 시 실행", true, auto_on, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &mascot, &reset_mascot, &realtime, &protect, &chatter_menu, &scan, &settings, &autostart, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &mascot, &reset_mascot, &realtime, &protect, &chatter_menu, &scan, &settings, &check_update, &autostart, &quit])?;
 
     let autostart_item = autostart.clone();
     let mascot_item = mascot.clone();
@@ -158,6 +159,11 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 let _ = app.state::<AppState>().scan_tx.send(PipelineMsg::RunNow);
             }
             "settings" => show_settings(app),
+            "check_update" => {
+                use tauri::Emitter;
+                show_chat(app);
+                let _ = app.emit("update:check", ());
+            }
             "autostart" => {
                 let al = app.autolaunch();
                 let cur = al.is_enabled().unwrap_or(false);
