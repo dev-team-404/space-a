@@ -1,8 +1,9 @@
 ---
 title: 미니홈피 테마 시스템 (테마 모드 × 색상 세트) 설계
-status: draft
+status: done
 date: 2026-07-21
 component: a-mate
+archived: 2026-07-22
 ---
 
 # 미니홈피 테마 시스템 설계

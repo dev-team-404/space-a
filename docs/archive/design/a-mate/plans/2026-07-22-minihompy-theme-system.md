@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-22
+---
+
 # 미니홈피 테마 시스템 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -8,7 +13,7 @@
 
 **Tech Stack:** Svelte 5 (runes) + Vite + TypeScript (Vitest), Tauri v2 + Rust (cargo test), CSS custom properties. Windows 전용 — 빌드/테스트는 네이티브 PowerShell.
 
-**설계 스펙:** `docs/design/a-mate/specs/2026-07-21-minihompy-theme-system-design.md` (팔레트 값·토큰 계약·범위의 근거)
+**설계 스펙:** `docs/archive/design/a-mate/specs/2026-07-21-minihompy-theme-system-design.md` (팔레트 값·토큰 계약·범위의 근거)
 
 ## Global Constraints
 
@@ -131,7 +136,7 @@ export function getTheme(): ThemeSettings { return { ...current }; }
 ```css
 /* SPACE A 미니홈피 테마 — 테마 모드(light/dark) × 색상 세트(스킨).
    색·radius·그림자는 반드시 여기서만. 컴포넌트는 시맨틱 토큰만 참조하고,
-   배경 토큰을 쓰면 짝 글자 토큰을 함께 지정한다. (설계: specs/2026-07-21-minihompy-theme-system-design.md) */
+   배경 토큰을 쓰면 짝 글자 토큰을 함께 지정한다. (설계: docs/archive/design/a-mate/specs/2026-07-21-minihompy-theme-system-design.md) */
 
 /* 모드/스킨 무관 상수 */
 :root { --radius-s: 8px; --radius-m: 12px; --radius-l: 16px; }

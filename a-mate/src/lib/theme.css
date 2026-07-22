@@ -1,6 +1,6 @@
 /* SPACE A 미니홈피 테마 — 테마 모드(light/dark) × 색상 세트(스킨).
    색·radius·그림자는 반드시 여기서만. 컴포넌트는 시맨틱 토큰만 참조하고,
-   배경 토큰을 쓰면 짝 글자 토큰을 함께 지정한다. (설계: specs/2026-07-21-minihompy-theme-system-design.md) */
+   배경 토큰을 쓰면 짝 글자 토큰을 함께 지정한다. (설계: docs/archive/design/a-mate/specs/2026-07-21-minihompy-theme-system-design.md) */
 
 /* 모드/스킨 무관 상수 */
 :root { --radius-s: 8px; --radius-m: 12px; --radius-l: 16px; }
