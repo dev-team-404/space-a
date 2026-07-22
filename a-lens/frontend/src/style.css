@@ -525,6 +525,23 @@ button { font: inherit; cursor: pointer; }
 }
 .issue-row .doc-summary { margin-top: 4px; }
 
+/* 카드(문서함·책장)에선 제목·요약을 짧게 클램프 — 전문은 클릭 시 모달에서 */
+.doc-item { cursor: pointer; }
+.doc-item b {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.doc-item .doc-summary {
+  -webkit-line-clamp: 2;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 /* 이슈 행 클릭 → 상세 모달 */
 .issue-row { cursor: pointer; }
 .issue-detail-badges { display: flex; gap: 6px; margin-bottom: 10px; }

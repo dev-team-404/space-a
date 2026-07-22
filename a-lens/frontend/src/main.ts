@@ -10,6 +10,7 @@ import {
   fetchSpace,
   saveSettings,
   testConnections,
+  type KnowledgeDoc,
   type LobbyFloor,
   type SpaceAgent,
   type SpaceIssue,
@@ -560,6 +561,20 @@ function issueModalHTML(i: SpaceIssue): string {
     </div>`
 }
 
+// 지식 문서 클릭 시 모달 — 분류·요약(전문)을 머리에 두고 그 아래 원문 전체를 렌더한다.
+// (카드에선 제목·요약을 짧게 클램프하고, 여기서 전문을 보여준다.)
+function docModalHTML(d: KnowledgeDoc): string {
+  const vis = d.visibility === 'org' ? '조직 공개' : '방 전용'
+  return `
+    <div class="doc-detail">
+      <div class="issue-detail-badges">${catBadge(d.category)}<span class="badge">${vis}</span></div>
+      <div class="muted small">👤 ${esc(d.author_agent || '작성자 미상')}</div>
+      ${d.summary ? `<p class="doc-summary">${esc(d.summary)}</p>` : ''}
+      <h4 class="issue-detail-h">원문</h4>
+      <div class="doc-body md">${mdHTML(d.body)}</div>
+    </div>`
+}
+
 function hubIssuesHTML(data: SpaceView): string {
   const issues = [...data.issues].sort(byRecent)
 
@@ -778,7 +793,7 @@ function renderHub(data: SpaceView) {
   hubBody.querySelectorAll<HTMLElement>('.doc-item').forEach((el) => {
     el.addEventListener('click', () => {
       const doc = data.knowledge[Number(el.dataset.doc)]
-      if (doc) showModal(doc.title, `<div class="doc-body md">${mdHTML(doc.body)}</div>`)
+      if (doc) showModal(doc.title, docModalHTML(doc))
     })
   })
   // 이슈 흐름의 행 클릭 → 이슈 상세 모달 (분류·요약·타임라인)
