@@ -16,6 +16,9 @@ C2 계약과 어긋나면 계약 파일이 정답이다.
   항상 주고, 서사 필드(`highlight`, `status_line`, `chain[].label`, `summary`)는 완성문으로
   얹어준다. **MVP는 서버 제공 서사를 그대로 렌더**한다 — 서사 생성 주체(열린 질문 Q1)가
   결정되기 전까지의 기본값이며, 결정이 바뀌면 이 문서의 "서사" 행들만 재지정하면 된다.
+  → **Q1 확정 (2026-07-22): 뷰 서버(a-lens)에서 `분류→요약→서사`를 LLM으로 번역**한다.
+  서사 행의 재지정과 신규 `knowledge[].category`(분류 배지) 매핑은
+  [05-narrative-summarization.md §3–4](05-narrative-summarization.md#3-분류-categorize)가 정본이다.
 - **추정치는 반드시 `~` 라벨.** `est_saved_*`, `tokens_saved_est`는 계약상 측정값처럼
   표시하는 것이 금지돼 있다.
 
