@@ -1391,6 +1391,18 @@ impl SqliteStore {
         Ok(out)
     }
 
+    /// 한 세션의 사용자 프롬프트(최신순 상한). prompt_events는 이미 sidechain·meta·도구결과 제외.
+    pub fn session_user_prompts(&self, session_id: &str, limit: usize) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT preview FROM prompt_events WHERE session_id=?1
+             ORDER BY id DESC LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![session_id, limit as i64], |r| r.get::<_, String>(0))?;
+        let mut out: Vec<String> = rows.collect::<std::result::Result<_, _>>()?;
+        out.retain(|p| !p.trim().is_empty());
+        Ok(out)
+    }
+
     /// R6 스킬 초안용 — 특정 host에서 정규화 지시(norm60)가 일치하는 (session_id, preview) 전량.
     /// 세션·원문 중복 제거는 호출부(skill_draft)가 수행한다.
     pub fn prompt_sessions_for_norm(&self, host: &str, norm60: &str) -> Result<Vec<(String, String)>> {
@@ -2741,6 +2753,25 @@ mod tests {
             "SELECT first_prompt_preview FROM sessions WHERE session_id='s1'",
             [], |r| r.get(0)).unwrap();
         assert_eq!(first.as_deref(), Some("매일 아침 판매 리포트 뽑아줘"));
+    }
+
+    #[test]
+    fn session_user_prompts_returns_full_text_main_chain() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 실질 프롬프트 2개 (deref는 source_file+offset 필요 없이 preview로 폴백 확인)
+        store.upsert_events(&[
+            NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(), host: "Windows".into(),
+                project_id: "p".into(), session_id: "s1".into(), uuid: Some("u1".into()), parent_uuid: None,
+                is_sidechain: false, ts: Some("2026-07-06T10:00:00Z".into()),
+                source_file: "s.jsonl".into(), source_offset: 0, msg_id: None,
+                kind: EventKind::UserPrompt { preview: "이 파일 이름만 바꿔줘".into() },
+            },
+        ]).unwrap();
+        let ps = store.session_user_prompts("s1", 5).unwrap();
+        assert_eq!(ps.len(), 1);
+        assert!(ps[0].contains("이름만 바꿔줘"));
     }
 
     #[test]
