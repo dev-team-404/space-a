@@ -410,6 +410,8 @@ pub fn run() {
                 commands::life_add_guestbook,
                 commands::life_delete_guestbook,
                 commands::life_set_bubble,
+                commands::life_sync_mascot_image,
+                commands::life_mascot_image,
                 commands::robot_spec_for_seed,
                 commands::mascot_set_expanded,
                 commands::open_settings_window,

@@ -188,6 +188,25 @@ impl LifeClient {
             .send_json(json!({"body": body})).map_err(err_of)?.into_json().map_err(Into::into)
     }
 
+    pub fn upload_mascot_image(&self, png: &[u8]) -> Result<Value> {
+        self.req("PUT", "/life/me/mascot-image")
+            .set("Content-Type", "image/png")
+            .send_bytes(png).map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
+    pub fn mascot_image(&self, agent_id: &str) -> Result<Option<Vec<u8>>> {
+        use std::io::Read as _;
+        match self.req("GET", &format!("/life/agents/{agent_id}/mascot-image")).call() {
+            Ok(response) => {
+                let mut bytes = Vec::new();
+                response.into_reader().read_to_end(&mut bytes)?;
+                Ok(Some(bytes))
+            }
+            Err(ureq::Error::Status(404, _)) => Ok(None),
+            Err(error) => Err(err_of(error)),
+        }
+    }
+
     pub fn disconnect(&self) -> Result<Value> {
         self.req("POST", "/life/me/disconnect").send_json(json!({})).map_err(err_of)?.into_json().map_err(Into::into)
     }

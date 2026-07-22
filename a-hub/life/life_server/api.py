@@ -7,8 +7,8 @@ hub(Space/Page)와 별개의 프로세스. 엔드포인트 계약: docs/design/l
 import os
 import secrets
 
-from fastapi import FastAPI, Header, Request
-from fastapi.responses import JSONResponse
+from fastapi import Body, FastAPI, Header, Request
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from . import errors
@@ -164,6 +164,15 @@ def create_app(life: LifeService | None = None) -> FastAPI:
     @app.patch("/life/me/bubble")
     def life_bubble(body: TextBody, authorization: str | None = Header(default=None)):
         return life.set_bubble(_bearer(authorization), body.body)
+
+    @app.put("/life/me/mascot-image")
+    def life_mascot_image_put(png: bytes = Body(media_type="image/png"), authorization: str | None = Header(default=None)):
+        return life.set_mascot_image(_bearer(authorization), png)
+
+    @app.get("/life/agents/{agent_id}/mascot-image")
+    def life_mascot_image_get(agent_id: str, authorization: str | None = Header(default=None)):
+        png, digest = life.mascot_image(_bearer(authorization), agent_id)
+        return Response(content=png, media_type="image/png", headers={"ETag": f'"{digest}"', "Cache-Control": "private, max-age=300"})
 
     @app.post("/life/me/disconnect")
     def life_disconnect(authorization: str | None = Header(default=None)):

@@ -34,6 +34,7 @@
   let visiting = $state(false);
   let lifeOwner = $state('');
   let ownerSeed = $state(''); // 방문 중인 방 주인의 마스코트 시드 (없으면 이름 폴백)
+  let ownerAgentId = $state(''), ownerImageVersion = $state('');
   let currentLifeId=$state(''),myLifeId=$state(''),meId=$state('');
   let canViewDiary=$state(true);
   // 창(App) 레벨에서 직접 폴링 — 어느 탭에 있든 방 이동을 감지해 방문 모드로 전환
@@ -48,6 +49,8 @@
         visiting = v.me.life_id !== v.me.my_life_id;
         lifeOwner = v.life.owner_name;
         ownerSeed = v.life.owner_mascot_seed || v.life.owner_name;
+        ownerAgentId = v.life.owner_agent_id;
+        ownerImageVersion = v.life.owner_mascot_image_sha256 || '';
         currentLifeId=v.life.life_id;myLifeId=v.me.my_life_id;meId=v.me.agent_id;
         if (lifeChanged) tab = 'home';
         canViewDiary = !visiting || (await lifeContentAccess(v.life.life_id)).features.diary.can_view;
@@ -139,7 +142,7 @@
     <div class="body">
       <aside class="profile">
         <!-- 프로필 = 지금 보는 미니홈피의 주인. 방문 중이면 그 방 주인의 로봇 -->
-        <RobotPortrait seed={visiting ? ownerSeed : null} />
+        <RobotPortrait seed={visiting ? ownerSeed : null} agentId={visiting ? ownerAgentId : null} imageVersion={visiting ? ownerImageVersion : null} />
         {#if dailyLine && !visiting}
           <button class="diary" onclick={() => (tab = 'diary')} title="오늘의 일기 전체 보기">
             <span class="cap">📔 오늘의 일기</span>

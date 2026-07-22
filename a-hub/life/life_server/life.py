@@ -10,6 +10,7 @@
 """
 
 import secrets
+import hashlib
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -104,9 +105,11 @@ class LifeService:
         self._content_visibility: dict[tuple[str, str], str] = {}
         self._diaries: dict[tuple[str, str], dict] = {}
         self._guestbook: list[dict] = []
+        self._mascot_image_hashes: dict[str, str] = {}
         if store is not None:
             self._life, self._agents, self._tokens = store.load()
             self._friends, self._content_visibility, self._diaries, self._guestbook = store.load_social()
+            self._mascot_image_hashes = store.load_mascot_image_hashes()
             # protocol v2에서는 창문 회전이 자유값이었다. v3부터 벽이 방향의 단일 원천이다.
             for life in self._life.values():
                 changed = False
@@ -193,9 +196,11 @@ class LifeService:
             owner = self._agents.get(life.owner_agent_id)
             return {
                 "life_id": life.id,
+                "owner_agent_id": life.owner_agent_id,
                 "owner_name": life.owner_name,
                 # 주인이 다른 방에 가 있어도 방문자가 주인의 로봇(미니홈피 프로필)을 그릴 수 있게
                 "owner_mascot_seed": owner.mascot_seed if owner else "",
+                "owner_mascot_image_sha256": self._mascot_image_hashes.get(life.owner_agent_id),
                 "grid": {"w": GRID_W, "h": GRID_H},
                 "design": {
                     "wallpaper": life.design.wallpaper,
@@ -220,6 +225,7 @@ class LifeService:
                         "cell": list(a.cell),
                         "is_owner": a.agent_id == life.owner_agent_id,
                         "mascot_seed": a.mascot_seed,
+                        "mascot_image_sha256": self._mascot_image_hashes.get(a.agent_id),
                         "bubble": a.bubble,
                     }
                     for a in self._agents.values()
@@ -297,6 +303,32 @@ class LifeService:
                 "visibility": visibility,
                 "can_view": self._can_view_locked(life.owner_agent_id, viewer.agent_id, visibility),
             }}}
+
+    def set_mascot_image(self, token: str | None, png: bytes) -> dict:
+        me = self._authed(token)
+        if not png.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise errors.InvalidRequest("mascot image must be a PNG")
+        if len(png) > 5 * 1024 * 1024:
+            raise errors.InvalidRequest("mascot image exceeds 5 MiB")
+        digest = hashlib.sha256(png).hexdigest()
+        with self._lock:
+            if not self._store:
+                raise errors.InvalidRequest("mascot image storage is unavailable")
+            current = self._store.mascot_image(me.agent_id)
+            if current is None or current[1] != digest:
+                self._store.save_mascot_image(me.agent_id, png, digest, datetime.now(timezone.utc).isoformat())
+                self._mascot_image_hashes[me.agent_id] = digest
+        return {"sha256": digest, "size": len(png)}
+
+    def mascot_image(self, token: str | None, agent_id: str) -> tuple[bytes, str]:
+        self._authed(token)
+        with self._lock:
+            if agent_id not in self._agents:
+                raise errors.NotFound(f"agent '{agent_id}' not found")
+            row = self._store.mascot_image(agent_id) if self._store else None
+            if row is None:
+                raise errors.NotFound("mascot image not found")
+            return row
 
     def share_diary(self, token: str | None, date: str, body: str, visibility: str) -> dict:
         me = self._authed(token)
