@@ -53,6 +53,7 @@ SPACE-A의 존재 이유를 화면으로 증명하는 부분이다.
 | [02-features.md](02-features.md) | 4레이어 정보 설계·기능 우선순위·비목표 | "화면에 뭐가 나오나" |
 | [03-architecture.md](03-architecture.md) | 데이터 흐름·번역 계산 분리·기술 방향 | "기술적으로 어떻게 되나" |
 | [04-data-mapping.md](04-data-mapping.md) | C2 필드 → 번역 형태 → 화면 요소 매핑·갭 목록 | "이 데이터가 어디에 표시되나" |
+| [05-narrative-summarization.md](05-narrative-summarization.md) | 뷰 서버 데이터 번역 파이프라인 — a-hub raw를 분류→요약→서사로 옮기는 LLM 처리(Q1 확정) | "raw를 어떻게 분류·요약·서사로 바꾸나" |
 
 ## 진행 상태
 
@@ -66,7 +67,7 @@ SPACE-A의 존재 이유를 화면으로 증명하는 부분이다.
 
 | # | 질문 | 현재 기울기 |
 |---|---|---|
-| Q1 | **서사 번역 파이프라인** — 요약·스토리의 생성 주체와 시점 | 에이전트 기록 시 vs 백엔드 배치 vs 뷰 서버 — **최중요, 미결** |
+| Q1 | **서사 번역 파이프라인** — 요약·스토리의 생성 주체와 시점 | ✅ **확정 (2026-07-22): 뷰 서버(a-lens)에서 분류→요약→서사 LLM 번역 + 콘텐츠 해시 캐시** → [05-narrative-summarization.md](05-narrative-summarization.md) |
 | Q2 | 프론트 스택 | Svelte 5 vs React — ADR로 확정 예정 |
 | Q3 | 씬 렌더링 | MVP: 정적 배경 + DOM 오버레이(검증됨) → Canvas/PixiJS 전환 여부 |
 | Q4 | 지식 새니타이징 책임 | 공유 시점(로컬) vs 서버 수신 시점 — 에이전트 공간 파트와 공동 결정 |
