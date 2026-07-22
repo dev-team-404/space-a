@@ -151,8 +151,6 @@ pub fn run_inventory(store: &mut SqliteStore) -> Result<Vec<String>> {
 }
 
 pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
-    // 코칭 v2 이행: 세션 스코프 R7은 폐기 — 프로젝트 집계(R7 v2)가 대체 (스펙 §3)
-    store.delete_findings_by_rule_and_scope("R7", "session")?;
     // R5(반복 읽기) 발화 보류(2026-07-10 사용자 판정): 반복 Read는 에이전트 동작이라
     // 사용자가 행동할 레버가 없음 — 등록 해제·전 스코프 카드 정리, 룰 코드·테스트는 보존.
     store.delete_findings_by_rule_and_scope("R5", "session")?;
@@ -333,8 +331,8 @@ mod tests {
             evidence: serde_json::json!({}), est_tokens_saved: 0,
             prescription: None, dedup_key: key.into(),
         };
-        // v2 폐기분(R7 session·R5 전 스코프) + v3 은퇴분(R1·R2·R9·R12) + 생존 R11
-        store.upsert_finding(&mk("R7", "session", "R7|s1"), "2026-07-06T00:00:00Z").unwrap();
+        // v2 폐기분(R5 전 스코프) + v3 은퇴분(R1·R2·R9·R12) + 생존 R11
+        // (R7 session은 더 이상 run_rules가 사전 정리하지 않음 — 판정 캐시 보존, 아래 별도 테스트)
         store.upsert_finding(&mk("R5", "session", "R5|s1|a.md"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R5", "project", "R5|W|proj|cross_session_claude_md"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R1", "host", "R1|W|ctx"), "2026-07-06T00:00:00Z").unwrap();
@@ -346,6 +344,28 @@ mod tests {
 
         run_rules(&store).unwrap();
         assert_eq!(store.count_findings().unwrap(), 1, "R11만 생존해야 함");
+    }
+
+    #[test]
+    fn run_rules_preserves_judged_r7_session_findings() {
+        use crate::finding::{Finding, Severity};
+        let store = SqliteStore::open_in_memory().unwrap();
+        let f = Finding {
+            rule_id: "R7".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: Some("p".into()),
+            scope_kind: "session".into(), scope_ref: "s1".into(),
+            evidence: serde_json::json!({}), est_tokens_saved: 0,
+            prescription: None, dedup_key: "R7|sess|Windows|s1".into(),
+        };
+        store.upsert_finding(&f, "2026-07-06T00:00:00Z").unwrap();
+        store.set_judgment("R7|sess|Windows|s1", Some("confirmed"), &serde_json::json!({"attempts": 1})).unwrap();
+
+        run_rules(&store).unwrap(); // 이벤트 없음 → R7 evaluate가 새 후보를 만들지 않음
+
+        assert!(
+            store.find_finding("R7|sess|Windows|s1").unwrap().is_some(),
+            "판정 캐시가 있는 R7 세션 후보를 run_rules가 지우면 안 됨"
+        );
     }
 
     #[test]
