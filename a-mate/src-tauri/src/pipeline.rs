@@ -301,8 +301,10 @@ mod runtime {
                 let idle = IdleContext {
                     date: date.clone(),
                     is_weekend: brief.work_context.is_weekend,
+                    is_holiday: brief.work_context.is_holiday,
                     days_idle,
                     occasions: brief.occasions.clone(),
+                    recent_diaries: brief.recent_diaries.clone(),
                 };
                 match render_idle_diary(&engine, &idle, &cfg) {
                     Ok(r) => r,

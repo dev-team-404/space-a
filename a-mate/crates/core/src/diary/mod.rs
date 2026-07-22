@@ -958,8 +958,10 @@ pub fn render_diary(engine: &dyn Engine, brief: &Brief, cfg: &DiaryConfig) -> Re
 pub struct IdleContext {
     pub date: String,
     pub is_weekend: bool,
+    pub is_holiday: bool,
     pub days_idle: Option<i64>, // 마지막 활동일로부터 며칠째 조용한지(모르면 None)
     pub occasions: Vec<Occasion>,
+    pub recent_diaries: Vec<RecentDiary>, // 최근 같은 성격 일기 — 반복 방지
 }
 
 /// 무활동일 일기 시스템 프롬프트 — 작업 사실 없이 마스코트의 자유 시간을 능청스러운 상상 일기로.
@@ -1638,12 +1640,28 @@ mod tests {
         use crate::diary::engine::MockEngine;
         let cfg = DiaryConfig::default();
         let idle = IdleContext {
-            date: "2026-07-11".into(), is_weekend: true, days_idle: Some(2), occasions: vec![],
+            date: "2026-07-11".into(), is_weekend: true, is_holiday: false, days_idle: Some(2),
+            occasions: vec![], recent_diaries: vec![],
         };
         let engine = MockEngine { canned: "옆 동네 봇이랑 놀았다.".into() };
         let r = render_idle_diary(&engine, &idle, &cfg).unwrap();
         assert!(r.body.contains("옆 동네 봇이랑 놀았다."));
         assert!(r.body.contains("토큰"), "footer meters tokens");
+    }
+
+    #[test]
+    fn idle_context_carries_holiday_and_recent() {
+        let idle = IdleContext {
+            date: "2026-07-17".into(),
+            is_weekend: false,
+            is_holiday: true,
+            days_idle: Some(1),
+            occasions: vec![],
+            recent_diaries: vec![],
+        };
+        let json = serde_json::to_string(&idle).unwrap();
+        assert!(json.contains("\"is_holiday\":true"));
+        assert!(json.contains("recent_diaries"));
     }
 
     #[test]
