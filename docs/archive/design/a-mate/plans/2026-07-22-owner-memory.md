@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-22
+---
+
 # 주인 메모리(Owner Memory) 구현 계획
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -17,7 +22,7 @@
 - **프론트엔드는 렌더링만**, 무거운 로직은 `crates/core`.
 - **결정론 조립 유지**: 프롬프트 주입에 추가 LLM 호출/랭킹을 넣지 않는다.
 
-**Spec:** `docs/design/a-mate/specs/2026-07-22-owner-memory-design.md`
+**Spec:** `docs/archive/design/a-mate/specs/2026-07-22-owner-memory-design.md`
 
 ---
 

@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-22
+---
+
 # a-mate 주인 메모리(Owner Memory) 설계
 
 - **날짜**: 2026-07-22
