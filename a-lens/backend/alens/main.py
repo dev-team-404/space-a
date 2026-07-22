@@ -9,7 +9,7 @@ import httpx
 from fastapi import Body, FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from . import collector, pipeline, settings
+from . import collector, pipeline, settings, store
 
 _A_LENS = Path(__file__).resolve().parents[2]
 _FRONT_DIST = _A_LENS / "frontend" / "dist"
@@ -44,8 +44,14 @@ def create_app() -> FastAPI:
             for k, v in (payload or {}).items()
             if not (k in settings.SECRET_KEYS and (v is None or v == ""))
         }
+        before_style = settings.get().get("summary_style")
         cfg = settings.update(clean)
-        collector.clear_cache()  # 새 URL/토큰/원천을 다음 요청부터 즉시 반영
+        # 요약 길이(summary_style)가 바뀌면 기존 번역 캐시를 비워 새 스타일로 전체 재번역
+        if cfg.get("summary_style") != before_style:
+            st = store.get_store()
+            if st is not None:
+                st.clear_translations()
+        collector.clear_cache()  # 새 URL/토큰/원천/스타일을 다음 요청부터 즉시 반영
         return settings.public(cfg)
 
     @app.post("/api/settings/test")

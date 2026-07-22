@@ -37,6 +37,13 @@ _SYSTEM = (
     "반드시 지정한 JSON 형식만 출력한다."
 )
 
+# 요약 길이 프리셋 — settings.summary_style로 선택. 프롬프트의 summary 지시문에 끼워 넣는다.
+_STYLE = {
+    "brief": "핵심만 한 문장으로, 40자 이내로 아주 간결하게",
+    "normal": "2~3문장으로",
+    "detailed": "3~5문장으로 배경까지 포함해",
+}
+
 
 def _rule(title: str, body: str, kind: str) -> dict:
     """LLM 없거나 실패 시 규칙 폴백 — 분류는 종류·키워드, 요약은 앞 120자."""
@@ -72,12 +79,13 @@ def _llm(cfg: dict, title: str, body: str, kind: str) -> dict:
     headers = {"Content-Type": "application/json"}
     if cfg.get("llm_key"):
         headers["Authorization"] = f"Bearer {cfg['llm_key']}"
+    style = _STYLE.get(cfg.get("summary_style", "brief"), _STYLE["brief"])
     user = (
         f"제목: {title}\n종류: {kind}\n본문:\n{(body or '')[:4000]}\n\n"
-        "위 문서를 번역해 아래 JSON만 출력해라.\n"
+        "위 문서를 번역해 아래 JSON만 출력해라. 요약·서사는 사실 위주로 미사여구 없이 담백하게 쓴다.\n"
         f'{{"category": <{"|".join(CATEGORIES)} 중 하나>, '
-        '"summary": "팀 관전용 2~3문장 한국어 요약", '
-        '"narrative": "누가 무엇을 했는지 한 줄 서사"}'
+        f'"summary": "{style} 쓴 한국어 요약", '
+        '"narrative": "누가 무엇을 했는지 한 줄로"}'
     )
     payload = {
         "model": cfg["llm_model"],

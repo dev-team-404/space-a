@@ -36,6 +36,8 @@ def _defaults() -> dict:
         "llm_url": e("A_LENS_LLM_URL", "http://172.26.80.1:1234/v1"),
         "llm_model": e("A_LENS_LLM_MODEL", "qwen/qwen3/qwen3-30b-a3b-instruct-2507-q4_k_m.gguf"),
         "llm_key": e("A_LENS_LLM_KEY", ""),
+        # 요약 길이: brief(한 문장·담백) | normal(2~3문장) | detailed(3~5문장). 바꾸면 재번역됨.
+        "summary_style": e("A_LENS_SUMMARY_STYLE", "brief"),
         # 번역 캐시 DB(SQLite). 비우면 캐시 없이 매번 재번역.
         "db_path": e("A_LENS_DB", str(_DEFAULT_DIR / "translation.db")),
     }

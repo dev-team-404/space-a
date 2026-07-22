@@ -202,6 +202,12 @@ async function openSettings() {
       <label class="set-field"><span>모델</span>
         <input id="set-llm_model" type="text" value="${esc(s.llm_model)}" /></label>
       ${secret('set-llm_key', 'LLM Key (로컬이면 비워둠)', s.llm_key_set)}
+      <label class="set-field"><span>요약 길이 <em class="muted">(바꾸면 전체 재번역)</em></span>
+        <select id="set-summary_style">
+          <option value="brief" ${s.summary_style === 'brief' ? 'selected' : ''}>간결 (한 문장)</option>
+          <option value="normal" ${s.summary_style === 'normal' ? 'selected' : ''}>보통 (2~3문장)</option>
+          <option value="detailed" ${s.summary_style === 'detailed' ? 'selected' : ''}>상세 (3~5문장)</option>
+        </select></label>
 
       <h3 class="set-group">고급</h3>
       <label class="set-field"><span>번역 캐시 DB 경로 <em class="muted">(비우면 캐시 끔)</em></span>
@@ -225,6 +231,7 @@ async function openSettings() {
       source: v('#set-source'),
       llm_url: v('#set-llm_url'),
       llm_model: v('#set-llm_model'),
+      summary_style: v('#set-summary_style'),
       db_path: v('#set-db_path'),
       cache_ttl: v('#set-cache_ttl'),
     }

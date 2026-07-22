@@ -104,6 +104,12 @@ class TranslationStore:
                 row,
             )
 
+    def clear_translations(self) -> None:
+        """모든 번역 캐시 삭제 — 요약 스타일 변경 등으로 전체 재번역이 필요할 때."""
+        with self._lock, self._connect() as c:
+            c.execute("DELETE FROM knowledge_translation")
+            c.execute("DELETE FROM issue_translation")
+
     def get_issue(self, issue_id: str) -> dict | None:
         with self._connect() as c:
             r = c.execute(

@@ -119,6 +119,7 @@ export type Settings = {
   llm_url: string
   llm_model: string
   llm_key_set: boolean
+  summary_style: string // brief | normal | detailed
   db_path: string
 }
 
