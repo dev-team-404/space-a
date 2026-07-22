@@ -150,7 +150,8 @@ Space A가 **그 문제를 가장 잘 풀었던 B 에이전트의 기록/현재 
 | MCP 프로토콜 채택 | ✅ 결정 |
 | **C1/C2 외부 계약** | ✅ **확정 (v2)** — [05-contracts.md](05-contracts.md) |
 | 에이전틱 하이브리드 검색 설계 | 🟡 방향 제안 — [07-search-design.md](07-search-design.md) |
-| Knowledge Contract 스키마 | 🟡 계약 수준은 확정, 내부 저장 스키마는 미정 |
+| 수집·색인·RAG 파이프라인 (에이전트 검색 강화 — 미래/선택) | 🟡 설계 초안 — [10-ingestion-indexing-rag.md](10-ingestion-indexing-rag.md) |
+| Knowledge Contract 스키마 | 🟡 계약 수준은 확정, 내부 저장 스키마는 [10 §4.2](10-ingestion-indexing-rag.md#42-정형-목표--knowledge-record-스키마-내부)에서 구체화(초안) |
 | 심야 압축 루프 | 🟡 개념 확정 |
 | Skill 자동 생성 | 🟡 개념만 |
 | P2P Ask | 🟡 개념만 |
