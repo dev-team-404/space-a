@@ -5,7 +5,7 @@ use crate::diary::engine::Engine;
 use crate::diary::occasions::{compute_occasions, Occasion};
 use crate::store::SqliteStore;
 use anyhow::Result;
-use chrono::{Datelike, NaiveDate};
+use chrono::{DateTime, Datelike, FixedOffset, NaiveDate};
 use rusqlite::params;
 use serde::Serialize;
 use std::path::PathBuf;
@@ -38,12 +38,20 @@ pub struct WorkContext {
 const LONG_WORK_HOURS: f64 = 7.0;  // 몰입 시간 기준 — 이 이상이면 "유난히 긴 날"(매일 아님)
 const IDLE_GAP_SECS: f64 = 1800.0; // 30분 이상 공백은 휴식으로 보고 몰입 시간에서 제외
 
-/// 그날 실제로 한 작업 — "열심히 달렸다"가 아니라 무슨 작업이었는지 일기에 담을 재료.
+/// 그날 실제로 한 작업 — 프로젝트별로 묶어 LLM이 경계를 인식하게 한다.
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct WorkLog {
-    pub commits: Vec<String>,   // churn 우선+repo 비례로 고른 커밋 제목(최대 TITLE_CAP)
-    pub commit_count: usize,    // 그날 총 커밋 수(cap 전) — 일기 목표 길이 산정용
-    pub topics: Vec<String>,    // 폴백/보조: 브랜치명·정제된 첫 프롬프트
+    pub projects: Vec<ProjectWork>, // 그날 활동한 프로젝트들, 첫 활동 시각순
+    pub commit_count: usize,        // 그날 총 커밋 수(cap 전) — 일기 목표 길이 산정용
+    pub concurrent: bool,           // 서로 다른 프로젝트 세션의 시간이 실제로 겹쳤나
+}
+
+/// 한 프로젝트의 그날 작업 소재.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct ProjectWork {
+    pub name: String,         // 표시 이름 = cwd basename ("space-a", "agent-meter")
+    pub commits: Vec<String>, // 이 프로젝트 커밋 제목(balance_commits 배분 몫)
+    pub topics: Vec<String>,  // 이 프로젝트 브랜치·정제된 첫 프롬프트(폴백/보조)
 }
 
 const WORK_LOG_TITLE_CAP: usize = 12;   // work_log에 실을 커밋 제목 최대 개수
@@ -532,7 +540,7 @@ fn git_commits_for(host: &str, cwd: &str, date: &str) -> Vec<(String, u64)> {
 /// repo별 그룹(각 (제목, raw churn))을 받아 clamp된 churn으로 floor + 비례 배분하고,
 /// repo 내부는 clamp된 churn 내림차순으로 골라 평평한 제목 리스트(≤ TITLE_CAP)를 반환.
 /// label은 churn 동률 시 결정론적 tiebreak용(host+cwd 등 안정 문자열).
-fn balance_commits(mut groups: Vec<(String, Vec<(String, u64)>)>) -> Vec<String> {
+fn balance_commits(mut groups: Vec<(String, Vec<(String, u64)>)>) -> Vec<(String, Vec<String>)> {
     let n = groups.len();
     if n == 0 {
         return Vec::new();
@@ -600,8 +608,10 @@ fn balance_commits(mut groups: Vec<(String, Vec<(String, u64)>)>) -> Vec<String>
     }
 
     // 채택: order 순으로 repo별 quota만큼 churn 순, 전역 중복 제목은 skip(슬롯 소비 안 함).
+    // 반환은 입력 그룹 순서대로 (label, 선택 제목들); 빈 그룹은 제외.
     let mut seen = std::collections::HashSet::new();
-    let mut selected = Vec::new();
+    let mut out: Vec<(String, Vec<String>)> =
+        groups.iter().map(|(label, _)| (label.clone(), Vec::new())).collect();
     for &i in &order {
         let mut take = quota[i];
         for (subj, _) in &groups[i].1 {
@@ -609,79 +619,177 @@ fn balance_commits(mut groups: Vec<(String, Vec<(String, u64)>)>) -> Vec<String>
                 break;
             }
             if seen.insert(subj.clone()) {
-                selected.push(subj.clone());
+                out[i].1.push(subj.clone());
                 take -= 1;
             }
         }
     }
-    selected
+    out.into_iter().filter(|(_, v)| !v.is_empty()).collect()
 }
 
-/// 그날 실제 한 작업 — 전 host 활동 repo의 git 커밋 제목(우선) + 세션 갈래(브랜치·정제 첫 프롬프트, 폴백/보조).
+/// 그날 실제 한 작업 — 프로젝트별로 묶은 커밋·토픽 + 동시 진행 여부.
+/// 프로젝트 = 정규화 키(hosts::project_identity)로 통합 — 같은 프로젝트의 WSL 직접·
+/// Windows(WSL UNC) 세션은 하나로 묶인다. 커밋·topic 둘 다 없는 프로젝트는 노이즈로 제외.
 fn collect_work_log(store: &SqliteStore, date: &str) -> WorkLog {
-    let rows: Vec<(String, String, Option<String>, Option<String>, Option<String>)> = store
+    use crate::hosts::project_identity;
+    use std::collections::HashMap;
+
+    // 세션 단위 조회(시간 포함 — concurrent 판정·정렬용).
+    let rows: Vec<(
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    )> = store
         .conn
         .prepare(
-            "SELECT DISTINCT host, project_id, cwd, git_branch, first_prompt_preview FROM sessions
-             WHERE date(first_ts,'localtime')=?1",
+            "SELECT host, project_id, cwd, git_branch, first_prompt_preview, first_ts, last_ts
+             FROM sessions WHERE date(first_ts,'localtime')=?1",
         )
         .and_then(|mut s| {
             let r = s.query_map(params![date], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?))
             })?;
             r.collect::<rusqlite::Result<Vec<_>>>()
         })
         .unwrap_or_default();
 
-    // cwd 없는 옛 세션 보완: 같은 (host, project_id)를 cwd와 함께 기록한 다른 세션의 cwd를 재사용.
-    // (옛 세션은 cwd 미수집 + 트랜스크립트도 삭제돼 재스캔 불가 — 프로젝트 매핑으로 repo 위치 복원)
-    let known: std::collections::HashMap<(String, String), String> = store
+    // cwd 없는 옛 세션 보완: 같은 (host, project_id)를 cwd와 함께 기록한 다른 세션의 cwd 재사용.
+    let known: HashMap<(String, String), String> = store
         .conn
         .prepare("SELECT host, project_id, cwd FROM sessions WHERE cwd IS NOT NULL")
         .and_then(|mut s| {
             let r = s.query_map([], |r| {
                 Ok(((r.get::<_, String>(0)?, r.get::<_, String>(1)?), r.get::<_, String>(2)?))
             })?;
-            r.collect::<rusqlite::Result<std::collections::HashMap<_, _>>>()
+            r.collect::<rusqlite::Result<HashMap<_, _>>>()
         })
         .unwrap_or_default();
 
-    // 커밋: 그날 활동한 distinct (host, repo)에서 — host별로 git 실행 방식 분기(Windows/WSL)
-    let mut host_cwds: Vec<(String, String)> = rows
-        .iter()
-        .filter_map(|(h, pid, cwd, _, _)| {
-            cwd.clone()
-                .or_else(|| known.get(&(h.clone(), pid.clone())).cloned())
-                .map(|c| (h.clone(), c))
-        })
-        .collect();
-    host_cwds.sort();
-    host_cwds.dedup();
-    let groups: Vec<(String, Vec<(String, u64)>)> = host_cwds
-        .iter()
-        .map(|(h, c)| (format!("{h}\u{0}{c}"), git_commits_for(h, c, date)))
-        .filter(|(_, v)| !v.is_empty())
-        .collect();
-    let commit_count = groups.iter().map(|(_, v)| v.len()).sum();
-    let commits = balance_commits(groups);
+    struct Accum {
+        name: String,
+        rep: Option<(String, String)>, // 커밋 수집 대표 (host, cwd) — WSL 직접 우선
+        starts: Vec<DateTime<FixedOffset>>,
+        spans: Vec<(DateTime<FixedOffset>, DateTime<FixedOffset>)>,
+        topics: Vec<String>,
+    }
+    let mut projects: HashMap<String, Accum> = HashMap::new();
+    let mut order: Vec<String> = Vec::new(); // key 최초 등장 순(안정 정렬 tiebreak)
 
-    // 토픽: 브랜치(main/master/HEAD 제외) + 정제된 첫 프롬프트 — 여러 갈래면 멀티태스킹 신호
-    let mut topics: Vec<String> = Vec::new();
-    for (_, _, _, br, fp) in &rows {
-        if let Some(b) = br {
-            if !matches!(b.as_str(), "main" | "master" | "HEAD" | "") {
-                topics.push(b.clone());
+    for (host, pid, cwd, branch, prompt, first_ts, last_ts) in &rows {
+        let eff_cwd = cwd.clone().or_else(|| known.get(&(host.clone(), pid.clone())).cloned());
+        let (key, name) = match &eff_cwd {
+            Some(c) => project_identity(host, c),
+            None => (format!("pid:{host}:{pid}"), pid.clone()),
+        };
+        let acc = projects.entry(key.clone()).or_insert_with(|| {
+            order.push(key.clone());
+            Accum {
+                name,
+                rep: None,
+                starts: Vec::new(),
+                spans: Vec::new(),
+                topics: Vec::new(),
+            }
+        });
+        // 커밋 대표: WSL 직접(host=wsl:) 우선(리눅스 git 정확), 없으면 최초 값.
+        if let Some(c) = &eff_cwd {
+            let is_wsl = host.starts_with("wsl:");
+            let replace = match &acc.rep {
+                None => true,
+                Some((h, _)) => is_wsl && !h.starts_with("wsl:"),
+            };
+            if replace {
+                acc.rep = Some((host.clone(), c.clone()));
             }
         }
-        if let Some(p) = fp.as_deref().and_then(clean_prompt) {
-            topics.push(p);
+        // 시간(concurrent·정렬).
+        if let Some(st) = first_ts.as_deref().and_then(|t| DateTime::parse_from_rfc3339(t).ok()) {
+            let en = last_ts
+                .as_deref()
+                .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
+                .filter(|e| *e >= st)
+                .unwrap_or(st);
+            acc.starts.push(st);
+            acc.spans.push((st, en));
+        }
+        // topics: 비-main 브랜치 + 정제된 첫 프롬프트.
+        if let Some(b) = branch {
+            if !matches!(b.as_str(), "main" | "master" | "HEAD" | "") {
+                acc.topics.push(b.clone());
+            }
+        }
+        if let Some(p) = prompt.as_deref().and_then(clean_prompt) {
+            acc.topics.push(p);
         }
     }
-    topics.sort();
-    topics.dedup();
-    topics.truncate(WORK_LOG_TOPIC_CAP);
 
-    WorkLog { commits, commit_count, topics }
+    // 커밋 수집: 프로젝트별 대표 (host, cwd)로 — host별 git 실행 방식 분기(Windows/WSL)는 git_commits_for가 담당.
+    let mut commit_groups: Vec<(String, Vec<(String, u64)>)> = Vec::new();
+    for key in &order {
+        if let Some((h, c)) = &projects[key].rep {
+            let cs = git_commits_for(h, c, date);
+            if !cs.is_empty() {
+                commit_groups.push((key.clone(), cs));
+            }
+        }
+    }
+    let commit_count: usize = commit_groups.iter().map(|(_, v)| v.len()).sum();
+    let mut commits_by_key: HashMap<String, Vec<String>> =
+        balance_commits(commit_groups).into_iter().collect();
+
+    // ProjectWork 조립 + 노이즈 필터 → retained 프로젝트만.
+    let mut works: Vec<(Option<DateTime<FixedOffset>>, String, ProjectWork)> = Vec::new();
+    for key in &order {
+        let acc = &projects[key];
+        let commits = commits_by_key.remove(key).unwrap_or_default();
+        let mut topics = acc.topics.clone();
+        topics.sort();
+        topics.dedup();
+        topics.truncate(WORK_LOG_TOPIC_CAP);
+        if commits.is_empty() && topics.is_empty() {
+            continue; // 노이즈(temp/드라이브 루트/홈 등) 제외
+        }
+        let start = acc.starts.iter().min().copied();
+        works.push((start, key.clone(), ProjectWork { name: acc.name.clone(), commits, topics }));
+    }
+
+    // concurrent: retained(노이즈 필터 통과) 프로젝트의 세션 구간만으로 판정 —
+    // 제거된 노이즈 프로젝트의 겹침이 허위 동시작업을 만들지 않도록.
+    let retained: std::collections::HashSet<String> =
+        works.iter().map(|(_, k, _)| k.clone()).collect();
+    let mut spans: Vec<(&String, DateTime<FixedOffset>, DateTime<FixedOffset>)> = Vec::new();
+    for (key, acc) in &projects {
+        if !retained.contains(key) {
+            continue;
+        }
+        for (st, en) in &acc.spans {
+            spans.push((key, *st, *en));
+        }
+    }
+    let mut concurrent = false;
+    'outer: for i in 0..spans.len() {
+        for j in (i + 1)..spans.len() {
+            if spans[i].0 != spans[j].0 && spans[i].1 < spans[j].2 && spans[j].1 < spans[i].2 {
+                concurrent = true;
+                break 'outer;
+            }
+        }
+    }
+
+    // 첫 활동 시각순 정렬.
+    works.sort_by(|a, b| match (a.0, b.0) {
+        (Some(x), Some(y)) => x.cmp(&y),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
+    });
+    let projects_out = works.into_iter().map(|(_, _, w)| w).collect();
+
+    WorkLog { projects: projects_out, commit_count, concurrent }
 }
 
 #[derive(Debug, Clone)]
@@ -787,14 +895,19 @@ pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize) -> String {
          오늘 브리프의 오늘만의 사실과 기분에 집중해 어제와는 다른 이야기로 쓰세요. \
          비어있으면 신경 쓰지 마세요. \
          \
-         오늘 하루의 재료는 이렇습니다: `work_log`(그날 한 작업 — git 커밋 제목이나 작업 갈래), \
+         오늘 하루의 재료는 이렇습니다: `work_log`(그날 한 작업 — `projects` 배열로 프로젝트별 커밋 제목·작업 갈래, \
+         `concurrent`는 여러 프로젝트를 동시에 진행했는지, `commit_count`는 총 커밋 수), \
          `tool_usage`(도구 사용량), `work_context`(주말 여부·몰입 시간), `findings`(오늘 새 코칭거리), `occasions`. \
          이 재료들을 종류별로 문단을 나눠 나열하지 마세요 — '도구 문단 / 커밋 문단 / MCP 문단'처럼 쓰면 실패입니다. \
          그날을 가장 잘 말해주는 한 가지(대개 무슨 작업을 했는지)를 중심 줄기로 잡고, 나머지는 곁들이듯 흘려 \
          하나의 자연스러운 하루 이야기로 엮으세요. 모든 재료를 억지로 다 넣지 말고 골라 쓰세요. \
          특히 '몇 시간 붙어 있었다'처럼 작업 시간 수치로 일기를 시작하지 마세요. \
          \
-         `work_log`가 있으면 무슨 작업을 했는지 구체적으로(여러 갈래면 '여러 일을 오갔다'는 분주함도 슬쩍). \
+         `work_log.projects`가 있으면 무슨 작업을 했는지 구체적으로 쓰세요. 프로젝트가 여럿이면 \
+         각 작업이 어느 프로젝트(`name`)에서 한 일인지 자연스럽게 드러내세요 — 라벨 없이 한 프로젝트 얘기에 \
+         다른 프로젝트 작업을 섞으면 실패입니다. 단 프로젝트마다 문단을 딱딱 나누지는 말고 하루 흐름으로 엮으세요 \
+         (예: '오전엔 space-a 다이어리를 손봤고, 오후엔 agent-meter 쪽으로 넘어갔다'). \
+         `concurrent`가 true면 두 일을 동시에 오간 분주함도 슬쩍 담으세요('두 프로젝트를 왔다 갔다 하느라 정신없었네'). \
          `findings`는 있으면 하나만 스치듯 — 이미 다룬 상시 이슈는 빠져 있으니 되풀이 금지, 없으면 억지로 만들지 말 것. \
          위로·응원은 매일이 아니라 `work_context.long_work`(유난히 긴 날)나 `is_weekend`(주말 근무) 때만, \
          그것도 판박이 대신 다마고치 능청으로(주말이면 '주말에 또? 일중독인가 봐', 긴 날이면 '오늘 좀 과했다, 배터리 방전 직전'). \
@@ -1150,11 +1263,14 @@ mod tests {
         seed("s2", "2026-07-08T03:00:00Z", "main", "<task-notification>");
 
         let wl = super::collect_work_log(&store, "2026-07-08");
-        assert!(wl.commits.is_empty(), "cwd 없어 git 커밋 없음");
-        assert!(wl.topics.contains(&"feat/mascot-daily-line".to_string()), "서술적 브랜치 포함");
-        assert!(wl.topics.contains(&"마스코트 한마디 구현".to_string()), "정제된 프롬프트 포함");
-        assert!(!wl.topics.contains(&"main".to_string()), "main 브랜치 제외");
-        assert!(!wl.topics.iter().any(|t| t.contains("task-notification")), "노이즈 프롬프트 제외");
+        // cwd 없는 두 세션은 같은 project_id → 하나의 프로젝트로 묶임(폴백 키).
+        assert_eq!(wl.projects.len(), 1, "cwd 없는 동일 project는 프로젝트 하나: {wl:?}");
+        let p = &wl.projects[0];
+        assert!(p.commits.is_empty(), "cwd 없어 git 커밋 없음");
+        assert!(p.topics.contains(&"feat/mascot-daily-line".to_string()), "서술적 브랜치 포함");
+        assert!(p.topics.contains(&"마스코트 한마디 구현".to_string()), "정제된 프롬프트 포함");
+        assert!(!p.topics.contains(&"main".to_string()), "main 브랜치 제외");
+        assert!(!p.topics.iter().any(|t| t.contains("task-notification")), "노이즈 프롬프트 제외");
     }
 
     #[test]
@@ -1188,10 +1304,156 @@ mod tests {
 
         // 07-05는 cwd가 없지만 project 매핑으로 repo를 복원해 그날 커밋을 읽어야 함
         let wl = super::collect_work_log(&store, "2026-07-05");
+        let all_commits: Vec<&String> = wl.projects.iter().flat_map(|p| &p.commits).collect();
         assert!(
-            wl.commits.iter().any(|s| s.contains("옛 세션 repo 커밋")),
-            "project 매핑으로 cwd 복원: {:?}", wl.commits
+            all_commits.iter().any(|s| s.contains("옛 세션 repo 커밋")),
+            "project 매핑으로 cwd 복원: {all_commits:?}"
         );
+    }
+
+    // 세션 한 건 삽입(cwd 있음). 커밋은 없어도 브랜치로 프로젝트가 생존.
+    fn seed_session(
+        store: &SqliteStore,
+        sid: &str,
+        host: &str,
+        pid: &str,
+        cwd: &str,
+        branch: &str,
+        first_ts: &str,
+        last_ts: &str,
+    ) {
+        store
+            .conn
+            .execute(
+                "INSERT INTO sessions
+                 (session_id, host, project_id, agent, first_ts, last_ts, git_branch, cwd)
+                 VALUES (?1,?2,?3,'claude-code',?4,?5,?6,?7)",
+                rusqlite::params![sid, host, pid, first_ts, last_ts, branch, cwd],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn collect_work_log_splits_projects_and_sorts_by_first_activity() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 오후에 시작한 space-a, 오전에 시작한 agent-meter → 정렬은 agent-meter 먼저.
+        seed_session(&store, "s1", "Windows", "pA", r"D:\Project\space-a",
+            "feat/diary", "2026-07-20T05:00:00Z", "2026-07-20T06:00:00Z");
+        seed_session(&store, "s2", "wsl:Ubuntu-22.04", "pB", "/home/jayb/work/agent-meter",
+            "feat/meter", "2026-07-20T01:00:00Z", "2026-07-20T02:00:00Z");
+
+        let wl = super::collect_work_log(&store, "2026-07-20");
+        assert_eq!(wl.projects.len(), 2, "두 프로젝트로 분리: {wl:?}");
+        assert_eq!(wl.projects[0].name, "agent-meter", "먼저 시작한 프로젝트가 앞");
+        assert_eq!(wl.projects[1].name, "space-a");
+    }
+
+    #[test]
+    fn collect_work_log_unifies_wsl_and_windows_unc_variants() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 같은 agent-meter를 WSL 직접 + Windows(WSL UNC)로 접근 → 한 프로젝트.
+        seed_session(&store, "s1", "wsl:Ubuntu-22.04", "pB", "/home/jayb/work/agent-meter",
+            "feat/a", "2026-07-20T01:00:00Z", "2026-07-20T02:00:00Z");
+        seed_session(&store, "s2", "Windows", "pC",
+            r"\\wsl.localhost\Ubuntu-22.04\home\jayb\work\agent-meter",
+            "feat/b", "2026-07-20T03:00:00Z", "2026-07-20T04:00:00Z");
+
+        let wl = super::collect_work_log(&store, "2026-07-20");
+        assert_eq!(wl.projects.len(), 1, "경로 변종은 한 프로젝트로 통합: {wl:?}");
+        assert_eq!(wl.projects[0].name, "agent-meter");
+    }
+
+    #[test]
+    fn collect_work_log_flags_concurrent_on_time_overlap() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 두 프로젝트의 구간이 겹침(01:00-03:00 vs 02:00-04:00).
+        seed_session(&store, "s1", "Windows", "pA", r"D:\Project\space-a",
+            "feat/a", "2026-07-20T01:00:00Z", "2026-07-20T03:00:00Z");
+        seed_session(&store, "s2", "wsl:Ubuntu-22.04", "pB", "/home/jayb/work/agent-meter",
+            "feat/b", "2026-07-20T02:00:00Z", "2026-07-20T04:00:00Z");
+
+        let wl = super::collect_work_log(&store, "2026-07-20");
+        assert!(wl.concurrent, "시간 겹치는 두 프로젝트 → concurrent");
+    }
+
+    #[test]
+    fn collect_work_log_not_concurrent_when_sequential() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 순차(01:00-02:00, 03:00-04:00) — 겹치지 않음.
+        seed_session(&store, "s1", "Windows", "pA", r"D:\Project\space-a",
+            "feat/a", "2026-07-20T01:00:00Z", "2026-07-20T02:00:00Z");
+        seed_session(&store, "s2", "wsl:Ubuntu-22.04", "pB", "/home/jayb/work/agent-meter",
+            "feat/b", "2026-07-20T03:00:00Z", "2026-07-20T04:00:00Z");
+
+        let wl = super::collect_work_log(&store, "2026-07-20");
+        assert!(!wl.concurrent, "순차 진행 → not concurrent");
+    }
+
+    #[test]
+    fn collect_work_log_filters_noise_projects() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // main 브랜치 + 노이즈 프롬프트 + cwd 있지만 git repo 아님 → 커밋·topic 모두 없음 → 제외.
+        store.conn.execute(
+            "INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, git_branch, cwd, first_prompt_preview)
+             VALUES ('n1','Windows','pN','claude-code','2026-07-20T01:00:00Z','2026-07-20T01:10:00Z','main',?1,'<task-notification>')",
+            rusqlite::params![r"C:\Users\jibin\AppData\Local\Temp\noise"],
+        ).unwrap();
+        // 살아남는 프로젝트 하나(서술 브랜치).
+        seed_session(&store, "s1", "Windows", "pA", r"D:\Project\space-a",
+            "feat/diary", "2026-07-20T02:00:00Z", "2026-07-20T03:00:00Z");
+
+        let wl = super::collect_work_log(&store, "2026-07-20");
+        assert_eq!(wl.projects.len(), 1, "노이즈 프로젝트 제외: {wl:?}");
+        assert_eq!(wl.projects[0].name, "space-a");
+    }
+
+    #[test]
+    fn collect_work_log_noise_overlap_does_not_flag_concurrent() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 노이즈 세션(커밋·topic 없음)이 실제 프로젝트와 시간 겹침 →
+        // 노이즈는 제외되고 실제 프로젝트 하나만 남으므로 concurrent=false 여야 한다.
+        store.conn.execute(
+            "INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, git_branch, cwd, first_prompt_preview)
+             VALUES ('n1','Windows','pN','claude-code','2026-07-20T01:00:00Z','2026-07-20T04:00:00Z','main',?1,'<task-notification>')",
+            rusqlite::params![r"C:\Users\jibin\AppData\Local\Temp\noise"],
+        ).unwrap();
+        seed_session(&store, "s1", "Windows", "pA", r"D:\Project\space-a",
+            "feat/diary", "2026-07-20T02:00:00Z", "2026-07-20T03:00:00Z");
+
+        let wl = super::collect_work_log(&store, "2026-07-20");
+        assert_eq!(wl.projects.len(), 1, "노이즈 제외 후 프로젝트 하나: {wl:?}");
+        assert!(!wl.concurrent, "노이즈 프로젝트 겹침은 concurrent 아님: {wl:?}");
+    }
+
+    #[test]
+    fn collect_work_log_keeps_hosts_distinct_in_cwdless_fallback() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 같은 project_id, cwd 없음, 서로 다른 host(두 distro) → 별도 프로젝트로 유지.
+        store.conn.execute(
+            "INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, git_branch, cwd)
+             VALUES ('a','wsl:Ubuntu-22.04','samepid','claude-code','2026-07-20T01:00:00Z','2026-07-20T02:00:00Z','feat/a',NULL)",
+            [],
+        ).unwrap();
+        store.conn.execute(
+            "INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts, git_branch, cwd)
+             VALUES ('b','wsl:Debian','samepid','claude-code','2026-07-20T03:00:00Z','2026-07-20T04:00:00Z','feat/b',NULL)",
+            [],
+        ).unwrap();
+
+        let wl = super::collect_work_log(&store, "2026-07-20");
+        assert_eq!(wl.projects.len(), 2, "다른 host의 동일 project_id는 분리: {wl:?}");
+    }
+
+    #[test]
+    fn brief_serializes_project_names() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        seed_session(&store, "s1", "Windows", "pA", r"D:\Project\space-a",
+            "feat/diary", "2026-07-20T02:00:00Z", "2026-07-20T03:00:00Z");
+        let wl = super::collect_work_log(&store, "2026-07-20");
+        let json = serde_json::to_string(&wl).unwrap();
+        assert!(json.contains("\"projects\""), "work_log JSON에 projects: {json}");
+        assert!(json.contains("space-a"), "프로젝트 이름 직렬화: {json}");
+        assert!(json.contains("\"concurrent\""), "concurrent 플래그 직렬화");
     }
 
     #[test]
@@ -1240,21 +1502,25 @@ mod tests {
     #[test]
     fn balance_commits_behaviors() {
         use super::balance_commits;
+        // 반환은 그룹별 (label, titles); 기존 검증은 평탄 리스트 기준 — 순서 무관 검증만 남는다.
+        fn flat(g: Vec<(String, Vec<String>)>) -> Vec<String> {
+            g.into_iter().flat_map(|(_, v)| v).collect()
+        }
 
         // 빈 입력
-        assert!(balance_commits(vec![]).is_empty());
+        assert!(flat(balance_commits(vec![])).is_empty());
 
         // floor 보장: churn 큰 A(12개) + churn 작은 B(1개), C=13 → B 실종 금지
         let a: Vec<(String, u64)> = (0..12).map(|i| (format!("a{i}"), 500)).collect();
         let b = vec![(String::from("bonly"), 5)];
-        let out = balance_commits(vec![("A".into(), a), ("B".into(), b)]);
+        let out = flat(balance_commits(vec![("A".into(), a), ("B".into(), b)]));
         assert!(out.contains(&"bonly".to_string()), "floor: B 커밋 실종 금지: {out:?}");
         assert!(out.len() <= 12);
 
         // churn 비례 (개수 역전): 둘 다 10개인데 A churn 800, B churn 20 → A 과반
         let a: Vec<(String, u64)> = (0..10).map(|i| (format!("a{i}"), 800)).collect();
         let b: Vec<(String, u64)> = (0..10).map(|i| (format!("b{i}"), 20)).collect();
-        let out = balance_commits(vec![("A".into(), a), ("B".into(), b)]);
+        let out = flat(balance_commits(vec![("A".into(), a), ("B".into(), b)]));
         let na = out.iter().filter(|s| s.starts_with('a')).count();
         let nb = out.iter().filter(|s| s.starts_with('b')).count();
         assert!(na >= 8, "churn 큰 A 과반: na={na} nb={nb}");
@@ -1264,45 +1530,45 @@ mod tests {
         // churn 우선 채택: 단일 repo 13개(cap 초과) → churn 최저 탈락
         let mut c: Vec<(String, u64)> = (0..12).map(|i| (format!("big{i}"), 100)).collect();
         c.push(("tiny".into(), 1));
-        let out = balance_commits(vec![("A".into(), c)]);
+        let out = flat(balance_commits(vec![("A".into(), c)]));
         assert_eq!(out.len(), 12);
         assert!(!out.contains(&"tiny".to_string()), "churn 최저 탈락: {out:?}");
 
         // churn desc 순서 (cap 이내)
-        let out = balance_commits(vec![(
+        let out = flat(balance_commits(vec![(
             "A".into(),
             vec![("low".into(), 10), ("high".into(), 900), ("mid".into(), 100)],
-        )]);
+        )]));
         assert_eq!(out, vec!["high".to_string(), "mid".to_string(), "low".to_string()]);
 
         // clamp: A(5개, 1개 5000+4개 10) vs B(10개 각 200), C=15 → B가 A보다 많음
         let mut a = vec![("lock".to_string(), 5000u64)];
         a.extend((0..4).map(|i| (format!("a{i}"), 10)));
         let b: Vec<(String, u64)> = (0..10).map(|i| (format!("b{i}"), 200)).collect();
-        let out = balance_commits(vec![("A".into(), a), ("B".into(), b)]);
+        let out = flat(balance_commits(vec![("A".into(), a), ("B".into(), b)]));
         let na = out.iter().filter(|s| *s == "lock" || s.starts_with('a')).count();
         let nb = out.iter().filter(|s| s.starts_with('b')).count();
         assert!(nb > na, "clamp: 저활동 A가 lockfile로 상위 불가 na={na} nb={nb}");
 
         // cap 이하 전부 포함
-        let out = balance_commits(vec![
+        let out = flat(balance_commits(vec![
             ("A".into(), vec![("a0".into(), 1), ("a1".into(), 1)]),
             ("B".into(), vec![("b0".into(), 1)]),
             ("C".into(), vec![("c0".into(), 1)]),
-        ]);
+        ]));
         assert_eq!(out.len(), 4);
 
         // 중복 제목 1회만
-        let out = balance_commits(vec![
+        let out = flat(balance_commits(vec![
             ("A".into(), vec![("dup".into(), 100), ("a1".into(), 100)]),
             ("B".into(), vec![("dup".into(), 100), ("b1".into(), 100)]),
-        ]);
+        ]));
         assert_eq!(out.iter().filter(|s| *s == "dup").count(), 1, "중복 1회: {out:?}");
 
         // repo 과다: churn 0 repo 20개 → cap개만
         let groups: Vec<(String, Vec<(String, u64)>)> =
             (0..20).map(|i| (format!("r{i:02}"), vec![(format!("c{i:02}"), 0)])).collect();
-        assert_eq!(balance_commits(groups).len(), 12);
+        assert_eq!(flat(balance_commits(groups)).len(), 12);
 
         // 저-churn D'Hondt: 정수 나눗셈이 몫을 0으로 뭉개는 구간(가중치 2 vs 1)에서도
         // 가중치 큰 repo가 우세해야 함(교차곱 비교 + 상위 우선 tie-break). 각 10커밋(cap 초과).
@@ -1310,7 +1576,7 @@ mod tests {
         a.extend((1..10).map(|i| (format!("a{i}"), 0)));
         let mut b = vec![("b0".to_string(), 1u64)];
         b.extend((1..10).map(|i| (format!("b{i}"), 0)));
-        let out = balance_commits(vec![("A".into(), a), ("B".into(), b)]);
+        let out = flat(balance_commits(vec![("A".into(), a), ("B".into(), b)]));
         let na = out.iter().filter(|s| s.starts_with('a')).count();
         let nb = out.iter().filter(|s| s.starts_with('b')).count();
         assert!(na > nb, "저-churn 동률 구간에서도 가중치 큰 A 우세: na={na} nb={nb}");
@@ -1602,6 +1868,14 @@ mod tests {
         assert!(p.contains("일중독"));            // 주말 능청 예시(유머·주말 강화)
         assert!(p.contains("나열하지"));          // 종류별 문단 나열 금지(자연스러운 흐름)
         assert!(p.contains("work_log"));          // 그날 한 작업(커밋/토픽) 지시
+    }
+
+    #[test]
+    fn system_prompt_directs_project_scoped_work_log() {
+        let p = build_system_prompt(&DiaryConfig::default(), 5);
+        assert!(p.contains("projects"), "프로젝트별 구조 언급");
+        assert!(p.contains("어느 프로젝트"), "작업의 프로젝트 귀속 지시");
+        assert!(p.contains("concurrent"), "동시 진행 지시");
     }
 
     #[test]
