@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-22
+---
+
 # 다이어리 공휴일 인식 + 다양성 개선 설계
 
 - **컴포넌트**: a-mate (Agent Mentor) — `crates/core/src/diary`

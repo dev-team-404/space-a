@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-22
+---
+
 # Diary Holiday Awareness + Variety Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -18,7 +23,7 @@
 - 커밋은 **영어 Conventional Commits**.
 - 테스트(주 게이트): `cargo test --manifest-path a-mate/Cargo.toml -p agent-mentor --lib` (baseline 380 passed).
 - 빌드·실행은 **네이티브 Windows PowerShell** — WSL 내부 금지.
-- 스펙: `docs/design/a-mate/specs/2026-07-22-diary-holiday-and-variety-design.md`.
+- 스펙: `docs/archive/design/a-mate/specs/2026-07-22-diary-holiday-and-variety-design.md`.
 
 ## File Structure
 
