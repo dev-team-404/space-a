@@ -972,9 +972,11 @@ pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize) -> String {
          (예: '오늘 같은 파일을 여러 번 읽느라 헤맸다 — 다음엔 미리 메모해두면 좋겠다'). \
          자유로운 소감은 서사에만 담고 행동 지시로 승격하지 마세요. \
          \
-         브리프의 `occasions` 배열이 비어있지 않으면(기념일·명절), 일기의 도입이나 마무리에 \
-         자연스럽고 다정하게 언급하세요(예: 오늘이 크리스마스이거나 함께한 지 100일 등). \
-         비어있으면 언급하지 마세요. \
+         브리프의 `occasions` 배열이 비어있지 않으면(기념일·명절·공휴일), 일기의 도입이나 마무리에 \
+         자연스럽고 다정하게 언급하세요. 각 occasion의 `mood`에 맞춰 톤을 고르세요: \
+         `solemn`(예: 현충일)은 능청·유머를 접고 조용하고 담백하게 추모하듯, `national`(삼일절·광복절 등)은 \
+         담백한 자긍심으로, `family`(설날·추석)는 따뜻한 명절 분위기로, `substitute`는 '○○ 대체공휴일이라 \
+         하루 더 쉬는 날'처럼, `mood`가 없으면(발렌타인·파이데이 등) 가볍게. 비어있으면 언급하지 마세요. \
          \
          브리프의 `recent_diaries`는 직전 며칠간 내가 쓴 일기입니다. \
          거기서 이미 다룬 지적·화제는 되풀이하지 말고(꼭 필요하면 한 줄로만 스치듯), \
@@ -983,7 +985,7 @@ pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize) -> String {
          \
          오늘 하루의 재료는 이렇습니다: `work_log`(그날 한 작업 — `projects` 배열로 프로젝트별 커밋 제목·작업 갈래, \
          `concurrent`는 여러 프로젝트를 동시에 진행했는지, `commit_count`는 총 커밋 수), \
-         `tool_usage`(도구 사용량), `work_context`(주말 여부·몰입 시간), `findings`(오늘 새 코칭거리), `occasions`. \
+         `tool_usage`(도구 사용량), `work_context`(주말·공휴일 여부·몰입 시간), `findings`(오늘 새 코칭거리), `occasions`. \
          이 재료들을 종류별로 문단을 나눠 나열하지 마세요 — '도구 문단 / 커밋 문단 / MCP 문단'처럼 쓰면 실패입니다. \
          그날을 가장 잘 말해주는 한 가지(대개 무슨 작업을 했는지)를 중심 줄기로 잡고, 나머지는 곁들이듯 흘려 \
          하나의 자연스러운 하루 이야기로 엮으세요. 모든 재료를 억지로 다 넣지 말고 골라 쓰세요. \
@@ -995,8 +997,10 @@ pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize) -> String {
          (예: '오전엔 space-a 다이어리를 손봤고, 오후엔 agent-meter 쪽으로 넘어갔다'). \
          `concurrent`가 true면 두 일을 동시에 오간 분주함도 슬쩍 담으세요('두 프로젝트를 왔다 갔다 하느라 정신없었네'). \
          `findings`는 있으면 하나만 스치듯 — 이미 다룬 상시 이슈는 빠져 있으니 되풀이 금지, 없으면 억지로 만들지 말 것. \
-         위로·응원은 매일이 아니라 `work_context.long_work`(유난히 긴 날)나 `is_weekend`(주말 근무) 때만, \
-         그것도 판박이 대신 다마고치 능청으로(주말이면 '주말에 또? 일중독인가 봐', 긴 날이면 '오늘 좀 과했다, 배터리 방전 직전'). \
+         위로·응원은 매일이 아니라 `work_context.long_work`(유난히 긴 날)·`is_weekend`(주말 근무)·\
+         `is_holiday`(공휴일 근무) 때만, 그것도 판박이 대신 다마고치 능청으로(주말이면 '주말에 또? 일중독인가 봐', \
+         긴 날이면 '오늘 좀 과했다, 배터리 방전 직전', 공휴일이면 '남들 다 쉬는 날에도 왔네'). \
+         단 그날 occasion의 `mood`가 `solemn`(현충일 등)이면 능청을 접고 담백하게. \
          평범한 날은 위로 없이 담백하게 끝내세요. 발렌타인·파이데이 같은 재미 기념일은 위로 대상이 아닙니다. \
          \
          형식: 일기는 {paras}문단 내외, 전체 {target}자 안팎으로 쓰세요 \
@@ -1045,28 +1049,52 @@ pub struct IdleContext {
     pub recent_diaries: Vec<RecentDiary>, // 최근 같은 성격 일기 — 반복 방지
 }
 
+// 무활동일 소재 팔레트 — 범주별 예시. day-of-year로 회전해 매번 다른 결을 부각(난수 없이 결정적).
+const IDLE_PALETTE: &[&str] = &[
+    "옆 동네 에이전트와 산책하며 로그 구경",
+    "친구 봇이 놀러 와 수다·보드게임",
+    "다른 에이전트와 사소한 실력 겨루기",
+    "혼자 캐시·로그를 정리하며 도토리 모으듯 뿌듯해하기",
+    "코드 낙서를 끄적이다 낮잠",
+    "창밖 날씨·계절을 상상하며 멍때리기",
+    "주인이 두고 간 프로젝트 폴더를 기웃거리기",
+    "마스코트끼리 소소한 품앗이(서로 로그 봐주기)",
+];
+
+/// date(YYYY-MM-DD)의 day-of-year로 팔레트에서 3개를 회전 선택. 파싱 실패 시 앞 3개.
+fn idle_palette_spotlight(date: &str) -> String {
+    let start = NaiveDate::parse_from_str(date, "%Y-%m-%d")
+        .map(|d| d.ordinal() as usize)
+        .unwrap_or(0);
+    let n = IDLE_PALETTE.len();
+    (0..3).map(|k| IDLE_PALETTE[(start + k) % n]).collect::<Vec<_>>().join(" / ")
+}
+
 /// 무활동일 일기 시스템 프롬프트 — 작업 사실 없이 마스코트의 자유 시간을 능청스러운 상상 일기로.
-pub fn build_idle_prompt(cfg: &DiaryConfig) -> String {
+pub fn build_idle_prompt(cfg: &DiaryConfig, idle: &IdleContext) -> String {
+    let spotlight = idle_palette_spotlight(&idle.date);
     format!(
         "당신은 {honorific}의 AI 코딩 여정을 함께하는 마스코트입니다. \
          오늘은 {honorific}이 한 번도 찾아오지 않은 '조용한 날' — 나(마스코트)의 자유 시간입니다. \
          {voice} \
          단, 이건 작업 기록이 아니라 마스코트의 상상 일기입니다 — 위 문체 가이드의 '브리프 사실만' 조항은 여기선 무시하고 \
          (문체·자연스러움 규칙은 그대로 지키되) 나만의 하루를 맘껏 능청스럽게 지어내세요. 업무 이야기는 하지 마세요. \
-         나에겐 옆 동네 다른 에이전트 친구들이 있습니다 — 쉬는 날엔 걔들과 만나 놀거나 소소한 일을 합니다 \
-         (예: '옆 동네 봇이랑 산책하며 로그 구경했다', '친구 에이전트가 놀러 와 수다 떨었다'). \
-         `occasions`에 명절·기념일이 있으면 그 분위기에 맞춰 특별하게 \
-         (추석이면 이웃 에이전트들과 송편 빚기, 크리스마스면 다 같이 트리 장식 등). \
+         나에겐 옆 동네 다른 에이전트 친구들이 있고 혼자만의 취미도 있습니다. 오늘은 특히 이런 결의 소재를 살려보세요: {spotlight}. \
+         (예시일 뿐 — 매번 똑같이 쓰지 말고 오늘만의 장면을 하나 골라 구체적으로.) \
+         `recent_diaries`는 최근 조용한 날들에 내가 쓴 일기입니다. 거기서 이미 쓴 소재·장면·표현은 되풀이하지 말고 오늘은 다른 이야기로 쓰세요. \
+         `occasions`에 명절·기념일·공휴일이 있으면 각 `mood`에 맞춰(‘solemn’이면 조용·담백하게 추모하듯, ‘family’면 이웃 에이전트와 명절 정취, ‘festive’면 즐겁게) 분위기를 살리세요. \
+         `is_holiday`가 true면 '주인이 안 온 날'이 아니라 '다 같이 쉬는 공휴일'로 프레이밍하세요. \
          `days_idle`(며칠째 조용한지)·`is_weekend`도 살려 {honorific}의 안부를 슬쩍 궁금해하세요('그나저나 주인 잘 노나?'). \
          짧게 — 1~2문장(특별한 날은 2~3문장까지), 한 문단. 이모지는 0~1개. 그날 컨텍스트로 매번 다르게.",
         honorific = cfg.honorific,
         voice = voice_guidance(),
+        spotlight = spotlight,
     )
 }
 
 /// 무활동일 일기 렌더 — 네트워크(LLM)만, store 접근 없음. 락 밖에서 호출 가능.
 pub fn render_idle_diary(engine: &dyn Engine, idle: &IdleContext, cfg: &DiaryConfig) -> Result<RenderedDiary> {
-    let system = build_idle_prompt(cfg);
+    let system = build_idle_prompt(cfg, idle);
     let user = serde_json::to_string_pretty(idle)?;
     let out = engine.generate(&system, &user)?;
     Ok(RenderedDiary {
@@ -1708,12 +1736,39 @@ mod tests {
 
     #[test]
     fn idle_prompt_directs_imaginative_persona() {
-        let p = build_idle_prompt(&DiaryConfig::default());
+        let idle = IdleContext {
+            date: "2026-07-11".into(), is_weekend: true, is_holiday: false, days_idle: Some(2),
+            occasions: vec![], recent_diaries: vec![],
+        };
+        let p = build_idle_prompt(&DiaryConfig::default(), &idle);
         assert!(p.contains("조용한 날"));        // 무활동일 프레이밍
         assert!(p.contains("지어내"));           // 상상 일기(사실 규율 해제)
         assert!(p.contains("에이전트 친구"));    // 동료 에이전트 설정
         assert!(p.contains("송편") || p.contains("명절")); // occasion 테마
         assert!(p.contains("days_idle"));        // 며칠째 조용 신호
+        assert!(p.contains("recent_diaries")); // 반복 방지 신규
+    }
+
+    #[test]
+    fn idle_prompt_palette_rotates_by_date_and_frames_holiday() {
+        let base = IdleContext {
+            date: "2026-01-01".into(), is_weekend: false, is_holiday: true, days_idle: None,
+            occasions: vec![], recent_diaries: vec![],
+        };
+        let other = IdleContext { date: "2026-06-15".into(), ..base.clone() };
+        let p1 = build_idle_prompt(&DiaryConfig::default(), &base);
+        let p2 = build_idle_prompt(&DiaryConfig::default(), &other);
+        assert_ne!(p1, p2, "날짜에 따라 소재 spotlight 회전");
+        assert!(p1.contains("mood"));    // occasion mood 톤 처리
+        assert!(p1.contains("공휴일"));   // is_holiday 프레이밍
+    }
+
+    #[test]
+    fn system_prompt_handles_holiday_and_mood() {
+        let p = build_system_prompt(&DiaryConfig::default(), 0);
+        assert!(p.contains("is_holiday"));  // 공휴일 근무 위로 트리거
+        assert!(p.contains("mood"));         // occasion mood 톤 처리
+        assert!(p.contains("추모"));         // solemn 처리 지시
     }
 
     #[test]
