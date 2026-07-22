@@ -136,9 +136,9 @@ pub fn finding_advice(
             (detail, format!("안 쓰는 `{server}`를 설정에서 제거하면 매 세션 상주 토큰을 아껴요"))
         }
         "R7" => {
-            // v3 프로젝트 카드: over_modeled_sessions/example_session_ids/note만 낸다.
+            // v3 프로젝트 카드: session_ids/total_sessions/note (프론트 coach-helpers 계약과 동일 키).
             // est_tokens_saved는 설계상 0(LLM 판정 근거일 뿐 실측 아님) — 여기서 인용하지 않는다.
-            let n = evidence.get("over_modeled_sessions").and_then(|v| v.as_u64()).unwrap_or(0);
+            let n = evidence.get("total_sessions").and_then(|v| v.as_u64()).unwrap_or(0);
             let detail = format!(
                 "이 프로젝트에서 Opus로 처리했지만 Sonnet으로 충분했을 세션이 {n}건 있었어요"
             );
@@ -1609,13 +1609,13 @@ mod tests {
 
     #[test]
     fn finding_advice_r7_project_card_renders_session_count() {
-        // v3 R7 프로젝트 카드는 over_modeled_sessions/example_session_ids/note만 낸다(ratio_pct 등 폐기).
+        // v3 R7 프로젝트 카드는 session_ids/total_sessions/note만 낸다(ratio_pct 등 폐기, 프론트 계약 정합).
         // est_tokens_saved는 설계상 0 — detail에 "비용-등가" 등 무근거 수치를 붙이면 안 됨.
         let (detail, action) = super::finding_advice(
             "R7",
             &serde_json::json!({
-                "over_modeled_sessions": 4,
-                "example_session_ids": ["s1", "s2"],
+                "total_sessions": 4,
+                "session_ids": ["s1", "s2"],
                 "note": "LLM 판정: 이 프로젝트의 Opus 세션 상당수가 Sonnet으로 충분",
             }),
             0,

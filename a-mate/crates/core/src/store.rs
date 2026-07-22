@@ -2076,7 +2076,7 @@ mod tests {
             scope_host: Some("Windows".into()), scope_project: Some("p".into()),
             scope_kind: "project".into(), scope_ref: "p".into(),
             evidence: serde_json::json!({
-                "over_modeled_sessions": 3, "example_session_ids": ["s1"],
+                "total_sessions": 3, "session_ids": ["s1"],
                 "note": "LLM 판정: 이 프로젝트의 Opus 세션 상당수가 Sonnet으로 충분",
             }),
             est_tokens_saved: 0, prescription: None, dedup_key: "R7|Windows|p".into(),

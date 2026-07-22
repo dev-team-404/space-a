@@ -139,10 +139,12 @@ pub trait CoachingJudge {
     fn rule_id(&self) -> &'static str;
     /// 후보 1건의 (system, user) 판정 프롬프트. 재료 수집 실패는 Err(영구 실패).
     fn build_prompt(&self, store: &SqliteStore, c: &PendingCandidate) -> Result<(String, String)>;
-    /// 파싱된 verdict → 상태 전이("new"|"confirmed"|"rejected").
-    fn classify(&self, verdict: &serde_json::Value) -> &'static str;
-    /// verdict 저장 후 노출 finding (재)구성. 반환 = 새로 노출된 dedup_key.
-    fn rollup(&self, store: &SqliteStore) -> Result<Vec<String>>;
+    /// 파싱된 verdict → 상태 전이(Some("new"|"confirmed"|"rejected")). 필수 결정 필드가
+    /// 없으면 None(판정 미확정) — 드라이버가 형식 불량과 동형으로 재시도한다.
+    fn classify(&self, verdict: &serde_json::Value) -> Option<&'static str>;
+    /// verdict 저장 후 노출 finding (재)구성. 반환 = (새로 노출된 dedup_key, mutated).
+    /// mutated = 카드가 생성/갱신/삭제돼 UI 재발행이 필요한지(신규뿐 아니라 갱신·삭제 포함).
+    fn rollup(&self, store: &SqliteStore) -> Result<(Vec<String>, bool)>;
 }
 
 pub struct R6Judge;
@@ -154,10 +156,14 @@ impl CoachingJudge for R6Judge {
         let ctx = crate::skill_draft::gather_context(store, &c.scope_host, rep)?;
         Ok(judgment_prompt(&ctx))
     }
-    fn classify(&self, verdict: &serde_json::Value) -> &'static str {
-        if verdict.get("worthy").and_then(|v| v.as_bool()).unwrap_or(false) { "new" } else { "rejected" }
+    fn classify(&self, verdict: &serde_json::Value) -> Option<&'static str> {
+        match verdict.get("worthy").and_then(|v| v.as_bool()) {
+            Some(true) => Some("new"),
+            Some(false) => Some("rejected"),
+            None => None, // worthy 필드 없음 = 판정 미확정(형식 불량 취급, 재시도)
+        }
     }
-    fn rollup(&self, _store: &SqliteStore) -> Result<Vec<String>> { Ok(vec![]) } // classify→"new"가 곧 노출, 롤업 없음
+    fn rollup(&self, _store: &SqliteStore) -> Result<(Vec<String>, bool)> { Ok((vec![], false)) } // classify→"new"가 곧 노출, 롤업 없음
 }
 
 #[cfg(test)]
@@ -167,9 +173,9 @@ mod tests {
     #[test]
     fn r6_judge_classifies_worthy_and_unworthy() {
         let j = R6Judge;
-        assert_eq!(j.classify(&serde_json::json!({"worthy": true})), "new");
-        assert_eq!(j.classify(&serde_json::json!({"worthy": false})), "rejected");
-        assert_eq!(j.classify(&serde_json::json!({})), "rejected"); // 필드 없음 = 보수적 rejected
+        assert_eq!(j.classify(&serde_json::json!({"worthy": true})), Some("new"));
+        assert_eq!(j.classify(&serde_json::json!({"worthy": false})), Some("rejected"));
+        assert_eq!(j.classify(&serde_json::json!({})), None); // 필드 없음 = 미확정(재시도)
         assert_eq!(j.rule_id(), "R6");
     }
 

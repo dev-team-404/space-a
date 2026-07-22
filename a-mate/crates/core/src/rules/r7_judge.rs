@@ -40,21 +40,25 @@ over_modeled=false: 복잡한 추론·설계·큰 구현 등 Opus가 정당. **�
         Ok((system, user))
     }
 
-    fn classify(&self, verdict: &serde_json::Value) -> &'static str {
-        if verdict.get("over_modeled").and_then(|v| v.as_bool()).unwrap_or(false) {
-            "confirmed"
-        } else {
-            "rejected"
+    fn classify(&self, verdict: &serde_json::Value) -> Option<&'static str> {
+        match verdict.get("over_modeled").and_then(|v| v.as_bool()) {
+            Some(true) => Some("confirmed"),
+            Some(false) => Some("rejected"),
+            None => None, // over_modeled 필드 없음 = 판정 미확정(형식 불량 취급, 재시도)
         }
     }
 
-    fn rollup(&self, store: &SqliteStore) -> Result<Vec<String>> {
+    fn rollup(&self, store: &SqliteStore) -> Result<(Vec<String>, bool)> {
         rollup_project_cards(store)
     }
 }
 
-pub(crate) fn rollup_project_cards(store: &SqliteStore) -> Result<Vec<String>> {
+/// 반환 = (새로 노출된 프로젝트 카드 key, mutated). mutated = 카드가 생성/삭제/내용변경돼
+/// UI 재발행이 필요한지. fresh는 신규 노출만(마스코트 알림용), mutated는 갱신·삭제까지 포함.
+pub(crate) fn rollup_project_cards(store: &SqliteStore) -> Result<(Vec<String>, bool)> {
     use crate::finding::{Finding, Prescription, Severity};
+    // 관찰창(14일) 내 세션만 집계 — 노후 verdict가 카드를 무한 유지하지 않도록(recency 경계).
+    let cutoff = (chrono::Utc::now() - chrono::Duration::days(14)).to_rfc3339();
     // (host, project)별 confirmed/판정합 집계
     let mut stmt = store.conn.prepare(
         "SELECT COALESCE(scope_host,''), COALESCE(scope_project,''),
@@ -64,10 +68,11 @@ pub(crate) fn rollup_project_cards(store: &SqliteStore) -> Result<Vec<String>> {
                     THEN json_extract(evidence_json,'$.session_id') END)
          FROM findings
          WHERE rule_id='R7' AND scope_kind='session'
+           AND json_extract(evidence_json,'$.first_ts') >= ?1
          GROUP BY scope_host, scope_project",
     )?;
     let rows: Vec<(String, String, i64, i64, Option<String>)> = stmt
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?
+        .query_map([&cutoff], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?
         .collect::<std::result::Result<_, _>>()?;
 
     let mut qualifying: Vec<(String, String, i64, Vec<String>)> = Vec::new();
@@ -79,36 +84,54 @@ pub(crate) fn rollup_project_cards(store: &SqliteStore) -> Result<Vec<String>> {
         }
     }
 
-    // 비자격 stale 'new' 프로젝트 카드 제거 (구 통계 카드 마이그레이션 포함).
-    // 자격 세트는 소규모라 개별 확인.
+    // 기존 'new' 프로젝트 카드(key → evidence_json) — 변경/삭제 감지에 사용.
     let qualifying_keys: std::collections::HashSet<String> =
         qualifying.iter().map(|(h, p, _, _)| format!("R7|{h}|{p}")).collect();
     let mut stale = store.conn.prepare(
-        "SELECT dedup_key FROM findings WHERE rule_id='R7' AND scope_kind='project' AND status='new'",
+        "SELECT dedup_key, evidence_json FROM findings
+         WHERE rule_id='R7' AND scope_kind='project' AND status='new'",
     )?;
-    let existing: Vec<String> = stale.query_map([], |r| r.get::<_, String>(0))?
+    let existing: std::collections::HashMap<String, String> = stale
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
         .collect::<std::result::Result<_, _>>()?;
-    for key in &existing {
+
+    let mut mutated = false;
+    // 비자격 stale 'new' 카드 제거(구 통계 카드 마이그레이션 포함).
+    for key in existing.keys() {
         if !qualifying_keys.contains(key) {
             store.conn.execute("DELETE FROM findings WHERE dedup_key=?1 AND status='new'", [key])?;
+            mutated = true;
         }
     }
 
-    // 자격 프로젝트 카드 upsert. 신규 노출만 fresh로 반환.
-    let existing_set: std::collections::HashSet<&String> = existing.iter().collect();
+    // 자격 카드 upsert. 신규 노출만 fresh, 내용 변화(신규·갱신)는 mutated로도 표시.
     let now = chrono::Utc::now().to_rfc3339();
     let mut fresh = Vec::new();
     for (host, proj, confirmed, examples) in qualifying {
         let key = format!("R7|{host}|{proj}");
+        // 프론트 계약(coach-helpers.ts: session_ids/total_sessions)에 맞춘 evidence 키.
+        let evidence = serde_json::json!({
+            "total_sessions": confirmed,
+            "session_ids": examples,
+            "note": "LLM 판정: 이 프로젝트의 Opus 세션 상당수가 Sonnet으로 충분",
+        });
+        match existing.get(&key) {
+            None => { fresh.push(key.clone()); mutated = true; } // 신규 노출
+            Some(prev_json) => {
+                let prev: serde_json::Value =
+                    serde_json::from_str(prev_json).unwrap_or(serde_json::Value::Null);
+                if prev.get("total_sessions") != evidence.get("total_sessions")
+                    || prev.get("session_ids") != evidence.get("session_ids")
+                {
+                    mutated = true; // 카운트·예시 변화 → UI 갱신 필요
+                }
+            }
+        }
         let card = Finding {
             rule_id: "R7".into(), severity: Severity::Suggest,
             scope_host: Some(host.clone()), scope_project: Some(proj.clone()),
             scope_kind: "project".into(), scope_ref: proj.clone(),
-            evidence: serde_json::json!({
-                "over_modeled_sessions": confirmed,
-                "example_session_ids": examples,
-                "note": "LLM 판정: 이 프로젝트의 Opus 세션 상당수가 Sonnet으로 충분",
-            }),
+            evidence,
             est_tokens_saved: 0,
             prescription: Some(Prescription {
                 kind: "start_with_lighter_model".into(),
@@ -117,11 +140,8 @@ pub(crate) fn rollup_project_cards(store: &SqliteStore) -> Result<Vec<String>> {
             dedup_key: key.clone(),
         };
         store.upsert_finding(&card, &now)?; // (R7,project) → init 'new'
-        if !existing_set.contains(&key) {
-            fresh.push(key); // 새로 노출된 것만 알림
-        }
     }
-    Ok(fresh)
+    Ok((fresh, mutated))
 }
 
 #[cfg(test)]
@@ -131,9 +151,9 @@ mod tests {
     #[test]
     fn r7_judge_classify_maps_over_modeled() {
         let j = R7Judge;
-        assert_eq!(j.classify(&serde_json::json!({"over_modeled": true})), "confirmed");
-        assert_eq!(j.classify(&serde_json::json!({"over_modeled": false})), "rejected");
-        assert_eq!(j.classify(&serde_json::json!({})), "rejected");
+        assert_eq!(j.classify(&serde_json::json!({"over_modeled": true})), Some("confirmed"));
+        assert_eq!(j.classify(&serde_json::json!({"over_modeled": false})), Some("rejected"));
+        assert_eq!(j.classify(&serde_json::json!({})), None); // 필드 없음 = 미확정(재시도)
         assert_eq!(j.rule_id(), "R7");
     }
 
@@ -162,27 +182,58 @@ mod tests {
         assert!(user.contains("개수만 세줘"), "사용자 요청 전문 포함");
     }
 
+    // 관찰창(14일) 내 recent 타임스탬프 — 하드코딩 날짜는 창 밖으로 밀려나므로 now 기준.
+    fn recent_ts() -> String {
+        (chrono::Utc::now() - chrono::Duration::days(1)).to_rfc3339()
+    }
+    fn seed_session(store: &SqliteStore, sid: &str, status: &str, first_ts: &str) {
+        let f = crate::finding::Finding {
+            rule_id: "R7".into(), severity: crate::finding::Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: Some("p".into()),
+            scope_kind: "session".into(), scope_ref: sid.into(),
+            evidence: serde_json::json!({"session_id": sid, "first_ts": first_ts}),
+            est_tokens_saved: 0, prescription: None,
+            dedup_key: format!("R7|sess|Windows|{sid}"),
+        };
+        store.upsert_finding(&f, "2026-07-06T10:00:00Z").unwrap();
+        store.set_judgment(&f.dedup_key, Some(status), &serde_json::json!({"attempts":1})).unwrap();
+    }
+
     #[test]
     fn rollup_emits_project_card_when_enough_confirmed() {
         let store = SqliteStore::open_in_memory().unwrap();
         // confirmed 세션 3개 + rejected 1개 (같은 host/project) → 3 >= 3, 3*2 > 4 과반
-        let mk = |sid: &str, status: &str| {
-            let f = crate::finding::Finding {
-                rule_id:"R7".into(), severity:crate::finding::Severity::Suggest,
-                scope_host:Some("Windows".into()), scope_project:Some("p".into()),
-                scope_kind:"session".into(), scope_ref:sid.into(),
-                evidence: serde_json::json!({"session_id":sid}), est_tokens_saved:0,
-                prescription:None, dedup_key: format!("R7|sess|Windows|{sid}"),
-            };
-            store.upsert_finding(&f, "2026-07-06T10:00:00Z").unwrap();
-            store.set_judgment(&f.dedup_key, Some(status), &serde_json::json!({"attempts":1})).unwrap();
-        };
-        mk("s1","confirmed"); mk("s2","confirmed"); mk("s3","confirmed"); mk("s4","rejected");
-        let fresh = rollup_project_cards(&store).unwrap();
+        let ts = recent_ts();
+        seed_session(&store, "s1", "confirmed", &ts);
+        seed_session(&store, "s2", "confirmed", &ts);
+        seed_session(&store, "s3", "confirmed", &ts);
+        seed_session(&store, "s4", "rejected", &ts);
+        let (fresh, mutated) = rollup_project_cards(&store).unwrap();
         assert_eq!(fresh, vec!["R7|Windows|p".to_string()]);
-        let status: String = store.conn.query_row(
-            "SELECT status FROM findings WHERE dedup_key='R7|Windows|p'", [], |r| r.get(0)).unwrap();
+        assert!(mutated, "신규 카드 노출 = mutated");
+        let (status, ev): (String, String) = store.conn.query_row(
+            "SELECT status, evidence_json FROM findings WHERE dedup_key='R7|Windows|p'",
+            [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
         assert_eq!(status, "new");
+        // 프론트 계약 키(session_ids/total_sessions) 사용 확인
+        let ev: serde_json::Value = serde_json::from_str(&ev).unwrap();
+        assert_eq!(ev["total_sessions"], serde_json::json!(3));
+        assert_eq!(ev["session_ids"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn rollup_ignores_sessions_outside_observation_window() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // confirmed 3개지만 first_ts가 창(14일) 밖 → 카드 안 생김
+        let old = (chrono::Utc::now() - chrono::Duration::days(20)).to_rfc3339();
+        seed_session(&store, "s1", "confirmed", &old);
+        seed_session(&store, "s2", "confirmed", &old);
+        seed_session(&store, "s3", "confirmed", &old);
+        let (fresh, _mutated) = rollup_project_cards(&store).unwrap();
+        assert!(fresh.is_empty(), "창 밖 세션은 롤업 제외");
+        let n: i64 = store.conn.query_row(
+            "SELECT COUNT(*) FROM findings WHERE dedup_key='R7|Windows|p'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
     }
 
     #[test]
@@ -197,10 +248,24 @@ mod tests {
             dedup_key:"R7|Windows|p".into(),
         };
         store.upsert_finding(&card, "2026-07-06T10:00:00Z").unwrap(); // 'new'
-        let fresh = rollup_project_cards(&store).unwrap();
+        let (fresh, mutated) = rollup_project_cards(&store).unwrap();
         assert!(fresh.is_empty());
+        assert!(mutated, "stale 카드 삭제 = mutated (UI 재발행 필요)");
         let n: i64 = store.conn.query_row(
             "SELECT COUNT(*) FROM findings WHERE dedup_key='R7|Windows|p' AND status='new'", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0, "자격 없는 stale 카드 제거");
+    }
+
+    #[test]
+    fn rollup_stable_card_is_not_mutated() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let ts = recent_ts();
+        for sid in ["s1", "s2", "s3"] { seed_session(&store, sid, "confirmed", &ts); }
+        let (_fresh, first) = rollup_project_cards(&store).unwrap();
+        assert!(first, "첫 노출은 mutated");
+        // 두 번째 롤업: 세션·verdict 변화 없음 → 카드 내용 동일 → mutated=false (재발행 안 함)
+        let (fresh2, mutated2) = rollup_project_cards(&store).unwrap();
+        assert!(fresh2.is_empty(), "이미 존재 → fresh 없음");
+        assert!(!mutated2, "내용 불변 → mutated 아님(불필요한 재발행 방지)");
     }
 }

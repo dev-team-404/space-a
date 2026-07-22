@@ -191,6 +191,7 @@ mod runtime {
         let Some(engine) = engine else { return; };
 
         let mut fresh_all: Vec<String> = Vec::new();
+        let mut mutated_any = false; // 롤업이 카드를 생성/갱신/삭제했는지 (UI 재발행 판단)
         for judge in &judges {
             // ② pending + 프롬프트 (짧은 락)
             let batch: Vec<(String, u32, String, String)> = match store_mutex.lock() {
@@ -228,10 +229,14 @@ mod runtime {
                 Ok(store) => {
                     for (key, prev, text, tokens) in results {
                         let attempts = prev + 1;
-                        match extract_verdict_json(&text) {
-                            Ok(v) => {
-                                let status = judge.classify(&v);
-                                let mut rec = v.clone();
+                        // 결정 필드가 있는 valid verdict만 종결 처리. 추출 실패 또는 필수 필드가 없는
+                        // 미확정 verdict(예: {} · {"foo":1})는 형식 불량으로 취급 — attempts++·3회면
+                        // rejected(재시도 계약 유지, 한 번의 불완전 응답으로 영구 오캐시 금지).
+                        let verdict = extract_verdict_json(&text).ok()
+                            .and_then(|v| judge.classify(&v).map(|s| (s, v)));
+                        match verdict {
+                            Some((status, v)) => {
+                                let mut rec = v;
                                 rec["attempts"] = serde_json::json!(attempts);
                                 rec["tokens"] = serde_json::json!(tokens);
                                 let _ = store.set_judgment(&key, Some(status), &rec);
@@ -240,10 +245,10 @@ mod runtime {
                                 // 판정된 세션 후보로 잔류 → 롤업 프로젝트 카드로만 노출)
                                 if status == "new" { fresh_all.push(key.clone()); }
                             }
-                            Err(e) => {
+                            None => {
                                 let status = if attempts >= 3 { Some("rejected") } else { None };
                                 let _ = store.set_judgment(&key, status,
-                                    &serde_json::json!({"attempts":attempts,"error":e.to_string(),"tokens":tokens}));
+                                    &serde_json::json!({"attempts":attempts,"error":"verdict 추출/필수필드 실패","tokens":tokens}));
                             }
                         }
                     }
@@ -253,22 +258,23 @@ mod runtime {
             // ⑤ 롤업 (짧은 락)
             match store_mutex.lock() {
                 Ok(store) => match judge.rollup(&store) {
-                    Ok(keys) => fresh_all.extend(keys),
+                    Ok((keys, mutated)) => { fresh_all.extend(keys); mutated_any |= mutated; }
                     Err(e) => log::warn!("{} rollup 실패: {e}", judge.rule_id()),
                 },
                 Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
             }
         }
-        // ⑥ 새 노출 finding 재발행 — 스캔 fresh-finding과 동일 규율(coach:finding + scan:done).
-        if !fresh_all.is_empty() {
+        // ⑥ 판정으로 노출 세트가 바뀌면 재발행 — 신규 카드·R6 worthy(fresh)뿐 아니라 카드
+        //    갱신/삭제(mutated)까지. coach:finding은 CoachTab 전체 재조회를 유발해 갱신·삭제를
+        //    반영하고(payload 무관), scan:done은 셸 배지 activeCount를 갱신한다.
+        if !fresh_all.is_empty() || mutated_any {
             if let Ok(store) = store_mutex.lock() {
                 let rows: Vec<_> = store.list_findings_current(false).unwrap_or_default()
                     .into_iter().filter(|f| fresh_all.contains(&f.dedup_key)).collect();
                 drop(store);
-                if !rows.is_empty() {
-                    let _ = app.emit("coach:finding", &rows);
-                    let _ = app.emit("scan:done", &chrono::Utc::now().to_rfc3339());
-                }
+                // 갱신/삭제만 있으면 rows가 비어도 coach:finding을 보내 목록 재조회를 유발한다.
+                let _ = app.emit("coach:finding", &rows);
+                let _ = app.emit("scan:done", &chrono::Utc::now().to_rfc3339());
             }
         }
     }
