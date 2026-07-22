@@ -47,6 +47,9 @@ export type SpaceIssue = {
   status: 'open' | 'knowledge_linked' | 'resolved' | string
   opened_by: string
   timeline: IssueStep[]
+  category?: string // LLM 분류
+  summary?: string // LLM 요약
+  narrative?: string // LLM 한 줄 서사
 }
 
 export type KnowledgeDoc = {
@@ -58,6 +61,8 @@ export type KnowledgeDoc = {
   body: string
   cited_by: string[]
   reuse_count: number
+  category?: string // LLM 분류 (문제해결/설계·스펙/…)
+  narrative?: string // LLM 한 줄 서사
 }
 
 export type SpaceHighlight = {
@@ -100,4 +105,46 @@ export function fetchLobby(): Promise<LobbyView> {
 
 export function fetchSpace(spaceId: string, tier = 'member'): Promise<SpaceView> {
   return getJson<SpaceView>(`/api/spaces/${encodeURIComponent(spaceId)}?tier=${tier}`)
+}
+
+// ── 설정 (설정 창) — a-hub 연결 · LLM API 런타임 구성 ──
+// 비밀값은 서버가 값 대신 *_set 불리언으로만 내려준다 (마스킹).
+export type Settings = {
+  source: string
+  work_url: string
+  work_token_set: boolean
+  work_api_key_set: boolean
+  presence_window: number
+  cache_ttl: number
+  llm_url: string
+  llm_model: string
+  llm_key_set: boolean
+  summary_style: string // brief | normal | detailed
+  db_path: string
+}
+
+export type ConnResult = { ok: boolean; status?: number; error?: string }
+export type ConnTest = { hub: ConnResult; llm: ConnResult }
+
+export function fetchSettings(): Promise<Settings> {
+  return getJson<Settings>('/api/settings')
+}
+
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  })
+  if (!res.ok) throw new Error(`POST ${url} → ${res.status}`)
+  return res.json() as Promise<T>
+}
+
+export function saveSettings(patch: Record<string, unknown>): Promise<Settings> {
+  return postJson<Settings>('/api/settings', patch)
+}
+
+// 저장 전 폼 값으로도 검사할 수 있게 patch를 함께 보낸다 (빈 비밀값은 저장된 값으로 폴백).
+export function testConnections(patch: Record<string, unknown> = {}): Promise<ConnTest> {
+  return postJson<ConnTest>('/api/settings/test', patch)
 }

@@ -17,6 +17,18 @@ def test_mascot_png_survives_restart(tmp_path):
     assert restarted.mascot_image(token, agent.agent_id)[0] == png
 
 
+def test_profile_org_uuid_survive_restart(tmp_path):
+    db = str(tmp_path / "life-profile.db")
+    s1 = LifeService(store=SqliteStore(db))
+    agent, _, _ = s1.register("owner", org="S/W 혁신팀", agent_uuid="uuid-xyz")
+
+    # 재시작 흉내 — 같은 DB로 새 서비스가 로드
+    s2 = LifeService(store=SqliteStore(db))
+    loaded = s2._agents[agent.agent_id]
+    assert loaded.org == "S/W 혁신팀"
+    assert loaded.agent_uuid == "uuid-xyz"
+
+
 def test_state_survives_restart(tmp_path):
     db = str(tmp_path / "life.db")
     s1 = LifeService(store=SqliteStore(db))

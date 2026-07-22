@@ -4,12 +4,23 @@
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import { Application, Container } from 'pixi.js'
-import { fetchLobby, fetchSpace, type LobbyFloor, type SpaceAgent, type SpaceIssue, type SpaceView } from './api'
+import {
+  fetchLobby,
+  fetchSettings,
+  fetchSpace,
+  saveSettings,
+  testConnections,
+  type KnowledgeDoc,
+  type LobbyFloor,
+  type SpaceAgent,
+  type SpaceIssue,
+  type SpaceView,
+} from './api'
 import { openBuilder } from './builder'
 import { loadKit } from './life/kit'
 import { buildLifeScene } from './life/renderer'
 import type { LifeConfig } from './life/types'
-import { deleteLife, getLife, loadLife, saveLife } from './store'
+import { deleteLife, getLife, loadLife, loadRooms, saveLife } from './store'
 
 const $ = <T extends HTMLElement>(id: string): T => {
   const el = document.getElementById(id)
@@ -102,7 +113,7 @@ function typeLines(lines: { label: string; value: string }[]) {
 
   let li = 0
   let ci = 0
-  const SPEED = 38 // ms/글자
+  const SPEED = 14 // ms/글자 (타이핑 속도 — 낮을수록 빠름)
   const step = () => {
     if (li >= lines.length) {
       caret.remove()
@@ -157,6 +168,111 @@ function showModal(title: string, bodyHtml: string) {
   modal.querySelector('[data-act="close"]')!.addEventListener('click', () => (modal.hidden = true))
 }
 
+// ── 설정 창 — a-hub 연결 · LLM API 구성 (기본값은 서버가 채워 내려줌) ──
+async function openSettings() {
+  let s
+  try {
+    s = await fetchSettings()
+  } catch (e) {
+    showModal('설정', `<div class="error-note">설정을 불러오지 못했습니다: ${esc(String(e))}</div>`)
+    return
+  }
+  // 비밀값 입력칸 — 저장돼 있으면 placeholder로 '설정됨', 바꿀 때만 입력받는다(빈 값=유지).
+  const secret = (id: string, label: string, isSet: boolean) => `
+    <label class="set-field"><span>${label}</span>
+      <input id="${id}" type="password" autocomplete="off"
+        placeholder="${isSet ? '설정됨 — 바꿀 때만 입력' : '미설정'}" /></label>`
+  const sourceOpts = ['auto', 'hub', 'dummy', 'fixtures']
+    .map((o) => `<option value="${o}" ${o === s.source ? 'selected' : ''}>${o}</option>`)
+    .join('')
+
+  showModal(
+    '설정',
+    `<form class="settings-form" id="settings-form" autocomplete="off">
+      <h3 class="set-group">a-hub 연결</h3>
+      <label class="set-field"><span>a-hub URL</span>
+        <input id="set-work_url" type="text" value="${esc(s.work_url)}" placeholder="https://spacea.msalt.net" /></label>
+      ${secret('set-work_api_key', 'a-hub API Key (x-api-key)', s.work_api_key_set)}
+      ${secret('set-work_token', 'a-hub Token (Bearer)', s.work_token_set)}
+      <label class="set-field"><span>데이터 원천</span><select id="set-source">${sourceOpts}</select></label>
+
+      <h3 class="set-group">LLM API — 분류·요약·서사</h3>
+      <label class="set-field"><span>LLM URL (OpenAI 호환)</span>
+        <input id="set-llm_url" type="text" value="${esc(s.llm_url)}" placeholder="http://…/v1" /></label>
+      <label class="set-field"><span>모델</span>
+        <input id="set-llm_model" type="text" value="${esc(s.llm_model)}" /></label>
+      ${secret('set-llm_key', 'LLM Key (로컬이면 비워둠)', s.llm_key_set)}
+      <label class="set-field"><span>요약 길이 <em class="muted">(바꾸면 전체 재번역)</em></span>
+        <select id="set-summary_style">
+          <option value="brief" ${s.summary_style === 'brief' ? 'selected' : ''}>간결 (한 문장)</option>
+          <option value="normal" ${s.summary_style === 'normal' ? 'selected' : ''}>보통 (2~3문장)</option>
+          <option value="detailed" ${s.summary_style === 'detailed' ? 'selected' : ''}>상세 (3~5문장)</option>
+        </select></label>
+
+      <h3 class="set-group">고급</h3>
+      <label class="set-field"><span>번역 캐시 DB 경로 <em class="muted">(비우면 캐시 끔)</em></span>
+        <input id="set-db_path" type="text" value="${esc(s.db_path)}" /></label>
+      <label class="set-field"><span>폴링 캐시(초)</span>
+        <input id="set-cache_ttl" type="number" min="0" step="1" value="${s.cache_ttl}" /></label>
+
+      <div class="set-actions">
+        <button type="button" class="ghost-btn" id="set-test">연결 테스트</button>
+        <span class="set-status muted small" id="set-status"></span>
+        <span class="spacer"></span>
+        <button type="submit" class="primary-btn">저장</button>
+      </div>
+    </form>`,
+  )
+
+  const v = (id: string) => modal.querySelector<HTMLInputElement | HTMLSelectElement>(id)!.value
+  const collectPatch = (): Record<string, unknown> => {
+    const patch: Record<string, unknown> = {
+      work_url: v('#set-work_url'),
+      source: v('#set-source'),
+      llm_url: v('#set-llm_url'),
+      llm_model: v('#set-llm_model'),
+      summary_style: v('#set-summary_style'),
+      db_path: v('#set-db_path'),
+      cache_ttl: v('#set-cache_ttl'),
+    }
+    for (const [id, key] of [
+      ['#set-work_api_key', 'work_api_key'],
+      ['#set-work_token', 'work_token'],
+      ['#set-llm_key', 'llm_key'],
+    ] as const) {
+      const val = v(id)
+      if (val) patch[key] = val // 비밀값은 입력했을 때만 (빈 값 = 유지)
+    }
+    return patch
+  }
+  const status = () => modal.querySelector<HTMLElement>('#set-status')!
+
+  modal.querySelector('#set-test')!.addEventListener('click', async () => {
+    status().textContent = '테스트 중…'
+    try {
+      const r = await testConnections(collectPatch())
+      const mark = (x: { ok: boolean; status?: number; error?: string }) =>
+        `${x.ok ? '✅' : '❌'}${x.status ? ` (${x.status})` : ''}${x.error ? ` ${esc(x.error)}` : ''}`
+      status().innerHTML = `a-hub ${mark(r.hub)} · LLM ${mark(r.llm)}`
+    } catch (e) {
+      status().textContent = '테스트 실패: ' + String(e)
+    }
+  })
+
+  modal.querySelector('#settings-form')!.addEventListener('submit', async (ev) => {
+    ev.preventDefault()
+    status().textContent = '저장 중…'
+    try {
+      await saveSettings(collectPatch())
+      floorsCache = null // 새 설정으로 다시 조회하게 캐시 무효화
+      modal.hidden = true
+      void renderHome()
+    } catch (e) {
+      status().textContent = '저장 실패: ' + String(e)
+    }
+  })
+}
+
 // ── Pixi 앱 (방 씬 전용, 홈에서는 숨김) ──
 const app = new Application()
 let appReady = false
@@ -194,15 +310,15 @@ function watchDevicePixelRatio() {
   mq.addEventListener('change', onChange, { once: true })
 }
 
-const HUB_W = 340 // #hub 사이드바 폭 — 씬 가용 영역에서 제외
 const SCENE_PAD = 12 // 잘림 방지용 최소 여백 (px)
 function fitScene() {
   if (!currentScene || !appReady) return
   const b = currentScene.getLocalBounds()
-  // 가용 영역 = 전체 화면 − (열린 Hub 폭) − 상단 헤더 높이. 여백은 최소만 두고 방을 꽉 채운다.
+  // 가용 영역 = 전체 화면 − (열린 Hub 실제 폭) − 상단 헤더 높이. 여백은 최소만 두고 방을 꽉 채운다.
   const headerH = headerEl.hidden ? 0 : headerEl.offsetHeight
   // 창이 아주 작아도 가용 영역을 양수로 유지 — 음수 배율(씬 뒤집힘) 방지.
-  const availW = Math.max(10, app.screen.width - (hub.hidden ? 0 : HUB_W) - SCENE_PAD * 2)
+  const hubW = hub.hidden ? 0 : hub.offsetWidth // 리사이즈로 바뀐 현재 폭을 반영
+  const availW = Math.max(10, app.screen.width - hubW - SCENE_PAD * 2)
   const availH = Math.max(10, app.screen.height - headerH - SCENE_PAD * 2)
   // contain: 잘림 없이 가용 영역에 최대로 — 가로/세로 배율 중 작은 쪽.
   const s = Math.min(availW / b.width, availH / b.height)
@@ -292,6 +408,7 @@ async function renderHome() {
         <p class="home-sub">스페이스 방 관전 — 방을 만들고 a-hub 데이터를 들여다보세요</p>
         <button class="primary-btn" id="btn-new-life" ${visibleFloors.length ? '' : 'disabled'}>+ 방 만들기</button>
         ${floors.some((f) => f.demo) ? `<button class="ghost-btn sm fake-toggle ${showFake ? 'on' : ''}" id="btn-toggle-fake">${showFake ? 'FAKE 숨기기' : 'FAKE 보이기'}</button>` : ''}
+        <button class="ghost-btn sm" id="btn-settings" title="a-hub·LLM 연결 설정">⚙ 설정</button>
       </header>
       ${loadError ? `<div class="error-note">백엔드 연결 실패: ${esc(loadError)}</div>` : ''}
       ${life.length ? `<h3 class="home-section">내가 만든 방</h3><div class="card-grid">${lifeCards}</div>` : ''}
@@ -312,6 +429,7 @@ async function renderHome() {
     })
   }
 
+  homeEl.querySelector('#btn-settings')?.addEventListener('click', () => void openSettings())
   homeEl.querySelector('#btn-new-life')?.addEventListener('click', () => startBuilder())
   homeEl.querySelector('#btn-toggle-fake')?.addEventListener('click', () => {
     showFake = !showFake
@@ -349,6 +467,20 @@ function statusMeta(status: string): [string, string] {
 function statusBadge(status: string): string {
   const [label, color] = statusMeta(status)
   return `<span class="badge" style="border-color:${color};color:${color}">${esc(label)}</span>`
+}
+
+// LLM 분류 → 사람이 읽을 라벨 + 색 배지 (translator.CATEGORY_KO 미러)
+const CATEGORY_KO: Record<string, string> = {
+  troubleshoot: '문제해결',
+  spec: '설계·스펙',
+  analysis: '분석·결과',
+  release: '릴리즈·변경',
+  note: '노트·회의',
+  guide: '가이드',
+}
+function catBadge(cat?: string | null): string {
+  if (!cat) return ''
+  return `<span class="cat-badge cat-${esc(cat)}">${esc(CATEGORY_KO[cat] ?? cat)}</span>`
 }
 
 // 서랍장(책장) 클릭 → Hub '지식 재사용' 탭으로 전환 (2026-07-19). 탭 안에서
@@ -405,10 +537,48 @@ function issueTimeLabel(iso: string): string {
 // 컴팩트 행: 왼쪽 상태 색 바 + 제목(최대 2줄) + 흐린 메타 한 줄. 해결은 dim.
 function issueRowHTML(i: SpaceIssue): string {
   const [, color] = statusMeta(i.status)
+  const gist = i.narrative || i.summary || '' // LLM 요약(한 줄 서사 우선)
   return `
     <div class="issue-row ${i.status === 'resolved' ? 'done' : ''}" data-issue="${esc(i.issue_id)}" style="border-left-color:${color}">
-      <div class="issue-row-title">${esc(i.title)}</div>
+      <div class="issue-row-title">${catBadge(i.category)}${esc(i.title)}</div>
+      ${gist ? `<div class="doc-summary">${esc(gist)}</div>` : ''}
       <div class="issue-row-meta"><span>👤 ${esc(issueActor(i))} · ${issueTimeLabel(issueAt(i))}</span>${statusBadge(i.status)}</div>
+    </div>`
+}
+
+// 이슈 행 클릭 시 뜨는 상세 모달 — 분류·요약·서사 + 진행 상태 타임라인.
+// (이슈는 원문 body가 없어 지식 문서처럼 원문 렌더 대신 번역·타임라인을 보여준다.)
+function issueModalHTML(i: SpaceIssue): string {
+  const steps = (i.timeline ?? [])
+    .map(
+      (s) =>
+        `<li><b>${esc(s.label || s.step)}</b>${s.actor ? ` · 👤 ${esc(s.actor)}` : ''}${
+          s.at ? ` · <span class="muted">${esc(kstDateTime(s.at))}</span>` : ''
+        }${s.note ? `<div class="muted">${esc(s.note)}</div>` : ''}</li>`,
+    )
+    .join('')
+  return `
+    <div class="issue-detail">
+      <div class="issue-detail-badges">${catBadge(i.category)}${statusBadge(i.status)}</div>
+      ${i.summary ? `<p class="doc-summary">${esc(i.summary)}</p>` : ''}
+      ${i.narrative && i.narrative !== i.summary ? `<p class="muted">${esc(i.narrative)}</p>` : ''}
+      <div class="muted small">👤 ${esc(issueActor(i))}</div>
+      <h4 class="issue-detail-h">진행 상태</h4>
+      <ul class="issue-timeline">${steps || '<li class="muted">기록 없음</li>'}</ul>
+    </div>`
+}
+
+// 지식 문서 클릭 시 모달 — 분류·요약(전문)을 머리에 두고 그 아래 원문 전체를 렌더한다.
+// (카드에선 제목·요약을 짧게 클램프하고, 여기서 전문을 보여준다.)
+function docModalHTML(d: KnowledgeDoc): string {
+  const vis = d.visibility === 'org' ? '조직 공개' : '방 전용'
+  return `
+    <div class="doc-detail">
+      <div class="issue-detail-badges">${catBadge(d.category)}<span class="badge">${vis}</span></div>
+      <div class="muted small">👤 ${esc(d.author_agent || '작성자 미상')}</div>
+      ${d.summary ? `<p class="doc-summary">${esc(d.summary)}</p>` : ''}
+      <h4 class="issue-detail-h">원문</h4>
+      <div class="doc-body md">${mdHTML(d.body)}</div>
     </div>`
 }
 
@@ -490,7 +660,7 @@ function hubReuseHTML(data: SpaceView): string {
         .map(
           ({ d, i }) => `
         <div class="doc-item" data-doc="${i}" data-docid="${esc(d.doc_id)}">
-          <b>${esc(d.title)}</b>
+          <b>${catBadge(d.category)}${esc(d.title)}</b>
           <div class="muted">👤 ${esc(d.author_agent || '작성자 미상')}${d.visibility === 'org' ? ' · 조직 공개' : ''} · 재사용 ${d.reuse_count ?? 0}</div>
           <div class="doc-summary">${esc(d.summary)}</div>
         </div>`,
@@ -523,7 +693,7 @@ function hubPagesHTML(data: SpaceView): string {
         .map(
           ({ d, i }) => `
         <div class="doc-item" data-doc="${i}" data-docid="${esc(d.doc_id)}">
-          <b>${esc(d.title)}</b>
+          <b>${catBadge(d.category)}${esc(d.title)}</b>
           <div class="muted">👤 ${esc(d.author_agent || '작성자 미상')} · ${d.visibility === 'org' ? '조직 공개' : '방 전용'}</div>
           <div class="doc-summary">${esc(d.summary)}</div>
         </div>`,
@@ -600,6 +770,44 @@ function toggleHub(collapsed: boolean) {
 $('hub-collapse').addEventListener('click', () => toggleHub(true))
 hubOpen.addEventListener('click', () => toggleHub(false))
 
+// ── Hub 너비 드래그 리사이즈 (localStorage 유지) ──
+const HUB_MIN = 300
+const HUB_MAX = 720
+let hubWidth = 400
+try {
+  const w = Number(localStorage.getItem('a-lens.hub.width'))
+  if (w) hubWidth = Math.min(HUB_MAX, Math.max(HUB_MIN, w))
+} catch (e) {
+  console.warn('localStorage 읽기 실패 — Hub 너비 기본값 사용', e)
+}
+function applyHubWidth() {
+  document.documentElement.style.setProperty('--hub-w', `${hubWidth}px`)
+  fitScene()
+}
+applyHubWidth()
+const hubResize = $('hub-resize')
+hubResize.addEventListener('pointerdown', (e: PointerEvent) => {
+  e.preventDefault()
+  hubResize.classList.add('dragging')
+  const onMove = (ev: PointerEvent) => {
+    // Hub는 오른쪽에 고정 — 왼쪽 가장자리를 끌면 너비 = 화면오른쪽 − 커서X
+    hubWidth = Math.min(HUB_MAX, Math.max(HUB_MIN, Math.round(window.innerWidth - ev.clientX)))
+    applyHubWidth()
+  }
+  const onUp = () => {
+    hubResize.classList.remove('dragging')
+    try {
+      localStorage.setItem('a-lens.hub.width', String(hubWidth))
+    } catch {
+      /* 저장 실패 무시 */
+    }
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+  }
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+})
+
 function renderHub(data: SpaceView) {
   hubTabs.innerHTML = HUB_TABS.map(
     (t) => `<button class="hub-tab ${t.id === hubTab ? 'on' : ''}" data-tab="${t.id}">
@@ -630,7 +838,14 @@ function renderHub(data: SpaceView) {
   hubBody.querySelectorAll<HTMLElement>('.doc-item').forEach((el) => {
     el.addEventListener('click', () => {
       const doc = data.knowledge[Number(el.dataset.doc)]
-      if (doc) showModal(doc.title, `<div class="doc-body md">${mdHTML(doc.body)}</div>`)
+      if (doc) showModal(doc.title, docModalHTML(doc))
+    })
+  })
+  // 이슈 흐름의 행 클릭 → 이슈 상세 모달 (분류·요약·타임라인)
+  hubBody.querySelectorAll<HTMLElement>('.issue-row').forEach((el) => {
+    el.addEventListener('click', () => {
+      const iss = data.issues.find((x) => x.issue_id === el.dataset.issue)
+      if (iss) showModal(iss.title, issueModalHTML(iss))
     })
   })
   renderHubActivity(data)
@@ -770,5 +985,7 @@ function route() {
   else void renderHome()
 }
 window.addEventListener('hashchange', route)
-// 스프라이트 킷(있으면)을 먼저 로드하고 첫 라우팅 — 없으면 Graphics 폴백
-void loadKit().then(route)
+// 스프라이트 킷 + 서버의 공유 방 목록을 먼저 로드하고 첫 라우팅 — 킷 없으면 Graphics 폴백
+void loadKit()
+  .then(loadRooms)
+  .then(route)

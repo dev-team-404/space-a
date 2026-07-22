@@ -1,0 +1,11 @@
+# 이미지 빌드에서 제외 — 재생성되거나(node_modules·dist·venv) 비밀·런타임 데이터인 것들
+**/.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+**/*.egg-info
+**/.a-lens
+backend/.env
+frontend/.vite
+.git

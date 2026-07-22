@@ -7,9 +7,12 @@
   import GuestbookTab from './lib/ui/GuestbookTab.svelte';
   import LifeSettingsTab from './lib/ui/LifeSettingsTab.svelte';
   import RobotPortrait from './lib/ui/RobotPortrait.svelte';
+  import UpdateBanner from './lib/ui/UpdateBanner.svelte';
+  import { runCheck } from './lib/ui/update-store.svelte';
   import {
     getSummary, getDailyLine, listFindings, onScanDone, onGotoTab,
-    onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, lifeContentAccess, lifeView, type Summary,
+    onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, onUpdateCheckRequested,
+    lifeContentAccess, lifeView, type Summary,
   } from './lib/api';
   import {
     diaryNotice, findingNotice, loadNotices, occasionNotice, pushNotice, saveNotices,
@@ -84,6 +87,13 @@
   }
   refresh();
   onScanDone(() => refresh());
+
+  // 자동 업데이트: 시작 시 조용히 1회 체크 + 트레이 "업데이트 확인" 수동 트리거
+  runCheck(false);
+  $effect(() => {
+    const un = onUpdateCheckRequested(() => runCheck(true));
+    return () => { un.then((u) => u()); };
+  });
   onGotoTab(({ tab: t, target }) => {
     if (!(t === 'home' || t === 'diary' || t === 'coach' || t === 'chat')) return;
     if (target && t === 'coach') gotoCoach(target);
@@ -129,6 +139,7 @@
 
 <div class="wall">
   <div class="homepy">
+    <UpdateBanner />
     <header class="titlebar">
       <!-- 헤더 = 지금 보는 방의 주인. 자기 방이면 hub 등록 이름, hub 미연결이면 로컬 계정명 -->
       <h1>{lifeOwner || (summary?.user_name ?? '주인')}님의 <span class="mh">미니홈피</span></h1>

@@ -1,0 +1,29 @@
+# a-lens 로컬 실행 + 같은 네트워크(LAN) 공유용.
+#   docker compose up -d --build   → http://<이 PC의 LAN IP>:8600 을 팀원과 공유
+# 주의: LLM은 호스트의 LM Studio(1234)를 host.docker.internal로 사용한다.
+#       a-hub 접속값은 backend/.env(커밋 안 됨)에서 읽는다.
+services:
+  a-lens:
+    build:
+      context: .
+      additional_contexts:
+        proxy-certs: ./.proxy-certs # 사내 proxy CA (*.crt) — 없으면 Dockerfile에서 no-op
+    image: a-lens:local
+    container_name: a-lens
+    ports:
+      - "8600:8600" # 0.0.0.0 바인딩 → 같은 네트워크에서 http://<host-ip>:8600 접속
+    env_file:
+      - backend/.env # A_LENS_WORK_URL / A_LENS_WORK_TOKEN / A_LENS_WORK_API_KEY 등
+    environment:
+      # 컨테이너 → 호스트의 LM Studio. WSL 게이트웨이 IP(172.26.80.1)가 실측상 유일하게 닿음
+      # (host.docker.internal은 이 환경에서 refused). WSL 재시작 등으로 IP가 바뀌면 이 값 또는
+      # 설정창의 LLM URL을 갱신하면 된다.
+      - A_LENS_LLM_URL=http://172.26.80.1:1234/v1
+      - A_LENS_LLM_MODEL=qwen/qwen3/qwen3-30b-a3b-instruct-2507-q4_k_m.gguf
+      - A_LENS_SUMMARY_STYLE=brief
+    volumes:
+      - alens-data:/app/a-lens/backend/.a-lens # 설정·번역 캐시·스냅숏 영속화
+    restart: unless-stopped
+
+volumes:
+  alens-data:

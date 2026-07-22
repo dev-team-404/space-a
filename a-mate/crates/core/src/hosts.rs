@@ -110,6 +110,50 @@ pub fn wsl_path_to_unc(distro: &str, wsl_path: &str, localhost: bool) -> PathBuf
     PathBuf::from(format!(r"{prefix}\{distro}\{rel}"))
 }
 
+/// 경로의 마지막 세그먼트(basename). '/' 와 '\\' 둘 다 구분자로 취급.
+pub fn path_basename(p: &str) -> String {
+    p.rsplit(|c| c == '/' || c == '\\')
+        .find(|s| !s.is_empty())
+        .unwrap_or(p)
+        .to_string()
+}
+
+/// s 가 prefix(ASCII) 로 시작하면(대소문자 무시) 나머지 슬라이스를 반환.
+fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
+    (s.len() >= prefix.len()
+        && s.as_bytes()[..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes()))
+    .then(|| &s[prefix.len()..])
+}
+
+/// WSL UNC 경로를 (distro, 리눅스 절대경로)로 되돌린다. `wsl_path_to_unc` 의 역.
+/// `\\wsl.localhost\Ubuntu-22.04\home\jay\proj` → ("Ubuntu-22.04", "/home/jay/proj").
+/// `\\wsl$\Debian\home\x` 도 지원. UNC 서버명은 대소문자 무시. WSL UNC 가 아니면 None.
+pub fn unc_to_wsl_path(p: &str) -> Option<(String, String)> {
+    let rest = strip_prefix_ci(p, r"\\wsl.localhost\")
+        .or_else(|| strip_prefix_ci(p, r"\\wsl$\"))?;
+    let mut it = rest.splitn(2, '\\');
+    let distro = it.next().filter(|s| !s.is_empty())?.to_string();
+    let tail = it.next().unwrap_or("");
+    Some((distro, format!("/{}", tail.replace('\\', "/"))))
+}
+
+/// (host, cwd) → (정규화 프로젝트 키, 표시 이름).
+/// 같은 프로젝트의 WSL 직접 세션과 Windows(WSL UNC 경로) 세션을 같은 키로 통합한다.
+/// - WSL 직접: host=`wsl:<distro>`, cwd=리눅스경로 → key=`wsl:<distro>:<linux>`
+/// - Windows(WSL UNC): cwd=`\\wsl.localhost\<distro>\...` → 위와 동일 key 로 통합
+/// - 일반 Windows: key=`win:<소문자 경로>` (리눅스 경로 키는 대소문자 유지)
+pub fn project_identity(host: &str, cwd: &str) -> (String, String) {
+    // distro 는 대소문자 무시로 통합(WSL distro 이름은 case-insensitive), 리눅스 tail 은 케이스 유지.
+    if let Some(distro) = host.strip_prefix("wsl:") {
+        return (format!("wsl:{}:{cwd}", distro.to_lowercase()), path_basename(cwd));
+    }
+    if let Some((distro, linux)) = unc_to_wsl_path(cwd) {
+        let name = path_basename(&linux);
+        return (format!("wsl:{}:{linux}", distro.to_lowercase()), name);
+    }
+    (format!("win:{}", cwd.to_lowercase()), path_basename(cwd))
+}
+
 fn windows_claude_root() -> Option<PathBuf> {
     let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).ok()?;
     Some(PathBuf::from(home).join(".claude"))
@@ -238,5 +282,62 @@ mod tests {
         let a = hs.adapter();
         assert_eq!(a.host, "Windows");
         assert_eq!(a.root, PathBuf::from(r"C:\Users\jibin\.claude"));
+    }
+
+    #[test]
+    fn unc_to_wsl_path_reverses_wsl_path_to_unc() {
+        assert_eq!(
+            unc_to_wsl_path(r"\\wsl.localhost\Ubuntu-22.04\home\jay\proj"),
+            Some(("Ubuntu-22.04".to_string(), "/home/jay/proj".to_string()))
+        );
+        assert_eq!(
+            unc_to_wsl_path(r"\\wsl$\Debian\home\x"),
+            Some(("Debian".to_string(), "/home/x".to_string()))
+        );
+        assert_eq!(unc_to_wsl_path(r"D:\work\proj"), None);
+    }
+
+    #[test]
+    fn project_identity_unifies_wsl_direct_and_windows_unc() {
+        let (k1, n1) = project_identity("wsl:Ubuntu-22.04", "/home/jayb/work/agent-meter");
+        let (k2, n2) = project_identity(
+            "Windows",
+            r"\\wsl.localhost\Ubuntu-22.04\home\jayb\work\agent-meter",
+        );
+        assert_eq!(k1, k2, "같은 프로젝트는 같은 키로 통합");
+        assert_eq!(n1, "agent-meter");
+        assert_eq!(n2, "agent-meter");
+    }
+
+    #[test]
+    fn project_identity_plain_windows_is_case_insensitive() {
+        let (k1, n1) = project_identity("Windows", r"D:\Project\space-a");
+        let (k2, _) = project_identity("Windows", r"d:\project\space-a");
+        assert_eq!(k1, k2, "Windows 경로 키는 대소문자 무시");
+        assert_eq!(n1, "space-a");
+    }
+
+    #[test]
+    fn project_identity_distinct_projects_differ() {
+        let (a, _) = project_identity("wsl:Ubuntu-22.04", "/home/jayb/work/agent-meter");
+        let (b, _) = project_identity("wsl:Ubuntu-22.04", "/home/jayb/work/agenttoolbox");
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn unc_to_wsl_path_is_case_insensitive_on_server() {
+        // UNC 서버명(wsl.localhost)은 대소문자 무시 — 대문자 변종도 파싱해야 한다.
+        assert_eq!(
+            unc_to_wsl_path(r"\\WSL.LOCALHOST\Ubuntu-22.04\home\x"),
+            Some(("Ubuntu-22.04".to_string(), "/home/x".to_string()))
+        );
+    }
+
+    #[test]
+    fn project_identity_unifies_across_distro_and_unc_case() {
+        // distro 케이스가 다르거나 UNC 서버가 대문자여도 같은 프로젝트로 통합.
+        let (k1, _) = project_identity("wsl:Ubuntu-22.04", "/home/jayb/work/x");
+        let (k2, _) = project_identity("Windows", r"\\WSL.LOCALHOST\ubuntu-22.04\home\jayb\work\x");
+        assert_eq!(k1, k2, "distro·UNC 서버 대소문자 무관 통합");
     }
 }

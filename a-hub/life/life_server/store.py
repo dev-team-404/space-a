@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS agents (
   x           INTEGER NOT NULL,
   y           INTEGER NOT NULL,
   mascot_seed TEXT NOT NULL DEFAULT '',
+  org         TEXT NOT NULL DEFAULT '',
+  agent_uuid  TEXT NOT NULL DEFAULT '',
   bubble      TEXT NOT NULL DEFAULT '',
   connected   INTEGER NOT NULL DEFAULT 1
 );
@@ -94,6 +96,10 @@ class SqliteStore:
             self._conn.execute("ALTER TABLE agents ADD COLUMN bubble TEXT NOT NULL DEFAULT ''")
         if "connected" not in agent_columns:
             self._conn.execute("ALTER TABLE agents ADD COLUMN connected INTEGER NOT NULL DEFAULT 1")
+        if "org" not in agent_columns:
+            self._conn.execute("ALTER TABLE agents ADD COLUMN org TEXT NOT NULL DEFAULT ''")
+        if "agent_uuid" not in agent_columns:
+            self._conn.execute("ALTER TABLE agents ADD COLUMN agent_uuid TEXT NOT NULL DEFAULT ''")
         self._conn.commit()
 
     def _migrate_life_objects(self) -> None:
@@ -150,10 +156,11 @@ class SqliteStore:
         agents = {
             agent_id: LifeAgent(
                 agent_id=agent_id, name=name, life_id=life_id, at_life=at_life,
-                cell=(x, y), mascot_seed=mascot_seed, bubble=bubble, connected=bool(connected),
+                cell=(x, y), mascot_seed=mascot_seed, org=org, agent_uuid=agent_uuid,
+                bubble=bubble, connected=bool(connected),
             )
-            for agent_id, name, life_id, at_life, x, y, mascot_seed, bubble, connected in c.execute(
-                "SELECT agent_id, name, life_id, at_life, x, y, mascot_seed, bubble, connected FROM agents"
+            for agent_id, name, life_id, at_life, x, y, mascot_seed, org, agent_uuid, bubble, connected in c.execute(
+                "SELECT agent_id, name, life_id, at_life, x, y, mascot_seed, org, agent_uuid, bubble, connected FROM agents"
             )
         }
         tokens = dict(c.execute("SELECT token, agent_id FROM tokens"))
@@ -287,12 +294,14 @@ class SqliteStore:
 
     def _save_agent_row(self, agent: LifeAgent) -> None:
         self._conn.execute(
-            "INSERT INTO agents (agent_id, name, life_id, at_life, x, y, mascot_seed, bubble, connected) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "INSERT INTO agents (agent_id, name, life_id, at_life, x, y, mascot_seed, org, agent_uuid, bubble, connected) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(agent_id) DO UPDATE SET "
             "name = excluded.name, at_life = excluded.at_life, x = excluded.x, y = excluded.y, "
-            "mascot_seed = excluded.mascot_seed, bubble = excluded.bubble, connected = excluded.connected",
+            "mascot_seed = excluded.mascot_seed, org = excluded.org, agent_uuid = excluded.agent_uuid, "
+            "bubble = excluded.bubble, connected = excluded.connected",
             (
                 agent.agent_id, agent.name, agent.life_id, agent.at_life,
-                agent.cell[0], agent.cell[1], agent.mascot_seed, agent.bubble, int(agent.connected),
+                agent.cell[0], agent.cell[1], agent.mascot_seed, agent.org, agent.agent_uuid,
+                agent.bubble, int(agent.connected),
             ),
         )

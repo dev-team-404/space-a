@@ -11,7 +11,7 @@ pub const BODY_VARIANTS: u8 = 6;
 pub const ARMS_VARIANTS: u8 = 6;
 pub const PALETTE_VARIANTS: u8 = 8;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub struct RobotSpec {
     pub antenna: u8,
     pub head: u8,
@@ -43,6 +43,51 @@ pub fn robot_spec_for(identity: &str) -> RobotSpec {
         arms: d[4] % ARMS_VARIANTS,
         palette: d[5] % PALETTE_VARIANTS,
     }
+}
+
+/// MBTI 4글자 정규화 — 유효하면 대문자 4글자, 아니면 None. 빈값도 None(미설정).
+/// 각 자리는 해당 이분법의 두 글자 중 하나여야 한다(E/I, S/N, T/F, J/P).
+pub fn normalize_mbti(raw: &str) -> Option<String> {
+    let up = raw.trim().to_ascii_uppercase();
+    let b = up.as_bytes();
+    if b.len() != 4 {
+        return None;
+    }
+    let ok = matches!(b[0], b'E' | b'I')
+        && matches!(b[1], b'S' | b'N')
+        && matches!(b[2], b'T' | b'F')
+        && matches!(b[3], b'J' | b'P');
+    ok.then_some(up)
+}
+
+/// 부분집합에서 uuid 해시 바이트로 하나 고른다(결정론).
+fn pick(group: &[u8], byte: u8) -> u8 {
+    group[(byte as usize) % group.len()]
+}
+
+/// 프로필(uuid + 선택 MBTI) → RobotSpec.
+/// MBTI가 있으면 4축을 슬롯 부분집합으로 제약하고, uuid 해시가 그 안에서 세부를 고른다
+/// (같은 MBTI는 비슷, 사람마다 다름). MBTI가 없으면 `robot_spec_for(uuid)`와 동일.
+pub fn robot_spec_from_profile(uuid: &str, mbti: Option<&str>) -> RobotSpec {
+    let base = robot_spec_for(uuid);
+    let Some(m) = mbti.and_then(normalize_mbti) else {
+        return base;
+    };
+    let d = Sha256::digest(uuid.as_bytes());
+    let m = m.as_bytes();
+    // S/N → head (실용=각진 / 추상=둥근)
+    let head = if m[1] == b'S' { pick(&[1, 5, 4], d[1]) } else { pick(&[0, 2, 3], d[1]) };
+    // E/I → eyes(생기/차분) + palette(밝은/무광)
+    let (eyes, palette) = if m[0] == b'E' {
+        (pick(&[1, 3, 5], d[2]), pick(&[0, 2, 3, 5], d[5]))
+    } else {
+        (pick(&[0, 2, 4], d[2]), pick(&[1, 4, 6, 7], d[5]))
+    };
+    // T/F → body (각진 아머 / 부드러운 라운드)
+    let body = if m[2] == b'T' { pick(&[1, 5, 4], d[3]) } else { pick(&[0, 3, 2], d[3]) };
+    // J/P → arms (정돈 / 여유)
+    let arms = if m[3] == b'J' { pick(&[0, 3, 1], d[4]) } else { pick(&[2, 4, 5], d[4]) };
+    RobotSpec { antenna: base.antenna, head, eyes, body, arms, palette }
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -297,6 +342,49 @@ mod tests {
         let id = stable_identity();
         assert!(id.contains('|'));
     }
+
+    #[test]
+    fn mbti_normalize_accepts_valid_rejects_invalid() {
+        assert_eq!(normalize_mbti("intj").as_deref(), Some("INTJ"));
+        assert_eq!(normalize_mbti(" ENFP ").as_deref(), Some("ENFP"));
+        assert_eq!(normalize_mbti(""), None); // 미설정
+        assert_eq!(normalize_mbti("INT"), None); // 길이
+        assert_eq!(normalize_mbti("XNTJ"), None); // 1자리 X
+        assert_eq!(normalize_mbti("IXTJ"), None); // 2자리 X (S/N 아님)
+        assert_eq!(normalize_mbti("INTX"), None); // 4자리 X (J/P 아님)
+    }
+
+    #[test]
+    fn profile_without_mbti_equals_uuid_spec() {
+        let uuid = "550e8400-e29b-41d4-a716-446655440000";
+        assert_eq!(robot_spec_from_profile(uuid, None), robot_spec_for(uuid));
+        assert_eq!(robot_spec_from_profile(uuid, Some("")), robot_spec_for(uuid));
+        assert_eq!(robot_spec_from_profile(uuid, Some("bad")), robot_spec_for(uuid));
+    }
+
+    #[test]
+    fn mbti_constrains_slots_to_expected_groups() {
+        // 여러 uuid에 대해 INTJ면 head/body/arms/eyes/palette가 항상 지정 그룹 안에 든다.
+        for i in 0..30 {
+            let uuid = format!("uuid-{i}");
+            let s = robot_spec_from_profile(&uuid, Some("INTJ"));
+            assert!([0u8, 2, 3].contains(&s.head), "N → 둥근 head: {}", s.head); // N
+            assert!([1u8, 5, 4].contains(&s.body), "T → 아머 body: {}", s.body); // T
+            assert!([0u8, 3, 1].contains(&s.arms), "J → 정돈 arms: {}", s.arms); // J
+            assert!([0u8, 2, 4].contains(&s.eyes), "I → 차분 eyes: {}", s.eyes); // I
+            assert!([1u8, 4, 6, 7].contains(&s.palette), "I → 무광 palette: {}", s.palette); // I
+        }
+    }
+
+    #[test]
+    fn same_mbti_varies_by_uuid() {
+        // 같은 MBTI라도 uuid가 다르면 세부가 갈린다 — 여러 표본에서 서로 다른 스펙이 2종 이상 나온다.
+        use std::collections::HashSet;
+        let set: HashSet<_> = (0..20)
+            .map(|i| robot_spec_from_profile(&format!("uuid-{i}"), Some("ENFP")))
+            .collect();
+        assert!(set.len() > 1, "같은 MBTI라도 uuid로 세부가 달라야 함 (distinct={})", set.len());
+    }
 }
 
 #[cfg(test)]
@@ -415,7 +503,7 @@ mod chatter_tests {
     }
 
     fn work(is_weekend: bool, active_hours: f64, long_work: bool) -> crate::diary::WorkContext {
-        crate::diary::WorkContext { is_weekend, active_hours, long_work }
+        crate::diary::WorkContext { is_weekend, is_holiday: false, active_hours, long_work }
     }
 
     #[test]

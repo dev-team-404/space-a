@@ -263,6 +263,9 @@ export const onSettingsChanged = (cb: () => void): Promise<UnlistenFn> =>
   listen('settings:changed', () => cb());
 export const onContentReady = (cb: (rows: ContentItem[]) => void): Promise<UnlistenFn> =>
   listen<ContentItem[]>('content:ready', (e) => cb(e.payload));
+/** 트레이 "업데이트 확인" → chat 창에서 수동 업데이트 체크를 트리거 */
+export const onUpdateCheckRequested = (cb: () => void): Promise<UnlistenFn> =>
+  listen('update:check', () => cb());
 
 /** AI 스프라이트(캐시) base64 — 없으면 null (절차 생성 폴백). */
 export async function getSprite(): Promise<string | null> {
@@ -289,6 +292,12 @@ export async function imageSettingsSet(url: string, key: string, model: string):
 export async function regenerateSprite(): Promise<void> {
   await invoke('regenerate_sprite');
 }
+
+/** 개인정보 — 이름·조직·아이디(UUID 자동)·MBTI. a-hub 연결·마스코트 시드에 쓰인다. */
+export interface Profile { name: string; org: string; uuid: string; mbti: string }
+export const profileGet = () => invoke<Profile>('profile_get');
+export const profileSet = (name: string, org: string, mbti: string) =>
+  invoke<Profile>('profile_set', { name, org, mbti });
 
 /** 점유자 스프라이트 백그라운드 생성 요청 — 완료 시 'occupant-sprite:ready'(seed) 이벤트. */
 export async function requestOccupantSprite(seed: string): Promise<void> {
