@@ -315,7 +315,7 @@
     cursor: pointer;
   }
   button.primary {
-    color: #fff;
+    color: var(--accent-ink);
     background: var(--accent);
     border-color: var(--accent);
   }

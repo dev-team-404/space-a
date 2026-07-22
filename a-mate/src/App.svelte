@@ -204,9 +204,9 @@
     border-bottom: 1px solid var(--pastel-lav);
   }
   .titlebar h1 { margin: 0; font-size: 16px; font-weight: 700; }
-  .titlebar h1 .mh { color: var(--accent); }
+  .titlebar h1 .mh { color: var(--accent-strong); }
   .counter { font-size: 12px; color: var(--ink-soft); }
-  .counter b { color: var(--accent); }
+  .counter b { color: var(--accent-strong); }
   .body { flex: 1; display: flex; min-height: 0; position: relative; }
   .profile {
     width: 168px; padding: 16px 14px;
@@ -227,7 +227,7 @@
     overflow-wrap: break-word; word-break: break-word;
     display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
   }
-  .diary .more { font-size: 10px; color: var(--accent); }
+  .diary .more { font-size: 10px; color: var(--accent-strong); }
   /* margin-right: 스크롤바를 프레임 가장자리(우측 세로 탭이 걸치는 곳)에서 안쪽으로 밀어냄 */
   .content { flex: 1; min-width: 0; overflow-y: auto; display: flex; flex-direction: column; margin-right: 10px; }
   .tabs {
@@ -243,10 +243,10 @@
     box-shadow: var(--shadow-soft);
     display: flex; align-items: center; gap: 5px;
   }
-  .tabs button.active { background: var(--accent); font-weight: 700; color: #0b3327; border-color: transparent; }
+  .tabs button.active { background: var(--accent); font-weight: 700; color: var(--accent-ink); border-color: transparent; }
   .badge {
     writing-mode: horizontal-tb;
-    background: var(--pastel-coral); color: #3a1512; font-weight: 700;
+    background: var(--coral); color: var(--coral-ink); font-weight: 700;
     border-radius: 999px; font-size: 10px; padding: 1px 5px;
   }
 </style>

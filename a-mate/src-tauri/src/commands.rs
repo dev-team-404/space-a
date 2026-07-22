@@ -536,6 +536,62 @@ pub fn engine_settings_set(
     Ok(())
 }
 
+/// 미니홈피 테마 설정 스냅샷. mode: light|dark|system, skin: sky|mint|peach|lavender.
+#[derive(Debug, Clone, Serialize)]
+pub struct ThemeSettings {
+    pub mode: String,
+    pub skin: String,
+}
+
+const THEME_MODES: &[&str] = &["light", "dark", "system"];
+const THEME_SKINS: &[&str] = &["sky", "mint", "peach", "lavender"];
+
+/// 허용 집합 검증 (순수 — 테스트 대상)
+pub fn validate_theme(mode: &str, skin: &str) -> Result<(), String> {
+    if !THEME_MODES.contains(&mode) {
+        return Err(format!("허용되지 않은 테마 모드: {mode}"));
+    }
+    if !THEME_SKINS.contains(&skin) {
+        return Err(format!("허용되지 않은 색상 세트: {skin}"));
+    }
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub fn theme_get(state: State<AppState>) -> Result<ThemeSettings, String> {
+    let guard = lock(&state)?;
+    let get = |k: &str, d: &str| {
+        let v = guard.get_setting(k).ok().flatten().unwrap_or_default();
+        if v.trim().is_empty() { d.to_string() } else { v }
+    };
+    let mode = get("theme_mode", "system");
+    let skin = get("theme_skin", "sky");
+    // 저장값이 깨졌으면 기본값으로 폴백
+    if validate_theme(&mode, &skin).is_ok() {
+        Ok(ThemeSettings { mode, skin })
+    } else {
+        Ok(ThemeSettings { mode: "system".into(), skin: "sky".into() })
+    }
+}
+
+#[tauri::command(async)]
+pub fn theme_set(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    mode: String,
+    skin: String,
+) -> Result<(), String> {
+    validate_theme(&mode, &skin)?;
+    {
+        let guard = lock(&state)?;
+        guard.set_setting("theme_mode", &mode).map_err(|e| e.to_string())?;
+        guard.set_setting("theme_skin", &skin).map_err(|e| e.to_string())?;
+    } // 락 해제 후 브로드캐스트
+    use tauri::Emitter;
+    let _ = app.emit("theme:changed", ThemeSettings { mode, skin });
+    Ok(())
+}
+
 /// 저장 전 값으로도 시험할 수 있게 폼 값을 그대로 받는다. 성공 시 모델의 응답 일부를 돌려준다.
 #[tauri::command(async)]
 pub fn engine_test(url: String, key: String, model: String) -> Result<String, String> {
@@ -951,6 +1007,15 @@ mod tests {
     fn open_chat_tab_validates_tab() {
         assert!(valid_tab("home") && valid_tab("diary") && valid_tab("coach") && valid_tab("chat"));
         assert!(!valid_tab("etc") && !valid_tab(""));
+    }
+
+    #[test]
+    fn validate_theme_accepts_known_and_rejects_unknown() {
+        assert!(validate_theme("system", "sky").is_ok());
+        assert!(validate_theme("dark", "peach").is_ok());
+        assert!(validate_theme("light", "lavender").is_ok());
+        assert!(validate_theme("neon", "sky").is_err());
+        assert!(validate_theme("dark", "rainbow").is_err());
     }
 
     #[test]
