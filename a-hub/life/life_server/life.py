@@ -70,6 +70,8 @@ class LifeAgent:
     at_life: str  # 현재 있는 방
     cell: Cell
     mascot_seed: str = ""  # 클라이언트 마스코트 시드 — 어느 방에서든 같은 로봇으로 보이게
+    org: str = ""  # 조직 (클라이언트 프로필)
+    agent_uuid: str = ""  # 클라이언트가 자동부여한 고유 ID (서버 agent_id와 별개)
     bubble: str = ""
     connected: bool = True
 
@@ -123,8 +125,13 @@ class LifeService:
 
     # --- 신원 ---
 
-    def register(self, name: str, mascot_seed: str = "") -> tuple[LifeAgent, str, Life]:
-        """유저 등록 + 개인 방 생성. 에이전트는 자기 방에 자동 입장."""
+    def register(
+        self, name: str, mascot_seed: str = "", org: str = "", agent_uuid: str = ""
+    ) -> tuple[LifeAgent, str, Life]:
+        """유저 등록 + 개인 방 생성. 에이전트는 자기 방에 자동 입장.
+
+        org·agent_uuid는 클라이언트 프로필(조직·고유 ID). 빈 값이면 기존 값을 유지한다.
+        """
         name = name.strip()
         if not name:
             raise errors.InvalidRequest("이름이 비어 있음")
@@ -133,6 +140,8 @@ class LifeService:
             if existing is not None:
                 existing.connected = True
                 existing.mascot_seed = mascot_seed or existing.mascot_seed
+                existing.org = org or existing.org
+                existing.agent_uuid = agent_uuid or existing.agent_uuid
                 token = secrets.token_urlsafe(24)
                 self._tokens[token] = existing.agent_id
                 if self._store:
@@ -146,6 +155,7 @@ class LifeService:
             agent = LifeAgent(
                 agent_id=agent_id, name=name, life_id=life_id, at_life=life_id,
                 cell=self._free_cell_locked(life_id), mascot_seed=mascot_seed,
+                org=org, agent_uuid=agent_uuid,
             )
             self._agents[agent_id] = agent
             token = secrets.token_urlsafe(24)

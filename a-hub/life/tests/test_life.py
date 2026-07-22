@@ -23,6 +23,16 @@ def test_register_creates_life_and_auto_enters(life):
     assert state["occupants"][0]["is_owner"] is True
 
 
+def test_register_stores_org_and_uuid(life):
+    agent, _, _ = life.register("준녕", org="S/W 혁신팀", agent_uuid="uuid-123")
+    assert agent.org == "S/W 혁신팀"
+    assert agent.agent_uuid == "uuid-123"
+    # 빈 값으로 재등록(재연결)해도 기존 프로필은 유지된다
+    again, _, _ = life.register("준녕")
+    assert again.org == "S/W 혁신팀"
+    assert again.agent_uuid == "uuid-123"
+
+
 def test_register_same_normalized_name_reuses_life(life):
     first_agent, first_token, first_life = life.register("  Same Name  ", mascot_seed="seed-old")
     second_agent, second_token, second_life = life.register("Same Name", mascot_seed="seed-new")
