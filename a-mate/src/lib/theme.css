@@ -1,27 +1,122 @@
-/* SPACE A 다크-민트 토큰 — space-a 커뮤니티 비주얼과 통일. 색·radius·그림자는 반드시 여기서만. */
-:root {
-  --bg-grad: radial-gradient(120% 120% at 20% 0%, #131c34 0%, #0b101f 60%);
-  --frame-bg: #151d33;   /* 카드·위젯·팁·스트립 표면 */
-  --frame-2: #0e1526;    /* 미니홈피 외곽 프레임(카드보다 어둡게 → 깊이) */
-  --panel2: #1b2440;     /* 인셋(칩·바 트랙 등) */
-  --line: #2a3354;       /* 보더/구분선 */
-  --ink: #e8ecf8;
-  --ink-soft: #8b94b8;
-  --accent: #7ee8c8;     /* 민트 — 주 액센트 */
-  --lav: #b8a7f7;        /* 라벤더 — 보조(코칭 등) */
-  --pastel-lav: #2a3354;  /* (다크) 보더·탭/버튼 바탕·트랙 */
-  --pastel-mint: #7ee8c8; /* 작은 배지용 솔리드 민트(위에 어두운 글자) */
-  --mint-tint: rgba(126, 232, 200, 0.09);   /* 📊 근거 박스 바탕 */
-  --mint-tint-b: rgba(126, 232, 200, 0.22); /* 📊 근거 박스 보더 */
-  --pastel-cream: #24304d;
-  --pastel-coral: #ff9d97;
-  --radius-s: 8px;
-  --radius-m: 12px;
-  --radius-l: 16px;
-  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.4);
+/* SPACE A 미니홈피 테마 — 테마 모드(light/dark) × 색상 세트(스킨).
+   색·radius·그림자는 반드시 여기서만. 컴포넌트는 시맨틱 토큰만 참조하고,
+   배경 토큰을 쓰면 짝 글자 토큰을 함께 지정한다. (설계: specs/2026-07-21-minihompy-theme-system-design.md) */
+
+/* 모드/스킨 무관 상수 */
+:root { --radius-s: 8px; --radius-m: 12px; --radius-l: 16px; }
+
+/* ── 상태·기능 파스텔 (스킨 공유, 모드별) + color-scheme + shadow ── */
+:root[data-theme="light"] {
+  --lav-surface: #e7e9fb; --lav-ink: #37356b;
+  --coral: #ffb3ad; --coral-ink: #6b241d;
+  --cream: #ffe6bf; --cream-ink: #6b5218;
+  --danger: #b74444;
+  --shadow-soft: 0 8px 24px rgba(20, 26, 45, 0.10);
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --lav-surface: #2c2c54; --lav-ink: #c9c2f7;
+  --coral: #7a3a38; --coral-ink: #ffd9d5;
+  --cream: #4a3f2a; --cream-ink: #ffe4b0;
+  --danger: #f2a5a0;
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.40);
+  color-scheme: dark;
 }
 
-/* 얇은 다크 스크롤바 */
+/* ── 스킨 × 모드: accent 계열 + 표면·글자 + 레거시 별칭 ──
+   레거시 별칭: v1 아웃-스코프(LifeView/MiniLife 등)가 계속 렌더되도록 구 토큰명을 신 토큰에 매핑.
+   --pastel-lav는 보더·표면 이중사용이었으나 별칭은 보더(--line)로 두고,
+   인스코프 표면 용도는 마이그레이션에서 --lav-surface로 정정. */
+:root[data-skin="sky"][data-theme="light"] {
+  --bg: #eef5fc; --frame: #ffffff; --frame-2: #e6edf7; --surface-inset: #eef3fb;
+  --line: #d9e2f1; --text: #26303f; --text-soft: #66738a;
+  --accent: #84c9ef; --accent-ink: #0e2230; --accent-strong: #1670b8;
+  --accent-tint: #e3f2fc; --accent-tint-b: #bfe2f6;
+  --bg-grad: var(--bg); --frame-bg: var(--frame); --panel2: var(--surface-inset);
+  --ink: var(--text); --ink-soft: var(--text-soft);
+  --pastel-mint: var(--accent); --pastel-coral: var(--coral); --pastel-cream: var(--cream);
+  --pastel-lav: var(--line); --lav: var(--lav-ink);
+  --mint-tint: var(--accent-tint); --mint-tint-b: var(--accent-tint-b);
+}
+:root[data-skin="sky"][data-theme="dark"] {
+  --bg: #0f1626; --frame: #1b2544; --frame-2: #131b31; --surface-inset: #243050;
+  --line: #313d61; --text: #e6ecf8; --text-soft: #98a4c6;
+  --accent: #7fc9f0; --accent-ink: #0c1826; --accent-strong: #7fc9f0;
+  --accent-tint: rgba(127,201,240,.12); --accent-tint-b: rgba(127,201,240,.30);
+  --bg-grad: var(--bg); --frame-bg: var(--frame); --panel2: var(--surface-inset);
+  --ink: var(--text); --ink-soft: var(--text-soft);
+  --pastel-mint: var(--accent); --pastel-coral: var(--coral); --pastel-cream: var(--cream);
+  --pastel-lav: var(--line); --lav: var(--lav-ink);
+  --mint-tint: var(--accent-tint); --mint-tint-b: var(--accent-tint-b);
+}
+:root[data-skin="mint"][data-theme="light"] {
+  --bg: #ecf8f3; --frame: #ffffff; --frame-2: #e4f0ea; --surface-inset: #ecf5f1;
+  --line: #d3e7de; --text: #26332e; --text-soft: #647469;
+  --accent: #5cd0b0; --accent-ink: #0e2620; --accent-strong: #0b8368;
+  --accent-tint: #e2f7ef; --accent-tint-b: #bfe9da;
+  --bg-grad: var(--bg); --frame-bg: var(--frame); --panel2: var(--surface-inset);
+  --ink: var(--text); --ink-soft: var(--text-soft);
+  --pastel-mint: var(--accent); --pastel-coral: var(--coral); --pastel-cream: var(--cream);
+  --pastel-lav: var(--line); --lav: var(--lav-ink);
+  --mint-tint: var(--accent-tint); --mint-tint-b: var(--accent-tint-b);
+}
+:root[data-skin="mint"][data-theme="dark"] {
+  --bg: #0e1c19; --frame: #16241f; --frame-2: #0f1a17; --surface-inset: #1f302a;
+  --line: #2c3f38; --text: #e6f0ec; --text-soft: #94a89f;
+  --accent: #7ee8c8; --accent-ink: #0a1613; --accent-strong: #7ee8c8;
+  --accent-tint: rgba(126,232,200,.12); --accent-tint-b: rgba(126,232,200,.30);
+  --bg-grad: var(--bg); --frame-bg: var(--frame); --panel2: var(--surface-inset);
+  --ink: var(--text); --ink-soft: var(--text-soft);
+  --pastel-mint: var(--accent); --pastel-coral: var(--coral); --pastel-cream: var(--cream);
+  --pastel-lav: var(--line); --lav: var(--lav-ink);
+  --mint-tint: var(--accent-tint); --mint-tint-b: var(--accent-tint-b);
+}
+:root[data-skin="peach"][data-theme="light"] {
+  --bg: #fdf3ec; --frame: #ffffff; --frame-2: #f7e9de; --surface-inset: #fbeee4;
+  --line: #f0dccb; --text: #3a2a20; --text-soft: #8a6f5c;
+  --accent: #f4b183; --accent-ink: #3a1e0e; --accent-strong: #b5501f;
+  --accent-tint: #fdeadd; --accent-tint-b: #f6d3b8;
+  --bg-grad: var(--bg); --frame-bg: var(--frame); --panel2: var(--surface-inset);
+  --ink: var(--text); --ink-soft: var(--text-soft);
+  --pastel-mint: var(--accent); --pastel-coral: var(--coral); --pastel-cream: var(--cream);
+  --pastel-lav: var(--line); --lav: var(--lav-ink);
+  --mint-tint: var(--accent-tint); --mint-tint-b: var(--accent-tint-b);
+}
+:root[data-skin="peach"][data-theme="dark"] {
+  --bg: #291c12; --frame: #392819; --frame-2: #211710; --surface-inset: #453321;
+  --line: #57422c; --text: #f4ede7; --text-soft: #c6ad97;
+  --accent: #f0b58c; --accent-ink: #241206; --accent-strong: #f0b58c;
+  --accent-tint: rgba(240,181,140,.12); --accent-tint-b: rgba(240,181,140,.30);
+  --bg-grad: var(--bg); --frame-bg: var(--frame); --panel2: var(--surface-inset);
+  --ink: var(--text); --ink-soft: var(--text-soft);
+  --pastel-mint: var(--accent); --pastel-coral: var(--coral); --pastel-cream: var(--cream);
+  --pastel-lav: var(--line); --lav: var(--lav-ink);
+  --mint-tint: var(--accent-tint); --mint-tint-b: var(--accent-tint-b);
+}
+:root[data-skin="lavender"][data-theme="light"] {
+  --bg: #f3f0fc; --frame: #ffffff; --frame-2: #eae6f8; --surface-inset: #f0ecfb;
+  --line: #e0d9f2; --text: #2c2740; --text-soft: #6f6885;
+  --accent: #b9a6f0; --accent-ink: #1e163a; --accent-strong: #6c4fd0;
+  --accent-tint: #efe9fb; --accent-tint-b: #ddd0f5;
+  --bg-grad: var(--bg); --frame-bg: var(--frame); --panel2: var(--surface-inset);
+  --ink: var(--text); --ink-soft: var(--text-soft);
+  --pastel-mint: var(--accent); --pastel-coral: var(--coral); --pastel-cream: var(--cream);
+  --pastel-lav: var(--line); --lav: var(--lav-ink);
+  --mint-tint: var(--accent-tint); --mint-tint-b: var(--accent-tint-b);
+}
+:root[data-skin="lavender"][data-theme="dark"] {
+  --bg: #1e1a38; --frame: #2a2450; --frame-2: #1d183a; --surface-inset: #332c62;
+  --line: #443c70; --text: #ece9f7; --text-soft: #a8a2ca;
+  --accent: #b8a7f7; --accent-ink: #140f28; --accent-strong: #b8a7f7;
+  --accent-tint: rgba(184,167,247,.12); --accent-tint-b: rgba(184,167,247,.30);
+  --bg-grad: var(--bg); --frame-bg: var(--frame); --panel2: var(--surface-inset);
+  --ink: var(--text); --ink-soft: var(--text-soft);
+  --pastel-mint: var(--accent); --pastel-coral: var(--coral); --pastel-cream: var(--cream);
+  --pastel-lav: var(--line); --lav: var(--lav-ink);
+  --mint-tint: var(--accent-tint); --mint-tint-b: var(--accent-tint-b);
+}
+
+/* 스크롤바 — 토큰으로 자동 테마 대응 */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; }
