@@ -780,6 +780,84 @@ pub async fn life_save_design(
     .await
 }
 
+#[tauri::command]
+pub async fn hub_disconnect(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<HubSettings, String> {
+    use tauri::Emitter;
+    if let Some(client) = hub_client(&state)? {
+        run_life_http("hub_disconnect", move || client.disconnect().map(|_| ()).map_err(|e| e.to_string())).await?;
+    }
+    let guard = lock(&state)?;
+    for key in ["hub_token", "hub_agent_id", "hub_life_id"] {
+        guard.set_setting(key, "").map_err(|e| e.to_string())?;
+    }
+    drop(guard);
+    let _ = app.emit("settings:changed", ());
+    hub_settings_get(state)
+}
+
+#[tauri::command]
+pub async fn life_people(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let Some(client) = hub_client(&state)? else { return Err("hub_not_connected".into()) };
+    run_life_http("life_people", move || client.people().map_err(|e| e.to_string())).await
+}
+
+#[tauri::command]
+pub async fn life_set_friend(state: State<'_, AppState>, agent_id: String, enabled: bool) -> Result<serde_json::Value, String> {
+    let Some(client) = hub_client(&state)? else { return Err("hub_not_connected".into()) };
+    run_life_http("life_set_friend", move || client.set_friend(&agent_id, enabled).map_err(|e| e.to_string())).await
+}
+
+#[tauri::command]
+pub async fn life_set_content_visibility(state: State<'_, AppState>, feature: String, visibility: String) -> Result<serde_json::Value, String> {
+    let Some(client) = hub_client(&state)? else { return Err("hub_not_connected".into()) };
+    run_life_http("life_set_content_visibility", move || client.set_content_visibility(&feature, &visibility).map_err(|e| e.to_string())).await
+}
+
+#[tauri::command]
+pub async fn life_content_access(state: State<'_, AppState>, life_id: String) -> Result<serde_json::Value, String> {
+    let Some(client) = hub_client(&state)? else { return Err("hub_not_connected".into()) };
+    run_life_http("life_content_access", move || client.content_access(&life_id).map_err(|e| e.to_string())).await
+}
+
+#[tauri::command]
+pub async fn life_set_diary_visibility(state: State<'_, AppState>, date: String, body: String, visibility: String) -> Result<serde_json::Value, String> {
+    let Some(client) = hub_client(&state)? else { return Err("hub_not_connected".into()) };
+    run_life_http("life_set_diary_visibility", move || {
+        if visibility == "private" { client.unshare_diary(&date) }
+        else { client.share_diary(&date, &body, &visibility) }.map_err(|e| e.to_string())
+    }).await
+}
+
+#[tauri::command]
+pub async fn life_diaries(state: State<'_, AppState>, life_id: String) -> Result<serde_json::Value, String> {
+    let Some(client) = hub_client(&state)? else { return Err("hub_not_connected".into()) };
+    run_life_http("life_diaries", move || client.diaries(&life_id).map_err(|e| e.to_string())).await
+}
+
+#[tauri::command]
+pub async fn life_guestbook(state: State<'_, AppState>, life_id: String) -> Result<serde_json::Value, String> {
+    let Some(client) = hub_client(&state)? else { return Err("hub_not_connected".into()) };
+    run_life_http("life_guestbook", move || client.guestbook(&life_id).map_err(|e| e.to_string())).await
+}
+
+#[tauri::command]
+pub async fn life_add_guestbook(state: State<'_, AppState>, life_id: String, body: String) -> Result<serde_json::Value, String> {
+    let Some(client) = hub_client(&state)? else { return Err("hub_not_connected".into()) };
+    run_life_http("life_add_guestbook", move || client.add_guestbook(&life_id, &body).map_err(|e| e.to_string())).await
+}
+
+#[tauri::command]
+pub async fn life_delete_guestbook(state: State<'_, AppState>, entry_id: String) -> Result<serde_json::Value, String> {
+    let Some(client) = hub_client(&state)? else { return Err("hub_not_connected".into()) };
+    run_life_http("life_delete_guestbook", move || client.delete_guestbook(&entry_id).map_err(|e| e.to_string())).await
+}
+
+#[tauri::command]
+pub async fn life_set_bubble(state: State<'_, AppState>, body: String) -> Result<serde_json::Value, String> {
+    let Some(client) = hub_client(&state)? else { return Err("hub_not_connected".into()) };
+    run_life_http("life_set_bubble", move || client.set_bubble(&body).map_err(|e| e.to_string())).await
+}
+
 /// 임의 시드의 로봇 스펙 — 방 안 다른 에이전트 렌더용.
 #[tauri::command]
 pub fn robot_spec_for_seed(seed: String) -> RobotSpec {

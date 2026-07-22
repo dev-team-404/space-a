@@ -161,3 +161,35 @@ def test_rename_updates_agent_and_life(life):
     assert state["owner_name"] == "새이름"
     with pytest.raises(errors.InvalidRequest):
         life.rename(token, "  ")
+def test_social_visibility_guestbook_and_bubble():
+    service = LifeService()
+    owner, owner_token, owner_life = service.register("owner")
+    friend, friend_token, _ = service.register("friend")
+    stranger, stranger_token, _ = service.register("stranger")
+
+    assert service.content_access(stranger_token, owner_life.id)["features"]["diary"] == {
+        "visibility": "private", "can_view": False,
+    }
+    assert service.content_access(owner_token, owner_life.id)["features"]["diary"]["can_view"] is True
+    service.set_content_visibility(owner_token, "diary", "friends")
+    service.share_diary(owner_token, "2026-07-22", "friends only", "friends")
+    assert service.shared_diaries(stranger_token, owner_life.id) == []
+    service.set_friend(owner_token, friend.agent_id, True)
+    assert service.shared_diaries(friend_token, owner_life.id)[0]["body"] == "friends only"
+    service.set_content_visibility(owner_token, "diary", "public")
+    service.share_diary(owner_token, "2026-07-23", "everyone", "public")
+    assert {row["date"] for row in service.shared_diaries(stranger_token, owner_life.id)} == {"2026-07-22", "2026-07-23"}
+    service.set_content_visibility(owner_token, "diary", "private")
+    assert service.shared_diaries(stranger_token, owner_life.id) == []
+
+    entry = service.add_guestbook(friend_token, owner_life.id, "다녀갑니다")
+    assert service.guestbook(owner_life.id)[0]["body"] == "다녀갑니다"
+    service.delete_guestbook(owner_token, entry["entry_id"])
+    assert service.guestbook(owner_life.id) == []
+
+    service.set_bubble(owner_token, "집중 중")
+    assert service.life_state(owner_life.id)["occupants"][0]["bubble"] == "집중 중"
+    service.disconnect(owner_token)
+    assert all(row["agent_id"] != owner.agent_id for row in service.life_state(owner_life.id)["occupants"])
+    service.register("owner")
+    assert any(row["agent_id"] == owner.agent_id for row in service.life_state(owner_life.id)["occupants"])

@@ -133,6 +133,64 @@ impl LifeClient {
             .into_json()
             .map_err(Into::into)
     }
+
+    pub fn people(&self) -> Result<Value> {
+        self.req("GET", "/life/people").call().map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
+    pub fn set_friend(&self, agent_id: &str, enabled: bool) -> Result<Value> {
+        self.req("PUT", &format!("/life/friends/{agent_id}"))
+            .send_json(json!({"enabled": enabled})).map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
+    pub fn set_content_visibility(&self, feature: &str, visibility: &str) -> Result<Value> {
+        self.req("PUT", &format!("/life/me/content-visibility/{feature}"))
+            .send_json(json!({"visibility": visibility})).map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
+    pub fn content_access(&self, life_id: &str) -> Result<Value> {
+        self.req("GET", &format!("/life/{life_id}/content-access"))
+            .call().map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
+    pub fn share_diary(&self, date: &str, body: &str, visibility: &str) -> Result<Value> {
+        self.req("PUT", &format!("/life/me/diaries/{date}"))
+            .send_json(json!({"body": body, "visibility": visibility})).map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
+    pub fn unshare_diary(&self, date: &str) -> Result<Value> {
+        self.req("DELETE", &format!("/life/me/diaries/{date}"))
+            .call().map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
+    pub fn diaries(&self, life_id: &str) -> Result<Value> {
+        self.req("GET", &format!("/life/{life_id}/diaries"))
+            .call().map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
+    pub fn guestbook(&self, life_id: &str) -> Result<Value> {
+        self.req("GET", &format!("/life/{life_id}/guestbook"))
+            .call().map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
+    pub fn add_guestbook(&self, life_id: &str, body: &str) -> Result<Value> {
+        self.req("POST", &format!("/life/{life_id}/guestbook"))
+            .send_json(json!({"body": body})).map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
+    pub fn delete_guestbook(&self, entry_id: &str) -> Result<Value> {
+        self.req("DELETE", &format!("/life/guestbook/{entry_id}"))
+            .call().map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
+    pub fn set_bubble(&self, body: &str) -> Result<Value> {
+        self.req("PATCH", "/life/me/bubble")
+            .send_json(json!({"body": body})).map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
+    pub fn disconnect(&self) -> Result<Value> {
+        self.req("POST", "/life/me/disconnect").send_json(json!({})).map_err(err_of)?.into_json().map_err(Into::into)
+    }
 }
 
 #[cfg(test)]

@@ -4,22 +4,26 @@
   import CoachTab from './lib/ui/CoachTab.svelte';
   import DiaryTab from './lib/ui/DiaryTab.svelte';
   import ChatTab from './lib/ui/ChatTab.svelte';
+  import GuestbookTab from './lib/ui/GuestbookTab.svelte';
+  import LifeSettingsTab from './lib/ui/LifeSettingsTab.svelte';
   import RobotPortrait from './lib/ui/RobotPortrait.svelte';
   import {
     getSummary, getDailyLine, listFindings, onScanDone, onGotoTab,
-    onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, lifeView, type Summary,
+    onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, lifeContentAccess, lifeView, type Summary,
   } from './lib/api';
   import {
     diaryNotice, findingNotice, loadNotices, occasionNotice, pushNotice, saveNotices,
     type Notice, type NoticeDest,
   } from './lib/notices';
 
-  type Tab = 'home' | 'diary' | 'coach' | 'chat';
+  type Tab = 'home' | 'diary' | 'coach' | 'chat' | 'guestbook' | 'settings';
   const TABS: { id: Tab; label: string }[] = [
     { id: 'home', label: '홈' },
     { id: 'diary', label: '다이어리' },
     { id: 'coach', label: '코칭' },
     { id: 'chat', label: '채팅' },
+    { id: 'guestbook', label: '방명록' },
+    { id: 'settings', label: '설정' },
   ];
 
   let tab = $state<Tab>('home');
@@ -30,6 +34,8 @@
   let visiting = $state(false);
   let lifeOwner = $state('');
   let ownerSeed = $state(''); // 방문 중인 방 주인의 마스코트 시드 (없으면 이름 폴백)
+  let currentLifeId=$state(''),myLifeId=$state(''),meId=$state('');
+  let canViewDiary=$state(true);
   // 창(App) 레벨에서 직접 폴링 — 어느 탭에 있든 방 이동을 감지해 방문 모드로 전환
   $effect(() => {
     let ticking = false;
@@ -38,10 +44,14 @@
       ticking = true;
       try {
         const v = await lifeView();
+        const lifeChanged = currentLifeId !== '' && currentLifeId !== v.life.life_id;
         visiting = v.me.life_id !== v.me.my_life_id;
         lifeOwner = v.life.owner_name;
         ownerSeed = v.life.owner_mascot_seed || v.life.owner_name;
-        if (visiting && tab !== 'home') tab = 'home';
+        currentLifeId=v.life.life_id;myLifeId=v.me.my_life_id;meId=v.me.agent_id;
+        if (lifeChanged) tab = 'home';
+        canViewDiary = !visiting || (await lifeContentAccess(v.life.life_id)).features.diary.can_view;
+        if (visiting && (!['home','diary','guestbook'].includes(tab) || (tab === 'diary' && !canViewDiary))) tab = 'home';
       } catch {
         visiting = false;
         lifeOwner = '';
@@ -56,7 +66,7 @@
     document.addEventListener('visibilitychange', onVis);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
   });
-  const visibleTabs = $derived(visiting ? TABS.filter((t) => t.id === 'home') : TABS);
+  const visibleTabs = $derived(visiting ? TABS.filter((t) => ['home','guestbook'].includes(t.id) || (t.id === 'diary' && canViewDiary)) : TABS);
   let summary = $state<Summary | null>(null);
   let dailyLine = $state<string | null>(null);
   let activeCount = $state(0);
@@ -148,9 +158,13 @@
         {:else if tab === 'coach'}
           <CoachTab focusKey={coachFocus} onChanged={refresh} />
         {:else if tab === 'diary'}
-          <DiaryTab focusDate={diaryFocus} />
-        {:else}
+          <DiaryTab focusDate={diaryFocus} {visiting} lifeId={currentLifeId} />
+        {:else if tab === 'chat'}
           <ChatTab />
+        {:else if tab === 'guestbook'}
+          <GuestbookTab lifeId={currentLifeId} {meId} isOwner={currentLifeId===myLifeId}/>
+        {:else}
+          <LifeSettingsTab />
         {/if}
       </main>
       <nav class="tabs">

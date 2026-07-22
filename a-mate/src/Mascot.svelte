@@ -5,7 +5,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   import {
     emitOccasionToday, getChatterPool, getMascotSeed, getSettings, getSummary, getTodayOccasions,
     hubSettingsGet, listFindings, mascotSetExpanded, openChatTab, openSettingsWindow,
-    lifeGoto, lifeView, lifeList, setSetting,
+    lifeGoto, lifeView, lifeList, lifeSetBubble, setSetting,
     onDiaryReady, onNewFindings, onScanDone, onSettingsChanged,
     type LifeListEntry, getSprite } from './lib/api';
   import { drawRobot, type RobotSpec } from './lib/robot/render';
@@ -129,6 +129,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   let hubOn = $state(false);
   let lifeMenuRequest = 0;
   let lifeMenuPolling = false;
+  let bubbleEditor=$state(false),roomBrowser=$state(false),persistentBubble=$state(''),savedBubble=$state(''),bubbleSaving=$state(false);
   const visibleLifeEntries = $derived(lifeMenu?.filter((life) => life.life_id !== myLifeId && life.life_id !== curLifeId) ?? []);
   const lifeMenuItemCount = $derived(visibleLifeEntries.length + (curLifeId !== myLifeId ? 1 : 0));
   async function toggleLifeMenu() {
@@ -149,6 +150,8 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
       myLifeId = h.life_id;
       // 위치 조회 실패 시 내 방으로 간주 — 돌아가기 버튼을 띄워봐야 이동도 실패한다
       curLifeId = view?.me.life_id ?? h.life_id;
+      persistentBubble = view?.life.occupants.find((o) => o.agent_id === view.me.agent_id)?.bubble ?? '';
+      savedBubble = persistentBubble;
       lifeMenu = list.life;
     } catch {
       if (request !== lifeMenuRequest || lifeMenu === null) return;
@@ -156,6 +159,8 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
       lifeMenu = [];
     }
   }
+  async function savePersistentBubble(){bubbleSaving=true;try{await lifeSetBubble(persistentBubble);savedBubble=persistentBubble.trim();persistentBubble=savedBubble;bubbleEditor=false}finally{bubbleSaving=false}}
+  async function clearPersistentBubble(){if(!savedBubble||bubbleSaving)return;bubbleSaving=true;try{await lifeSetBubble('');savedBubble='';persistentBubble=''}finally{bubbleSaving=false}}
   async function gotoLife(lifeId: string) {
     await closeLifeMenu();
     try { await lifeGoto(lifeId); } catch { /* 이동 실패 시에도 메뉴는 닫힌 상태 유지 */ }
@@ -164,6 +169,8 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
     if (lifeMenu === null) return;
     lifeMenuRequest++;
     lifeMenu = null;
+    bubbleEditor = false;
+    roomBrowser = false;
     await expand(false);
   }
 
@@ -281,17 +288,20 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
 
 <div class="stage" class:expanded={bubble !== null || lifeMenu !== null}>
   {#if lifeMenu !== null}
-    <div class="menu" class:away={curLifeId !== myLifeId}>
-      <div class="menu-title">방 이동</div>
+    <div class="menu" class:away={curLifeId !== myLifeId} class:editor={bubbleEditor} class:rooms={roomBrowser}>
       {#if !hubOn}
         <button class="item" onclick={() => { openSettingsWindow(); closeLifeMenu(); }}>
           서버 미연결 — 설정 열기
         </button>
-      {:else}
-        {#if curLifeId !== myLifeId}
-          <button class="item" onclick={() => gotoLife(myLifeId)}>🏠 내 방으로 돌아가기</button>
-        {/if}
+      {:else if bubbleEditor}
+        <div class="menu-head"><button aria-label="마스코트 메뉴로 뒤로" title="뒤로" onclick={()=>bubbleEditor=false}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><b>말풍선 설정</b></div>
+        <form class="bubble-editor" onsubmit={(e)=>{e.preventDefault();savePersistentBubble()}}><textarea maxlength="120" rows="3" bind:value={persistentBubble} placeholder="여러 줄로 입력할 수 있어요"></textarea><div><button type="button" disabled={bubbleSaving||!savedBubble} onclick={clearPersistentBubble}>말풍선 지우기</button><button disabled={bubbleSaving}>저장</button></div></form>
+      {:else if roomBrowser}
+        <div class="menu-head"><button aria-label="마스코트 메뉴로 뒤로" title="뒤로" onclick={()=>roomBrowser=false}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><b>방 이동</b></div>
         <div class="list" class:scrollable={lifeMenuItemCount >= 3}>
+          {#if curLifeId !== myLifeId}
+            <button class="item" onclick={() => gotoLife(myLifeId)}>🏠 내 방으로 돌아가기</button>
+          {/if}
           <!-- 지금 있는 방은 이동 대상이 아님 — 내 방은 위의 "돌아가기"가 담당 -->
           {#each visibleLifeEntries as r (r.life_id)}
             <button class="item" onclick={() => gotoLife(r.life_id)}>
@@ -299,6 +309,8 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
             </button>
           {/each}
         </div>
+      {:else}
+        <div class="main-actions"><button class="menu-action" onclick={() => bubbleEditor=true}><span class="action-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a8.5 8.5 0 0 1-9 8.48 9.8 9.8 0 0 1-3.8-.98L3 20l1.22-3.65A8.5 8.5 0 1 1 20 11.5Z"/></svg>말풍선 설정</span><span class="chevron">›</span></button><button class="menu-action" onclick={() => roomBrowser=true}><span class="action-label"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4.5A1.5 1.5 0 0 1 6.5 3H17v18M5 21h14M9 3v18M13.5 12h.01"/></svg>방 이동</span><span class="chevron">›</span></button></div>
       {/if}
     </div>
   {:else if bubble}
@@ -325,7 +337,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
 
 <style>
   :global(html, body) { margin: 0; background: transparent; overflow: hidden; }
-  .stage { width: 100vw; height: 100vh; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-end; }
+  .stage { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-end; }
   .robot { width: 128px; height: 128px; margin: 0 16px 16px 0; cursor: pointer; touch-action: none; }
   canvas { width: 128px; height: 128px; image-rendering: pixelated; }
   .spriteimg {
@@ -351,21 +363,24 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   }
   .bubble .x:hover { color: var(--ink); }
   .menu {
+    position: absolute; right: 12px; bottom: 144px; box-sizing: border-box;
     display: flex; flex-direction: column; gap: 4px;
-    width: 200px; margin: 8px 12px 0 0; padding: 8px;
-    background: var(--frame-bg); color: var(--ink);
-    border-radius: var(--radius-m); box-shadow: var(--shadow-soft);
+    width: 200px; height: 128px; margin: 0; padding: 8px; overflow: hidden;
+    background: #f3f3f3; color: #1f1f1f;
+    border-radius: 14px; box-shadow: none;
     font: 12px 'Segoe UI', 'Malgun Gothic', sans-serif;
   }
-  .menu-title { font-weight: 700; font-size: 11px; color: var(--ink-soft); padding: 0 4px; }
-  .menu .list { max-height: 92px; overflow-y: hidden; display: flex; flex-direction: column; gap: 4px; }
-  .menu.away .list { max-height: 60px; }
-  .menu .list.scrollable { overflow-x: hidden; overflow-y: auto; scrollbar-gutter: stable; }
+  .menu-title { font-weight: 700; font-size: 11px; color: #666; padding: 0 4px; }
+  .main-actions{display:grid;grid-template-rows:1fr 1fr;gap:5px;height:100%}.menu-action{display:flex;align-items:center;justify-content:space-between;border:1px solid #d9d9d9;background:#fff;color:#1f1f1f;border-radius:10px;padding:7px 9px;text-align:left;font:inherit;cursor:pointer}.menu-action:hover{border-color:#a9a9a9;background:#fafafa}.action-label{display:flex;flex-direction:column;align-items:flex-start;gap:2px}.action-label svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.menu-action .chevron{font-size:18px;line-height:1}.menu.rooms,.menu.editor{display:grid;grid-template-rows:auto minmax(0,1fr);gap:4px}.menu-head{display:grid;grid-template-columns:1.5em 1fr;align-items:center;gap:7px}.menu-head button{box-sizing:border-box;width:1.5em;height:1.5em;min-width:1.5em;border:0;border-radius:4px;padding:0;background:transparent;color:#1f1f1f;cursor:pointer}.menu-head button svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.menu-head button:hover{background:#e5e5e5}.menu-head b{font-size:12px}
+  .menu .list { min-height:0; overflow-y: hidden; display: flex; flex-direction: column; gap: 3px; padding-right:2px; }
+  .menu .list.scrollable { overflow-x: hidden; overflow-y: auto; }
+  .menu .list::-webkit-scrollbar{width:5px}.menu .list::-webkit-scrollbar-thumb{background:#c7c7c7;border-radius:999px}.menu .list::-webkit-scrollbar-thumb:hover{background:#aaa}
   .menu .item {
-    border: none; background: var(--pastel-lav); color: var(--ink);
-    box-sizing: border-box; width: 100%; min-width: 0; min-height: 28px; border-radius: var(--radius-s); padding: 6px 8px; font: inherit;
+    border: 1px solid #d9d9d9; background: #fff; color: #1f1f1f;
+    box-sizing: border-box; width: 100%; min-width: 0; min-height: 26px; border-radius: 8px; padding: 4px 8px; font: inherit;
     cursor: pointer; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .menu .item:hover { background: var(--accent); color: #fff; }
+  .menu .item:hover { background: #fafafa; border-color:#a9a9a9; }
   .menu .n { float: right; color: inherit; opacity: 0.7; }
+  .bubble-editor{min-height:0;display:grid;grid-template-rows:minmax(0,1fr) auto;gap:4px}.bubble-editor textarea{box-sizing:border-box;width:100%;height:100%;min-height:0;resize:none;border:1px solid #d9d9d9;border-radius:6px;padding:6px;background:#fff;color:#1f1f1f;font:inherit}.bubble-editor div{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px}.bubble-editor button{min-width:0;border:1px solid #d9d9d9;border-radius:6px;padding:5px;background:#fff;color:#1f1f1f;font:inherit;cursor:pointer}.bubble-editor button:hover:not(:disabled){border-color:#a9a9a9;background:#fafafa}.bubble-editor button:disabled{opacity:.42;cursor:default}
 </style>
