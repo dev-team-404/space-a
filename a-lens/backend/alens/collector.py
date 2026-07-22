@@ -52,6 +52,26 @@ _build_lock = threading.Lock()         # 스냅숏 빌드는 한 번에 하나�
 _refresher_started = False
 _refresher_lock = threading.Lock()
 
+# 마지막 스냅숏을 디스크에 남겨, 재시작 직후에도 빈 화면 대신 직전 데이터를 즉시 제공한다.
+_SNAPSHOT_FILE = Path(__file__).resolve().parents[1] / ".a-lens" / "snapshot.json"
+
+
+def _persist(snap: dict) -> None:
+    try:
+        _SNAPSHOT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _SNAPSHOT_FILE.write_text(json.dumps(snap, ensure_ascii=False), encoding="utf-8")
+    except Exception:  # noqa: BLE001 — 스냅숏 캐시 파일 쓰기 실패는 무시
+        pass
+
+
+def _load_persisted() -> dict | None:
+    try:
+        if _SNAPSHOT_FILE.exists():
+            return json.loads(_SNAPSHOT_FILE.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
 
 def clear_cache() -> None:
     """설정 변경 시 — 최신 스냅숏을 버리고 즉시 백그라운드 재빌드를 건다(새 URL/원천 반영)."""
@@ -64,6 +84,7 @@ def _rebuild_once() -> None:
     global _latest
     try:
         _latest = _build_guarded()
+        _persist(_latest)
     except Exception as e:  # noqa: BLE001
         log.warning("스냅숏 재빌드 실패: %s", e)
 
@@ -73,17 +94,20 @@ def _refresh_loop() -> None:
     while True:
         try:
             _latest = _build_guarded()
+            _persist(_latest)
         except Exception as e:  # noqa: BLE001
             log.warning("스냅숏 갱신 실패: %s", e)
         time.sleep(max(5.0, settings.get()["cache_ttl"]))
 
 
 def _ensure_refresher() -> None:
-    global _refresher_started
+    global _refresher_started, _latest
     if _refresher_started:
         return
     with _refresher_lock:
         if not _refresher_started:
+            if _latest is None:  # 재시작 직후: 디스크의 마지막 스냅숏을 즉시 띄운다
+                _latest = _load_persisted()
             threading.Thread(target=_refresh_loop, daemon=True, name="alens-refresh").start()
             _refresher_started = True
 
