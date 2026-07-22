@@ -538,6 +538,28 @@ function issueRowHTML(i: SpaceIssue): string {
     </div>`
 }
 
+// 이슈 행 클릭 시 뜨는 상세 모달 — 분류·요약·서사 + 진행 상태 타임라인.
+// (이슈는 원문 body가 없어 지식 문서처럼 원문 렌더 대신 번역·타임라인을 보여준다.)
+function issueModalHTML(i: SpaceIssue): string {
+  const steps = (i.timeline ?? [])
+    .map(
+      (s) =>
+        `<li><b>${esc(s.label || s.step)}</b>${s.actor ? ` · 👤 ${esc(s.actor)}` : ''}${
+          s.at ? ` · <span class="muted">${esc(kstDateTime(s.at))}</span>` : ''
+        }${s.note ? `<div class="muted">${esc(s.note)}</div>` : ''}</li>`,
+    )
+    .join('')
+  return `
+    <div class="issue-detail">
+      <div class="issue-detail-badges">${catBadge(i.category)}${statusBadge(i.status)}</div>
+      ${i.summary ? `<p class="doc-summary">${esc(i.summary)}</p>` : ''}
+      ${i.narrative && i.narrative !== i.summary ? `<p class="muted">${esc(i.narrative)}</p>` : ''}
+      <div class="muted small">👤 ${esc(issueActor(i))}</div>
+      <h4 class="issue-detail-h">진행 상태</h4>
+      <ul class="issue-timeline">${steps || '<li class="muted">기록 없음</li>'}</ul>
+    </div>`
+}
+
 function hubIssuesHTML(data: SpaceView): string {
   const issues = [...data.issues].sort(byRecent)
 
@@ -757,6 +779,13 @@ function renderHub(data: SpaceView) {
     el.addEventListener('click', () => {
       const doc = data.knowledge[Number(el.dataset.doc)]
       if (doc) showModal(doc.title, `<div class="doc-body md">${mdHTML(doc.body)}</div>`)
+    })
+  })
+  // 이슈 흐름의 행 클릭 → 이슈 상세 모달 (분류·요약·타임라인)
+  hubBody.querySelectorAll<HTMLElement>('.issue-row').forEach((el) => {
+    el.addEventListener('click', () => {
+      const iss = data.issues.find((x) => x.issue_id === el.dataset.issue)
+      if (iss) showModal(iss.title, issueModalHTML(iss))
     })
   })
   renderHubActivity(data)

@@ -524,3 +524,10 @@ button { font: inherit; cursor: pointer; }
   color: #cdd4df;
 }
 .issue-row .doc-summary { margin-top: 4px; }
+
+/* 이슈 행 클릭 → 상세 모달 */
+.issue-row { cursor: pointer; }
+.issue-detail-badges { display: flex; gap: 6px; margin-bottom: 10px; }
+.issue-detail-h { margin: 14px 0 6px; font-size: 12px; color: #d9a441; }
+.issue-timeline { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 7px; }
+.issue-timeline li { font-size: 12.5px; line-height: 1.5; color: #dfe4ec; }
