@@ -53,9 +53,75 @@ over_modeled=false: 복잡한 추론·설계·큰 구현 등 Opus가 정당. **�
     }
 }
 
-// Task 6에서 실제 구현으로 교체. 지금은 스텁.
-pub(crate) fn rollup_project_cards(_store: &SqliteStore) -> Result<Vec<String>> {
-    Ok(vec![])
+pub(crate) fn rollup_project_cards(store: &SqliteStore) -> Result<Vec<String>> {
+    use crate::finding::{Finding, Prescription, Severity};
+    // (host, project)별 confirmed/판정합 집계
+    let mut stmt = store.conn.prepare(
+        "SELECT COALESCE(scope_host,''), COALESCE(scope_project,''),
+                SUM(CASE WHEN status='confirmed' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN status IN ('confirmed','rejected') THEN 1 ELSE 0 END),
+                GROUP_CONCAT(CASE WHEN status='confirmed'
+                    THEN json_extract(evidence_json,'$.session_id') END)
+         FROM findings
+         WHERE rule_id='R7' AND scope_kind='session'
+         GROUP BY scope_host, scope_project",
+    )?;
+    let rows: Vec<(String, String, i64, i64, Option<String>)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?
+        .collect::<std::result::Result<_, _>>()?;
+
+    let mut qualifying: Vec<(String, String, i64, Vec<String>)> = Vec::new();
+    for (host, proj, confirmed, judged, sids) in rows {
+        if confirmed >= 3 && confirmed * 2 > judged {
+            let examples: Vec<String> = sids.unwrap_or_default()
+                .split(',').filter(|s| !s.is_empty()).take(5).map(String::from).collect();
+            qualifying.push((host, proj, confirmed, examples));
+        }
+    }
+
+    // 비자격 stale 'new' 프로젝트 카드 제거 (구 통계 카드 마이그레이션 포함).
+    // 자격 세트는 소규모라 개별 확인.
+    let qualifying_keys: std::collections::HashSet<String> =
+        qualifying.iter().map(|(h, p, _, _)| format!("R7|{h}|{p}")).collect();
+    let mut stale = store.conn.prepare(
+        "SELECT dedup_key FROM findings WHERE rule_id='R7' AND scope_kind='project' AND status='new'",
+    )?;
+    let existing: Vec<String> = stale.query_map([], |r| r.get::<_, String>(0))?
+        .collect::<std::result::Result<_, _>>()?;
+    for key in &existing {
+        if !qualifying_keys.contains(key) {
+            store.conn.execute("DELETE FROM findings WHERE dedup_key=?1 AND status='new'", [key])?;
+        }
+    }
+
+    // 자격 프로젝트 카드 upsert. 신규 노출만 fresh로 반환.
+    let existing_set: std::collections::HashSet<&String> = existing.iter().collect();
+    let now = chrono::Utc::now().to_rfc3339();
+    let mut fresh = Vec::new();
+    for (host, proj, confirmed, examples) in qualifying {
+        let key = format!("R7|{host}|{proj}");
+        let card = Finding {
+            rule_id: "R7".into(), severity: Severity::Suggest,
+            scope_host: Some(host.clone()), scope_project: Some(proj.clone()),
+            scope_kind: "project".into(), scope_ref: proj.clone(),
+            evidence: serde_json::json!({
+                "over_modeled_sessions": confirmed,
+                "example_session_ids": examples,
+                "note": "LLM 판정: 이 프로젝트의 Opus 세션 상당수가 Sonnet으로 충분",
+            }),
+            est_tokens_saved: 0,
+            prescription: Some(Prescription {
+                kind: "start_with_lighter_model".into(),
+                payload: serde_json::json!({ "to": "sonnet" }),
+            }),
+            dedup_key: key.clone(),
+        };
+        store.upsert_finding(&card, &now)?; // (R7,project) → init 'new'
+        if !existing_set.contains(&key) {
+            fresh.push(key); // 새로 노출된 것만 알림
+        }
+    }
+    Ok(fresh)
 }
 
 #[cfg(test)]
@@ -94,5 +160,47 @@ mod tests {
         assert!(system.contains("무게"), "작업 무게만 보라는 경계 명시");
         assert!(system.contains("서브에이전트"), "subagent 모델 판단 금지 명시");
         assert!(user.contains("개수만 세줘"), "사용자 요청 전문 포함");
+    }
+
+    #[test]
+    fn rollup_emits_project_card_when_enough_confirmed() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // confirmed 세션 3개 + rejected 1개 (같은 host/project) → 3 >= 3, 3*2 > 4 과반
+        let mk = |sid: &str, status: &str| {
+            let f = crate::finding::Finding {
+                rule_id:"R7".into(), severity:crate::finding::Severity::Suggest,
+                scope_host:Some("Windows".into()), scope_project:Some("p".into()),
+                scope_kind:"session".into(), scope_ref:sid.into(),
+                evidence: serde_json::json!({"session_id":sid}), est_tokens_saved:0,
+                prescription:None, dedup_key: format!("R7|sess|Windows|{sid}"),
+            };
+            store.upsert_finding(&f, "2026-07-06T10:00:00Z").unwrap();
+            store.set_judgment(&f.dedup_key, Some(status), &serde_json::json!({"attempts":1})).unwrap();
+        };
+        mk("s1","confirmed"); mk("s2","confirmed"); mk("s3","confirmed"); mk("s4","rejected");
+        let fresh = rollup_project_cards(&store).unwrap();
+        assert_eq!(fresh, vec!["R7|Windows|p".to_string()]);
+        let status: String = store.conn.query_row(
+            "SELECT status FROM findings WHERE dedup_key='R7|Windows|p'", [], |r| r.get(0)).unwrap();
+        assert_eq!(status, "new");
+    }
+
+    #[test]
+    fn rollup_silent_below_threshold_and_clears_stale() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 기존(구 통계) 프로젝트 카드가 'new'로 남아있으나 confirmed 세션 부족 → 제거돼야
+        let card = crate::finding::Finding {
+            rule_id:"R7".into(), severity:crate::finding::Severity::Suggest,
+            scope_host:Some("Windows".into()), scope_project:Some("p".into()),
+            scope_kind:"project".into(), scope_ref:"p".into(),
+            evidence: serde_json::json!({}), est_tokens_saved:0, prescription:None,
+            dedup_key:"R7|Windows|p".into(),
+        };
+        store.upsert_finding(&card, "2026-07-06T10:00:00Z").unwrap(); // 'new'
+        let fresh = rollup_project_cards(&store).unwrap();
+        assert!(fresh.is_empty());
+        let n: i64 = store.conn.query_row(
+            "SELECT COUNT(*) FROM findings WHERE dedup_key='R7|Windows|p' AND status='new'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0, "자격 없는 stale 카드 제거");
     }
 }
