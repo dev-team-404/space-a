@@ -24,6 +24,9 @@ function styleBlocks(src: string): string {
 }
 
 const HEX = /#[0-9a-fA-F]{3,8}\b/;
+// --accent는 fill/border 전용. 전경 텍스트에 쓰면 라이트에서 저대비 → --accent-strong를 써야 함.
+// (background-color/border-color 등은 앞 글자가 '-'라 lookbehind로 제외)
+const ACCENT_TEXT = /(?<![-\w])color:\s*var\(--accent\)/;
 
 describe('컴포넌트 <style>에 하드코딩 hex 색 없음', () => {
   const base = join(process.cwd());
@@ -35,8 +38,10 @@ describe('컴포넌트 <style>에 하드코딩 hex 색 없음', () => {
     it(rel, () => {
       if (ALLOWLIST.has(rel)) return; // 아웃-스코프
       const css = styleBlocks(readFileSync(join(base, abs), 'utf8'));
-      const hit = css.split('\n').find((l) => HEX.test(l));
-      expect(hit, `하드코딩 hex 발견: ${hit?.trim()}`).toBeUndefined();
+      const hexHit = css.split('\n').find((l) => HEX.test(l));
+      expect(hexHit, `하드코딩 hex 발견: ${hexHit?.trim()}`).toBeUndefined();
+      const accentText = css.split('\n').find((l) => ACCENT_TEXT.test(l));
+      expect(accentText, `전경 color에 --accent (→ --accent-strong 사용): ${accentText?.trim()}`).toBeUndefined();
     });
   }
 });

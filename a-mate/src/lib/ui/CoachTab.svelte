@@ -255,9 +255,9 @@
   .card.muted { opacity: 0.75; border-left-color: var(--pastel-lav); }
   header { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
   .title { font-weight: 600; }
-  .save { color: var(--accent); font-size: 12px; white-space: nowrap; }
+  .save { color: var(--accent-strong); font-size: 12px; white-space: nowrap; }
   .why { margin: 6px 0 2px; font-size: 12px; color: var(--ink-soft); }
-  .judgment { margin: 2px 0 6px; font-size: 12px; color: var(--accent); }
+  .judgment { margin: 2px 0 6px; font-size: 12px; color: var(--accent-strong); }
   .session { margin: 2px 0; font-size: 12px; color: var(--ink-soft); }
   .how { margin: 2px 0 8px; font-size: 13px; white-space: pre-line; }
   .actions { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -302,7 +302,7 @@
   .draft-head { display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
   .draft-head .x { border: none; background: none; cursor: pointer; font: inherit; color: var(--ink-soft); }
   .draft-msg { font-size: 12px; color: var(--ink-soft); margin: 8px 0; }
-  .draft-msg.err { color: var(--pastel-coral); }
+  .draft-msg.err { color: var(--danger); }
   .draft-body {
     background: var(--surface-inset); color: var(--text); border-radius: var(--radius-s); padding: 10px;
     overflow: auto; font-size: 11.5px; line-height: 1.5; margin: 0; white-space: pre-wrap; flex: 1;

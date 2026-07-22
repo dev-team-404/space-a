@@ -117,7 +117,7 @@
     margin-left: auto; border: none; background: none; cursor: pointer;
     color: var(--ink-soft); font-size: 12px; padding: 2px 4px; line-height: 1;
   }
-  .x:hover { color: var(--accent); }
+  .x:hover { color: var(--accent-strong); }
   h3 { margin: 0; font-size: 15px; color: var(--ink); font-weight: 700; line-height: 1.4; }
   .body { margin: 0; font-size: 12px; color: var(--ink-soft); line-height: 1.7; white-space: pre-line; }
   .personal {
@@ -127,7 +127,7 @@
   }
   .coach { margin: 0; font-size: 12.5px; color: var(--lav); line-height: 1.6; }
   .coach.loading { color: var(--ink-soft); font-style: italic; }
-  .more { font-size: 12px; color: var(--accent); text-decoration: none; font-weight: 600; width: fit-content; }
+  .more { font-size: 12px; color: var(--accent-strong); text-decoration: none; font-weight: 600; width: fit-content; }
   .more:hover { text-decoration: underline; }
   .rest {
     list-style: none; margin: 4px 0 0; padding: 9px 0 0; border-top: 1px dashed var(--line);
@@ -135,12 +135,12 @@
   }
   .rest li { display: flex; flex-direction: column; gap: 3px; }
   .rest-head { display: flex; align-items: baseline; gap: 6px; }
-  .rest .dot { color: var(--accent); flex: none; }
+  .rest .dot { color: var(--accent-strong); flex: none; }
   .rest-title { color: var(--ink); font-weight: 600; min-width: 0; }
   .rest-body { margin: 0 0 0 12px; font-size: 11.5px; color: var(--ink-soft); line-height: 1.65; white-space: pre-line; }
-  .rest-more { margin-left: 12px; font-size: 11px; color: var(--accent); text-decoration: none; font-weight: 600; width: fit-content; }
+  .rest-more { margin-left: 12px; font-size: 11px; color: var(--accent-strong); text-decoration: none; font-weight: 600; width: fit-content; }
   .rest-more:hover { text-decoration: underline; }
-  .rest a:hover { color: var(--accent); text-decoration: underline; }
+  .rest a:hover { color: var(--accent-strong); text-decoration: underline; }
   .minibadge {
     margin-left: auto; font-size: 10px; color: var(--ink-soft); white-space: nowrap; flex: none;
     background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 1px 7px;

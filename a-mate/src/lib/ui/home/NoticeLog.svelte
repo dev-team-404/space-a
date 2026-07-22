@@ -41,6 +41,6 @@
     border: none; background: none; font: inherit; color: inherit;
     padding: 0; cursor: pointer; text-align: left;
   }
-  button.text:hover { color: var(--accent); text-decoration: underline; }
+  button.text:hover { color: var(--accent-strong); text-decoration: underline; }
   time { color: var(--ink-soft); font-size: 10px; }
 </style>

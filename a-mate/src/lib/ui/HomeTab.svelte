@@ -134,7 +134,7 @@
     padding: 9px 14px;
   }
   .strip b { color: var(--ink); }
-  .strip .save b { color: var(--accent); }
+  .strip .save b { color: var(--accent-strong); }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; position: relative; flex: 0 0 auto; }
   /* grid 아이템 기본 min-width:auto가 긴 top3(nowrap)에 밀려 컬럼을 늘리는 것 방지 — 1fr 고정·ellipsis 복구 */
   .grid > :global(*) { min-width: 0; }

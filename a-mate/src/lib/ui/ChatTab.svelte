@@ -114,7 +114,7 @@
   .list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
   .hint { color: var(--ink-soft); font-size: 12px; margin: 0; }
   .welcome { margin: auto; max-width: 340px; text-align: center; display: flex; flex-direction: column; gap: 12px; }
-  .welcome b { color: var(--accent); }
+  .welcome b { color: var(--accent-strong); }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
   .chips .chip {
     border: 1px solid var(--pastel-lav); background: var(--frame-bg); color: var(--ink);

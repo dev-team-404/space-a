@@ -35,7 +35,7 @@
     border-radius: var(--radius-s); padding: 7px 10px;
   }
   li button:hover { background: var(--pastel-lav); }
-  .rank { color: var(--accent); font-weight: 700; }
+  .rank { color: var(--accent-strong); font-weight: 700; }
   .action { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .save { color: var(--ink-soft); font-size: 11px; white-space: nowrap; }
 </style>
