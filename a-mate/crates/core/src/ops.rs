@@ -169,6 +169,8 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
         Box::new(R7OpusTrivial::default()),
         // R8(MCP 대형 결과) — result_len 수집 승격, 2026-07-19
         Box::new(crate::rules::r8_mcp_large_result::R8McpLargeResult::default()),
+        // F(컨텍스트 위생) — 에피소드 세그먼터 기반 결정론 룰 (코칭 v3 재설계 §4 F)
+        Box::new(crate::rules::r24_context_hygiene::R24ContextHygiene::default()),
         // R10·R11 은퇴 (코칭 가치 재설계) — detect_bursts는 R7 후보 제외에 계속 사용
     ]);
     let findings = engine.run(store)?;
@@ -372,6 +374,56 @@ mod tests {
             store.find_finding("R7|sess|Windows|s1").unwrap().is_some(),
             "판정 캐시가 있는 R7 세션 후보를 run_rules가 지우면 안 됨"
         );
+    }
+
+    #[test]
+    fn run_rules_registers_r24_and_surfaces_project_card_as_new() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let recent = |h: i64| (chrono::Utc::now() - chrono::Duration::hours(h)).to_rfc3339();
+        // 6개 에피소드, 전부 60k 상속 → R24 발화.
+        let mut evs = Vec::new();
+        for i in 0..6u64 {
+            let ts = recent(20 - i as i64);
+            evs.push(NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(),
+                host: "Windows".into(), project_id: "d--proj".into(),
+                session_id: "s1".into(), uuid: Some(format!("p{i}")), parent_uuid: None,
+                is_sidechain: false, ts: Some(ts.clone()), source_file: "s.jsonl".into(),
+                source_offset: i * 2, msg_id: None,
+                kind: EventKind::UserPrompt { preview: format!("에피소드 {i} 실질 작업 지시 문장") },
+            });
+            evs.push(NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(),
+                host: "Windows".into(), project_id: "d--proj".into(),
+                session_id: "s1".into(), uuid: Some(format!("a{i}")), parent_uuid: None,
+                is_sidechain: false, ts: Some(ts), source_file: "s.jsonl".into(),
+                source_offset: i * 2 + 1, msg_id: None,
+                kind: EventKind::AssistantTurn {
+                    model: NormModel::from_raw_id("claude-opus-4-8"),
+                    usage: TokenUsage { input: 60_000, ..Default::default() },
+                    web_search: 0, web_fetch: 0,
+                },
+            });
+        }
+        store.upsert_events(&evs).unwrap();
+
+        let findings = run_rules(&store).unwrap();
+        assert!(
+            findings.iter().any(|f| f.rule_id == "R24" && f.scope_kind == "project"),
+            "run_rules가 R24 프로젝트 카드를 낸다"
+        );
+
+        // 노출 상태: R24 project → status 'new' (즉시 노출).
+        let status: String = store
+            .conn
+            .query_row(
+                "SELECT status FROM findings WHERE dedup_key = 'R24|Windows|d--proj'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "new");
     }
 
     #[test]
