@@ -45,12 +45,22 @@ export async function initTheme(): Promise<void> {
   await listen<ThemeSettings>('theme:changed', (ev) => { current = normalizeTheme(ev.payload); paint(); });
 }
 
-/** 설정 UI에서 호출. 낙관적 적용 + 저장(서버가 theme:changed 브로드캐스트). */
-export async function setTheme(next: ThemeSettings): Promise<void> {
+// 연속 변경(모드→스킨 빠른 클릭) 시 async 저장이 순서 뒤바뀌어 오래된 스냅샷이
+// store/브로드캐스트를 덮어쓰지 않도록 저장을 직렬화한다 — 마지막 선택이 이긴다.
+let saveChain: Promise<void> = Promise.resolve();
+
+/** 설정 UI에서 호출. 낙관적 적용(동기) + 직렬화된 저장(서버가 theme:changed 브로드캐스트). */
+export function setTheme(next: ThemeSettings): Promise<void> {
   current = normalizeTheme(next);
   paint();
-  try { await invoke('theme_set', { mode: current.mode, skin: current.skin }); }
-  catch (e) { console.warn('theme_set 실패:', e); }
+  const snap = { mode: current.mode, skin: current.skin };
+  saveChain = saveChain.then(() =>
+    invoke('theme_set', snap).then(
+      () => {},
+      (e) => { console.warn('theme_set 실패:', e); },
+    ),
+  );
+  return saveChain;
 }
 
 export function getTheme(): ThemeSettings { return { ...current }; }
