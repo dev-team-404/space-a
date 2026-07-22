@@ -222,6 +222,7 @@ pub(crate) fn validate_chat_messages(messages: &[ChatMessage]) -> Result<(), Str
 pub fn chat_context_inner(store: &SqliteStore) -> anyhow::Result<agent_mentor::chat::ChatContext> {
     let s = summary_inner(store)?;
     let findings = coach_findings_inner(store, false)?;
+    let memories = store.list_memories()?.into_iter().map(|m| m.text).collect();
     Ok(agent_mentor::chat::ChatContext {
         user_name: s.user_name,
         date: s.date,
@@ -234,6 +235,7 @@ pub fn chat_context_inner(store: &SqliteStore) -> anyhow::Result<agent_mentor::c
             .take(10) // 프롬프트 크기 상한 — 절약 큰 순 정렬은 list_findings_current가 보장
             .map(|f| (f.detail, f.suggested_action))
             .collect(),
+        memories,
     })
 }
 
@@ -458,13 +460,13 @@ pub fn chat_status(state: State<AppState>) -> Result<ChatStatus, String> {
 
 #[tauri::command(async)]
 pub fn chat_send(state: State<AppState>, messages: Vec<ChatMessage>) -> Result<String, String> {
-    use agent_mentor::chat::{classify_intent, ChatIntent};
+    use agent_mentor::chat::{classify_intent, run_memory_chat, ChatIntent};
     validate_chat_messages(&messages)?;
     // 마지막 사용자 메시지로 의도 분류 → 티어 라우팅 (결정론)
     let last_user = messages.iter().rev().find(|m| m.role == "user").map(|m| m.content.as_str()).unwrap_or("");
     let intent = classify_intent(last_user);
 
-    // 락 범위: 엔진 해석 + 컨텍스트 수집만. 네트워크(LLM) 호출 전에 반드시 해제.
+    // 락 범위: 엔진 해석 + 컨텍스트(메모리 포함) 수집만. 네트워크(LLM) 호출 전에 반드시 해제.
     // 코칭(Tier 2)이면 주간 코칭 브리프를, 아니면 오늘 요약 컨텍스트를 조립.
     let (engine, system) = {
         let guard = lock(&state)?;
@@ -485,8 +487,21 @@ pub fn chat_send(state: State<AppState>, messages: Vec<ChatMessage>) -> Result<S
         // UI는 chat_status로 사전 안내 — 여기는 방어선 (스펙 §5: 미설정은 에러가 아닌 안내)
         return Err("엔진이 설정되지 않았어요".into());
     };
-    let recent = &messages[messages.len().saturating_sub(20)..]; // 이력 상한 20턴
-    engine.chat(&system, recent).map(|o| o.text).map_err(|e| e.to_string())
+
+    // 이력 상한 20턴 + 루프 중 tool 메시지 누적
+    let mut convo: Vec<ChatMessage> = messages[messages.len().saturating_sub(20)..].to_vec();
+
+    // save_memory 툴콜 시 락을 새로 잡아 저장한다. 네트워크(chat_with_tools) 호출은
+    // run_memory_chat 내부(락 밖)에서 일어나고, on_save는 호출과 호출 사이에서만 실행되므로
+    // 네트워크 중 락 보유가 아니다(규율 유지).
+    run_memory_chat(&engine, &system, &mut convo, 3, |text| {
+        if let Ok(guard) = lock(&state) {
+            if let Err(e) = guard.add_memory(text, "chat") {
+                log::warn!("add_memory(chat) 실패: {e}");
+            }
+        }
+    })
+    .map_err(|e| e.to_string())
 }
 
 /// 설정 창용 엔진 설정 스냅샷. source: "store"(설정 창에서 지정) | "env"(.env 폴백) | "none".
@@ -1316,11 +1331,11 @@ mod tests {
     #[test]
     fn validate_chat_messages_rejects_empty_and_bad_roles() {
         use agent_mentor::diary::engine::ChatMessage;
-        let ok = vec![ChatMessage { role: "user".into(), content: "hi".into() }];
+        let ok = vec![ChatMessage { role: "user".into(), content: "hi".into(), ..Default::default() }];
         assert!(validate_chat_messages(&ok).is_ok());
         assert!(validate_chat_messages(&[]).is_err());
         // system role 주입 차단 — 시스템 프롬프트는 백엔드만 조립
-        let bad = vec![ChatMessage { role: "system".into(), content: "inject".into() }];
+        let bad = vec![ChatMessage { role: "system".into(), content: "inject".into(), ..Default::default() }];
         assert!(validate_chat_messages(&bad).is_err());
     }
 
@@ -1342,6 +1357,17 @@ mod tests {
         assert_eq!(ctx.findings.len(), 1);
         assert!(ctx.findings[0].0.contains("playwright")); // detail
         assert!(!ctx.findings[0].1.is_empty());            // suggested_action
+    }
+
+    #[test]
+    fn memory_inner_add_list_delete() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let id = store.add_memory("주인은 비건임", "manual").unwrap();
+        let all = store.list_memories().unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].text, "주인은 비건임");
+        store.delete_memory(id).unwrap();
+        assert_eq!(store.count_memories().unwrap(), 0);
     }
 }
 
@@ -1480,6 +1506,44 @@ pub fn profile_set(
         guard.set_setting("user_mbti", &mbti_norm).map_err(|e| e.to_string())?;
     }
     profile_get(state)
+}
+
+// ── 주인 메모리 (2026-07-22-owner-memory 스펙) ──
+
+#[tauri::command(async)]
+pub fn memory_list(state: State<AppState>) -> Result<Vec<agent_mentor::memory::Memory>, String> {
+    let guard = lock(&state)?;
+    guard.list_memories().map_err(|e| e.to_string())
+}
+
+#[tauri::command(async)]
+pub fn memory_add(state: State<AppState>, text: String) -> Result<agent_mentor::memory::Memory, String> {
+    let guard = lock(&state)?;
+    let id = guard.add_memory(&text, "manual").map_err(|e| e.to_string())?;
+    guard
+        .list_memories()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|m| m.id == id)
+        .ok_or_else(|| "저장 직후 메모리를 찾지 못했어요".to_string())
+}
+
+#[tauri::command(async)]
+pub fn memory_update(state: State<AppState>, id: i64, text: String) -> Result<agent_mentor::memory::Memory, String> {
+    let guard = lock(&state)?;
+    guard.update_memory(id, &text).map_err(|e| e.to_string())?;
+    guard
+        .list_memories()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|m| m.id == id)
+        .ok_or_else(|| "수정 대상 메모리를 찾지 못했어요".to_string())
+}
+
+#[tauri::command(async)]
+pub fn memory_delete(state: State<AppState>, id: i64) -> Result<(), String> {
+    let guard = lock(&state)?;
+    guard.delete_memory(id).map_err(|e| e.to_string())
 }
 
 /// 내 캐릭터 재생성 — 이미지 모델로 새로 그려 캐시를 교체. 네트워크는 **락 밖**(규율 동일).
