@@ -887,14 +887,19 @@ pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize) -> String {
          오늘 브리프의 오늘만의 사실과 기분에 집중해 어제와는 다른 이야기로 쓰세요. \
          비어있으면 신경 쓰지 마세요. \
          \
-         오늘 하루의 재료는 이렇습니다: `work_log`(그날 한 작업 — git 커밋 제목이나 작업 갈래), \
+         오늘 하루의 재료는 이렇습니다: `work_log`(그날 한 작업 — `projects` 배열로 프로젝트별 커밋 제목·작업 갈래, \
+         `concurrent`는 여러 프로젝트를 동시에 진행했는지, `commit_count`는 총 커밋 수), \
          `tool_usage`(도구 사용량), `work_context`(주말 여부·몰입 시간), `findings`(오늘 새 코칭거리), `occasions`. \
          이 재료들을 종류별로 문단을 나눠 나열하지 마세요 — '도구 문단 / 커밋 문단 / MCP 문단'처럼 쓰면 실패입니다. \
          그날을 가장 잘 말해주는 한 가지(대개 무슨 작업을 했는지)를 중심 줄기로 잡고, 나머지는 곁들이듯 흘려 \
          하나의 자연스러운 하루 이야기로 엮으세요. 모든 재료를 억지로 다 넣지 말고 골라 쓰세요. \
          특히 '몇 시간 붙어 있었다'처럼 작업 시간 수치로 일기를 시작하지 마세요. \
          \
-         `work_log`가 있으면 무슨 작업을 했는지 구체적으로(여러 갈래면 '여러 일을 오갔다'는 분주함도 슬쩍). \
+         `work_log.projects`가 있으면 무슨 작업을 했는지 구체적으로 쓰세요. 프로젝트가 여럿이면 \
+         각 작업이 어느 프로젝트(`name`)에서 한 일인지 자연스럽게 드러내세요 — 라벨 없이 한 프로젝트 얘기에 \
+         다른 프로젝트 작업을 섞으면 실패입니다. 단 프로젝트마다 문단을 딱딱 나누지는 말고 하루 흐름으로 엮으세요 \
+         (예: '오전엔 space-a 다이어리를 손봤고, 오후엔 agent-meter 쪽으로 넘어갔다'). \
+         `concurrent`가 true면 두 일을 동시에 오간 분주함도 슬쩍 담으세요('두 프로젝트를 왔다 갔다 하느라 정신없었네'). \
          `findings`는 있으면 하나만 스치듯 — 이미 다룬 상시 이슈는 빠져 있으니 되풀이 금지, 없으면 억지로 만들지 말 것. \
          위로·응원은 매일이 아니라 `work_context.long_work`(유난히 긴 날)나 `is_weekend`(주말 근무) 때만, \
          그것도 판박이 대신 다마고치 능청으로(주말이면 '주말에 또? 일중독인가 봐', 긴 날이면 '오늘 좀 과했다, 배터리 방전 직전'). \
@@ -1818,6 +1823,14 @@ mod tests {
         assert!(p.contains("일중독"));            // 주말 능청 예시(유머·주말 강화)
         assert!(p.contains("나열하지"));          // 종류별 문단 나열 금지(자연스러운 흐름)
         assert!(p.contains("work_log"));          // 그날 한 작업(커밋/토픽) 지시
+    }
+
+    #[test]
+    fn system_prompt_directs_project_scoped_work_log() {
+        let p = build_system_prompt(&DiaryConfig::default(), 5);
+        assert!(p.contains("projects"), "프로젝트별 구조 언급");
+        assert!(p.contains("어느 프로젝트"), "작업의 프로젝트 귀속 지시");
+        assert!(p.contains("concurrent"), "동시 진행 지시");
     }
 
     #[test]
