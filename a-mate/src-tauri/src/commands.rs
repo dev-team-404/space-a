@@ -1637,12 +1637,19 @@ pub fn generate_skill_draft(
     host: String,
     representative: String,
     suggested_name: Option<String>,
+    member_norms: Option<Vec<String>>,
 ) -> Result<SkillDraftResult, String> {
-    // 1) 재료 수집 + 엔진 구성 (락 안, SQL만)
+    // 1) 재료 수집 + 엔진 구성 (락 안, SQL만). 느슨한 묶음(member_norms)이 오면 묶음 전체
+    //    변형의 세션·도구를 모아 카드가 센 세션 수와 초안이 일치하도록 한다.
     let (ctx, engine) = {
         let guard = lock(&state)?;
-        let ctx = agent_mentor::skill_draft::gather_context(&guard, &host, &representative)
-            .map_err(|e| e.to_string())?;
+        let ctx = match member_norms.as_deref() {
+            Some(norms) if !norms.is_empty() => {
+                agent_mentor::skill_draft::gather_context_multi(&guard, &host, &representative, norms)
+            }
+            _ => agent_mentor::skill_draft::gather_context(&guard, &host, &representative),
+        }
+        .map_err(|e| e.to_string())?;
         (ctx, resolve_engine(&guard))
     };
     // 2) 초안 생성 (락 밖, LLM 네트워크 가능)

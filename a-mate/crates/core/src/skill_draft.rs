@@ -66,6 +66,27 @@ pub fn gather_context_multi(
     })
 }
 
+/// R6 finding evidence로 초안 재료를 모은다. `member_norms`(A 느슨한 묶음)가 있으면 묶음 전체,
+/// 없으면(구버전 finding) 대표 하나로 폴백. judge·CLI 공통 진입점 — 카드가 센 세션·도구를
+/// 초안도 그대로 보게 해 카드/초안 불일치를 막는다.
+pub fn gather_context_for_finding(
+    store: &SqliteStore,
+    host: &str,
+    representative: &str,
+    evidence: &serde_json::Value,
+) -> Result<DraftContext> {
+    let norms: Vec<String> = evidence
+        .get("member_norms")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+    if norms.is_empty() {
+        gather_context(store, host, representative)
+    } else {
+        gather_context_multi(store, host, representative, &norms)
+    }
+}
+
 /// 스킬 디렉터리/커맨드 이름용 슬러그 — 영숫자+하이픈, 소문자, 40자 컷.
 /// 한글 등 비ASCII만 남으면 안정적 해시 접미로 폴백(빈 이름 금지).
 pub fn slugify(name: &str) -> String {

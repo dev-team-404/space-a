@@ -336,8 +336,9 @@ export async function generateSkillDraft(
   host: string,
   representative: string,
   suggestedName: string | null = null,
+  memberNorms: string[] | null = null,
 ): Promise<SkillDraft> {
-  return invoke<SkillDraft>('generate_skill_draft', { host, representative, suggestedName });
+  return invoke<SkillDraft>('generate_skill_draft', { host, representative, suggestedName, memberNorms });
 }
 
 /** 초안을 ~/.claude/skills/<slug>/SKILL.md 로 저장. 저장된 절대 경로 반환. */

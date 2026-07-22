@@ -153,17 +153,8 @@ impl CoachingJudge for R6Judge {
     fn build_prompt(&self, store: &SqliteStore, c: &PendingCandidate) -> Result<(String, String)> {
         let rep = c.evidence.get("repeated_prompt").and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("R6 evidence에 repeated_prompt 없음"))?;
-        // A — 묶음의 모든 변형(member_norms)에서 재료 수집. 구버전 finding(member_norms 없음)은
-        // 대표 하나로 폴백(하위호환).
-        let norms: Vec<String> = c.evidence.get("member_norms")
-            .and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
-            .unwrap_or_default();
-        let ctx = if norms.is_empty() {
-            crate::skill_draft::gather_context(store, &c.scope_host, rep)?
-        } else {
-            crate::skill_draft::gather_context_multi(store, &c.scope_host, rep, &norms)?
-        };
+        // A — 묶음의 모든 변형(member_norms)에서 재료 수집(없으면 대표 하나로 폴백).
+        let ctx = crate::skill_draft::gather_context_for_finding(store, &c.scope_host, rep, &c.evidence)?;
         Ok(judgment_prompt(&ctx))
     }
     fn classify(&self, verdict: &serde_json::Value) -> Option<&'static str> {
