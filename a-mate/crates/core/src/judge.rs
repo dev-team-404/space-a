@@ -4,6 +4,7 @@
 
 use crate::diary::engine::Engine;
 use crate::skill_draft::DraftContext;
+use crate::store::SqliteStore;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
@@ -54,16 +55,21 @@ worthy=false: 대화 접착제('진행해줘','계속','ㅇㅋ' 등), 일회성�
     (system, user)
 }
 
+/// 엔진 응답에서 JSON 객체를 관대히 추출(첫 '{'~마지막 '}'). 코드펜스·사족 허용.
+pub fn extract_verdict_json(text: &str) -> Result<serde_json::Value> {
+    let start = text.find('{').ok_or_else(|| anyhow!("응답에 JSON 객체 없음"))?;
+    let end = text.rfind('}').ok_or_else(|| anyhow!("응답에 JSON 객체 없음"))?;
+    if end < start {
+        return Err(anyhow!("JSON 경계 불량"));
+    }
+    Ok(serde_json::from_str(&text[start..=end])?)
+}
+
 /// 엔진 응답에서 엄격 JSON 판정을 추출. 코드펜스·사족을 관대히 벗기되(첫 '{'~마지막 '}'),
 /// 필수 필드(worthy·reason·suggested_name)가 없으면 실패로 본다.
 pub fn parse_judgment(text: &str) -> Result<Judgment> {
-    let start = text.find('{').ok_or_else(|| anyhow!("판정 응답에 JSON 객체 없음"))?;
-    let end = text.rfind('}').ok_or_else(|| anyhow!("판정 응답에 JSON 객체 없음"))?;
-    if end < start {
-        return Err(anyhow!("판정 응답 JSON 경계 불량"));
-    }
-    let j: Judgment = serde_json::from_str(&text[start..=end])?;
-    Ok(j)
+    let v = extract_verdict_json(text)?;
+    Ok(serde_json::from_value(v)?)
 }
 
 pub enum JudgeOutcome {
@@ -120,9 +126,59 @@ pub fn judgment_record(
     }
 }
 
+pub struct PendingCandidate {
+    pub dedup_key: String,
+    pub scope_host: String,
+    pub scope_project: Option<String>,
+    pub evidence: serde_json::Value,
+    pub prev_attempts: u32,
+}
+
+/// 결정론 채굴(findings pending) + LLM 판정 + 롤업. 각 아이템이 구현.
+pub trait CoachingJudge {
+    fn rule_id(&self) -> &'static str;
+    /// 후보 1건의 (system, user) 판정 프롬프트. 재료 수집 실패는 Err(영구 실패).
+    fn build_prompt(&self, store: &SqliteStore, c: &PendingCandidate) -> Result<(String, String)>;
+    /// 파싱된 verdict → 상태 전이("new"|"confirmed"|"rejected").
+    fn classify(&self, verdict: &serde_json::Value) -> &'static str;
+    /// verdict 저장 후 노출 finding (재)구성. 반환 = 새로 노출된 dedup_key.
+    fn rollup(&self, store: &SqliteStore) -> Result<Vec<String>>;
+}
+
+pub struct R6Judge;
+impl CoachingJudge for R6Judge {
+    fn rule_id(&self) -> &'static str { "R6" }
+    fn build_prompt(&self, store: &SqliteStore, c: &PendingCandidate) -> Result<(String, String)> {
+        let rep = c.evidence.get("repeated_prompt").and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("R6 evidence에 repeated_prompt 없음"))?;
+        let ctx = crate::skill_draft::gather_context(store, &c.scope_host, rep)?;
+        Ok(judgment_prompt(&ctx))
+    }
+    fn classify(&self, verdict: &serde_json::Value) -> &'static str {
+        if verdict.get("worthy").and_then(|v| v.as_bool()).unwrap_or(false) { "new" } else { "rejected" }
+    }
+    fn rollup(&self, _store: &SqliteStore) -> Result<Vec<String>> { Ok(vec![]) } // classify→"new"가 곧 노출, 롤업 없음
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn r6_judge_classifies_worthy_and_unworthy() {
+        let j = R6Judge;
+        assert_eq!(j.classify(&serde_json::json!({"worthy": true})), "new");
+        assert_eq!(j.classify(&serde_json::json!({"worthy": false})), "rejected");
+        assert_eq!(j.classify(&serde_json::json!({})), "rejected"); // 필드 없음 = 보수적 rejected
+        assert_eq!(j.rule_id(), "R6");
+    }
+
+    #[test]
+    fn extract_verdict_json_tolerates_prose_and_fence() {
+        let v = extract_verdict_json("결과:\n```json\n{\"over_modeled\":true,\"reason\":\"x\"}\n```").unwrap();
+        assert_eq!(v["over_modeled"], serde_json::json!(true));
+        assert!(extract_verdict_json("판정 불가").is_err());
+    }
 
     fn ctx() -> DraftContext {
         DraftContext {

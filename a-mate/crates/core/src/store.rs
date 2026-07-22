@@ -833,6 +833,30 @@ impl SqliteStore {
         rows.collect::<std::result::Result<_, _>>().map_err(Into::into)
     }
 
+    /// 범용 판정 배치 대상 — 주어진 rule_id의 pending & 시도 3회 미만, 최근 활동 순 상한.
+    pub fn pending_for_judgment(&self, rule_id: &str, limit: usize) -> Result<Vec<crate::judge::PendingCandidate>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT dedup_key, COALESCE(scope_host,''), scope_project, evidence_json,
+                    COALESCE(json_extract(judgment_json,'$.attempts'), 0)
+             FROM findings
+             WHERE rule_id=?1 AND status='pending'
+               AND COALESCE(json_extract(judgment_json,'$.attempts'), 0) < 3
+             ORDER BY last_seen DESC
+             LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![rule_id, limit as i64], |r| {
+            let ev: String = r.get(3)?;
+            Ok(crate::judge::PendingCandidate {
+                dedup_key: r.get(0)?,
+                scope_host: r.get(1)?,
+                scope_project: r.get::<_, Option<String>>(2)?,
+                evidence: serde_json::from_str(&ev).unwrap_or(serde_json::Value::Null),
+                prev_attempts: r.get::<_, i64>(4)? as u32,
+            })
+        })?;
+        rows.collect::<std::result::Result<_, _>>().map_err(Into::into)
+    }
+
     /// 판정 결과 저장. new_status=Some → status 전환(worthy→'new', unworthy→'rejected'),
     /// None → status 불변(파싱 실패 시 pending 잔류). judgment_json은 항상 갱신.
     pub fn set_judgment(
@@ -2318,6 +2342,27 @@ mod tests {
         assert_eq!(batch[0].prev_attempts, 0, "미시도는 attempts 0");
         assert!(batch.iter().all(|t| t.dedup_key != "R6|W|2"), "상한에 밀린 오래된 유효 카드 제외");
         assert!(batch.iter().all(|t| t.dedup_key != "R6|W|3"), "상한에 밀린 오래된 유효 카드 제외");
+    }
+
+    #[test]
+    fn pending_for_judgment_returns_generic_candidates() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // pending R7 세션 후보 2개 시드 (evidence에 session_id)
+        let mk = |key: &str, sid: &str| crate::finding::Finding {
+            rule_id: "R7".into(), severity: crate::finding::Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: Some("p".into()),
+            scope_kind: "session".into(), scope_ref: sid.into(),
+            evidence: serde_json::json!({"session_id": sid}),
+            est_tokens_saved: 0, prescription: None, dedup_key: key.into(),
+        };
+        store.upsert_finding(&mk("R7|sess|Windows|s1", "s1"), "2026-07-06T10:00:00Z").unwrap();
+        store.upsert_finding(&mk("R7|sess|Windows|s2", "s2"), "2026-07-06T11:00:00Z").unwrap();
+        let batch = store.pending_for_judgment("R7", 10).unwrap();
+        assert_eq!(batch.len(), 2);
+        assert!(batch.iter().all(|c| c.prev_attempts == 0));
+        assert!(batch.iter().any(|c| c.evidence["session_id"] == "s2"));
+        // R6 후보는 안 섞임
+        assert!(store.pending_for_judgment("R6", 10).unwrap().is_empty());
     }
 
     #[test]
