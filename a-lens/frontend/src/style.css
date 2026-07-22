@@ -459,3 +459,68 @@ button { font: inherit; cursor: pointer; }
   border-color: #d9a441;
   box-shadow: 0 0 0 1px #d9a441, 0 0 14px rgba(217, 164, 65, 0.35);
 }
+
+/* ── 설정 창 ── */
+.settings-form { display: flex; flex-direction: column; gap: 12px; }
+.settings-form .set-group {
+  margin: 8px 0 0;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: #d9a441;
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(217, 164, 65, 0.25);
+  padding-bottom: 4px;
+}
+.set-field { display: flex; flex-direction: column; gap: 4px; }
+.set-field > span { font-size: 12px; color: #b7c0cf; }
+.set-field > span em { font-style: normal; }
+.set-field input, .set-field select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: #e8eaed;
+  background: #12182a;
+  border: 1px solid #2a3348;
+  border-radius: 6px;
+  outline: none;
+}
+.set-field input:focus, .set-field select:focus { border-color: #d9a441; }
+.set-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid #2a3348;
+}
+.set-actions .spacer { flex: 1; }
+.set-status { min-height: 1em; }
+
+/* ── LLM 분류 배지 + 요약 강조 (문서함·책장·이슈공유 공통) ── */
+.cat-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  margin-right: 6px;
+  border-radius: 999px;
+  vertical-align: middle;
+  color: #0d1220;
+  background: #7fb3d5;
+  white-space: nowrap;
+}
+.cat-troubleshoot { background: #e0937b; }
+.cat-spec { background: #88b0d3; }
+.cat-analysis { background: #8fbcbb; }
+.cat-release { background: #c3a3d9; }
+.cat-note { background: #aab4c6; }
+.cat-guide { background: #a8cf8e; }
+/* 요약을 제목 밑에서 더 잘 드러나게 — 이전보다 밝고 크게 */
+.doc-summary {
+  margin-top: 5px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #cdd4df;
+}
+.issue-row .doc-summary { margin-top: 4px; }
