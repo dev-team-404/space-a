@@ -19,15 +19,18 @@ members)를 읽어 C2 비슷한 모양으로 맞춘다 — pipeline은 원천을
 """
 
 import copy
+import hashlib
 import json
 import logging
-import os
 import re
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
+
+from . import settings, store, translator
 
 log = logging.getLogger("alens.collector")
 
@@ -36,25 +39,74 @@ _FIXTURES = Path(__file__).resolve().parents[3] / "contracts" / "fixtures"
 # 데모용 더미 데이터 (backend/dummy_data — _generate.py로 재생성)
 _DUMMY_DIR = Path(__file__).resolve().parents[1] / "dummy_data"
 
-SOURCE = os.environ.get("A_LENS_SOURCE", "auto")
-WORK_URL = os.environ.get("A_LENS_WORK_URL", "https://spacea.msalt.net").rstrip("/")
-WORK_TOKEN = os.environ.get("A_LENS_WORK_TOKEN", "")
-WORK_API_KEY = os.environ.get("A_LENS_WORK_API_KEY", "")
-# 프레즌스는 work 최근 쓰기 활동으로 판정한다 (life life-server 프레즌스 대체, 2026-07-19).
-PRESENCE_WINDOW = float(os.environ.get("A_LENS_PRESENCE_WINDOW", "3600"))
-CACHE_TTL = float(os.environ.get("A_LENS_CACHE_TTL", "30"))
+# 설정(원천·a-hub URL·토큰·LLM 등)은 import 시 상수가 아니라 호출 시점에 settings에서 읽는다
+# — 설정 창(POST /api/settings)에서 바꾸면 재시작 없이 반영된다.
+#
+# 수집·번역은 요청 스레드가 아니라 단일 백그라운드 워커가 한다:
+#   - snapshot()은 최신 스냅숏(_latest)을 즉시 반환 → 요청이 절대 안 막힌다.
+#   - _build_lock으로 빌드는 한 번에 하나만 → 요청이 몰려도 겹침 패스가 안 생긴다.
+#   - 페이지 본문·번역은 store에 캐시 → updated_at이 그대로면 허브 재조회·LLM 둘 다 스킵.
 
-_cache: dict[str, tuple[float, object]] = {}
+_latest: dict | None = None            # 백그라운드 워커가 갱신하는 최신 스냅숏
+_build_lock = threading.Lock()         # 스냅숏 빌드는 한 번에 하나만
+_refresher_started = False
+_refresher_lock = threading.Lock()
 
 
-def _memo(key: str, fn):
-    now = time.monotonic()
-    hit = _cache.get(key)
-    if hit is not None and now - hit[0] < CACHE_TTL:
-        return hit[1]
-    val = fn()
-    _cache[key] = (now, val)
-    return val
+def clear_cache() -> None:
+    """설정 변경 시 — 최신 스냅숏을 버리고 즉시 백그라운드 재빌드를 건다(새 URL/원천 반영)."""
+    global _latest
+    _latest = None
+    threading.Thread(target=_rebuild_once, daemon=True, name="alens-rebuild").start()
+
+
+def _rebuild_once() -> None:
+    global _latest
+    try:
+        _latest = _build_guarded()
+    except Exception as e:  # noqa: BLE001
+        log.warning("스냅숏 재빌드 실패: %s", e)
+
+
+def _refresh_loop() -> None:
+    global _latest
+    while True:
+        try:
+            _latest = _build_guarded()
+        except Exception as e:  # noqa: BLE001
+            log.warning("스냅숏 갱신 실패: %s", e)
+        time.sleep(max(5.0, settings.get()["cache_ttl"]))
+
+
+def _ensure_refresher() -> None:
+    global _refresher_started
+    if _refresher_started:
+        return
+    with _refresher_lock:
+        if not _refresher_started:
+            threading.Thread(target=_refresh_loop, daemon=True, name="alens-refresh").start()
+            _refresher_started = True
+
+
+def _build_current() -> dict:
+    """현재 원천 설정에 맞는 스냅숏을 만든다 (백그라운드 워커에서만 호출)."""
+    source = settings.get()["source"]
+    if source == "hub":
+        return _hub_snapshot()
+    if source == "dummy":
+        return _dummy_snapshot()
+    if source == "fixtures":
+        return _fixture_snapshot()
+    try:
+        return _merged_snapshot()
+    except Exception as e:  # noqa: BLE001 — 허브 실패 시 더미만
+        log.warning("허브 수집 실패, dummy_data만 표시: %s", e)
+        return _dummy_snapshot()
+
+
+def _build_guarded() -> dict:
+    with _build_lock:  # 한 번에 하나의 빌드만 — 요청 폭주에도 겹침 패스가 안 생긴다
+        return _build_current()
 
 
 def _fixture(name: str) -> dict:
@@ -160,21 +212,133 @@ def _issue_vm(issue: dict, member_name: dict[str, str]) -> dict:
     }
 
 
+def _issue_doc(it: dict, member_name: dict[str, str]) -> dict:
+    """이슈 VM + 번역(분류·요약·서사). 제목이 그대로면 캐시 사용 — 상태 변화로는 재번역 안 함."""
+    vm = _issue_vm(it, member_name)
+    title = it.get("title", "")
+    st = store.get_store()
+    row = st.get_issue(vm["issue_id"]) if st is not None else None
+    if row and row.get("title") == title and row.get("summary"):
+        vm["category"], vm["summary"], vm["narrative"] = (
+            row.get("category"),
+            row.get("summary"),
+            row.get("narrative"),
+        )
+        return vm
+    # 이슈는 본문이 없어 제목을 내용으로 번역한다(제목을 body 자리에도 넣어 맥락 확보).
+    res, model = translator.translate_text(title, title, "issue")
+    vm["category"], vm["summary"], vm["narrative"] = (
+        res["category"],
+        res["summary"],
+        res.get("narrative"),
+    )
+    if st is not None:
+        st.upsert_issue(
+            {
+                "issue_id": vm["issue_id"],
+                "title": title,
+                "category": res["category"],
+                "summary": res["summary"],
+                "narrative": res.get("narrative"),
+                "model": model,
+                "translated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+    return vm
+
+
+# ── 지식 문서 뷰 (본문+번역, store 증분 캐시) ────────────────
+
+
+def _page_doc(client: httpx.Client, node: dict, space_id: str, member_name: dict[str, str]) -> dict:
+    """트리 노드 하나 → 지식 문서 뷰(body·category·summary·narrative).
+
+    store 캐시로 증분 처리: 같은 updated_at이면 허브 /pages 재조회·LLM 번역을 둘 다 건너뛴다.
+    본문만 캐시에 없고(구 스키마 등) 번역은 있으면, 본문만 한 번 받아 채우고 LLM은 스킵한다."""
+    page_id = node["page_id"]
+    updated_at = node.get("updated_at") or node.get("created_at") or ""
+    doc = {"doc_id": page_id, "title": node.get("title", ""), "reuse_count": 0, "cited_by": []}
+
+    st = store.get_store()
+    row = st.get(page_id) if st is not None else None
+    fresh = bool(row and row.get("updated_at") == updated_at and row.get("summary"))
+
+    # 완전 캐시(본문까지) — 허브·LLM 모두 스킵
+    if fresh and row.get("body") is not None:
+        body = row.get("body") or ""
+        doc["body"] = body
+        doc["visibility"] = row.get("visibility") or "org"
+        doc["author_agent"] = row.get("author_agent") or ""
+        doc["category"] = row.get("category")
+        doc["summary"] = row.get("summary") or body[:120]
+        doc["narrative"] = row.get("narrative")
+        return doc
+
+    # 본문이 필요 → 허브 조회 (읽기 실패는 잠금으로 강등)
+    try:
+        page = _hub_get(client, f"/pages/{page_id}")
+    except _DEGRADE:
+        doc.update(body="", visibility="space", author_agent="", summary="", category=None, narrative=None)
+        return doc
+
+    body = page.get("body", "")
+    visibility = page.get("visibility", "org")
+    # 작성자: created_by_name(허브가 내려주면) 우선, 없으면 멤버 목록 이름, 그마저 없으면 agent_id.
+    creator = page.get("created_by")
+    author = page.get("created_by_name") or member_name.get(creator, creator) or ""
+
+    if fresh:  # 번역은 이미 있으니 LLM 스킵, 본문만 채워 캐시 보강
+        category, summary, narrative = row.get("category"), row.get("summary"), row.get("narrative")
+        model = row.get("model") or "cache"
+    else:  # 새/변경 문서만 LLM(또는 규칙)로 번역
+        res, model = translator.translate_text(
+            node.get("title", ""), body, node.get("source", "authored")
+        )
+        category, summary, narrative = res["category"], res["summary"], res.get("narrative")
+
+    doc["body"] = body
+    doc["visibility"] = visibility
+    doc["author_agent"] = author
+    doc["category"] = category
+    doc["summary"] = summary or body[:120]
+    doc["narrative"] = narrative
+
+    if st is not None:
+        st.upsert(
+            {
+                "page_id": page_id,
+                "space_id": space_id,
+                "updated_at": updated_at,
+                "source_hash": hashlib.sha256((body or "").encode("utf-8")).hexdigest(),
+                "body": body,
+                "visibility": visibility,
+                "author_agent": author,
+                "category": category,
+                "summary": summary,
+                "narrative": narrative,
+                "model": model,
+                "translated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+    return doc
+
+
 # ── 허브 스냅숏 ──────────────────────────────────────────────
 
 
 def _hub_snapshot() -> dict:
-    headers = {"Authorization": f"Bearer {WORK_TOKEN}"} if WORK_TOKEN else {}
-    if WORK_API_KEY:
-        headers["x-api-key"] = WORK_API_KEY
+    cfg = settings.get()
+    headers = {"Authorization": f"Bearer {cfg['work_token']}"} if cfg["work_token"] else {}
+    if cfg["work_api_key"]:
+        headers["x-api-key"] = cfg["work_api_key"]
     floors: list[dict] = []
     details: dict[str, dict] = {}
     all_pages: list[dict] = []
     totals = {"issues": 0, "knowledge": 0, "skills": 0, "reuses": 0}
     collected_at = datetime.now(timezone.utc)
-    online_cutoff = collected_at.timestamp() - PRESENCE_WINDOW
+    online_cutoff = collected_at.timestamp() - cfg["presence_window"]
 
-    with httpx.Client(base_url=WORK_URL, headers=headers, timeout=8) as client:
+    with httpx.Client(base_url=cfg["work_url"].rstrip("/"), headers=headers, timeout=8) as client:
         spaces_raw = _hub_get(client, "/spaces").get("spaces", [])
 
         for i, s in enumerate(spaces_raw):
@@ -234,30 +398,8 @@ def _hub_snapshot() -> dict:
                     "highlight": None,  # 서버 서사 부재 — 아래 활동 피드에서 결정론 선정
                 }
             )
-            # 지식 본문: 원문 모달(L4 역추적)용. 페이지 수가 적고 30s 캐시라 개별 조회 감당 가능
-            knowledge_docs = []
-            for p in pages:
-                doc = {
-                    "doc_id": p["page_id"],
-                    "title": p.get("title", ""),
-                    "reuse_count": 0,  # 허브에 ReuseEvent 조회 endpoint가 아직 없다 (totals와 동일 사유)
-                    "cited_by": [],
-                }
-                try:
-                    page = _hub_get(client, f"/pages/{p['page_id']}")
-                    doc["body"] = page.get("body", "")
-                    doc["visibility"] = page.get("visibility", "org")
-                    doc["summary"] = (page.get("body") or "")[:120]
-                    # 작성자: created_by_name(허브가 내려주면) 우선, 없으면 멤버 목록에서 이름 조회,
-                    # 그마저 없으면(비멤버 공간 등) agent_id 그대로.
-                    creator = page.get("created_by")
-                    doc["author_agent"] = page.get("created_by_name") or member_name.get(creator, creator) or ""
-                except _DEGRADE:
-                    doc["body"] = ""
-                    doc["visibility"] = "space"  # 못 읽었으면 잠금으로 취급
-                    doc["summary"] = ""
-                    doc["author_agent"] = ""
-                knowledge_docs.append(doc)
+            # 지식 본문+번역: 페이지별 store 캐시. updated_at이 그대로면 허브 재조회·LLM 둘 다 스킵.
+            knowledge_docs = [_page_doc(client, p, sid, member_name) for p in pages]
 
             def _agent(m: dict) -> dict:
                 seen = last_write.get(m["agent_id"])
@@ -274,7 +416,7 @@ def _hub_snapshot() -> dict:
             details[sid] = {
                 "space_id": sid,
                 "agents": [_agent(m) for m in members],
-                "issues": [_issue_vm(it, member_name) for it in issues],
+                "issues": [_issue_doc(it, member_name) for it in issues],
                 "knowledge": knowledge_docs,
             }
             for p in pages:
@@ -313,7 +455,7 @@ def _hub_snapshot() -> dict:
 
 def _dummy_snapshot() -> dict:
     now = datetime.now(timezone.utc)
-    cutoff = now.timestamp() - PRESENCE_WINDOW
+    cutoff = now.timestamp() - settings.get()["presence_window"]
     floors: list[dict] = []
     details: dict[str, dict] = {}
     totals = {"issues": 0, "knowledge": 0, "skills": 0, "reuses": 0}
@@ -503,22 +645,27 @@ def _fixture_snapshot() -> dict:
 
 
 def snapshot() -> dict:
-    """스냅숏. auto: 허브+더미 병합, 허브 실패 시 더미만 (더미 항목은 demo 마킹)."""
-    if SOURCE == "hub":
-        return _memo("hub", _hub_snapshot)
-    if SOURCE == "dummy":
-        return _memo("dummy", _dummy_snapshot)
-    if SOURCE == "fixtures":
-        return _memo("fixtures", _fixture_snapshot)
+    """최신 스냅숏을 즉시 반환 — 수집·번역은 백그라운드 워커가 하므로 요청은 안 막힌다.
+
+    첫 빌드 전이면 빠른 폴백(더미/픽스처)을 임시로 주고, 곧 실데이터로 교체된다."""
+    _ensure_refresher()
+    latest = _latest
+    if latest is not None:
+        return latest
+    source = settings.get()["source"]
     try:
-        return _memo("merged", _merged_snapshot)
-    except Exception as e:  # noqa: BLE001 — 원천 전환 지점
-        log.warning("허브 수집 실패, dummy_data만 표시: %s", e)
-        # 폴백 결과를 'merged' 키에도 캐시 — 허브가 죽어 있는 동안 매 요청이
-        # 타임아웃(최대 8s)을 기다리는 것을 TTL 동안 방지
-        val = _memo("dummy", _dummy_snapshot)
-        _cache["merged"] = (time.monotonic(), val)
-        return val
+        return _fixture_snapshot() if source == "fixtures" else _dummy_snapshot()
+    except Exception:  # noqa: BLE001 — 폴백조차 실패하면 빈 스냅숏
+        return {
+            "source": "loading",
+            "collected_at": None,
+            "floors": [],
+            "details": {},
+            "totals": {},
+            "tokens_saved_est": None,
+            "events": [],
+            "reuse_events": [],
+        }
 
 
 def space_detail(space_id: str, tier: str = "member") -> dict:
