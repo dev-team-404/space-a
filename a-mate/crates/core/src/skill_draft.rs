@@ -24,8 +24,8 @@ pub struct DraftContext {
     pub top_tools: Vec<(String, u64)>,
 }
 
-/// R6 finding의 evidence(대표 프롬프트)로 세션을 되짚어 재료를 모은다.
-/// v2 — 첫 프롬프트뿐 아니라 세션 내 아무 위치의 반복 지시(prompt_events)를 매칭한다.
+/// R6 finding의 evidence(대표 프롬프트)로 세션을 되짚어 재료를 모은다(단일 norm).
+/// 3개 호출부(judge·CLI·make-draft 커맨드) 호환용 — 내부적으로 gather_context_multi에 위임.
 pub fn gather_context(
     store: &SqliteStore,
     host: &str,
@@ -34,9 +34,20 @@ pub fn gather_context(
     let Some(target) = normalize(representative) else {
         return Err(anyhow!("대표 프롬프트가 너무 짧아 초안 대상이 아닙니다"));
     };
+    gather_context_multi(store, host, representative, &[target])
+}
+
+/// A — 느슨한 묶음의 **여러 변형(norm60)** 세션을 되짚어 재료를 모은다.
+/// 세션·원문 중복 제거 후 표본 5개, 도구 상위 집계. representative는 표시용 대표(앵커).
+pub fn gather_context_multi(
+    store: &SqliteStore,
+    host: &str,
+    representative: &str,
+    norms: &[String],
+) -> Result<DraftContext> {
     let mut matched_ids: Vec<String> = Vec::new();
     let mut samples: Vec<String> = Vec::new();
-    for (sid, preview) in store.prompt_sessions_for_norm(host, &target)? {
+    for (sid, preview) in store.prompt_sessions_for_norms(host, norms)? {
         if !matched_ids.iter().any(|s| s == &sid) {
             matched_ids.push(sid);
         }
@@ -53,6 +64,27 @@ pub fn gather_context(
         sample_prompts: samples,
         top_tools,
     })
+}
+
+/// R6 finding evidence로 초안 재료를 모은다. `member_norms`(A 느슨한 묶음)가 있으면 묶음 전체,
+/// 없으면(구버전 finding) 대표 하나로 폴백. judge·CLI 공통 진입점 — 카드가 센 세션·도구를
+/// 초안도 그대로 보게 해 카드/초안 불일치를 막는다.
+pub fn gather_context_for_finding(
+    store: &SqliteStore,
+    host: &str,
+    representative: &str,
+    evidence: &serde_json::Value,
+) -> Result<DraftContext> {
+    let norms: Vec<String> = evidence
+        .get("member_norms")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+    if norms.is_empty() {
+        gather_context(store, host, representative)
+    } else {
+        gather_context_multi(store, host, representative, &norms)
+    }
 }
 
 /// 스킬 디렉터리/커맨드 이름용 슬러그 — 영숫자+하이픈, 소문자, 40자 컷.

@@ -187,7 +187,7 @@ fn cmd_skill_draft(store: &SqliteStore) -> Result<()> {
     for f in &findings {
         let host = f.scope_host.clone().unwrap_or_default();
         let rep = f.evidence["repeated_prompt"].as_str().unwrap_or_default();
-        let ctx = agent_mentor::skill_draft::gather_context(store, &host, rep)?;
+        let ctx = agent_mentor::skill_draft::gather_context_for_finding(store, &host, rep, &f.evidence)?;
         let draft = agent_mentor::skill_draft::build_draft(
             &ctx,
             engine.as_ref().map(|e| e as &dyn Engine),

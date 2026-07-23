@@ -5,6 +5,8 @@ use serde::Serialize;
 pub struct Occasion {
     pub category: String, // "holiday" | "milestone"
     pub label: String,    // 이미 로케일 지역화된 표시 문자열
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mood: Option<String>, // 공휴일 언급 톤(festive/national/solemn/family/substitute). 그 외 None.
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -64,6 +66,96 @@ const LUNAR_HOLIDAYS: &[(i32, u32, u32, LunarFestival)] = &[
     (2035, 2, 8, LunarFestival::LunarNewYear),  (2035, 9, 16, LunarFestival::MidAutumn),
 ];
 
+#[derive(Clone, Copy)]
+enum HolidayMood {
+    Festive,
+    National,
+    Solemn,
+    Family,
+    Substitute,
+}
+
+impl HolidayMood {
+    fn as_str(self) -> &'static str {
+        match self {
+            HolidayMood::Festive => "festive",
+            HolidayMood::National => "national",
+            HolidayMood::Solemn => "solemn",
+            HolidayMood::Family => "family",
+            HolidayMood::Substitute => "substitute",
+        }
+    }
+}
+
+/// 한국 법정공휴일 조회 결과 — 언급 라벨 + 톤(mood).
+pub struct KrHoliday {
+    pub label: String,
+    pub mood: &'static str,
+}
+
+// 한국 법정공휴일 red-day 테이블 (2026–2027). 2026-07-22 사용자 확인.
+// 현행 대체공휴일 규칙이 이 2년에 실제 만들어내는 날만 열거. 이후 연도는 조용히 생략(패닉 없음).
+const KR_HOLIDAYS: &[(i32, u32, u32, &str, HolidayMood)] = &[
+    (2026, 1, 1, "새해 첫날", HolidayMood::Festive),
+    (2026, 2, 16, "설날 연휴", HolidayMood::Family),
+    (2026, 2, 17, "설날", HolidayMood::Family),
+    (2026, 2, 18, "설날 연휴", HolidayMood::Family),
+    (2026, 3, 1, "삼일절", HolidayMood::National),
+    (2026, 3, 2, "삼일절 대체공휴일", HolidayMood::Substitute),
+    (2026, 5, 5, "어린이날", HolidayMood::Festive),
+    (2026, 5, 24, "부처님 오신 날", HolidayMood::Festive),
+    (2026, 5, 25, "부처님 오신 날 대체공휴일", HolidayMood::Substitute),
+    (2026, 6, 3, "지방선거일", HolidayMood::National), // 제9회 전국동시지방선거 — 선거일은 법정공휴일
+    (2026, 6, 6, "현충일", HolidayMood::Solemn),
+    (2026, 7, 17, "제헌절", HolidayMood::National),
+    (2026, 8, 15, "광복절", HolidayMood::National),
+    (2026, 8, 17, "광복절 대체공휴일", HolidayMood::Substitute),
+    (2026, 9, 24, "추석 연휴", HolidayMood::Family),
+    (2026, 9, 25, "추석", HolidayMood::Family),
+    (2026, 9, 26, "추석 연휴", HolidayMood::Family),
+    (2026, 10, 3, "개천절", HolidayMood::National),
+    (2026, 10, 5, "개천절 대체공휴일", HolidayMood::Substitute),
+    (2026, 10, 9, "한글날", HolidayMood::National),
+    (2026, 12, 25, "크리스마스", HolidayMood::Festive),
+    (2027, 1, 1, "새해 첫날", HolidayMood::Festive),
+    (2027, 2, 5, "설날 연휴", HolidayMood::Family),
+    (2027, 2, 6, "설날", HolidayMood::Family),
+    (2027, 2, 7, "설날 연휴", HolidayMood::Family),
+    (2027, 2, 8, "설날 대체공휴일", HolidayMood::Substitute),
+    (2027, 3, 1, "삼일절", HolidayMood::National),
+    (2027, 5, 5, "어린이날", HolidayMood::Festive),
+    (2027, 5, 13, "부처님 오신 날", HolidayMood::Festive),
+    (2027, 6, 6, "현충일", HolidayMood::Solemn),
+    (2027, 7, 17, "제헌절", HolidayMood::National),
+    (2027, 8, 15, "광복절", HolidayMood::National),
+    (2027, 8, 16, "광복절 대체공휴일", HolidayMood::Substitute),
+    (2027, 9, 14, "추석 연휴", HolidayMood::Family),
+    (2027, 9, 15, "추석", HolidayMood::Family),
+    (2027, 9, 16, "추석 연휴", HolidayMood::Family),
+    (2027, 10, 3, "개천절", HolidayMood::National),
+    (2027, 10, 4, "개천절 대체공휴일", HolidayMood::Substitute),
+    (2027, 10, 9, "한글날", HolidayMood::National),
+    (2027, 10, 11, "한글날 대체공휴일", HolidayMood::Substitute),
+    (2027, 12, 25, "크리스마스", HolidayMood::Festive),
+    (2027, 12, 27, "크리스마스 대체공휴일", HolidayMood::Substitute),
+];
+
+/// 그날이 한국 법정공휴일이면 라벨·mood를 돌려준다. `ko` 로케일에서만 `Some`.
+/// 테이블 밖 연도·비-ko 로케일은 `None`(패닉 없음).
+pub fn korean_public_holiday(date: NaiveDate, locale: &str) -> Option<KrHoliday> {
+    // BCP-47 대소문자 무관 — 소문자 정규화 후 언어만 비교
+    if lang_of(&locale.to_lowercase()) != "ko" {
+        return None;
+    }
+    KR_HOLIDAYS
+        .iter()
+        .find(|(y, m, dd, _, _)| *y == date.year() && *m == date.month() && *dd == date.day())
+        .map(|(_, _, _, label, mood)| KrHoliday {
+            label: (*label).to_string(),
+            mood: mood.as_str(),
+        })
+}
+
 fn lang_of(locale: &str) -> &str {
     locale.split('-').next().unwrap_or("en")
 }
@@ -119,12 +211,13 @@ pub fn compute_occasions(
         let days = (date - a).num_days();
         if days > 0 {
             if days == 50 || (days >= 100 && days % 100 == 0) {
-                out.push(Occasion { category: "milestone".into(), label: format!("함께한 지 {days}일") });
+                out.push(Occasion { category: "milestone".into(), label: format!("함께한 지 {days}일"), mood: None });
             }
             if days % 365 == 0 {
                 out.push(Occasion {
                     category: "milestone".into(),
                     label: format!("함께한 지 {}주년", days / 365),
+                    mood: None,
                 });
             }
         }
@@ -137,26 +230,45 @@ pub fn compute_occasions(
             && scope_applies(h.scope, lang, include_dev_days)
         {
             if let Some(name) = name_for(h.names, lang) {
-                out.push(Occasion { category: "holiday".into(), label: name });
+                out.push(Occasion { category: "holiday".into(), label: name, mood: None });
             }
         }
     }
 
     // 프로그래머의 날: 연 256번째 날 (개발자 문화)
     if include_dev_days && date.ordinal() == 256 {
-        out.push(Occasion { category: "holiday".into(), label: "Programmer's Day".into() });
+        out.push(Occasion { category: "holiday".into(), label: "Programmer's Day".into(), mood: None });
     }
 
     // 음력 명절 (동아시아 로케일만)
     if is_east_asian(lang) {
         for (y, m, dd, fest) in LUNAR_HOLIDAYS {
             if *y == date.year() && *m == date.month() && *dd == date.day() {
-                out.push(Occasion { category: "holiday".into(), label: lunar_name(*fest, lang) });
+                out.push(Occasion { category: "holiday".into(), label: lunar_name(*fest, lang), mood: None });
             }
         }
     }
 
+    // 한국 법정공휴일 (ko 로케일) — 언급 + mood. 판정(is_holiday)은 mod.rs에서 별도.
+    if let Some(h) = korean_public_holiday(date, locale) {
+        out.push(Occasion { category: "holiday".into(), label: h.label, mood: Some(h.mood.to_string()) });
+    }
+
+    // 설·추석 당일은 LUNAR(mood 없음)·KR(mood 있음) 양쪽에서 잡힐 수 있다.
+    // 같은 label의 mood 없는 holiday는 mood 있는 쪽을 남기고 제거.
+    dedupe_holidays_prefer_mood(&mut out);
+
     out
+}
+
+/// holiday 항목 중 같은 label이 mood 유·무로 중복되면 mood 있는 쪽만 남긴다.
+fn dedupe_holidays_prefer_mood(out: &mut Vec<Occasion>) {
+    let mooded: std::collections::HashSet<String> = out
+        .iter()
+        .filter(|o| o.category == "holiday" && o.mood.is_some())
+        .map(|o| o.label.clone())
+        .collect();
+    out.retain(|o| !(o.category == "holiday" && o.mood.is_none() && mooded.contains(&o.label)));
 }
 
 #[cfg(test)]
@@ -253,5 +365,90 @@ mod tests {
             .contains(&"설날".to_string()));
         assert!(labels(&compute_occasions(d(2035, 9, 16), None, "ko", false))
             .contains(&"추석".to_string()));
+    }
+
+    #[test]
+    fn korean_public_holiday_detects_and_gates_locale() {
+        // 제헌절 2026-07-17 (2026 재지정) — 회귀 기준점
+        let h = korean_public_holiday(d(2026, 7, 17), "ko-KR").unwrap();
+        assert_eq!(h.label, "제헌절");
+        assert_eq!(h.mood, "national");
+        // 현충일 = 추모(solemn)
+        assert_eq!(korean_public_holiday(d(2026, 6, 6), "ko").unwrap().mood, "solemn");
+        // 설날 연휴 3일 모두 공휴일
+        assert!(korean_public_holiday(d(2026, 2, 16), "ko").is_some());
+        assert!(korean_public_holiday(d(2026, 2, 17), "ko").is_some());
+        assert!(korean_public_holiday(d(2026, 2, 18), "ko").is_some());
+        // 대체공휴일
+        assert_eq!(korean_public_holiday(d(2026, 8, 17), "ko").unwrap().mood, "substitute");
+        // 비-ko 로케일 → None
+        assert!(korean_public_holiday(d(2026, 7, 17), "en").is_none());
+        assert!(korean_public_holiday(d(2026, 7, 17), "ja").is_none());
+        // 테이블 밖 연도 → None (패닉 없음)
+        assert!(korean_public_holiday(d(2028, 7, 17), "ko").is_none());
+    }
+
+    #[test]
+    fn korean_public_holiday_2027_substitutes_pinned() {
+        // 미래 연도 오타 조기 검출 — 값은 테이블에서 읽어 고정
+        assert_eq!(korean_public_holiday(d(2027, 2, 8), "ko").unwrap().label, "설날 대체공휴일");
+        assert_eq!(korean_public_holiday(d(2027, 12, 27), "ko").unwrap().mood, "substitute");
+    }
+
+    #[test]
+    fn korean_holiday_appears_in_occasions_with_mood() {
+        let occ = compute_occasions(d(2026, 7, 17), None, "ko-KR", false);
+        let jeheon = occ.iter().find(|o| o.label == "제헌절").unwrap();
+        assert_eq!(jeheon.category, "holiday");
+        assert_eq!(jeheon.mood.as_deref(), Some("national"));
+    }
+
+    #[test]
+    fn korean_seollal_deduped_and_family_mood() {
+        // ko 설날 당일은 LUNAR·KR 중복 없이 1개, mood=family
+        let occ = compute_occasions(d(2026, 2, 17), None, "ko", false);
+        let seollal: Vec<_> = occ.iter().filter(|o| o.label == "설날").collect();
+        assert_eq!(seollal.len(), 1, "중복 제거");
+        assert_eq!(seollal[0].mood.as_deref(), Some("family"));
+    }
+
+    #[test]
+    fn lunar_mention_unchanged_for_ja() {
+        // ja는 KR 공휴일 없음 → 기존 음력 명절 언급 유지(mood 없음), 한국 국경일 없음
+        let ja = compute_occasions(d(2026, 2, 17), None, "ja", false);
+        assert!(ja.iter().any(|o| o.label == "旧正月" && o.mood.is_none()));
+        assert!(compute_occasions(d(2026, 7, 17), None, "ja", false).iter().all(|o| o.label != "제헌절"));
+    }
+
+    #[test]
+    fn fun_day_occasion_has_no_mood() {
+        let occ = compute_occasions(d(2026, 2, 14), None, "ko", false);
+        let val = occ.iter().find(|o| o.label == "발렌타인데이").unwrap();
+        assert!(val.mood.is_none());
+    }
+
+    #[test]
+    fn solar_and_kr_aliases_deduped_to_single_mooded_occasion() {
+        // 1/1·12/25는 SOLAR("새해 첫날"/"크리스마스")와 KR 공휴일이 겹친다.
+        // 별칭을 맞춰 label-dedup이 잡고, mood 있는 항목 하나만 남아야 한다(이중 언급 방지).
+        let ny = compute_occasions(d(2026, 1, 1), None, "ko", false);
+        let ny_hits: Vec<_> = ny.iter().filter(|o| o.label == "새해 첫날").collect();
+        assert_eq!(ny_hits.len(), 1, "새해 첫날 단일 항목");
+        assert_eq!(ny_hits[0].mood.as_deref(), Some("festive"));
+        assert!(ny.iter().all(|o| o.label != "신정"), "별칭 신정 중복 없음");
+
+        let xmas = compute_occasions(d(2026, 12, 25), None, "ko", false);
+        let xmas_hits: Vec<_> = xmas.iter().filter(|o| o.label == "크리스마스").collect();
+        assert_eq!(xmas_hits.len(), 1, "크리스마스 단일 항목");
+        assert_eq!(xmas_hits[0].mood.as_deref(), Some("festive"));
+        assert!(xmas.iter().all(|o| o.label != "성탄절"), "별칭 성탄절 중복 없음");
+    }
+
+    #[test]
+    fn local_election_day_is_public_holiday() {
+        // 2026-06-03 = 제9회 전국동시지방선거 — 선거일은 법정공휴일(빨간날)
+        let h = korean_public_holiday(d(2026, 6, 3), "ko").unwrap();
+        assert_eq!(h.label, "지방선거일");
+        assert_eq!(h.mood, "national");
     }
 }

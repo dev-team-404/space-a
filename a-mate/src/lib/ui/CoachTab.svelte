@@ -96,9 +96,12 @@
     const rep = repeatedPromptOf(f);
     if (!rep) return;
     const suggested = f.judgment?.suggested_name ?? null;
+    // A — 느슨한 묶음의 모든 변형(member_norms)을 넘겨, 초안이 카드가 센 세션 전체를 보게 한다.
+    const ev = f.evidence as { member_norms?: string[] } | null;
+    const memberNorms = ev?.member_norms ?? null;
     draft = { key: f.dedup_key, loading: true, result: null, error: null, savedPath: null, copied: false };
     try {
-      const r = await generateSkillDraft(f.scope_host ?? '', rep, suggested);
+      const r = await generateSkillDraft(f.scope_host ?? '', rep, suggested, memberNorms);
       draft = { key: f.dedup_key, loading: false, result: r, error: null, savedPath: null, copied: false };
     } catch (e) {
       draft = { key: f.dedup_key, loading: false, result: null, error: String(e), savedPath: null, copied: false };

@@ -48,6 +48,9 @@ describe('coachTitle', () => {
   it('R6은 반복 지시 제목', () => {
     expect(coachTitle('R6', {})).toContain('같은 지시');
   });
+  it('R24 컨텍스트 위생 카드 제목', () => {
+    expect(coachTitle('R24', {})).toBe('작업을 바꿀 때 컨텍스트를 끊으면 더 좋아요');
+  });
   it('알 수 없는 rule → fallback', () => {
     expect(coachTitle('RX', {})).toBe('아낄 수 있는 게 보여요');
   });

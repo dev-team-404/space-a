@@ -1,13 +1,16 @@
 pub mod r1_unused_mcp;
 pub mod r2_unused_plugins;
 pub mod r5_repeated_read;
+pub mod r6_cluster;
 pub mod r6_repeated_prompts;
+pub mod r7_judge;
 pub mod r7_opus_trivial;
 pub mod r8_mcp_large_result;
 pub mod r9_web_overuse;
 pub mod r10_automation_burst;
 pub mod r11_permission_friction;
 pub mod r12_unused_skills;
+pub mod r24_context_hygiene;
 pub mod session_stats;
 
 use crate::finding::Finding;

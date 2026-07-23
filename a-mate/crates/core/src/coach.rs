@@ -56,6 +56,8 @@ mod tests {
             fix_command("R5", &json!({"subtype": "cross_session_claude_md", "files": []})),
             None
         );
+        // F(컨텍스트 위생)은 습관 넛지 — 복사 명령 없음
+        assert_eq!(fix_command("R24", &json!({})), None);
     }
 
     #[test]

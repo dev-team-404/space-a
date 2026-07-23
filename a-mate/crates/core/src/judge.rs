@@ -4,6 +4,7 @@
 
 use crate::diary::engine::Engine;
 use crate::skill_draft::DraftContext;
+use crate::store::SqliteStore;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
@@ -54,16 +55,21 @@ worthy=false: 대화 접착제('진행해줘','계속','ㅇㅋ' 등), 일회성�
     (system, user)
 }
 
+/// 엔진 응답에서 JSON 객체를 관대히 추출(첫 '{'~마지막 '}'). 코드펜스·사족 허용.
+pub fn extract_verdict_json(text: &str) -> Result<serde_json::Value> {
+    let start = text.find('{').ok_or_else(|| anyhow!("응답에 JSON 객체 없음"))?;
+    let end = text.rfind('}').ok_or_else(|| anyhow!("응답에 JSON 객체 없음"))?;
+    if end < start {
+        return Err(anyhow!("JSON 경계 불량"));
+    }
+    Ok(serde_json::from_str(&text[start..=end])?)
+}
+
 /// 엔진 응답에서 엄격 JSON 판정을 추출. 코드펜스·사족을 관대히 벗기되(첫 '{'~마지막 '}'),
 /// 필수 필드(worthy·reason·suggested_name)가 없으면 실패로 본다.
 pub fn parse_judgment(text: &str) -> Result<Judgment> {
-    let start = text.find('{').ok_or_else(|| anyhow!("판정 응답에 JSON 객체 없음"))?;
-    let end = text.rfind('}').ok_or_else(|| anyhow!("판정 응답에 JSON 객체 없음"))?;
-    if end < start {
-        return Err(anyhow!("판정 응답 JSON 경계 불량"));
-    }
-    let j: Judgment = serde_json::from_str(&text[start..=end])?;
-    Ok(j)
+    let v = extract_verdict_json(text)?;
+    Ok(serde_json::from_value(v)?)
 }
 
 pub enum JudgeOutcome {
@@ -120,9 +126,103 @@ pub fn judgment_record(
     }
 }
 
+pub struct PendingCandidate {
+    pub dedup_key: String,
+    pub scope_host: String,
+    pub scope_project: Option<String>,
+    pub evidence: serde_json::Value,
+    pub prev_attempts: u32,
+}
+
+/// 결정론 채굴(findings pending) + LLM 판정 + 롤업. 각 아이템이 구현.
+pub trait CoachingJudge {
+    fn rule_id(&self) -> &'static str;
+    /// 후보 1건의 (system, user) 판정 프롬프트. 재료 수집 실패는 Err(영구 실패).
+    fn build_prompt(&self, store: &SqliteStore, c: &PendingCandidate) -> Result<(String, String)>;
+    /// 파싱된 verdict → 상태 전이(Some("new"|"confirmed"|"rejected")). 필수 결정 필드가
+    /// 없으면 None(판정 미확정) — 드라이버가 형식 불량과 동형으로 재시도한다.
+    fn classify(&self, verdict: &serde_json::Value) -> Option<&'static str>;
+    /// verdict 저장 후 노출 finding (재)구성. 반환 = (새로 노출된 dedup_key, mutated).
+    /// mutated = 카드가 생성/갱신/삭제돼 UI 재발행이 필요한지(신규뿐 아니라 갱신·삭제 포함).
+    fn rollup(&self, store: &SqliteStore) -> Result<(Vec<String>, bool)>;
+}
+
+pub struct R6Judge;
+impl CoachingJudge for R6Judge {
+    fn rule_id(&self) -> &'static str { "R6" }
+    fn build_prompt(&self, store: &SqliteStore, c: &PendingCandidate) -> Result<(String, String)> {
+        let rep = c.evidence.get("repeated_prompt").and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("R6 evidence에 repeated_prompt 없음"))?;
+        // A — 묶음의 모든 변형(member_norms)에서 재료 수집(없으면 대표 하나로 폴백).
+        let ctx = crate::skill_draft::gather_context_for_finding(store, &c.scope_host, rep, &c.evidence)?;
+        Ok(judgment_prompt(&ctx))
+    }
+    fn classify(&self, verdict: &serde_json::Value) -> Option<&'static str> {
+        match verdict.get("worthy").and_then(|v| v.as_bool()) {
+            Some(true) => Some("new"),
+            Some(false) => Some("rejected"),
+            None => None, // worthy 필드 없음 = 판정 미확정(형식 불량 취급, 재시도)
+        }
+    }
+    fn rollup(&self, _store: &SqliteStore) -> Result<(Vec<String>, bool)> { Ok((vec![], false)) } // classify→"new"가 곧 노출, 롤업 없음
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn r6_judge_classifies_worthy_and_unworthy() {
+        let j = R6Judge;
+        assert_eq!(j.classify(&serde_json::json!({"worthy": true})), Some("new"));
+        assert_eq!(j.classify(&serde_json::json!({"worthy": false})), Some("rejected"));
+        assert_eq!(j.classify(&serde_json::json!({})), None); // 필드 없음 = 미확정(재시도)
+        assert_eq!(j.rule_id(), "R6");
+    }
+
+    #[test]
+    fn r6_judge_gathers_across_member_norms() {
+        use crate::model::{EventKind, NormalizedEvent};
+        use crate::rules::r6_repeated_prompts::normalize;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |sess: &str, text: &str| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
+            uuid: Some(format!("{sess}-0")), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-01T10:00:00Z".into()), source_file: "s.jsonl".into(),
+            source_offset: 0, msg_id: None,
+            kind: EventKind::UserPrompt { preview: text.into() },
+        };
+        store.upsert_events(&[
+            mk("s1", "PR 리뷰 코멘트 종합 검토해서 조치해줘"),
+            mk("s2", "PR 리뷰 코멘트 종합 검토하고 반영해줘"),
+        ]).unwrap();
+        let member_norms = vec![
+            normalize("PR 리뷰 코멘트 종합 검토해서 조치해줘").unwrap(),
+            normalize("PR 리뷰 코멘트 종합 검토하고 반영해줘").unwrap(),
+        ];
+        let c = PendingCandidate {
+            dedup_key: "R6|Windows|deadbeef".into(),
+            scope_host: "Windows".into(),
+            scope_project: None,
+            evidence: serde_json::json!({
+                "repeated_prompt": "PR 리뷰 코멘트 종합 검토해서 조치해줘",
+                "member_norms": member_norms,
+            }),
+            prev_attempts: 0,
+        };
+        let (_system, user) = R6Judge.build_prompt(&store, &c).unwrap();
+        // 묶음의 두 변형 모두 판정 재료(표본)에 들어가야 한다.
+        assert!(user.contains("조치해줘"), "앵커 변형 포함");
+        assert!(user.contains("반영해줘"), "다른 변형도 포함 — member_norms 전체 수집");
+    }
+
+    #[test]
+    fn extract_verdict_json_tolerates_prose_and_fence() {
+        let v = extract_verdict_json("결과:\n```json\n{\"over_modeled\":true,\"reason\":\"x\"}\n```").unwrap();
+        assert_eq!(v["over_modeled"], serde_json::json!(true));
+        assert!(extract_verdict_json("판정 불가").is_err());
+    }
 
     fn ctx() -> DraftContext {
         DraftContext {

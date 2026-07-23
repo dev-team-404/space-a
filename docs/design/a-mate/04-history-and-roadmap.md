@@ -101,6 +101,6 @@ im-not-ai(탐지→수술적 수정 파이프라인)를 참조하되, 사후 패
 | ~~채팅 티어 라우팅 + Tier 2 질적 코칭~~ | **구현 (2026-07-19)** | `classify_intent` 결정론 분류 → 코칭 질의는 주간 브리프(추세+역량+findings+고생세션+믹스)로 구조화 코칭. 스펙 `specs/2026-07-19-chat-tier-routing-design.md`. Tier 0의 0-LLM SQL 응답은 후속 |
 | 주간/월간 종단 서사 | 설계만 | 집계된 Finding 추세 위에서 일일 다이어리 파이프라인 재실행 ("캐시 히트율 +12%") |
 | OpenCode/Codex 어댑터 | 심만 존재 | `SourceAdapter` trait 구현체 추가로 확장 |
-| updater 활성화 | 뼈대만 | 서명 인프라 미확정으로 보류 |
+| ~~updater 활성화~~ | **구현 (2026-07-22)** | `tauri-plugin-updater` + 공개 릴리스 저장소(`a-mate-releases`) + updater 서명키. 코드 서명 인증서·CI는 후속. [ADR 0018](../../adr/0018-a-mate-auto-update-channel.md) |
 | 다이어리 다국어 서사 | 후속 | locale은 이미 1급 필드 — 서사 언어 지역화로 확장 가능 |
 | 옵트인 정확 프로브 | 유예 | MCP 서버 1회 실행으로 도구 스키마 토큰을 정확 계수(`est_def_tokens` 캐싱) |

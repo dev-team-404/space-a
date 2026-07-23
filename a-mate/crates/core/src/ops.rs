@@ -4,8 +4,6 @@ use crate::finding::Finding;
 use crate::hosts::enumerate_hosts;
 use crate::inventory::{collect_host_inventory, scan_plugin_inventory};
 use crate::rules::r7_opus_trivial::R7OpusTrivial;
-use crate::rules::r10_automation_burst::R10AutomationBurst;
-use crate::rules::r11_permission_friction::R11PermissionFriction;
 use crate::rules::RuleEngine;
 use crate::store::{ingest_file, SqliteStore};
 use anyhow::Result;
@@ -151,8 +149,6 @@ pub fn run_inventory(store: &mut SqliteStore) -> Result<Vec<String>> {
 }
 
 pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
-    // 코칭 v2 이행: 세션 스코프 R7은 폐기 — 프로젝트 집계(R7 v2)가 대체 (스펙 §3)
-    store.delete_findings_by_rule_and_scope("R7", "session")?;
     // R5(반복 읽기) 발화 보류(2026-07-10 사용자 판정): 반복 Read는 에이전트 동작이라
     // 사용자가 행동할 레버가 없음 — 등록 해제·전 스코프 카드 정리, 룰 코드·테스트는 보존.
     store.delete_findings_by_rule_and_scope("R5", "session")?;
@@ -164,14 +160,18 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     store.delete_findings_by_rule_and_scope("R2", "host")?;
     store.delete_findings_by_rule_and_scope("R9", "session")?;
     store.delete_findings_by_rule_and_scope("R12", "project")?;
+    // 코칭 가치 재설계: R10(관찰 카드)·R11(권한 마찰) 은퇴 — 코드·테스트는 보존.
+    store.delete_findings_by_rule_and_scope("R10", "project")?;
+    store.delete_findings_by_rule_and_scope("R11", "project")?;
     let engine = RuleEngine::new(vec![
         // R6(반복 지시 → 스킬/커맨드화)은 v3 은퇴 대상 아님 — 킥오프 차별점 신규 등록
         Box::new(crate::rules::r6_repeated_prompts::R6RepeatedPrompts::default()),
         Box::new(R7OpusTrivial::default()),
         // R8(MCP 대형 결과) — result_len 수집 승격, 2026-07-19
         Box::new(crate::rules::r8_mcp_large_result::R8McpLargeResult::default()),
-        Box::new(R10AutomationBurst::default()),
-        Box::new(R11PermissionFriction::default()),
+        // F(컨텍스트 위생) — 에피소드 세그먼터 기반 결정론 룰 (코칭 v3 재설계 §4 F)
+        Box::new(crate::rules::r24_context_hygiene::R24ContextHygiene::default()),
+        // R10·R11 은퇴 (코칭 가치 재설계) — detect_bursts는 R7 후보 제외에 계속 사용
     ]);
     let findings = engine.run(store)?;
     let now = chrono::Utc::now().to_rfc3339();
@@ -180,6 +180,13 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
         store.upsert_finding(f, &now)?;
     }
     tx.commit()?;
+    // R6 앵커 키 이동/병합·관찰창 이탈로 생긴 유령 활성 카드 정리 (A 느슨한 묶기 부작용 방지).
+    let r6_keys: Vec<String> = findings
+        .iter()
+        .filter(|f| f.rule_id == "R6" && f.scope_kind == "pattern")
+        .map(|f| f.dedup_key.clone())
+        .collect();
+    store.prune_stale_r6_patterns(&r6_keys)?;
     Ok(findings)
 }
 
@@ -333,8 +340,8 @@ mod tests {
             evidence: serde_json::json!({}), est_tokens_saved: 0,
             prescription: None, dedup_key: key.into(),
         };
-        // v2 폐기분(R7 session·R5 전 스코프) + v3 은퇴분(R1·R2·R9·R12) + 생존 R11
-        store.upsert_finding(&mk("R7", "session", "R7|s1"), "2026-07-06T00:00:00Z").unwrap();
+        // v2 폐기분(R5 전 스코프) + v3 은퇴분(R1·R2·R9·R12·R11)
+        // (R7 session은 더 이상 run_rules가 사전 정리하지 않음 — 판정 캐시 보존, 아래 별도 테스트)
         store.upsert_finding(&mk("R5", "session", "R5|s1|a.md"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R5", "project", "R5|W|proj|cross_session_claude_md"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R1", "host", "R1|W|ctx"), "2026-07-06T00:00:00Z").unwrap();
@@ -342,10 +349,114 @@ mod tests {
         store.upsert_finding(&mk("R2", "host", "R2|W|superpowers@mp"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R9", "session", "R9|s9"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R12", "project", "R12|W|proj"), "2026-07-06T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R10", "project", "R10|W|proj"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R11", "project", "R11|W|proj"), "2026-07-06T00:00:00Z").unwrap();
 
         run_rules(&store).unwrap();
-        assert_eq!(store.count_findings().unwrap(), 1, "R11만 생존해야 함");
+        // 은퇴 룰(R10·R11 포함)·구폐기분 전부 purge. R7 세션 후보는 이 테스트에 시드 안 함.
+        for key in ["R10|W|proj", "R11|W|proj"] {
+            let n: i64 = store.conn.query_row(
+                "SELECT COUNT(*) FROM findings WHERE dedup_key=?1", [key], |r| r.get(0)).unwrap();
+            assert_eq!(n, 0, "{key} purge되어야");
+        }
+    }
+
+    #[test]
+    fn run_rules_prunes_stale_active_r6_patterns() {
+        use crate::finding::{Finding, Severity};
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |key: &str| Finding {
+            rule_id: "R6".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "pattern".into(), scope_ref: "pattern:x".into(),
+            evidence: serde_json::json!({}), est_tokens_saved: 0,
+            prescription: None, dedup_key: key.into(),
+        };
+        // prompt_events 없음 → R6 evaluate는 아무 후보도 방출하지 않는다(emit set 비어 있음).
+        // 앵커 이동/병합으로 방출되지 않게 된 활성 카드는 정리, 판정 캐시(rejected)는 보존.
+        store.upsert_finding(&mk("R6|Windows|stale_new"), "2026-07-06T00:00:00Z").unwrap(); // init 'pending'
+        store.set_judgment("R6|Windows|stale_new", Some("new"), &serde_json::json!({})).unwrap();
+        store.upsert_finding(&mk("R6|Windows|stale_rej"), "2026-07-06T00:00:00Z").unwrap();
+        store.set_judgment("R6|Windows|stale_rej", Some("rejected"), &serde_json::json!({})).unwrap();
+
+        run_rules(&store).unwrap();
+
+        assert!(store.find_finding("R6|Windows|stale_new").unwrap().is_none(),
+            "미방출 활성(new) R6 카드는 정리돼야");
+        assert!(store.find_finding("R6|Windows|stale_rej").unwrap().is_some(),
+            "rejected 판정 캐시는 보존돼야(재판정 금지)");
+    }
+
+    #[test]
+    fn run_rules_preserves_judged_r7_session_findings() {
+        use crate::finding::{Finding, Severity};
+        let store = SqliteStore::open_in_memory().unwrap();
+        let f = Finding {
+            rule_id: "R7".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: Some("p".into()),
+            scope_kind: "session".into(), scope_ref: "s1".into(),
+            evidence: serde_json::json!({}), est_tokens_saved: 0,
+            prescription: None, dedup_key: "R7|sess|Windows|s1".into(),
+        };
+        store.upsert_finding(&f, "2026-07-06T00:00:00Z").unwrap();
+        store.set_judgment("R7|sess|Windows|s1", Some("confirmed"), &serde_json::json!({"attempts": 1})).unwrap();
+
+        run_rules(&store).unwrap(); // 이벤트 없음 → R7 evaluate가 새 후보를 만들지 않음
+
+        assert!(
+            store.find_finding("R7|sess|Windows|s1").unwrap().is_some(),
+            "판정 캐시가 있는 R7 세션 후보를 run_rules가 지우면 안 됨"
+        );
+    }
+
+    #[test]
+    fn run_rules_registers_r24_and_surfaces_project_card_as_new() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let recent = |h: i64| (chrono::Utc::now() - chrono::Duration::hours(h)).to_rfc3339();
+        // 6개 에피소드, 전부 60k 상속 → R24 발화.
+        let mut evs = Vec::new();
+        for i in 0..6u64 {
+            let ts = recent(20 - i as i64);
+            evs.push(NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(),
+                host: "Windows".into(), project_id: "d--proj".into(),
+                session_id: "s1".into(), uuid: Some(format!("p{i}")), parent_uuid: None,
+                is_sidechain: false, ts: Some(ts.clone()), source_file: "s.jsonl".into(),
+                source_offset: i * 2, msg_id: None,
+                kind: EventKind::UserPrompt { preview: format!("에피소드 {i} 실질 작업 지시 문장") },
+            });
+            evs.push(NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(),
+                host: "Windows".into(), project_id: "d--proj".into(),
+                session_id: "s1".into(), uuid: Some(format!("a{i}")), parent_uuid: None,
+                is_sidechain: false, ts: Some(ts), source_file: "s.jsonl".into(),
+                source_offset: i * 2 + 1, msg_id: None,
+                kind: EventKind::AssistantTurn {
+                    model: NormModel::from_raw_id("claude-opus-4-8"),
+                    usage: TokenUsage { input: 60_000, ..Default::default() },
+                    web_search: 0, web_fetch: 0,
+                },
+            });
+        }
+        store.upsert_events(&evs).unwrap();
+
+        let findings = run_rules(&store).unwrap();
+        assert!(
+            findings.iter().any(|f| f.rule_id == "R24" && f.scope_kind == "project"),
+            "run_rules가 R24 프로젝트 카드를 낸다"
+        );
+
+        // 노출 상태: R24 project → status 'new' (즉시 노출).
+        let status: String = store
+            .conn
+            .query_row(
+                "SELECT status FROM findings WHERE dedup_key = 'R24|Windows|d--proj'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "new");
     }
 
     #[test]
