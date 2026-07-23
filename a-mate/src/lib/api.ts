@@ -299,6 +299,19 @@ export const profileGet = () => invoke<Profile>('profile_get');
 export const profileSet = (name: string, org: string, mbti: string) =>
   invoke<Profile>('profile_set', { name, org, mbti });
 
+/** 주인 메모리 — 마스코트가 기억하는 나에 대한 자유 텍스트 사실. */
+export interface Memory {
+  id: number;
+  text: string;
+  created_at: string;
+  updated_at: string | null;
+  source: string;
+}
+export const memoryList = () => invoke<Memory[]>('memory_list');
+export const memoryAdd = (text: string) => invoke<Memory>('memory_add', { text });
+export const memoryUpdate = (id: number, text: string) => invoke<Memory>('memory_update', { id, text });
+export const memoryDelete = (id: number) => invoke<void>('memory_delete', { id });
+
 /** 점유자 스프라이트 백그라운드 생성 요청 — 완료 시 'occupant-sprite:ready'(seed) 이벤트. */
 export async function requestOccupantSprite(seed: string): Promise<void> {
   try { await invoke('request_occupant_sprite', { seed }); } catch { /* 무시 */ }

@@ -98,6 +98,13 @@ CREATE TABLE IF NOT EXISTS hub_share_state (
   page_id   TEXT,
   shared_at TEXT
 );
+CREATE TABLE IF NOT EXISTS memories (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  text       TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT,
+  source     TEXT NOT NULL DEFAULT 'chat'
+);
 "#;
 
 pub struct SqliteStore {
@@ -1212,6 +1219,65 @@ impl SqliteStore {
             params![key, value],
         )?;
         Ok(())
+    }
+
+    // ── 주인 메모리 (memory.rs — 2026-07-22-owner-memory 스펙) ──
+
+    pub fn add_memory(&self, text: &str, source: &str) -> Result<i64> {
+        let text = text.trim();
+        if text.is_empty() {
+            anyhow::bail!("메모리 텍스트가 비어 있습니다");
+        }
+        let now = chrono::Local::now().format("%Y-%m-%d").to_string();
+        self.conn.execute(
+            "INSERT INTO memories (text, created_at, source) VALUES (?1, ?2, ?3)",
+            params![text, now, source],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn list_memories(&self) -> Result<Vec<crate::memory::Memory>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, text, created_at, updated_at, source FROM memories
+             ORDER BY created_at ASC, id ASC",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(crate::memory::Memory {
+                id: r.get(0)?,
+                text: r.get(1)?,
+                created_at: r.get(2)?,
+                updated_at: r.get(3)?,
+                source: r.get(4)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    pub fn update_memory(&self, id: i64, text: &str) -> Result<()> {
+        let text = text.trim();
+        if text.is_empty() {
+            anyhow::bail!("메모리 텍스트가 비어 있습니다");
+        }
+        let now = chrono::Local::now().format("%Y-%m-%d").to_string();
+        self.conn.execute(
+            "UPDATE memories SET text=?1, updated_at=?2 WHERE id=?3",
+            params![text, now, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_memory(&self, id: i64) -> Result<()> {
+        self.conn.execute("DELETE FROM memories WHERE id=?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn count_memories(&self) -> Result<u64> {
+        let n: i64 = self.conn.query_row("SELECT COUNT(*) FROM memories", [], |r| r.get(0))?;
+        Ok(n as u64)
     }
 
     // ── a-hub 지식 공유 상태 (hub.rs — 스펙 2026-07-18-hub-knowledge-sharing §7) ──
@@ -3756,5 +3822,41 @@ mod tests {
         let n: i64 = store.conn.query_row(
             "SELECT COUNT(*) FROM prompt_events", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 1, "포크 복제 프롬프트는 1행");
+    }
+
+    #[test]
+    fn memory_crud_roundtrip() {
+        use crate::memory::Memory;
+        let store = SqliteStore::open_in_memory().unwrap();
+        assert_eq!(store.count_memories().unwrap(), 0);
+
+        let id1 = store.add_memory("주인은 비간을 먹지 않음", "chat").unwrap();
+        let id2 = store.add_memory("목요일 오후는 회의로 바쁨", "manual").unwrap();
+        assert!(id2 > id1);
+        assert_eq!(store.count_memories().unwrap(), 2);
+
+        // created_at ASC, id ASC 정렬
+        let all = store.list_memories().unwrap();
+        assert_eq!(
+            all.iter().map(|m: &Memory| m.text.as_str()).collect::<Vec<_>>(),
+            vec!["주인은 비간을 먹지 않음", "목요일 오후는 회의로 바쁨"]
+        );
+        assert_eq!(all[0].source, "chat");
+        assert!(all[0].updated_at.is_none());
+
+        store.update_memory(id1, "주인은 완전 채식(비건)임").unwrap();
+        let updated = store.list_memories().unwrap();
+        assert_eq!(updated[0].text, "주인은 완전 채식(비건)임");
+        assert!(updated[0].updated_at.is_some());
+
+        store.delete_memory(id2).unwrap();
+        assert_eq!(store.count_memories().unwrap(), 1);
+    }
+
+    #[test]
+    fn add_memory_rejects_blank() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        assert!(store.add_memory("   ", "chat").is_err());
+        assert_eq!(store.count_memories().unwrap(), 0);
     }
 }

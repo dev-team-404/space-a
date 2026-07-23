@@ -11,6 +11,7 @@ pub mod hub;
 pub mod inventory;
 pub mod judge;
 pub mod mascot;
+pub mod memory;
 pub mod sprite;
 pub mod model;
 pub mod ops;

@@ -306,13 +306,17 @@ mod runtime {
 
         for date in dates {
             // ① 락 획득 → assemble_brief + session_count 체크 → 즉시 해제
-            let (brief, cfg, days_idle) = match store_mutex.lock() {
+            let (brief, cfg, days_idle, memories) = match store_mutex.lock() {
                 Ok(store) => {
                     let cfg = DiaryConfig { vault_dir: vault.clone(), ..DiaryConfig::default() };
                     match assemble_brief(&store, "Windows", &date, &cfg) {
                         Ok(brief) => {
                             let days_idle = store.days_since_last_active(&date).ok().flatten();
-                            (brief, cfg, days_idle)
+                            let memories: Vec<String> = store
+                                .list_memories()
+                                .map(|v| v.into_iter().map(|m| m.text).collect())
+                                .unwrap_or_default();
+                            (brief, cfg, days_idle, memories)
                         }
                         Err(e) => { log::warn!("assemble_brief({date}) 실패: {e}"); continue; }
                     }
@@ -330,12 +334,12 @@ mod runtime {
                     occasions: brief.occasions.clone(),
                     recent_diaries: brief.recent_diaries.clone(),
                 };
-                match render_idle_diary(&engine, &idle, &cfg) {
+                match render_idle_diary(&engine, &idle, &cfg, &memories) {
                     Ok(r) => r,
                     Err(e) => { log::warn!("render_idle_diary({date}) 실패: {e}"); continue; }
                 }
             } else {
-                match render_diary(&engine, &brief, &cfg) {
+                match render_diary(&engine, &brief, &cfg, &memories) {
                     Ok(r) => r,
                     Err(e) => { log::warn!("render_diary({date}) 실패: {e}"); continue; }
                 }

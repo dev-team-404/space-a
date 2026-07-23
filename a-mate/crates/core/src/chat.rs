@@ -5,6 +5,80 @@
 //! ① 정량(수치) ② 서사(오늘 근황) ③ 질적 코칭(Tier 2, "깊게 봐줘")로 나눈다.
 //! Tier 2는 주간 추세·역량 프로필·findings·고생 세션을 한데 모은 **코칭 브리프**로 답한다.
 
+use crate::diary::engine::{ChatMessage, Engine, ToolDef};
+
+/// 채팅 캡처용 save_memory 툴 정의.
+pub fn save_memory_tool() -> ToolDef {
+    ToolDef {
+        name: "save_memory".to_string(),
+        description: "주인이 자신에 대해 기억해 달라고 명시적으로 요청한 사실을 한 문장으로 저장한다. \
+                      주인이 기억을 요청할 때만 호출하고, 일상 대화에는 호출하지 마라."
+            .to_string(),
+        parameters: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "text": { "type": "string", "description": "기억할 사실 (간결한 평서문, 예: '주인은 비건임')" }
+            },
+            "required": ["text"]
+        }),
+    }
+}
+
+/// save_memory 툴콜 arguments(JSON 문자열)에서 text를 추출한다.
+fn parse_memory_arg(arguments: &str) -> Option<String> {
+    serde_json::from_str::<serde_json::Value>(arguments)
+        .ok()?
+        .get("text")?
+        .as_str()
+        .map(|s| s.to_string())
+}
+
+/// tool-calling 채팅 루프. save_memory 툴콜이 오면 `on_save(text)`를 호출하고
+/// tool 결과를 대화에 붙여 재요청한다. 텍스트 응답이 오면 반환한다.
+/// 엔진이 tools를 지원하지 않아 `chat_with_tools`가 실패하면 tools 없는 `chat`으로 폴백한다.
+pub fn run_memory_chat<E: Engine + ?Sized>(
+    engine: &E,
+    system: &str,
+    convo: &mut Vec<ChatMessage>,
+    max_rounds: usize,
+    mut on_save: impl FnMut(&str),
+) -> anyhow::Result<String> {
+    let tools = [save_memory_tool()];
+    for _ in 0..max_rounds {
+        let turn = match engine.chat_with_tools(system, convo.as_slice(), &tools) {
+            Ok(t) => t,
+            Err(_) => return engine.chat(system, convo.as_slice()).map(|o| o.text),
+        };
+        if turn.tool_calls.is_empty() {
+            return Ok(turn.text.unwrap_or_default());
+        }
+        convo.push(ChatMessage {
+            role: "assistant".into(),
+            content: turn.text.clone().unwrap_or_default(),
+            tool_calls: turn.tool_calls.clone(),
+            tool_call_id: None,
+        });
+        for call in &turn.tool_calls {
+            if call.name == "save_memory" {
+                if let Some(text) = parse_memory_arg(&call.arguments) {
+                    let t = text.trim();
+                    if !t.is_empty() {
+                        on_save(t);
+                    }
+                }
+            }
+            convo.push(ChatMessage {
+                role: "tool".into(),
+                content: "saved".into(),
+                tool_calls: vec![],
+                tool_call_id: Some(call.id.clone()),
+            });
+        }
+    }
+    // 루프 상한 초과 — tools 없이 마무리 답변
+    engine.chat(system, convo.as_slice()).map(|o| o.text)
+}
+
 /// 채팅 의도 — 어떤 컨텍스트로 답할지 결정하는 결정론 분류.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChatIntent {
@@ -91,6 +165,8 @@ pub struct CoachingBrief {
     pub struggle_count: u64,
     /// 모델 믹스: (티어, 토큰)
     pub model_mix: Vec<(String, u64)>,
+    /// 주인 메모리 텍스트.
+    pub memories: Vec<String>,
 }
 
 fn mastery_ko(key: &str) -> &'static str {
@@ -158,13 +234,14 @@ pub fn build_coaching_system_prompt(brief: &CoachingBrief) -> String {
          [역량 사다리]\n{profile_block}\n\
          → 지금 배울 것(프론티어): {frontier_line}\n\n\
          [활성 코칭 지적 (무엇이 → 어떻게)]\n{findings_block}\n\n\
-         [모델 사용 믹스]\n{mix_block}",
+         [모델 사용 믹스]\n{mix_block}{mem}",
         user = brief.user_name,
         ws = brief.week_sessions,
         wi = brief.week_tok_input,
         wo = brief.week_tok_output,
         struggle = brief.struggle_count,
         delta = delta,
+        mem = memory_section(&brief.memories),
     )
 }
 
@@ -213,6 +290,7 @@ pub fn assemble_coaching_brief(store: &crate::store::SqliteStore) -> anyhow::Res
     let struggle_count =
         store.struggle_sessions(3, 20, &now)?.iter().filter(|s| s.last_result_ok).count() as u64;
     let model_mix = store.model_mix_for_range(Some(&d(6)), &d(0))?;
+    let memories = store.list_memories()?.into_iter().map(|m| m.text).collect();
     Ok(CoachingBrief {
         user_name,
         week_sessions: ws,
@@ -224,6 +302,7 @@ pub fn assemble_coaching_brief(store: &crate::store::SqliteStore) -> anyhow::Res
         findings,
         struggle_count,
         model_mix,
+        memories,
     })
 }
 
@@ -236,6 +315,18 @@ pub struct ChatContext {
     pub est_tokens_saved_total: u64,
     /// (detail, suggested_action) — 활성 findings 상위 N개
     pub findings: Vec<(String, String)>,
+    /// 주인 메모리 텍스트(list_memories 순서). 프롬프트에 주입.
+    pub memories: Vec<String>,
+}
+
+/// 메모리 프롬프트 섹션(비면 빈 문자열). 채팅·코칭 공용.
+fn memory_section(memories: &[String]) -> String {
+    let block = crate::memory::memory_block(memories);
+    if block.is_empty() {
+        String::new()
+    } else {
+        format!("\n\n[주인에 대해 기억한 것 — 관련될 때만 자연스럽게 언급, 없는 사실 지어내지 말 것]\n{block}")
+    }
 }
 
 pub fn build_chat_system_prompt(ctx: &ChatContext) -> String {
@@ -259,13 +350,14 @@ pub fn build_chat_system_prompt(ctx: &ChatContext) -> String {
          [오늘({date}) 요약]\n\
          - 세션 {sessions}건 · 입력 {tin} · 출력 {tout} 토큰\n\
          - 절약 가능 총량(누적): {saved} 토큰\n\n\
-         [활성 코칭 지적 (무엇이 → 어떻게)]\n{findings_block}",
+         [활성 코칭 지적 (무엇이 → 어떻게)]\n{findings_block}{mem}",
         user = ctx.user_name,
         date = ctx.date,
         sessions = ctx.session_count,
         tin = ctx.tok_input,
         tout = ctx.tok_output,
         saved = ctx.est_tokens_saved_total,
+        mem = memory_section(&ctx.memories),
     )
 }
 
@@ -283,6 +375,7 @@ mod tests {
             tok_output: 200,
             est_tokens_saved_total: 4200,
             findings: vec![("playwright가 상주하는데 호출 0회".into(), "제거하면 아껴요".into())],
+            memories: vec![],
         };
         let p = build_chat_system_prompt(&ctx);
         assert!(p.contains("주인"));           // 페르소나 호칭
@@ -300,7 +393,7 @@ mod tests {
         let ctx = ChatContext {
             user_name: "u".into(), date: "2026-07-06".into(),
             session_count: 0, tok_input: 0, tok_output: 0,
-            est_tokens_saved_total: 0, findings: vec![],
+            est_tokens_saved_total: 0, findings: vec![], memories: vec![],
         };
         assert!(build_chat_system_prompt(&ctx).contains("활성 코칭 지적이 없어요"));
     }
@@ -350,6 +443,7 @@ mod tests {
             findings: vec![("큰 MCP 결과 반복".into(), "필드 좁히기".into())],
             struggle_count: 2,
             model_mix: vec![("opus".into(), 5000), ("sonnet".into(), 33000)],
+            memories: vec![],
         }
     }
 
@@ -373,11 +467,128 @@ mod tests {
         let brief = CoachingBrief {
             user_name: "u".into(), week_sessions: 0, week_tok_input: 0, week_tok_output: 0,
             week_session_delta_pct: None, profile: vec![], frontier: None,
-            findings: vec![], struggle_count: 0, model_mix: vec![],
+            findings: vec![], struggle_count: 0, model_mix: vec![], memories: vec![],
         };
         let p = build_coaching_system_prompt(&brief);
         assert!(p.contains("역량 데이터가 부족"));
         assert!(p.contains("모두 숙달"));
         assert!(p.contains("활성 코칭 지적이 없어요"));
+    }
+
+    // ── Task 5: 메모리 주입 ──
+
+    #[test]
+    fn chat_prompt_injects_memories() {
+        let ctx = ChatContext {
+            user_name: "jibin".into(),
+            date: "2026-07-22".into(),
+            session_count: 1,
+            tok_input: 1,
+            tok_output: 1,
+            est_tokens_saved_total: 0,
+            findings: vec![],
+            memories: vec!["주인은 비건임".into(), "목요일 오후 회의".into()],
+        };
+        let p = build_chat_system_prompt(&ctx);
+        assert!(p.contains("[주인에 대해 기억한 것"));
+        assert!(p.contains("- 주인은 비건임"));
+        assert!(p.contains("지어내지 마세요")); // 기존 정밀도의 선 유지
+    }
+
+    #[test]
+    fn chat_prompt_omits_memory_section_when_empty() {
+        let ctx = ChatContext {
+            user_name: "u".into(),
+            date: "2026-07-22".into(),
+            session_count: 0,
+            tok_input: 0,
+            tok_output: 0,
+            est_tokens_saved_total: 0,
+            findings: vec![],
+            memories: vec![],
+        };
+        assert!(!build_chat_system_prompt(&ctx).contains("[주인에 대해 기억한 것"));
+    }
+
+    #[test]
+    fn coaching_prompt_injects_memories() {
+        let mut brief = sample_brief();
+        brief.memories = vec!["주인은 아침형 인간".into()];
+        let p = build_coaching_system_prompt(&brief);
+        assert!(p.contains("[주인에 대해 기억한 것"));
+        assert!(p.contains("- 주인은 아침형 인간"));
+    }
+
+    // ── Task 4: run_memory_chat 툴 루프 ──
+
+    use crate::diary::engine::{ChatTurn, EngineOutput, ToolCall};
+    use std::cell::RefCell;
+
+    /// 첫 턴에 save_memory 툴콜을 내고, tool 결과를 받으면 텍스트를 반환하는 테스트 엔진.
+    struct ToolMock {
+        fail_tools: bool,
+    }
+    impl Engine for ToolMock {
+        fn name(&self) -> String {
+            "toolmock".into()
+        }
+        fn generate(&self, _s: &str, _u: &str) -> anyhow::Result<EngineOutput> {
+            Ok(EngineOutput { text: "gen".into(), tokens_used: 1 })
+        }
+        fn chat(&self, _s: &str, _m: &[ChatMessage]) -> anyhow::Result<EngineOutput> {
+            Ok(EngineOutput { text: "폴백 답변".into(), tokens_used: 1 })
+        }
+        fn chat_with_tools(
+            &self,
+            _s: &str,
+            m: &[ChatMessage],
+            _t: &[ToolDef],
+        ) -> anyhow::Result<ChatTurn> {
+            if self.fail_tools {
+                anyhow::bail!("tools unsupported");
+            }
+            if m.last().map(|x| x.role == "tool").unwrap_or(false) {
+                return Ok(ChatTurn { text: Some("기억했어요!".into()), tool_calls: vec![], tokens_used: 1 });
+            }
+            Ok(ChatTurn {
+                text: None,
+                tool_calls: vec![ToolCall {
+                    id: "call_1".into(),
+                    name: "save_memory".into(),
+                    arguments: r#"{"text":"주인은 비건임"}"#.into(),
+                }],
+                tokens_used: 1,
+            })
+        }
+    }
+
+    #[test]
+    fn run_memory_chat_saves_and_returns_final_text() {
+        let eng = ToolMock { fail_tools: false };
+        let mut convo =
+            vec![ChatMessage { role: "user".into(), content: "나 비건이야 기억해".into(), ..Default::default() }];
+        let saved = RefCell::new(Vec::<String>::new());
+        let out = run_memory_chat(&eng, "sys", &mut convo, 3, |t| saved.borrow_mut().push(t.to_string())).unwrap();
+        assert_eq!(out, "기억했어요!");
+        assert_eq!(saved.borrow().as_slice(), &["주인은 비건임".to_string()]);
+        assert!(convo.iter().any(|m| m.role == "assistant" && !m.tool_calls.is_empty()));
+        assert!(convo.iter().any(|m| m.role == "tool" && m.tool_call_id.as_deref() == Some("call_1")));
+    }
+
+    #[test]
+    fn run_memory_chat_degrades_when_tools_error() {
+        let eng = ToolMock { fail_tools: true };
+        let mut convo = vec![ChatMessage { role: "user".into(), content: "안녕".into(), ..Default::default() }];
+        let saved = RefCell::new(Vec::<String>::new());
+        let out = run_memory_chat(&eng, "sys", &mut convo, 3, |t| saved.borrow_mut().push(t.to_string())).unwrap();
+        assert_eq!(out, "폴백 답변");
+        assert!(saved.borrow().is_empty());
+    }
+
+    #[test]
+    fn save_memory_tool_has_text_param() {
+        let t = save_memory_tool();
+        assert_eq!(t.name, "save_memory");
+        assert!(t.parameters["properties"]["text"].is_object());
     }
 }

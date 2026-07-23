@@ -218,7 +218,7 @@ fn cmd_coach_chat(store: &SqliteStore, question: &str) -> Result<()> {
                     println!("engine: {}", eng.name());
                     let out = eng.chat(
                         &system,
-                        &[ChatMessage { role: "user".into(), content: question.into() }],
+                        &[ChatMessage { role: "user".into(), content: question.into(), ..Default::default() }],
                     )?;
                     println!("\n─── 튜터 답변 ───\n{}", out.text);
                 }
