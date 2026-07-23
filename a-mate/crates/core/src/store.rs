@@ -105,6 +105,14 @@ CREATE TABLE IF NOT EXISTS memories (
   updated_at TEXT,
   source     TEXT NOT NULL DEFAULT 'chat'
 );
+CREATE TABLE IF NOT EXISTS session_work_kinds (
+  session_id TEXT PRIMARY KEY,
+  host TEXT NOT NULL, project_id TEXT NOT NULL,
+  kinds_json TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_ts TEXT,
+  judged_at TEXT
+);
 "#;
 
 pub struct SqliteStore {
@@ -1110,6 +1118,164 @@ impl SqliteStore {
         Ok(n > 0)
     }
 
+    // ── E: 세션 work-kind 판정 캐시 + plugin 설치/사용 감지 ──────────────────
+
+    /// E — work-kind 판정 대기 세션: 관찰창 내 활동·main-chain 턴 ≥1·실질 프롬프트 ≥1,
+    /// 아직 미판정(kinds_json NULL) + attempts < 3(3회 형식 불량 = 영구 침묵). 최신 활동순.
+    pub fn pending_work_kind_sessions(
+        &self,
+        window_start: &str,
+        cap: usize,
+    ) -> Result<Vec<WorkKindCandidate>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e.session_id, COALESCE(MAX(e.host),''), COALESCE(MAX(e.project_id),''),
+                    COALESCE(MAX(w.attempts), 0), COALESCE(MAX(e.ts),'')
+             FROM events e
+             LEFT JOIN session_work_kinds w ON w.session_id = e.session_id
+             WHERE e.is_sidechain = 0
+             GROUP BY e.session_id
+             HAVING MAX(e.ts) >= ?1
+                AND SUM(CASE WHEN e.kind='assistant_turn' THEN 1 ELSE 0 END) >= 1
+                AND EXISTS (SELECT 1 FROM prompt_events p WHERE p.session_id = e.session_id)
+                AND MAX(w.kinds_json) IS NULL
+                AND COALESCE(MAX(w.attempts), 0) < 3
+             ORDER BY MAX(e.ts) DESC
+             LIMIT ?2",
+        )?;
+        let rows = stmt.query_map(params![window_start, cap as i64], |r| {
+            Ok(WorkKindCandidate {
+                session_id: r.get(0)?,
+                host: r.get(1)?,
+                project_id: r.get(2)?,
+                prev_attempts: r.get::<_, i64>(3)? as u32,
+                last_ts: r.get(4)?,
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// E — 판정 결과 저장. kinds=None은 형식 불량 시도 기록(attempts만 증가; kinds_json은
+    /// NULL 유지 → attempts>=3이면 pending에서 자연 제외 = 영구 침묵, judged에도 안 나옴).
+    pub fn set_session_work_kinds(
+        &self,
+        session_id: &str,
+        host: &str,
+        project_id: &str,
+        last_ts: &str,
+        kinds: Option<&[String]>,
+        attempts: u32,
+        now_ts: &str,
+    ) -> Result<()> {
+        let kinds_json = kinds.map(serde_json::to_string).transpose()?;
+        self.conn.execute(
+            "INSERT INTO session_work_kinds
+                (session_id, host, project_id, kinds_json, attempts, last_ts, judged_at)
+             VALUES (?1,?2,?3,?4,?5,?6, CASE WHEN ?4 IS NOT NULL THEN ?7 END)
+             ON CONFLICT(session_id) DO UPDATE SET
+                kinds_json = COALESCE(?4, kinds_json), attempts = ?5, last_ts = ?6,
+                judged_at = CASE WHEN ?4 IS NOT NULL THEN ?7 ELSE judged_at END",
+            params![session_id, host, project_id, kinds_json, attempts as i64, last_ts, now_ts],
+        )?;
+        Ok(())
+    }
+
+    /// E — 관찰창 내 판정 완료 세션의 work-kind (빈 배열 포함 — 소비자가 거른다). 최신 활동순.
+    pub fn judged_work_kind_sessions(&self, window_start: &str) -> Result<Vec<JudgedWorkKinds>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT session_id, host, project_id, kinds_json FROM session_work_kinds
+             WHERE kinds_json IS NOT NULL AND last_ts >= ?1
+             ORDER BY last_ts DESC",
+        )?;
+        let rows = stmt.query_map(params![window_start], |r| {
+            let kinds_json: String = r.get(3)?;
+            Ok(JudgedWorkKinds {
+                session_id: r.get(0)?,
+                host: r.get(1)?,
+                project_id: r.get(2)?,
+                kinds: serde_json::from_str(&kinds_json).unwrap_or_default(),
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// E — 세션을 연 첫 실질 프롬프트(카드 근거 인용용). prompt_events는 이미 사람 발화만.
+    pub fn session_lead_prompt(&self, session_id: &str) -> Result<Option<String>> {
+        use rusqlite::OptionalExtension;
+        self.conn
+            .query_row(
+                "SELECT preview FROM prompt_events WHERE session_id = ?1
+                 ORDER BY COALESCE(ts,''), source_offset LIMIT 1",
+                params![session_id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    /// E — 설치+enabled 여부. plugin_inventory(스킬 제공형) 또는, MCP 제공형이면
+    /// mcp_inventory의 동명 서버(standalone 설정 포함 — 이미 갖고 있으면 ② 금지)로 판정.
+    pub fn plugin_installed(&self, host: &str, plugin: &str, mcp_server: Option<&str>) -> Result<bool> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM plugin_inventory WHERE host=?1 AND plugin_key LIKE ?2 || '@%'",
+            params![host, plugin],
+            |r| r.get(0),
+        )?;
+        if n > 0 {
+            return Ok(true);
+        }
+        if let Some(server) = mcp_server {
+            let m: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM mcp_inventory WHERE host=?1 AND server=?2",
+                params![host, server],
+                |r| r.get(0),
+            )?;
+            return Ok(m > 0);
+        }
+        Ok(false)
+    }
+
+    /// E — 관찰창 내 이 호스트에서 plugin 사용 흔적 (이미 쓰면 침묵 — 스펙 §4 E):
+    /// 스킬 호출(`ns:skill` target) / 하네스 plugin 접두 MCP(`plugin_<name>_<server>`) /
+    /// 큐레이션 명시 서버명(standalone 동명 서버 포함) / 설치 인벤토리가 선언한 서버명.
+    pub fn plugin_used_recently(
+        &self,
+        host: &str,
+        plugin: &str,
+        mcp_server: Option<&str>,
+        window_start: &str,
+    ) -> Result<bool> {
+        use rusqlite::OptionalExtension;
+        // 설치된 plugin이 선언한 MCP 서버명 + 큐레이션 명시 서버명의 합집합
+        let mut servers: Vec<String> = self
+            .conn
+            .query_row(
+                "SELECT mcp_servers_json FROM plugin_inventory
+                 WHERE host=?1 AND plugin_key LIKE ?2 || '@%'",
+                params![host, plugin],
+                |r| r.get::<_, String>(0),
+            )
+            .optional()?
+            .and_then(|j| serde_json::from_str(&j).ok())
+            .unwrap_or_default();
+        if let Some(s) = mcp_server {
+            if !servers.iter().any(|x| x == s) {
+                servers.push(s.to_string());
+            }
+        }
+        let servers_json = serde_json::to_string(&servers)?;
+        let used: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM events
+             WHERE host=?1 AND is_sidechain=0 AND kind='tool_call' AND ts >= ?2
+               AND ( (tool_kind='skill' AND tool_target LIKE ?3 || ':%')
+                  OR (tool_kind='mcp_call' AND (
+                        tool_server LIKE 'plugin\\_' || ?3 || '\\_%' ESCAPE '\\'
+                     OR tool_server IN (SELECT value FROM json_each(?4)) )) )",
+            params![host, window_start, plugin, servers_json],
+            |r| r.get(0),
+        )?;
+        Ok(used > 0)
+    }
+
     /// 특정 하루의 모델 분포 — model_mix_for_range의 단일일 특수형.
     pub fn model_mix_for_date(&self, date: &str) -> Result<Vec<(String, u64)>> {
         self.model_mix_for_range(Some(date), date)
@@ -1721,6 +1887,25 @@ pub struct DaySummary {
     pub tok_cache_create: u64,
 }
 
+/// E — work-kind 판정 대기 세션 (pending_work_kind_sessions 반환 행).
+#[derive(Debug, Clone)]
+pub struct WorkKindCandidate {
+    pub session_id: String,
+    pub host: String,
+    pub project_id: String,
+    pub prev_attempts: u32,
+    pub last_ts: String,
+}
+
+/// E — 판정 완료 세션의 work-kind (judged_work_kind_sessions 반환 행).
+#[derive(Debug, Clone)]
+pub struct JudgedWorkKinds {
+    pub session_id: String,
+    pub host: String,
+    pub project_id: String,
+    pub kinds: Vec<String>,
+}
+
 /// content_items 한 행 — 프론트 팁/뉴스 카드용.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ContentRow {
@@ -2222,6 +2407,166 @@ mod tests {
         }, "2026-07-01T10:00:00Z").unwrap();
         let all = store.findings_for_date_all("2026-07-01").unwrap();
         assert!(all.iter().any(|f| f.dedup_key == "R7|Windows|p"), "프로젝트 카드는 노출돼야");
+    }
+
+    // ── E: session_work_kinds + plugin 설치/사용 감지 ──
+
+    fn wk_prompt_event(sid: &str, ts: &str, preview: &str) -> crate::model::NormalizedEvent {
+        crate::model::NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "d--proj".into(),
+            session_id: sid.into(), uuid: Some(format!("{sid}-p-{ts}")), parent_uuid: None,
+            is_sidechain: false, ts: Some(ts.into()),
+            source_file: format!("{sid}.jsonl"), source_offset: 0, msg_id: None,
+            kind: crate::model::EventKind::UserPrompt { preview: preview.into() },
+        }
+    }
+
+    fn wk_turn(sid: &str, uuid: &str, ts: &str) -> crate::model::NormalizedEvent {
+        crate::model::NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "d--proj".into(),
+            session_id: sid.into(), uuid: Some(uuid.into()), parent_uuid: None,
+            is_sidechain: false, ts: Some(ts.into()),
+            source_file: format!("{sid}.jsonl"), source_offset: 1, msg_id: None,
+            kind: crate::model::EventKind::AssistantTurn {
+                model: crate::model::NormModel::from_raw_id("claude-sonnet-4-6"),
+                usage: crate::model::TokenUsage::default(), web_search: 0, web_fetch: 0,
+            },
+        }
+    }
+
+    #[test]
+    fn work_kind_pending_persist_and_judged_roundtrip() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let recent = (chrono::Utc::now() - chrono::Duration::days(1)).to_rfc3339();
+        let old = (chrono::Utc::now() - chrono::Duration::days(30)).to_rfc3339();
+        let window = (chrono::Utc::now() - chrono::Duration::days(14)).to_rfc3339();
+        // s1: 창 내 + 프롬프트 + 턴 → pending
+        store.upsert_events(&[
+            wk_prompt_event("s1", &recent, "로그인 화면 버튼 스타일 다듬어줘"),
+            wk_turn("s1", "s1-t", &recent),
+            // s2: 창 밖 → 제외
+            wk_prompt_event("s2", &old, "옛날 세션의 실질 프롬프트입니다"),
+            wk_turn("s2", "s2-t", &old),
+            // s3: 프롬프트 없음(턴만) → 제외
+            wk_turn("s3", "s3-t", &recent),
+        ]).unwrap();
+        let pending = store.pending_work_kind_sessions(&window, 10).unwrap();
+        assert_eq!(pending.len(), 1, "창 내·프롬프트 있는 세션만: {pending:?}");
+        assert_eq!(pending[0].session_id, "s1");
+        assert_eq!(pending[0].host, "Windows");
+        assert_eq!(pending[0].prev_attempts, 0);
+
+        // 판정 저장 → pending에서 빠지고 judged에 나타난다
+        let kinds = vec!["frontend_ui".to_string()];
+        store.set_session_work_kinds("s1", "Windows", "d--proj", &recent,
+            Some(&kinds), 1, &recent).unwrap();
+        assert!(store.pending_work_kind_sessions(&window, 10).unwrap().is_empty());
+        let judged = store.judged_work_kind_sessions(&window).unwrap();
+        assert_eq!(judged.len(), 1);
+        assert_eq!(judged[0].kinds, kinds);
+        assert_eq!(judged[0].project_id, "d--proj");
+        // 창 밖 judged는 제외 (세션 last_ts보다 늦게 시작하는 창)
+        let after = chrono::Utc::now().to_rfc3339();
+        assert!(store.judged_work_kind_sessions(&after).unwrap().is_empty());
+    }
+
+    #[test]
+    fn work_kind_attempts_lifecycle_excludes_after_three_failures() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let recent = (chrono::Utc::now() - chrono::Duration::days(1)).to_rfc3339();
+        let window = (chrono::Utc::now() - chrono::Duration::days(14)).to_rfc3339();
+        store.upsert_events(&[
+            wk_prompt_event("s1", &recent, "판정이 계속 실패하는 세션입니다"),
+            wk_turn("s1", "s1-t", &recent),
+        ]).unwrap();
+        // 형식 불량 2회 — 여전히 pending(재시도), attempts 누적
+        store.set_session_work_kinds("s1", "Windows", "d--proj", &recent, None, 1, &recent).unwrap();
+        store.set_session_work_kinds("s1", "Windows", "d--proj", &recent, None, 2, &recent).unwrap();
+        let p = store.pending_work_kind_sessions(&window, 10).unwrap();
+        assert_eq!(p.len(), 1);
+        assert_eq!(p[0].prev_attempts, 2);
+        // 3회째 — 영구 제외(침묵), judged에도 없음
+        store.set_session_work_kinds("s1", "Windows", "d--proj", &recent, None, 3, &recent).unwrap();
+        assert!(store.pending_work_kind_sessions(&window, 10).unwrap().is_empty());
+        assert!(store.judged_work_kind_sessions(&window).unwrap().is_empty());
+    }
+
+    #[test]
+    fn session_lead_prompt_returns_first_substantive() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mut e1 = wk_prompt_event("s1", "2026-07-20T10:00:00Z", "첫 실질 프롬프트로 작업을 엽니다");
+        e1.source_offset = 0;
+        let mut e2 = wk_prompt_event("s1", "2026-07-20T11:00:00Z", "나중에 온 교정 프롬프트입니다");
+        e2.source_offset = 100;
+        store.upsert_events(&[e2, e1]).unwrap(); // 삽입 순서 무관
+        assert_eq!(store.session_lead_prompt("s1").unwrap().unwrap(),
+            "첫 실질 프롬프트로 작업을 엽니다");
+        assert!(store.session_lead_prompt("none").unwrap().is_none());
+    }
+
+    #[test]
+    fn plugin_installed_via_inventory_or_mcp_server() {
+        let mut store = SqliteStore::open_in_memory().unwrap();
+        store.replace_plugin_inventory("Windows", &[crate::inventory::PluginRecord {
+            plugin_key: "frontend-design@claude-plugins-official".into(),
+            namespace: "frontend-design".into(), skill_count: 1, resident_tokens: 100,
+            skills: vec!["frontend-design".into()], mcp_servers: vec![],
+        }]).unwrap();
+        assert!(store.plugin_installed("Windows", "frontend-design", None).unwrap());
+        assert!(!store.plugin_installed("Windows", "superpowers", None).unwrap());
+        assert!(!store.plugin_installed("WSL:u", "frontend-design", None).unwrap(), "호스트 분리");
+        // MCP 제공형: mcp_inventory의 동명 서버로 감지 (standalone 설정 포함 — 이미 있으면 ②금지)
+        store.conn.execute(
+            "INSERT INTO mcp_inventory (host, project_id, server, source) VALUES ('Windows','*','context7','plugin')",
+            [],
+        ).unwrap();
+        assert!(store.plugin_installed("Windows", "context7", Some("context7")).unwrap());
+        assert!(!store.plugin_installed("Windows", "playwright", Some("playwright")).unwrap());
+    }
+
+    #[test]
+    fn plugin_used_recently_detects_skill_and_mcp_and_respects_window() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let recent = (chrono::Utc::now() - chrono::Duration::days(1)).to_rfc3339();
+        let old = (chrono::Utc::now() - chrono::Duration::days(30)).to_rfc3339();
+        let window = (chrono::Utc::now() - chrono::Duration::days(14)).to_rfc3339();
+        let tool = |sid: &str, uuid: &str, kind: crate::model::ToolKind, raw: &str,
+                    target: Option<&str>, ts: &str| crate::model::NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "d--proj".into(),
+            session_id: sid.into(), uuid: Some(uuid.into()), parent_uuid: None,
+            is_sidechain: false, ts: Some(ts.into()),
+            source_file: format!("{sid}.jsonl"), source_offset: 2, msg_id: None,
+            kind: crate::model::EventKind::ToolCall {
+                kind, raw_name: raw.into(), target: target.map(String::from), tool_use_id: None,
+            },
+        };
+        store.upsert_events(&[
+            // 스킬 호출 (frontend-design)
+            tool("s1", "u1", crate::model::ToolKind::Skill { name: "frontend-design:frontend-design".into() },
+                "Skill", Some("frontend-design:frontend-design"), &recent),
+            // 하네스 plugin_ 접두 MCP 호출 (context7 플러그인 경유 — standalone 없이도 감지)
+            tool("s3", "u3", crate::model::ToolKind::from_raw_name("mcp__plugin_context7_context7__query-docs"),
+                "mcp__plugin_context7_context7__query-docs", None, &recent),
+            // 창 밖 스킬 호출 (superpowers) — 사용으로 안 침
+            tool("s4", "u4", crate::model::ToolKind::Skill { name: "superpowers:brainstorming".into() },
+                "Skill", Some("superpowers:brainstorming"), &old),
+        ]).unwrap();
+        assert!(store.plugin_used_recently("Windows", "frontend-design", None, &window).unwrap());
+        assert!(store.plugin_used_recently("Windows", "context7", Some("context7"), &window).unwrap(),
+            "plugin_ 접두 하네스 서버명으로 감지");
+        assert!(!store.plugin_used_recently("Windows", "superpowers", None, &window).unwrap(),
+            "창 밖 사용은 최근 사용 아님");
+        assert!(!store.plugin_used_recently("WSL:u", "frontend-design", None, &window).unwrap(),
+            "호스트 분리");
+        // standalone 동명 MCP 서버 호출도 사용으로 친다
+        store.upsert_events(&[
+            tool("s2", "u2", crate::model::ToolKind::from_raw_name("mcp__context7__query-docs"),
+                "mcp__context7__query-docs", None, &recent),
+        ]).unwrap();
+        assert!(store.plugin_used_recently("Windows", "context7", Some("context7"), &window).unwrap());
     }
 
     #[test]
