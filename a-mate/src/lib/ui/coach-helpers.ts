@@ -36,7 +36,6 @@ const COACH_TITLE: Record<string, string> = {
   R8: '큰 MCP 결과가 매번 컨텍스트를 잡아먹어요',
   R11: '거부한 뒤 결국 허용한 도구가 있어요',
   R12: '설치해둔 스킬이 놀고 있어요',
-  R24: '작업을 바꿀 때 컨텍스트를 끊으면 더 좋아요',
 };
 
 function subtypeOf(evidence: unknown): string | null {
