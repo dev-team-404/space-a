@@ -120,7 +120,19 @@ pub fn plugin_reco_items(
                     Some("https://code.claude.com/docs/en/plugins".to_string()),
                 )
             } else {
-                // ② 미설치 — 공식 카탈로그에 실재할 때만 (fetch 실패·목록 이탈 = 침묵)
+                // ② 미설치 — 부재가 **확인**될 때만 (Codex 리뷰: enabled-only 인벤토리로 부재
+                // 추론 금지). 설치 전수 스냅숏(enabledPlugins, disabled 포함)이 존재하고 그 안에
+                // 없어야 한다. 스냅숏 부재(미스캔)·스냅숏에 있음(disabled이거나 enabled인데
+                // 인벤토리 미포착) = 불확실 → 침묵. 카탈로그 실재도 필수(fetch 실패 = 침묵).
+                let Some(installed_map) = store.installed_plugins_map(&host)? else { continue };
+                let key_prefix = format!("{}@", reco.plugin);
+                let installed_any = installed_map
+                    .as_object()
+                    .map(|m| m.keys().any(|k| k.starts_with(&key_prefix)))
+                    .unwrap_or(false);
+                if installed_any {
+                    continue;
+                }
                 let Some(entry) = catalog.iter().find(|e| e.name == reco.plugin) else { continue };
                 (
                     format!("{label} 작업에 유용한 공식 플러그인: `{}`", reco.plugin),
@@ -232,11 +244,17 @@ mod tests {
         }]).unwrap();
     }
 
+    /// 설치 전수 스냅숏 "스캔됨·설치 0개" — ② 부재 확인 게이트 통과용
+    fn mark_plugin_scan_empty(store: &SqliteStore) {
+        store.set_installed_plugins("Windows", &serde_json::json!({})).unwrap();
+    }
+
     #[test]
     fn reco_case2_not_installed_recommends_install_with_catalog() {
         let store = SqliteStore::open_in_memory().unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         seed_frontend_sessions(&store, 2, &now);
+        mark_plugin_scan_empty(&store); // 부재 확인됨(스캔됨·설치 0개)
         let items = plugin_reco_items(&store, &official_catalog(), &now).unwrap();
         assert_eq!(items.len(), 1);
         let it = &items[0];
@@ -257,7 +275,33 @@ mod tests {
         let store = SqliteStore::open_in_memory().unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         seed_frontend_sessions(&store, 2, &now);
+        mark_plugin_scan_empty(&store);
         assert!(plugin_reco_items(&store, &[], &now).unwrap().is_empty());
+    }
+
+    #[test]
+    fn reco_case2_suppressed_without_install_snapshot() {
+        // 설치 전수 스냅숏(enabledPlugins)이 아직 없음 = 부재 미확인 → ② 억제 (Codex 리뷰:
+        // enabled-only인 plugin_inventory로 부재를 추론하면 안 된다)
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+        seed_frontend_sessions(&store, 2, &now);
+        assert!(plugin_reco_items(&store, &official_catalog(), &now).unwrap().is_empty());
+    }
+
+    #[test]
+    fn reco_case2_suppressed_when_installed_but_not_enabled() {
+        // 설치됐지만 disabled(사용자가 의도적으로 끔) → "깔아라"는 오추천 → 침묵 (Codex 리뷰)
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+        seed_frontend_sessions(&store, 2, &now);
+        store.set_installed_plugins("Windows",
+            &serde_json::json!({"frontend-design@claude-plugins-official": false})).unwrap();
+        assert!(plugin_reco_items(&store, &official_catalog(), &now).unwrap().is_empty());
+        // enabled인데 스킬 인벤토리에 안 잡히는 형태(스캔 실패·MCP 전용 버전) = 불확실 → 침묵
+        store.set_installed_plugins("Windows",
+            &serde_json::json!({"frontend-design@claude-plugins-official": true})).unwrap();
+        assert!(plugin_reco_items(&store, &official_catalog(), &now).unwrap().is_empty());
     }
 
     #[test]
@@ -296,6 +340,7 @@ mod tests {
         let store = SqliteStore::open_in_memory().unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         seed_frontend_sessions(&store, 1, &now); // 1 < MIN_MATCHED_SESSIONS(2)
+        mark_plugin_scan_empty(&store); // 침묵 원인이 세션 수임을 고정
         assert!(plugin_reco_items(&store, &official_catalog(), &now).unwrap().is_empty());
     }
 
@@ -313,6 +358,7 @@ mod tests {
         let store = SqliteStore::open_in_memory().unwrap();
         let now = chrono::Utc::now().to_rfc3339();
         seed_frontend_sessions(&store, 5, &now);
+        mark_plugin_scan_empty(&store);
         let items = plugin_reco_items(&store, &official_catalog(), &now).unwrap();
         assert_eq!(items.len(), 1);
         assert!(items[0].body.contains("5개"), "매칭 세션 수 인용: {}", items[0].body);

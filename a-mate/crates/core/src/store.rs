@@ -1212,6 +1212,20 @@ impl SqliteStore {
             .map_err(Into::into)
     }
 
+    /// E — 설치 전수 스냅숏 저장(settings.json enabledPlugins 맵 그대로, disabled=false 포함).
+    /// enabled-only인 plugin_inventory로는 부재를 추론할 수 없어(disabled·스캔 실패가 부재로
+    /// 보임 — Codex 리뷰) ②(미설치 추천)의 부재 확인 게이트로 쓴다. 키 존재 = "스캔됨" 마커.
+    pub fn set_installed_plugins(&self, host: &str, map: &serde_json::Value) -> Result<()> {
+        self.set_setting(&format!("installed_plugins:{host}"), &map.to_string())
+    }
+
+    /// E — 설치 전수 스냅숏 조회. None = 이 호스트는 아직 스캔 안 됨(② 억제 신호).
+    pub fn installed_plugins_map(&self, host: &str) -> Result<Option<serde_json::Value>> {
+        Ok(self
+            .get_setting(&format!("installed_plugins:{host}"))?
+            .and_then(|s| serde_json::from_str(&s).ok()))
+    }
+
     /// E — 설치+enabled 여부. plugin_inventory(스킬 제공형) 또는, MCP 제공형이면
     /// mcp_inventory의 동명 서버(standalone 설정 포함 — 이미 갖고 있으면 ② 금지)로 판정.
     pub fn plugin_installed(&self, host: &str, plugin: &str, mcp_server: Option<&str>) -> Result<bool> {
@@ -2509,6 +2523,18 @@ mod tests {
         assert_eq!(store.session_lead_prompt("s1").unwrap().unwrap(),
             "첫 실질 프롬프트로 작업을 엽니다");
         assert!(store.session_lead_prompt("none").unwrap().is_none());
+    }
+
+    #[test]
+    fn installed_plugins_snapshot_roundtrip() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        assert!(store.installed_plugins_map("Windows").unwrap().is_none(), "미스캔 = None");
+        store.set_installed_plugins("Windows",
+            &serde_json::json!({"superpowers@mp": true, "off@mp": false})).unwrap();
+        let map = store.installed_plugins_map("Windows").unwrap().unwrap();
+        assert_eq!(map["superpowers@mp"], serde_json::json!(true));
+        assert_eq!(map["off@mp"], serde_json::json!(false), "disabled도 스냅숏에 보존");
+        assert!(store.installed_plugins_map("WSL:u").unwrap().is_none(), "호스트 분리");
     }
 
     #[test]

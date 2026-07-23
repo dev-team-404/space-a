@@ -118,6 +118,15 @@ pub fn run_inventory(store: &mut SqliteStore) -> Result<Vec<String>> {
         } else {
             store.replace_plugin_inventory(&hs.host, &plugins)?;
         }
+        // E — 설치 전수 스냅숏(enabledPlugins 맵, disabled 포함): ②(미설치 추천)의 부재 확인
+        // 게이트. settings.json만으로 완전하므로 스킬 스캔 완전성과 무관하게 항상 갱신.
+        let installed = settings
+            .get("enabledPlugins")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
+        if let Err(e) = store.set_installed_plugins(&hs.host, &installed) {
+            warnings.push(format!("host {} 설치 스냅숏 실패: {e}", hs.host));
+        }
         // v3: 호스트 설정 스냅숏 — R7 확장·R13 OutdatedModel 재료 (코칭 v3 §4.2)
         let default_model = settings.get("model").and_then(|v| v.as_str());
         let effort = settings.get("effortLevel").and_then(|v| v.as_str());
@@ -329,6 +338,8 @@ mod tests {
             name: "frontend-design".into(), description: "".into(),
             category: None, homepage: None,
         }];
+        // ② 게이트: 설치 전수 스냅숏(스캔됨·설치 0개)으로 부재 확인
+        store.set_installed_plugins("Windows", &serde_json::json!({})).unwrap();
         // ② 카드가 큐레이션 노출 목록에 오른다 (personal 스코어 → 상단권)
         let visible = run_curation(&store, vec![], &catalog, &now).unwrap();
         let reco = visible.iter().find(|r| r.id.starts_with("plugin-reco-"))
