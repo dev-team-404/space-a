@@ -16,6 +16,7 @@ pub mod sprite;
 pub mod model;
 pub mod ops;
 pub mod pipeline;
+pub mod plugin_reco;
 pub mod profile;
 pub mod life_client;
 pub mod rules;
