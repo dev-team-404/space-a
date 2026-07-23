@@ -142,3 +142,42 @@ CREATE TABLE IF NOT EXISTS prompt_events (
 | 1 | `preview` 원문 저장 여부 | **원문 저장** — 기존 first_prompt와 동일 수준이고 skill_draft 표본 품질에 필요 | norm60 해시만 저장, 원문은 문턱 넘은 그룹만 |
 | 2 | bash 토큰 세분도 | **첫 단어까지** (`bash:gh`) — 워크플로 식별에 필요, 시크릿 위험 없음(단어 1개) | `bash` 단일 토큰 |
 | 3 | 신규 룰 번호 | **R23** (R13~R22는 코칭 v3 예약) | R6 하위 변형으로 통합 |
+
+## 8. 캘리브레이션 — 스킬/커맨드 호출 프롬프트 제외 (2026-07-23)
+
+### 8.1 오탐
+
+코치 탭에 다음 카드가 반복 노출됐다:
+
+> 💡 같은 지시를 3개 세션에서 반복했어요 —
+> "feat/install-signal 브랜치에서 docs/superpowers/plans/2026-07-10-"
+> 🧭 스킬(SKILL.md)로 묶으면 매번 다시 설명할 필요가 없어요
+
+### 8.2 근본 원인 (실데이터 확인)
+
+`prompt_events`를 만든 실제 프롬프트 3건(로컬 DB → WSL JSONL 원본 대조):
+
+| 세션 | host | 프롬프트 |
+|------|------|---------|
+| `78ca3a79` | wsl:Ubuntu | `…플랜을 superpowers:subagent-driven-development 로 실행. 완료 후 PR.` |
+| `d574816d` | wsl:Ubuntu | (동일) |
+| `a846c9ea` | wsl:Ubuntu | `…Task 12–14만 superpowers:executing-plans로 실행해줘…` |
+
+- 셋 다 `isSidechain=false`인 **진짜 사용자 프롬프트**다 — 사이드체인 누수(§4·마이그v4)가 아니다.
+- 셋 다 **이미 스킬을 호출하는 지시**다. 브랜치·플랜문서·태스크 번호 등 인자만 바뀌는
+  템플릿형 반복이라 `norm60`(60자 컷: `…브랜치에서 docs/superpowers/plans/2026-07-`)가
+  거의 동일 → 느슨한 묶기로 한 후보가 되어 발화.
+- R6이 "반복 지시 → 스킬로 묶어라"를 **스킬 호출에 다시 권하는** 순환 오탐.
+  변하는 부분(브랜치·문서)은 스킬의 인자일 뿐 새 스킬로 코드화할 대상이 아니다.
+
+### 8.3 조치
+
+- `normalize()`가 **스킬/슬래시커맨드 호출 프롬프트를 반복 마이닝에서 제외**한다
+  (`is_command_invocation`). 스킬 참조 토큰 `<ns>:<name>`(예 `superpowers:executing-plans`)
+  또는 선두 슬래시 커맨드(`/code-review`)를 감지. 이미 코드화된 지시이므로 후보가 아니다.
+- ⚠ 토큰이 60자 컷 뒤에 오므로 **truncate 전 전문**에서 검사. `regex` 무의존
+  (ASCII-safe 바이트 스캔 — `:`·`/`·식별자는 한글 멀티바이트에 없음).
+- 정밀도 경계: 경로(`docs/superpowers/plans`, 콜론 없음)·시각(`11:04`)·한글 콜론
+  (`주의:`)·`/mnt/c/…` 경로는 오탐 아님 — `normalize_excludes_command_invocations_only` 참조.
+- 마이그레이션 `user_version → 8`: 기존 `prompt_events`에 남은 호출 프롬프트를 소급
+  제거할 수 없어 전체 재수집 + R6 활성('new') 카드 정화 (dismissed/resolved 보존, v6 전례).

@@ -244,6 +244,18 @@ fn migrate(conn: &Connection) -> Result<()> {
              PRAGMA user_version = 7;",
         )?;
     }
+    // v8 재수집 — 스킬/커맨드 호출 프롬프트 제외(normalize, 2026-07-23 순환 오탐 판정)가
+    // prompt_events 재구축을 요구한다. 기존 uuid:offset 행에서 소급 제거할 수 없어 전체 재수집.
+    // 그 프롬프트로 만들어진 R6 활성('new') 카드도 정화 — dismissed/resolved는 사용자
+    // 기록(나깅 방지 쿨다운)이라 보존 (v6 전례).
+    if user_version < 8 {
+        conn.execute_batch(
+            "DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;
+             DELETE FROM prompt_events;
+             DELETE FROM findings WHERE rule_id='R6' AND status='new';
+             PRAGMA user_version = 8;",
+        )?;
+    }
     Ok(())
 }
 
@@ -3642,12 +3654,60 @@ mod tests {
         assert_eq!(status("R6|Windows|kept"), "dismissed", "R6 dismissed는 보존");
         assert_eq!(status("R11|Windows|keep"), "new", "무관 룰은 불변");
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(uv, 7);
+        assert!(uv >= 7, "v7 분기 통과 (후속 분기 연쇄로 더 올라갈 수 있음)");
         // 멱등 — 재오픈해도 안전
         drop(store);
         let store2 = SqliteStore::open(&path).unwrap();
         let uv2: i64 = store2.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(uv2, 7);
+        assert!(uv2 >= 7, "v7 분기 통과 (후속 분기 연쇄로 더 올라갈 수 있음)");
+    }
+
+    #[test]
+    fn migrate_v8_recollects_and_purges_command_invocation_r6() {
+        // 스킬/커맨드 호출 프롬프트 제외(normalize) → prompt_events 재구축 + 오염 R6 'new' 정화.
+        use crate::finding::{Finding, Severity};
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("mv8.db");
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(SCHEMA).unwrap();
+            conn.execute_batch(
+                "PRAGMA user_version = 7;
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 42);
+                 INSERT INTO prompt_events (dedup_key, session_id, host, project_id,
+                   source_file, source_offset, norm60, preview)
+                 VALUES ('old-key', 's1', 'Windows', 'p', 'f.jsonl', 0, 'x', 'x');",
+            ).unwrap();
+            let store = SqliteStore { conn };
+            let f = |rule: &str, key: &str| Finding {
+                rule_id: rule.into(), severity: Severity::Suggest,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "pattern".into(), scope_ref: format!("pattern:{key}"),
+                evidence: serde_json::json!({}), est_tokens_saved: 0,
+                prescription: None, dedup_key: key.into(),
+            };
+            store.upsert_finding(&f("R6", "R6|Windows|cmd"), "2026-07-23T00:00:00Z").unwrap();
+            store.set_finding_status("R6|Windows|cmd", "new").unwrap(); // 스킬 호출로 뜬 오탐 카드
+            store.upsert_finding(&f("R6", "R6|Windows|muted"), "2026-07-23T00:00:00Z").unwrap();
+            store.set_finding_status("R6|Windows|muted", "dismissed").unwrap();
+            store.upsert_finding(&f("R1", "R1|Windows|keep"), "2026-07-23T00:00:00Z").unwrap();
+        }
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v8 분기 발화
+        for table in ["ingest_state", "prompt_events", "events", "daily_rollup", "sessions"] {
+            let n: i64 = store.conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap();
+            assert_eq!(n, 0, "{table}는 재수집을 위해 비워져야 함");
+        }
+        let keys: Vec<String> = {
+            let mut stmt = store.conn
+                .prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
+            stmt.query_map([], |r| r.get(0)).unwrap()
+                .collect::<std::result::Result<_, _>>().unwrap()
+        };
+        assert_eq!(keys, vec!["R1|Windows|keep".to_string(), "R6|Windows|muted".to_string()],
+            "R6 'new'만 삭제 — dismissed·타 룰은 보존");
+        let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert!(uv >= 8, "v8 분기 통과");
     }
 
     #[test]
