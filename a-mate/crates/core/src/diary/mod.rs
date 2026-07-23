@@ -2442,7 +2442,11 @@ mod tests {
 
     #[test]
     fn idle_prompt_injects_memories() {
-        let p = build_idle_prompt(&DiaryConfig::default(), &["주인은 고양이를 키움".to_string()]);
+        let idle = IdleContext {
+            date: "2026-07-11".into(), is_weekend: false, is_holiday: false, days_idle: None,
+            occasions: vec![], recent_diaries: vec![],
+        };
+        let p = build_idle_prompt(&DiaryConfig::default(), &idle, &["주인은 고양이를 키움".to_string()]);
         assert!(p.contains("주인은 고양이를 키움"));
     }
 }

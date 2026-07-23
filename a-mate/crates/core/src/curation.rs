@@ -71,6 +71,50 @@ pub fn plugin_purpose(plugin_key: &str) -> Option<&'static str> {
     }
 }
 
+/// E — LLM이 세션 프롬프트에서 판정하는 작업 성격(work-kind) vocabulary. (key, 한국어 라벨).
+/// 항목 추가는 plugin_recos_for와 짝으로. 정밀도의 선: 카드 생성은 이 상수 테이블이 담당.
+pub const WORK_KINDS: &[(&str, &str)] = &[
+    ("frontend_ui", "프론트엔드 UI·스타일링"),
+    ("web_debugging", "웹페이지 디버깅·브라우저 자동화"),
+    ("library_docs", "외부 라이브러리 문서·API 탐색"),
+    ("workflow_planning", "대형 구현·리팩터링"),
+];
+
+pub fn work_kind_label(kind: &str) -> Option<&'static str> {
+    WORK_KINDS.iter().find(|(k, _)| *k == kind).map(|(_, l)| *l)
+}
+
+/// work-kind에 유용한 공식 마켓플레이스 plugin (①설치 미사용·②미설치 공용 큐레이션).
+/// v1은 설치/사용을 신뢰 판정할 수 있는 plugin만: 스킬 제공형(plugin_inventory 수록) 또는
+/// mcp_server 명시형(mcp_inventory/tool_server로 감지). 커맨드 전용(pr-review-toolkit 등)은
+/// 감지 불가라 제외 — "이미 깔린 걸 깔아라" 오추천 방지.
+pub struct PluginReco {
+    pub plugin: &'static str,          // 공식 마켓플레이스 plugin name (@ 앞부분)
+    pub purpose_ko: &'static str,      // 카드에 쓸 한 줄 용도
+    pub mcp_server: Option<&'static str>, // MCP 제공형의 서버명 (스킬 제공형은 None)
+}
+
+pub fn plugin_recos_for(work_kind: &str) -> &'static [PluginReco] {
+    match work_kind {
+        "frontend_ui" => &[PluginReco {
+            plugin: "frontend-design", purpose_ko: "UI 디자인·시각 완성도 가이드", mcp_server: None,
+        }],
+        "web_debugging" => &[PluginReco {
+            plugin: "chrome-devtools-mcp", purpose_ko: "웹페이지 디버깅·성능 분석",
+            // 현 카탈로그 버전은 스킬 제공형이지만 버전에 따라 MCP 서버 형태 —
+            // 서버명(chrome-devtools, mcp_server_purpose 실측명)으로 설치/사용 감지 보강.
+            mcp_server: Some("chrome-devtools"),
+        }],
+        "library_docs" => &[PluginReco {
+            plugin: "context7", purpose_ko: "라이브러리 최신 문서 조회", mcp_server: Some("context7"),
+        }],
+        "workflow_planning" => &[PluginReco {
+            plugin: "superpowers", purpose_ko: "브레인스토밍→플랜→TDD 개발 워크플로", mcp_server: None,
+        }],
+        _ => &[],
+    }
+}
+
 /// R20 시크릿 패턴 큐레이션 (코칭 v3 §11.2). (pattern_id, 접두). 버전업 가능한 상수.
 /// 주의: 매칭된 본문은 절대 저장·로그하지 않는다 — pattern_id만 반환.
 const SECRET_PREFIXES: &[(&str, &str)] = &[
@@ -150,6 +194,28 @@ mod tests {
         let recs = BuiltinCurationSource.recommend(&WorkPattern::LargeImplNoSkill);
         assert!(!recs.is_empty());
         assert!(recs.iter().any(|r| r.match_substrings.iter().any(|s| s.contains("writing-plans"))));
+    }
+
+    #[test]
+    fn work_kind_vocabulary_maps_to_official_plugins() {
+        // vocabulary의 모든 kind는 라벨과 최소 1개 추천을 가진다
+        for (kind, label) in WORK_KINDS {
+            assert!(!plugin_recos_for(kind).is_empty(), "{kind}에 추천 없음");
+            assert_eq!(work_kind_label(kind), Some(*label));
+            assert!(!label.is_empty());
+        }
+        assert!(plugin_recos_for("unknown_kind").is_empty());
+        assert!(work_kind_label("unknown_kind").is_none());
+        // v1 핵심 매핑 고정 (스킬 제공형 + MCP 판정 가능형만 — 계획 §설계 결정)
+        assert_eq!(plugin_recos_for("frontend_ui")[0].plugin, "frontend-design");
+        assert_eq!(plugin_recos_for("workflow_planning")[0].plugin, "superpowers");
+        let c7 = &plugin_recos_for("library_docs")[0];
+        assert_eq!(c7.plugin, "context7");
+        assert_eq!(c7.mcp_server, Some("context7"), "MCP 제공형은 서버명으로 설치/사용 감지");
+        // chrome-devtools-mcp는 버전에 따라 MCP 서버 형태 — 서버명 매핑으로 설치/사용 감지 보강
+        // (Codex 리뷰: 서버만 잡히는 설치본에 install 카드 오발 방지)
+        let cdt = &plugin_recos_for("web_debugging")[0];
+        assert_eq!(cdt.mcp_server, Some("chrome-devtools"));
     }
 
     #[test]

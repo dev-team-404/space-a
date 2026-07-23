@@ -118,6 +118,15 @@ pub fn run_inventory(store: &mut SqliteStore) -> Result<Vec<String>> {
         } else {
             store.replace_plugin_inventory(&hs.host, &plugins)?;
         }
+        // E — 설치 전수 스냅숏(enabledPlugins 맵, disabled 포함): ②(미설치 추천)의 부재 확인
+        // 게이트. settings.json만으로 완전하므로 스킬 스캔 완전성과 무관하게 항상 갱신.
+        let installed = settings
+            .get("enabledPlugins")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
+        if let Err(e) = store.set_installed_plugins(&hs.host, &installed) {
+            warnings.push(format!("host {} 설치 스냅숏 실패: {e}", hs.host));
+        }
         // v3: 호스트 설정 스냅숏 — R7 확장·R13 OutdatedModel 재료 (코칭 v3 §4.2)
         let default_model = settings.get("model").and_then(|v| v.as_str());
         let effort = settings.get("effortLevel").and_then(|v| v.as_str());
@@ -196,6 +205,7 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
 pub fn run_curation(
     store: &SqliteStore,
     feed_items: Vec<crate::content::ContentItem>,
+    catalog: &[crate::content::CatalogEntry],
     now_ts: &str,
 ) -> Result<Vec<crate::store::ContentRow>> {
     use crate::content::{rank, BuiltinTipsSource, ContentSource, CONTENT_COOLDOWN_DAYS};
@@ -207,6 +217,9 @@ pub fn run_curation(
         .format("%Y-%m-%d")
         .to_string();
     items.extend(crate::content::personal_lessons(store, &today, &yesterday));
+    // E — plugin 추천 (결정론: 캐시된 work-kind + 인벤토리 + 카탈로그. LLM 판정은 파이프라인
+    // 별도 스텝이 캐시해 둠 — 엔진 미설정이면 캐시가 비어 자연 침묵)
+    items.extend(crate::plugin_reco::plugin_reco_items(store, catalog, now_ts)?);
     items.extend(feed_items);
     let ranked = rank(items, &profile);
     store.replace_content_items(&ranked, now_ts)?;
@@ -247,6 +260,18 @@ pub fn fetch_feed_items(
     items
 }
 
+/// E 카탈로그 fetch — 부수효과는 가장자리(파이프라인이 락 밖에서 호출). 실패는 관대:
+/// 빈 벡터 = ② 추천만 침묵(에러 아님), ①·나머지 큐레이션은 계속 (스펙 §6).
+pub fn fetch_marketplace_catalog() -> Vec<crate::content::CatalogEntry> {
+    match crate::content::MarketplaceCatalogSource::default().fetch() {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("[curation] 마켓플레이스 카탈로그 fetch 실패(계속): {e}");
+            Vec::new()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,12 +302,63 @@ mod tests {
     }
 
     #[test]
+    fn run_curation_surfaces_plugin_reco_and_preserves_dismissal() {
+        use crate::content::CatalogEntry;
+        use crate::model::{EventKind, NormModel, NormalizedEvent, TokenUsage};
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = chrono::Utc::now().to_rfc3339();
+        // frontend_ui 판정 세션 2개 시드 (프롬프트+턴+판정 캐시)
+        for i in 0..2 {
+            let sid = format!("fe{i}");
+            store.upsert_events(&[
+                NormalizedEvent {
+                    source_agent: "claude-code".into(), schema_version: "t".into(),
+                    host: "Windows".into(), project_id: "d--proj".into(),
+                    session_id: sid.clone(), uuid: Some(format!("{sid}-p")), parent_uuid: None,
+                    is_sidechain: false, ts: Some(now.clone()),
+                    source_file: format!("{sid}.jsonl"), source_offset: 0, msg_id: None,
+                    kind: EventKind::UserPrompt { preview: "버튼 컴포넌트 스타일 다듬어줘".into() },
+                },
+                NormalizedEvent {
+                    source_agent: "claude-code".into(), schema_version: "t".into(),
+                    host: "Windows".into(), project_id: "d--proj".into(),
+                    session_id: sid.clone(), uuid: Some(format!("{sid}-t")), parent_uuid: None,
+                    is_sidechain: false, ts: Some(now.clone()),
+                    source_file: format!("{sid}.jsonl"), source_offset: 1, msg_id: None,
+                    kind: EventKind::AssistantTurn {
+                        model: NormModel::from_raw_id("claude-sonnet-4-6"),
+                        usage: TokenUsage::default(), web_search: 0, web_fetch: 0,
+                    },
+                },
+            ]).unwrap();
+            store.set_session_work_kinds(&sid, "Windows", "d--proj", &now,
+                Some(&["frontend_ui".to_string()]), 1, &now).unwrap();
+        }
+        let catalog = vec![CatalogEntry {
+            name: "frontend-design".into(), description: "".into(),
+            category: None, homepage: None,
+        }];
+        // ② 게이트: 설치 전수 스냅숏(스캔됨·설치 0개)으로 부재 확인
+        store.set_installed_plugins("Windows", &serde_json::json!({})).unwrap();
+        // ② 카드가 큐레이션 노출 목록에 오른다 (personal 스코어 → 상단권)
+        let visible = run_curation(&store, vec![], &catalog, &now).unwrap();
+        let reco = visible.iter().find(|r| r.id.starts_with("plugin-reco-"))
+            .expect("plugin 추천 카드 노출");
+        assert!(reco.trigger_tags.iter().any(|t| t == "personal"));
+        // dismiss → 재큐레이션에도 다시 안 뜬다 (기존 dismissal 인프라 재사용 검증)
+        let reco_id = reco.id.clone();
+        store.set_content_status(&reco_id, "dismissed", &now).unwrap();
+        let again = run_curation(&store, vec![], &catalog, &now).unwrap();
+        assert!(again.iter().all(|r| r.id != reco_id), "dismiss된 추천은 재노출 금지");
+    }
+
+    #[test]
     fn run_curation_persists_and_returns_frontier_first() {
         let store = SqliteStore::open_in_memory().unwrap();
         // 전부 opus → 프론티어 = 모델 리터러시
         opus_turn(&store, "s1", "u1", "claude-opus-4-8");
         opus_turn(&store, "s1", "u2", "claude-opus-4-8");
-        let visible = run_curation(&store, vec![], "2026-07-14T10:00:00Z").unwrap();
+        let visible = run_curation(&store, vec![], &[], "2026-07-14T10:00:00Z").unwrap();
         assert!(!visible.is_empty());
         assert_eq!(visible[0].dimension.as_deref(), Some("model_literacy"));
         // persist 확인: 전체(숨김 포함) 목록엔 마스터 축 팁도 저장돼 있음
@@ -303,7 +379,7 @@ mod tests {
             evidence: serde_json::json!({"server":"chrome-devtools","resident_tokens_total":432657}),
             est_tokens_saved: 2500, prescription: None, dedup_key: "R1|chrome-devtools".into(),
         }, "2026-07-14T10:00:00Z").unwrap();
-        run_curation(&store, vec![], "2026-07-14T10:00:00Z").unwrap();
+        run_curation(&store, vec![], &[], "2026-07-14T10:00:00Z").unwrap();
         let all = store.list_content("2026-07-14T10:00:00Z", 14.0, true).unwrap();
         let mcp = all.iter().find(|r| r.trigger_tags.iter().any(|t| t == "mcp")).unwrap();
         let p = mcp.personal.as_ref().expect("MCP 팁에 '당신 로그' 근거가 있어야 함");
@@ -317,7 +393,7 @@ mod tests {
         let store = SqliteStore::open_in_memory().unwrap();
         opus_turn(&store, "s1", "u1", "claude-opus-4-8");
         opus_turn(&store, "s1", "u2", "claude-opus-4-8");
-        let visible = run_curation(&store, vec![], "2026-07-14T10:00:00Z").unwrap();
+        let visible = run_curation(&store, vec![], &[], "2026-07-14T10:00:00Z").unwrap();
         let top = visible[0].id.clone(); // model_literacy 팁
         // 닫으면 같은 축 형제도 쿨다운 기간 동안 억제
         store.set_content_status(&top, "dismissed", "2026-07-14T10:05:00Z").unwrap();
