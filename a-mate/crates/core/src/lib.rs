@@ -4,7 +4,6 @@ pub mod coach;
 pub mod content;
 pub mod curation;
 pub mod diary;
-pub mod episode;
 pub mod finding;
 pub mod hosts;
 pub mod hub;

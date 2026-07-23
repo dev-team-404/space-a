@@ -251,29 +251,6 @@ pub fn finding_advice(
                 "필요한 필드만 요청하거나 결과 범위를 좁혀보세요 — 페이지네이션·요약·필터 옵션이 있으면 매 호출 컨텍스트 소모가 크게 줄어요".to_string(),
             )
         }
-        "R24" => {
-            let pct = evidence.get("worst_carry_ratio_pct").and_then(|v| v.as_u64()).unwrap_or(0);
-            let eps = evidence.get("worst_episodes").and_then(|v| v.as_u64()).unwrap_or(0);
-            let carry = evidence.get("worst_carry_count").and_then(|v| v.as_u64()).unwrap_or(0);
-            let thr_k = evidence
-                .get("inherited_ctx_threshold")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0)
-                / 1000;
-            let detail = format!(
-                "이 프로젝트에서 작업을 바꿔도 컨텍스트를 끊지 않아, 가장 심한 세션은 {eps}개 작업 중 {carry}개({pct}%)가 큰 컨텍스트(~{thr_k}k 토큰↑)를 물려받은 채 시작했어요"
-            );
-            let mut action = "작업을 전환할 때 `/clear`로 컨텍스트를 한 번씩 끊으면 토큰뿐 아니라 응답 품질(주의 희석 감소)에도 도움이 돼요 — auto-compact에 맡기기보다 작업 경계에서 끊어보세요".to_string();
-            if let Some(p) = evidence
-                .get("sample_prompts")
-                .and_then(|v| v.as_array())
-                .and_then(|a| a.first())
-                .and_then(|v| v.as_str())
-            {
-                action.push_str(&format!("\n💬 예: '{p}'"));
-            }
-            (detail, action)
-        }
         "R12" => {
             let n = evidence.get("total_sessions").and_then(|v| v.as_u64()).unwrap_or(0);
             let skills = evidence
@@ -2236,22 +2213,6 @@ mod tests {
         assert!(detail.contains("3000")); // 측정된 평균 토큰 인용
         assert!(detail.contains("9000")); // 누적
         assert!(action.contains("필요한 필드만") || action.contains("좁혀"));
-    }
-
-    #[test]
-    fn finding_advice_r24_context_hygiene_cites_worst_session() {
-        let ev = serde_json::json!({
-            "worst_carry_ratio_pct": 83,
-            "worst_episodes": 6,
-            "worst_carry_count": 5,
-            "inherited_ctx_threshold": 50_000,
-            "sample_prompts": ["로그인 폼 만들어줘", "결제 붙여줘"],
-        });
-        let (detail, action) = finding_advice("R24", &ev, 0);
-        assert!(detail.contains("83%"), "carry ratio 인용");
-        assert!(detail.contains("6") && detail.contains("5"), "에피소드/큰컨텍스트 수 인용");
-        assert!(action.contains("/clear"), "작업 경계에서 끊는 처방");
-        assert!(action.contains("로그인 폼"), "가장 심한 세션 프롬프트 예시 인용");
     }
 
     #[test]

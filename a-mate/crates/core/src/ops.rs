@@ -172,15 +172,16 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     // 코칭 가치 재설계: R10(관찰 카드)·R11(권한 마찰) 은퇴 — 코드·테스트는 보존.
     store.delete_findings_by_rule_and_scope("R10", "project")?;
     store.delete_findings_by_rule_and_scope("R11", "project")?;
+    // 코칭 가치 재설계 후속(2026-07-23): F(R24 컨텍스트 위생) 은퇴 — 룰·에피소드 세그먼터 완전 제거.
+    // 8자↑ 프롬프트=새 작업 경계가 후속질문을 작업전환으로 오인 → 결정론으로 정확도 확보 불가(스펙 참조).
+    store.delete_findings_by_rule_and_scope("R24", "project")?;
     let engine = RuleEngine::new(vec![
         // R6(반복 지시 → 스킬/커맨드화)은 v3 은퇴 대상 아님 — 킥오프 차별점 신규 등록
         Box::new(crate::rules::r6_repeated_prompts::R6RepeatedPrompts::default()),
         Box::new(R7OpusTrivial::default()),
         // R8(MCP 대형 결과) — result_len 수집 승격, 2026-07-19
         Box::new(crate::rules::r8_mcp_large_result::R8McpLargeResult::default()),
-        // F(컨텍스트 위생) — 에피소드 세그먼터 기반 결정론 룰 (코칭 v3 재설계 §4 F)
-        Box::new(crate::rules::r24_context_hygiene::R24ContextHygiene::default()),
-        // R10·R11 은퇴 (코칭 가치 재설계) — detect_bursts는 R7 후보 제외에 계속 사용
+        // R10·R11 은퇴(코드 보존 — detect_bursts는 R7 후보 제외에 계속 사용). F(R24)는 완전 제거 — 전용 세그먼터도 삭제(위 purge 참조)
     ]);
     let findings = engine.run(store)?;
     let now = chrono::Utc::now().to_rfc3339();
@@ -427,10 +428,11 @@ mod tests {
         store.upsert_finding(&mk("R12", "project", "R12|W|proj"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R10", "project", "R10|W|proj"), "2026-07-06T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R11", "project", "R11|W|proj"), "2026-07-06T00:00:00Z").unwrap();
+        store.upsert_finding(&mk("R24", "project", "R24|W|proj"), "2026-07-06T00:00:00Z").unwrap();
 
         run_rules(&store).unwrap();
-        // 은퇴 룰(R10·R11 포함)·구폐기분 전부 purge. R7 세션 후보는 이 테스트에 시드 안 함.
-        for key in ["R10|W|proj", "R11|W|proj"] {
+        // 은퇴 룰(R10·R11·R24 포함)·구폐기분 전부 purge. R7 세션 후보는 이 테스트에 시드 안 함.
+        for key in ["R10|W|proj", "R11|W|proj", "R24|W|proj"] {
             let n: i64 = store.conn.query_row(
                 "SELECT COUNT(*) FROM findings WHERE dedup_key=?1", [key], |r| r.get(0)).unwrap();
             assert_eq!(n, 0, "{key} purge되어야");
@@ -486,11 +488,11 @@ mod tests {
     }
 
     #[test]
-    fn run_rules_registers_r24_and_surfaces_project_card_as_new() {
+    fn run_rules_does_not_surface_r24_after_retirement() {
         use crate::model::*;
         let store = SqliteStore::open_in_memory().unwrap();
         let recent = |h: i64| (chrono::Utc::now() - chrono::Duration::hours(h)).to_rfc3339();
-        // 6개 에피소드, 전부 60k 상속 → R24 발화.
+        // 6개 에피소드, 전부 60k 상속 — 은퇴 전이라면 R24 발화 조건이었다.
         let mut evs = Vec::new();
         for i in 0..6u64 {
             let ts = recent(20 - i as i64);
@@ -518,21 +520,16 @@ mod tests {
         store.upsert_events(&evs).unwrap();
 
         let findings = run_rules(&store).unwrap();
+        // F(R24) 은퇴: 발화 조건 데이터여도 어떤 카드도 나오지 않아야 한다.
         assert!(
-            findings.iter().any(|f| f.rule_id == "R24" && f.scope_kind == "project"),
-            "run_rules가 R24 프로젝트 카드를 낸다"
+            !findings.iter().any(|f| f.rule_id == "R24"),
+            "R24는 은퇴 — run_rules가 카드를 내지 않는다"
         );
-
-        // 노출 상태: R24 project → status 'new' (즉시 노출).
-        let status: String = store
+        let n: i64 = store
             .conn
-            .query_row(
-                "SELECT status FROM findings WHERE dedup_key = 'R24|Windows|d--proj'",
-                [],
-                |r| r.get(0),
-            )
+            .query_row("SELECT COUNT(*) FROM findings WHERE rule_id = 'R24'", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(status, "new");
+        assert_eq!(n, 0, "R24 finding 행이 없어야");
     }
 
     #[test]
