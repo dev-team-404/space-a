@@ -1237,6 +1237,9 @@ impl SqliteStore {
     /// E — 관찰창 내 이 호스트에서 plugin 사용 흔적 (이미 쓰면 침묵 — 스펙 §4 E):
     /// 스킬 호출(`ns:skill` target) / 하네스 plugin 접두 MCP(`plugin_<name>_<server>`) /
     /// 큐레이션 명시 서버명(standalone 동명 서버 포함) / 설치 인벤토리가 선언한 서버명.
+    /// sidechain 포함 — 서브에이전트 안에서만 쓴 plugin도 사용 중이다. 억제(침묵) 방향이라
+    /// §2 계약(발화 근거 = main-chain)과 무관하고, R2 감지기도 sidechain을 셌다 (Codex 리뷰).
+    /// 스킬 접두는 LIKE 대신 substr 비교 — plugin명의 `_`가 와일드카드로 오작동 방지(R2 선례).
     pub fn plugin_used_recently(
         &self,
         host: &str,
@@ -1263,14 +1266,16 @@ impl SqliteStore {
             }
         }
         let servers_json = serde_json::to_string(&servers)?;
+        let skill_prefix = format!("{plugin}:");
+        let mcp_prefix = format!("plugin_{plugin}_");
         let used: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM events
-             WHERE host=?1 AND is_sidechain=0 AND kind='tool_call' AND ts >= ?2
-               AND ( (tool_kind='skill' AND tool_target LIKE ?3 || ':%')
+             WHERE host=?1 AND kind='tool_call' AND ts >= ?2
+               AND ( (tool_kind='skill' AND substr(tool_target, 1, length(?3)) = ?3)
                   OR (tool_kind='mcp_call' AND (
-                        tool_server LIKE 'plugin\\_' || ?3 || '\\_%' ESCAPE '\\'
-                     OR tool_server IN (SELECT value FROM json_each(?4)) )) )",
-            params![host, window_start, plugin, servers_json],
+                        substr(tool_server, 1, length(?4)) = ?4
+                     OR tool_server IN (SELECT value FROM json_each(?5)) )) )",
+            params![host, window_start, skill_prefix, mcp_prefix, servers_json],
             |r| r.get(0),
         )?;
         Ok(used > 0)
@@ -2567,6 +2572,15 @@ mod tests {
                 "mcp__context7__query-docs", None, &recent),
         ]).unwrap();
         assert!(store.plugin_used_recently("Windows", "context7", Some("context7"), &window).unwrap());
+        // 서브에이전트(sidechain) 안에서만 쓴 plugin도 "사용 중"이다 — 억제(침묵) 방향이므로
+        // §2 계약(발화 근거 = main-chain)과 무관. R2 감지기와 동일 (Codex 리뷰).
+        let mut side = tool("s5", "u5",
+            crate::model::ToolKind::Skill { name: "codex:rescue".into() },
+            "Skill", Some("codex:rescue"), &recent);
+        side.is_sidechain = true;
+        store.upsert_events(&[side]).unwrap();
+        assert!(store.plugin_used_recently("Windows", "codex", None, &window).unwrap(),
+            "sidechain 전용 사용도 침묵 대상");
     }
 
     #[test]
