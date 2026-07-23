@@ -108,6 +108,9 @@ mod runtime {
                 maybe_curate_content(app, &state.store);
                 // 코칭 판정(R6·R7…) — 엔진 없으면 no-op(pending 침묵), 실패는 조용히(다음 스캔 재시도)
                 run_coaching_judgments(app, &state.store);
+                // E — 세션 work-kind 판정(LLM) 캐시. 엔진 없으면 no-op, 카드는 다음 스캔의
+                // 큐레이션이 집계 (판정 패스와 별개 — 스펙 §4 E "큐레이션에 얹음")
+                maybe_judge_work_kinds(&state.store);
                 // 다이어리 실패는 조용히 — 다음 사이클에서 재시도
                 maybe_generate_diaries(app, &state.store);
                 // 오늘의 한마디 — 엔진 없으면 no-op, 실패는 조용히(다음 스캔 재시도)
@@ -277,6 +280,71 @@ mod runtime {
                 let _ = app.emit("coach:finding", &rows);
                 let _ = app.emit("scan:done", &chrono::Utc::now().to_rfc3339());
             }
+        }
+    }
+
+    /// E — 세션 work-kind 판정(LLM, 큐레이션 매칭 재료). 판정 패스(finding)와 별개지만
+    /// 락 규율은 동일: ①엔진 해석·②후보+프롬프트는 짧은 락, ③generate는 락 밖, ④저장 짧은 락.
+    /// 엔진 미설정이면 no-op(fail-safe 침묵). verdict는 세션당 1회 캐시(재판정 없음).
+    /// 전송 실패 = attempts 미증가(다음 스캔 재시도) / 형식 불량 = attempts++(3회면 영구 침묵).
+    fn maybe_judge_work_kinds(store_mutex: &std::sync::Mutex<SqliteStore>) {
+        use agent_mentor::diary::engine::Engine as _;
+        use agent_mentor::judge::extract_verdict_json;
+        use agent_mentor::plugin_reco::{
+            parse_work_kinds, work_kind_prompt, WORK_KIND_BATCH_CAP, WORK_KIND_WINDOW_DAYS,
+        };
+        // ① 엔진 (짧은 락)
+        let engine = match store_mutex.lock() {
+            Ok(store) => crate::resolve_engine(&store),
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        };
+        let Some(engine) = engine else { return; };
+        let window_start =
+            (chrono::Utc::now() - chrono::Duration::days(WORK_KIND_WINDOW_DAYS)).to_rfc3339();
+
+        // ② 후보 + 프롬프트 (짧은 락, SQL만)
+        let batch: Vec<(agent_mentor::store::WorkKindCandidate, String, String)> =
+            match store_mutex.lock() {
+                Ok(store) => store
+                    .pending_work_kind_sessions(&window_start, WORK_KIND_BATCH_CAP)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|c| {
+                        let prompts = store.session_user_prompts(&c.session_id, 5).ok()?;
+                        if prompts.is_empty() { return None; }
+                        let (sys, usr) = work_kind_prompt(&prompts);
+                        Some((c, sys, usr))
+                    })
+                    .collect(),
+                Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+            };
+        if batch.is_empty() { return; }
+
+        // ③ 락 밖: 판정 (LLM 네트워크 I/O)
+        let mut results = Vec::new();
+        for (c, sys, usr) in batch {
+            match engine.generate(&sys, &usr) {
+                Ok(out) => results.push((c, out.text)),
+                // 전송 실패 — attempts 미증가, 다음 스캔 재시도
+                Err(e) => log::warn!("work-kind 판정 전송 실패({}): {e}", c.session_id),
+            }
+        }
+
+        // ④ 저장 (짧은 락)
+        let now = chrono::Utc::now().to_rfc3339();
+        match store_mutex.lock() {
+            Ok(store) => {
+                for (c, text) in results {
+                    let attempts = c.prev_attempts + 1;
+                    let kinds = extract_verdict_json(&text).ok()
+                        .and_then(|v| parse_work_kinds(&v));
+                    let _ = store.set_session_work_kinds(
+                        &c.session_id, &c.host, &c.project_id, &c.last_ts,
+                        kinds.as_deref(), attempts, &now,
+                    );
+                }
+            }
+            Err(e) => log::warn!("store lock poisoned: {e}"),
         }
     }
 
