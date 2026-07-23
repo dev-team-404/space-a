@@ -100,7 +100,10 @@ pub fn plugin_recos_for(work_kind: &str) -> &'static [PluginReco] {
             plugin: "frontend-design", purpose_ko: "UI 디자인·시각 완성도 가이드", mcp_server: None,
         }],
         "web_debugging" => &[PluginReco {
-            plugin: "chrome-devtools-mcp", purpose_ko: "웹페이지 디버깅·성능 분석", mcp_server: None,
+            plugin: "chrome-devtools-mcp", purpose_ko: "웹페이지 디버깅·성능 분석",
+            // 현 카탈로그 버전은 스킬 제공형이지만 버전에 따라 MCP 서버 형태 —
+            // 서버명(chrome-devtools, mcp_server_purpose 실측명)으로 설치/사용 감지 보강.
+            mcp_server: Some("chrome-devtools"),
         }],
         "library_docs" => &[PluginReco {
             plugin: "context7", purpose_ko: "라이브러리 최신 문서 조회", mcp_server: Some("context7"),
@@ -209,6 +212,10 @@ mod tests {
         let c7 = &plugin_recos_for("library_docs")[0];
         assert_eq!(c7.plugin, "context7");
         assert_eq!(c7.mcp_server, Some("context7"), "MCP 제공형은 서버명으로 설치/사용 감지");
+        // chrome-devtools-mcp는 버전에 따라 MCP 서버 형태 — 서버명 매핑으로 설치/사용 감지 보강
+        // (Codex 리뷰: 서버만 잡히는 설치본에 install 카드 오발 방지)
+        let cdt = &plugin_recos_for("web_debugging")[0];
+        assert_eq!(cdt.mcp_server, Some("chrome-devtools"));
     }
 
     #[test]
