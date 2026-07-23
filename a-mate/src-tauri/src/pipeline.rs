@@ -150,13 +150,14 @@ mod runtime {
             };
             agent_mentor::hub::pull_source(&cfg, stored)
         });
-        // ① 락 밖: 피드 소스 네트워크 fetch (실패해도 빈 벡터)
+        // ① 락 밖: 피드 소스 + E 마켓플레이스 카탈로그 네트워크 fetch (실패해도 빈 벡터)
         let feed = agent_mentor::ops::fetch_feed_items(hub_src);
+        let catalog = agent_mentor::ops::fetch_marketplace_catalog();
         let now = chrono::Utc::now().to_rfc3339();
 
         // ② 락: run_curation(감지→랭킹→persist) → 노출 목록 → 즉시 해제
         let visible = match store_mutex.lock() {
-            Ok(store) => match agent_mentor::ops::run_curation(&store, feed, &now) {
+            Ok(store) => match agent_mentor::ops::run_curation(&store, feed, &catalog, &now) {
                 Ok(rows) => rows,
                 Err(e) => { log::warn!("run_curation 실패: {e}"); return; }
             },

@@ -71,7 +71,10 @@ fn cmd_curate(store: &SqliteStore) -> Result<()> {
         }
     };
     let now = chrono::Utc::now().to_rfc3339();
-    let visible = ops::run_curation(store, feed, &now)?;
+    // E — 마켓플레이스 카탈로그(② 미설치 추천 재료)도 파이프라인과 동일하게 fetch(실패 시 빈).
+    let catalog = ops::fetch_marketplace_catalog();
+    eprintln!("catalog: 공식 마켓플레이스 {}건", catalog.len());
+    let visible = ops::run_curation(store, feed, &catalog, &now)?;
     println!("\n== AX 튜터가 지금 보여줄 것 (노출 {}건, content_items에 persist) ==", visible.len());
     for r in &visible {
         println!("  [{:>4}] {:16} {}", r.score, r.dimension.as_deref().unwrap_or("news"), r.title);

@@ -85,7 +85,7 @@ fn main() {
     // 4) **실제 프로덕션 경로**: ops::run_curation — 랭킹 + SQLite content_items에 persist +
     //    쿨다운 적용한 노출 목록 반환 (Tauri 파이프라인이 부르는 바로 그 함수).
     let now = "2026-07-14T10:00:00Z";
-    let visible = agent_mentor::ops::run_curation(&store, feed, now).unwrap();
+    let visible = agent_mentor::ops::run_curation(&store, feed, &[], now).unwrap();
     let all = store.list_content(now, agent_mentor::content::CONTENT_COOLDOWN_DAYS, true).unwrap();
 
     let payload = serde_json::json!({
