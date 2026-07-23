@@ -183,8 +183,8 @@ export interface LifeListEntry {
 export interface LifeCapabilities { life_protocol: number; grid: { w: number; h: number }; floor_min_y: number; footprint_mask: boolean; wall_objects: boolean }
 
 export const hubSettingsGet = () => invoke<HubSettings>('hub_settings_get');
-export const hubConnect = (url: string, user: string) =>
-  invoke<HubSettings>('hub_connect', { url, user });
+export const hubConnect = (url: string, apiKey = '') =>
+  invoke<HubSettings>('hub_connect', { url, apiKey });
 export const hubDisconnect = () => invoke<HubSettings>('hub_disconnect');
 type LifeViewResponse = { me: LifeMe; life: LifeState };
 let lifeViewInFlight: Promise<LifeViewResponse> | null = null;

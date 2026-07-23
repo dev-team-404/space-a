@@ -53,7 +53,6 @@
   interface HubSettings { url: string; user: string; api_key: string; connected: boolean; life_id: string }
   let hub = $state<HubSettings | null>(null);
   let hubUrl = $state('');
-  let hubUser = $state('');
   let hubApiKey = $state('');
   let hubStatus = $state<{ kind: 'idle' | 'ok' | 'err' | 'busy'; text: string }>({ kind: 'idle', text: '' });
 
@@ -61,7 +60,6 @@
     try {
       hub = await invoke<HubSettings>('hub_settings_get');
       hubUrl = hub.url;
-      hubUser = hub.user;
       hubApiKey = hub.api_key;
     } catch { /* 미설정 */ }
   }
@@ -70,7 +68,7 @@
   async function connectHub() {
     hubStatus = { kind: 'busy', text: '연결 중…' };
     try {
-      hub = await invoke<HubSettings>('hub_connect', { url: hubUrl, user: hubUser, apiKey: hubApiKey });
+      hub = await invoke<HubSettings>('hub_connect', { url: hubUrl, apiKey: hubApiKey });
       hubStatus = { kind: 'ok', text: `연결 완료 — 개인 방이 만들어졌어요 (${hub.life_id})` };
     } catch (e) {
       hubStatus = { kind: 'err', text: `${e}` };
@@ -203,7 +201,7 @@
 
   <hr />
 
-  <h1>Space A 서버</h1>
+  <h1>Life Server</h1>
   <p class="hint">방 방문·에이전트 위치를 관장하는 life-server에 연결합니다 (hub와 별개 프로세스).</p>
   {#if hub}
     <p class="source" data-kind={hub.connected ? 'store' : 'none'}>
@@ -214,10 +212,6 @@
   <label>
     <span>서버 URL</span>
     <input type="text" bind:value={hubUrl} placeholder="http://192.168.0.10:8001" spellcheck="false" />
-  </label>
-  <label>
-    <span>내 이름</span>
-    <input type="text" bind:value={hubUser} placeholder="예: 준녕" spellcheck="false" />
   </label>
   <label>
     <span>API 키 <em>(선택)</em></span>
