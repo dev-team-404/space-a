@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-23
+---
+
 # E — 공식 마켓플레이스 plugin 추천 구현 계획
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -8,7 +13,7 @@
 
 **Tech Stack:** Rust (crates/core + src-tauri), rusqlite(JSON1), ureq, serde_json. 프론트엔드 변경 없음(ContentRow 계약 불변).
 
-**스펙:** [2026-07-22-coaching-value-redesign-design.md](../specs/2026-07-22-coaching-value-redesign-design.md) §4 E, §2(불변 계약), §6(테스트)
+**스펙:** [2026-07-22-coaching-value-redesign-design.md](../../../../design/a-mate/specs/2026-07-22-coaching-value-redesign-design.md) §4 E, §2(불변 계약), §6(테스트)
 
 ## Global Constraints
 
