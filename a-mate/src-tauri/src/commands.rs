@@ -648,7 +648,7 @@ pub fn coach_tip(title: String, body: String, personal: Option<String>) -> Resul
 }
 
 // --- 방 방문 (docs/design/life-visit.md) ---
-// 설정 키: hub_url·hub_user(입력), hub_token·hub_agent_id·hub_life_id(연결 시 캐시).
+// 설정 키: hub_url·hub_token·hub_agent_id·hub_life_id. 이름의 단일 원본은 user_name이다.
 // 규율: 락은 설정 읽기/쓰기 동안만, 네트워크(hub HTTP)는 락 밖.
 
 use agent_mentor::life_client::{self, LifeClient};
@@ -696,7 +696,7 @@ pub fn hub_settings_get(state: State<AppState>) -> Result<HubSettings, String> {
     let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
     Ok(HubSettings {
         url: get("hub_url"),
-        user: get("hub_user"),
+        user: get("user_name"),
         api_key: get("hub_api_key"),
         connected: !get("hub_token").is_empty(),
         life_id: get("hub_life_id"),
@@ -710,15 +710,20 @@ pub fn hub_connect(
     app: tauri::AppHandle,
     state: State<AppState>,
     url: String,
-    user: String,
     api_key: String,
 ) -> Result<HubSettings, String> {
     use tauri::Emitter;
     let url = url.trim().to_string();
-    let user = user.trim().to_string();
     let api_key = api_key.trim().to_string();
-    if url.is_empty() || user.is_empty() {
-        return Err("서버 URL과 이름을 입력하세요".into());
+    if url.is_empty() {
+        return Err("서버 URL을 입력하세요".into());
+    }
+    let user = {
+        let guard = lock(&state)?;
+        guard.get_setting("user_name").ok().flatten().unwrap_or_default().trim().to_string()
+    };
+    if user.is_empty() {
+        return Err("미니홈피 설정의 개인정보에서 이름을 먼저 입력하세요".into());
     }
     let key_opt = opt_key(api_key.clone());
     // 기존 연결 확인 (락은 읽기 동안만)
@@ -1515,6 +1520,10 @@ pub fn profile_set(
     org: String,
     mbti: String,
 ) -> Result<Profile, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("이름을 입력하세요".into());
+    }
     let mbti_norm = if mbti.trim().is_empty() {
         String::new()
     } else {
@@ -1523,9 +1532,19 @@ pub fn profile_set(
     };
     let org = org.trim();
     let org = if org.is_empty() { DEFAULT_ORG } else { org };
+    let old_name = {
+        let guard = lock(&state)?;
+        guard.get_setting("user_name").ok().flatten().unwrap_or_default()
+    };
+    if name != old_name {
+        if let Some(client) = hub_client(&state)? {
+            client.rename(&name).map_err(|e| format!("Life 서버 이름 변경 실패: {e}"))?;
+        }
+    }
     {
         let guard = lock(&state)?;
-        guard.set_setting("user_name", name.trim()).map_err(|e| e.to_string())?;
+        guard.set_setting("user_name", &name).map_err(|e| e.to_string())?;
+        guard.set_setting("hub_user", &name).map_err(|e| e.to_string())?;
         guard.set_setting("user_org", org).map_err(|e| e.to_string())?;
         guard.set_setting("user_mbti", &mbti_norm).map_err(|e| e.to_string())?;
     }

@@ -38,6 +38,9 @@
 - `regenerate_sprite`·`maybe_generate_sprite`: `stable_identity()` 대신 **프로필(uuid+mbti)** 로 spec/description 생성.
   결과 PNG는 `sprite:ready` → `LifeView`가 `lifeSyncMascotImage()`로 서버 업로드(#85). 즉 **MBTI 재생성 = 서버 자동 반영**.
 - `hub_connect`: register payload에 `org`·`user_uuid` 추가(서버 무시 가능), 이름은 프로필 `user_name` 우선.
+- `user_name`은 사용자 표시 이름의 **유일한 원본**이다. Space A 서버 설정은 이름을 별도로 입력받지 않는다.
+- Life 연결은 항상 `user_name`을 등록·재연결 이름으로 사용하고, 개인정보에서 이름을 변경하면 연결된 Life 서버의 에이전트·방 주인 이름도 함께 변경한다.
+- 과거 호환 키 `hub_user`는 새 UI와 판정에 사용하지 않으며, 저장 시에만 같은 값으로 덮어써 기존 설치의 불일치를 수렴시킨다.
 - `mascot_seed`(폴백용)는 `user_uuid`로 — 서버 이미지 없을 때만 쓰는 폴백.
 
 ## 커맨드
