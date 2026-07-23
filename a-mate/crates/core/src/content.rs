@@ -404,6 +404,67 @@ impl ContentSource for BorisTipsSource {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// E — 공식 마켓플레이스 카탈로그 (②미설치 plugin 추천 재료. changelog 소스의 형제).
+// ContentItem이 아니라 CatalogEntry를 반환 — 카탈로그는 노출물이 아니라 매칭 재료.
+// 공개 read-only GET(사용자 데이터 미전송). 관대: 파싱 실패·필드 누락 skip, 실패는
+// 호출부(ops::fetch_marketplace_catalog)가 빈 벡터로 계속(② 추천만 침묵).
+// ─────────────────────────────────────────────────────────────────────────
+
+/// 공식 마켓플레이스 plugin 한 항목 — E ②(미설치 추천)의 존재 검증·링크 재료.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CatalogEntry {
+    pub name: String,
+    pub description: String,
+    pub category: Option<String>,
+    pub homepage: Option<String>,
+}
+
+pub struct MarketplaceCatalogSource {
+    pub url: String,
+}
+
+impl Default for MarketplaceCatalogSource {
+    fn default() -> Self {
+        MarketplaceCatalogSource {
+            // 스펙 §8 핀(2026-07-23 실측): 200 OK, ~158KB, 425 plugins.
+            url: "https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/.claude-plugin/marketplace.json".into(),
+        }
+    }
+}
+
+impl MarketplaceCatalogSource {
+    /// marketplace.json을 관대하게 파싱 — plugins[]에서 name 있는 항목만.
+    pub fn parse_json(&self, raw: &str) -> Vec<CatalogEntry> {
+        let Ok(json) = serde_json::from_str::<serde_json::Value>(raw) else { return Vec::new() };
+        let Some(plugins) = json.get("plugins").and_then(|p| p.as_array()) else { return Vec::new() };
+        plugins
+            .iter()
+            .filter_map(|p| {
+                let name = p.get("name")?.as_str()?.trim().to_string();
+                if name.is_empty() {
+                    return None;
+                }
+                Some(CatalogEntry {
+                    name,
+                    description: p.get("description").and_then(|d| d.as_str()).unwrap_or("").to_string(),
+                    category: p.get("category").and_then(|c| c.as_str()).map(String::from),
+                    homepage: p.get("homepage").and_then(|h| h.as_str()).map(String::from),
+                })
+            })
+            .collect()
+    }
+
+    /// 네트워크 fetch — 백그라운드 스캔을 막지 않도록 타임아웃 필수(boris 선례).
+    pub fn fetch(&self) -> Result<Vec<CatalogEntry>> {
+        let body = ureq::get(&self.url)
+            .timeout(std::time::Duration::from_secs(15))
+            .call()?
+            .into_string()?;
+        Ok(self.parse_json(&body))
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // 팀 지식(Space A) — a-hub에 발행된 다른 팀원의 지식 페이지를 "오늘의 배움" 피드로.
 // pull 방향 (push는 hub.rs). 내 페이지는 제외(에코 방지 — agent_id == user_id 계약).
 // 관대: 트리/페이지 실패는 스킵, 소스 전체 실패도 상위에서 warn 후 계속.
@@ -979,6 +1040,40 @@ mod tests {
         assert!(items[0].body.contains("resume agents"));
         assert!(!items[0].body.contains("Fixed"), "픽스 라인 제외: {}", items[0].body);
         assert!(items[0].trigger_tags.contains(&"changelog".to_string()));
+    }
+
+    // ── E: 마켓플레이스 카탈로그 ──
+
+    #[test]
+    fn marketplace_catalog_parses_entries_generously() {
+        let src = MarketplaceCatalogSource::default();
+        let raw = r#"{
+            "name": "claude-plugins-official",
+            "plugins": [
+                {"name": "frontend-design", "description": "Design guidance",
+                 "category": "design", "homepage": "https://example.com/fd"},
+                {"description": "이름 없음 — skip"},
+                {"name": "context7"}
+            ]
+        }"#;
+        let entries = src.parse_json(raw);
+        assert_eq!(entries.len(), 2, "name 없는 항목은 관대하게 skip");
+        assert_eq!(entries[0].name, "frontend-design");
+        assert_eq!(entries[0].category.as_deref(), Some("design"));
+        assert_eq!(entries[0].homepage.as_deref(), Some("https://example.com/fd"));
+        assert_eq!(entries[1].name, "context7");
+        assert_eq!(entries[1].description, "", "description 없어도 항목 유지");
+        // 공식 카탈로그 원본 URL 고정 (스펙 §8 핀)
+        assert!(src.url.contains("anthropics/claude-plugins-official"));
+    }
+
+    #[test]
+    fn marketplace_catalog_malformed_yields_empty() {
+        let src = MarketplaceCatalogSource::default();
+        assert!(src.parse_json("{not json").is_empty());
+        assert!(src.parse_json(r#"{"plugins": "nope"}"#).is_empty());
+        assert!(src.parse_json("{}").is_empty());
+        assert!(src.parse_json("").is_empty());
     }
 
     // ── 개인 실전 레슨 ──
