@@ -7,8 +7,9 @@
 //! 경계가 되지 않아 별도 병합 로직이 필요 없다. 에피소드 내 작업 사실(물려받은 컨텍스트·
 //! compaction)은 `events`의 main-chain AssistantTurn·Compaction에서 온다.
 //!
-//! 범위 경계(YAGNI): v1(F)은 접착 프롬프트 원문 리스트(`glue_followups`)를 싣지 않는다 —
-//! F는 안 쓰고 ingest가 <8자 원문을 버리기 때문. C PR에서 ingest 확장과 함께 추가.
+//! 범위 경계(YAGNI): 접착 프롬프트 원문 리스트(`glue_followups`)는 싣지 않는다 —
+//! F는 안 쓰고 ingest가 <8자 원문을 버리기 때문. 유일한 소비 예정처였던 C가 드롭돼
+//! (스펙 §4 C, 2026-07-22) 현재 소비자가 없다 — 필요한 소비자가 생기면 ingest 확장과 함께 추가.
 
 use crate::store::SqliteStore;
 use anyhow::Result;

@@ -153,7 +153,8 @@ impl CoachingJudge for R6Judge {
     fn build_prompt(&self, store: &SqliteStore, c: &PendingCandidate) -> Result<(String, String)> {
         let rep = c.evidence.get("repeated_prompt").and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("R6 evidence에 repeated_prompt 없음"))?;
-        let ctx = crate::skill_draft::gather_context(store, &c.scope_host, rep)?;
+        // A — 묶음의 모든 변형(member_norms)에서 재료 수집(없으면 대표 하나로 폴백).
+        let ctx = crate::skill_draft::gather_context_for_finding(store, &c.scope_host, rep, &c.evidence)?;
         Ok(judgment_prompt(&ctx))
     }
     fn classify(&self, verdict: &serde_json::Value) -> Option<&'static str> {
@@ -177,6 +178,43 @@ mod tests {
         assert_eq!(j.classify(&serde_json::json!({"worthy": false})), Some("rejected"));
         assert_eq!(j.classify(&serde_json::json!({})), None); // 필드 없음 = 미확정(재시도)
         assert_eq!(j.rule_id(), "R6");
+    }
+
+    #[test]
+    fn r6_judge_gathers_across_member_norms() {
+        use crate::model::{EventKind, NormalizedEvent};
+        use crate::rules::r6_repeated_prompts::normalize;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |sess: &str, text: &str| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
+            uuid: Some(format!("{sess}-0")), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-01T10:00:00Z".into()), source_file: "s.jsonl".into(),
+            source_offset: 0, msg_id: None,
+            kind: EventKind::UserPrompt { preview: text.into() },
+        };
+        store.upsert_events(&[
+            mk("s1", "PR 리뷰 코멘트 종합 검토해서 조치해줘"),
+            mk("s2", "PR 리뷰 코멘트 종합 검토하고 반영해줘"),
+        ]).unwrap();
+        let member_norms = vec![
+            normalize("PR 리뷰 코멘트 종합 검토해서 조치해줘").unwrap(),
+            normalize("PR 리뷰 코멘트 종합 검토하고 반영해줘").unwrap(),
+        ];
+        let c = PendingCandidate {
+            dedup_key: "R6|Windows|deadbeef".into(),
+            scope_host: "Windows".into(),
+            scope_project: None,
+            evidence: serde_json::json!({
+                "repeated_prompt": "PR 리뷰 코멘트 종합 검토해서 조치해줘",
+                "member_norms": member_norms,
+            }),
+            prev_attempts: 0,
+        };
+        let (_system, user) = R6Judge.build_prompt(&store, &c).unwrap();
+        // 묶음의 두 변형 모두 판정 재료(표본)에 들어가야 한다.
+        assert!(user.contains("조치해줘"), "앵커 변형 포함");
+        assert!(user.contains("반영해줘"), "다른 변형도 포함 — member_norms 전체 수집");
     }
 
     #[test]

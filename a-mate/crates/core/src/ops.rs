@@ -180,6 +180,13 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
         store.upsert_finding(f, &now)?;
     }
     tx.commit()?;
+    // R6 앵커 키 이동/병합·관찰창 이탈로 생긴 유령 활성 카드 정리 (A 느슨한 묶기 부작용 방지).
+    let r6_keys: Vec<String> = findings
+        .iter()
+        .filter(|f| f.rule_id == "R6" && f.scope_kind == "pattern")
+        .map(|f| f.dedup_key.clone())
+        .collect();
+    store.prune_stale_r6_patterns(&r6_keys)?;
     Ok(findings)
 }
 
@@ -352,6 +359,32 @@ mod tests {
                 "SELECT COUNT(*) FROM findings WHERE dedup_key=?1", [key], |r| r.get(0)).unwrap();
             assert_eq!(n, 0, "{key} purge되어야");
         }
+    }
+
+    #[test]
+    fn run_rules_prunes_stale_active_r6_patterns() {
+        use crate::finding::{Finding, Severity};
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |key: &str| Finding {
+            rule_id: "R6".into(), severity: Severity::Suggest,
+            scope_host: Some("Windows".into()), scope_project: None,
+            scope_kind: "pattern".into(), scope_ref: "pattern:x".into(),
+            evidence: serde_json::json!({}), est_tokens_saved: 0,
+            prescription: None, dedup_key: key.into(),
+        };
+        // prompt_events 없음 → R6 evaluate는 아무 후보도 방출하지 않는다(emit set 비어 있음).
+        // 앵커 이동/병합으로 방출되지 않게 된 활성 카드는 정리, 판정 캐시(rejected)는 보존.
+        store.upsert_finding(&mk("R6|Windows|stale_new"), "2026-07-06T00:00:00Z").unwrap(); // init 'pending'
+        store.set_judgment("R6|Windows|stale_new", Some("new"), &serde_json::json!({})).unwrap();
+        store.upsert_finding(&mk("R6|Windows|stale_rej"), "2026-07-06T00:00:00Z").unwrap();
+        store.set_judgment("R6|Windows|stale_rej", Some("rejected"), &serde_json::json!({})).unwrap();
+
+        run_rules(&store).unwrap();
+
+        assert!(store.find_finding("R6|Windows|stale_new").unwrap().is_none(),
+            "미방출 활성(new) R6 카드는 정리돼야");
+        assert!(store.find_finding("R6|Windows|stale_rej").unwrap().is_some(),
+            "rejected 판정 캐시는 보존돼야(재판정 금지)");
     }
 
     #[test]

@@ -903,6 +903,31 @@ impl SqliteStore {
         Ok(n)
     }
 
+    /// R6 채굴(A) — 이번 스캔에서 방출되지 않은 **활성(new/pending)** R6 패턴 카드를 정리한다.
+    /// 느슨한 묶기로 앵커 키가 바뀌거나(별개 norm 병합·더 작은 norm이 앵커 교체) 관찰창 밖으로
+    /// 밀려난 카드가 중복·유령으로 남는 것을 막는다(R7/R23 recency-prune 선례). 판정 캐시
+    /// (rejected)와 사용자 기록(dismissed/resolved)은 보존한다 — 재판정 금지·사용자 의사 존중.
+    pub fn prune_stale_r6_patterns(&self, emitted_keys: &[String]) -> Result<usize> {
+        let mut stmt = self.conn.prepare(
+            "SELECT dedup_key FROM findings
+             WHERE rule_id='R6' AND scope_kind='pattern' AND status IN ('new','pending')",
+        )?;
+        let existing: Vec<String> = stmt
+            .query_map([], |r| r.get::<_, String>(0))?
+            .collect::<std::result::Result<_, _>>()?;
+        let emitted: std::collections::HashSet<&str> =
+            emitted_keys.iter().map(|s| s.as_str()).collect();
+        let mut removed = 0;
+        for key in &existing {
+            if !emitted.contains(key.as_str()) {
+                self.conn
+                    .execute("DELETE FROM findings WHERE dedup_key=?1", [key])?;
+                removed += 1;
+            }
+        }
+        Ok(removed)
+    }
+
     /// 큐레이션 콘텐츠를 현재 랭킹으로 upsert. findings 선례처럼 **사용자 status는 보존**
     /// (dismissed는 재스캔에도 유지 — 나깅 방지). 점수·본문·last_seen만 갱신.
     pub fn replace_content_items(
@@ -1408,17 +1433,56 @@ impl SqliteStore {
         Ok(out)
     }
 
-    /// R6 스킬 초안용 — 특정 host에서 정규화 지시(norm60)가 일치하는 (session_id, preview) 전량.
-    /// 세션·원문 중복 제거는 호출부(skill_draft)가 수행한다.
-    pub fn prompt_sessions_for_norm(&self, host: &str, norm60: &str) -> Result<Vec<(String, String)>> {
+    /// R6 채굴(A) — 관찰창 내 (host, norm60, session)별 등장수 + 대표 preview.
+    /// 미더가 Rust에서 norm 단위 집계 + 느슨한 군집화에 쓴다. ts NULL 행은 제외(기존 R6 SQL 동치).
+    pub fn prompt_occurrence_rows(&self, cutoff: &str) -> Result<Vec<PromptOccRow>> {
         let mut stmt = self.conn.prepare(
-            "SELECT session_id, preview FROM prompt_events
-             WHERE host = ?1 AND norm60 = ?2 ORDER BY id",
+            "SELECT host, norm60, session_id, COUNT(*), MIN(preview)
+             FROM prompt_events WHERE ts >= ?1
+             GROUP BY host, norm60, session_id
+             ORDER BY host, norm60, session_id",
         )?;
-        let rows = stmt.query_map(params![host, norm60], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        let rows = stmt.query_map(params![cutoff], |r| {
+            Ok(PromptOccRow {
+                host: r.get(0)?,
+                norm60: r.get(1)?,
+                session_id: r.get(2)?,
+                occurrences: r.get::<_, i64>(3)? as u64,
+                preview: r.get(4)?,
+            })
         })?;
-        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+        rows.collect::<std::result::Result<_, _>>().map_err(Into::into)
+    }
+
+    /// R6 스킬 초안용(A) — 여러 정규화 지시(norm60)에 매칭되는 (session_id, preview) 전량.
+    /// SQLite 변수 한도 대비 990개씩 청크. 세션·원문 중복 제거는 호출부(skill_draft) 책임.
+    pub fn prompt_sessions_for_norms(
+        &self,
+        host: &str,
+        norms: &[String],
+    ) -> Result<Vec<(String, String)>> {
+        if norms.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut out = Vec::new();
+        for chunk in norms.chunks(990) {
+            let placeholders = std::iter::repeat("?").take(chunk.len()).collect::<Vec<_>>().join(",");
+            let sql = format!(
+                "SELECT session_id, preview FROM prompt_events
+                 WHERE host = ? AND norm60 IN ({placeholders}) ORDER BY id",
+            );
+            let mut binds: Vec<String> = Vec::with_capacity(chunk.len() + 1);
+            binds.push(host.to_string());
+            binds.extend(chunk.iter().cloned());
+            let mut stmt = self.conn.prepare(&sql)?;
+            let rows = stmt.query_map(rusqlite::params_from_iter(binds.iter()), |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+            })?;
+            for row in rows {
+                out.push(row?);
+            }
+        }
+        Ok(out)
     }
 
     /// R6 스킬 초안용 — 주어진 세션들에서 실제로 쓴 도구(raw_name) 상위 집계.
@@ -1562,6 +1626,15 @@ impl SqliteStore {
         )?;
         Ok(())
     }
+}
+
+/// R6 채굴(A) 재료 — 관찰창 내 (host, norm60, session)별 등장수·대표 preview.
+pub struct PromptOccRow {
+    pub host: String,
+    pub norm60: String,
+    pub session_id: String,
+    pub occurrences: u64,
+    pub preview: String,
 }
 
 #[derive(Debug, Clone)]
@@ -2850,6 +2923,81 @@ mod tests {
         let ps = store.session_user_prompts("s1", 5).unwrap();
         assert_eq!(ps, vec!["첫번째로 파일을 읽어줘", "두번째로 코드를 수정해줘", "세번째로 테스트를 실행해줘"],
             "심사관은 시간순(오래된 것부터)으로 봐야 함");
+    }
+
+    #[test]
+    fn prompt_occurrence_rows_aggregates_per_norm_session() {
+        use crate::model::{EventKind, NormalizedEvent};
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |sess: &str, off: u64, text: &str, ts: &str| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
+            uuid: Some(format!("{sess}-{off}")), parent_uuid: None, is_sidechain: false,
+            ts: Some(ts.into()), source_file: "s.jsonl".into(), source_offset: off,
+            msg_id: None, kind: EventKind::UserPrompt { preview: text.into() },
+        };
+        // s1: 같은 지시 2회(다른 ts) + s2: 같은 지시 1회. (모두 8자↑ = norm60 대상)
+        store.upsert_events(&[
+            mk("s1", 0, "이 함수 리팩토링 진행해줘", "2026-07-01T10:00:00Z"),
+            mk("s1", 1, "이 함수 리팩토링 진행해줘", "2026-07-01T10:05:00Z"),
+            mk("s2", 0, "이 함수 리팩토링 진행해줘", "2026-07-01T11:00:00Z"),
+        ]).unwrap();
+
+        let rows = store.prompt_occurrence_rows("2026-06-01T00:00:00Z").unwrap();
+        // (host,norm,session) 그룹: (s1)=2, (s2)=1
+        assert_eq!(rows.len(), 2);
+        let s1 = rows.iter().find(|r| r.session_id == "s1").unwrap();
+        assert_eq!(s1.occurrences, 2);
+        assert!(s1.norm60.contains("리팩토링"));
+        let s2 = rows.iter().find(|r| r.session_id == "s2").unwrap();
+        assert_eq!(s2.occurrences, 1);
+    }
+
+    #[test]
+    fn prompt_occurrence_rows_excludes_outside_window() {
+        use crate::model::{EventKind, NormalizedEvent};
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_events(&[NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: "old".into(),
+            uuid: Some("old-0".into()), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-01-01T00:00:00Z".into()), source_file: "s.jsonl".into(),
+            source_offset: 0, msg_id: None,
+            kind: EventKind::UserPrompt { preview: "관찰창 밖 오래된 지시".into() },
+        }]).unwrap();
+        let rows = store.prompt_occurrence_rows("2026-06-01T00:00:00Z").unwrap();
+        assert!(rows.is_empty(), "cutoff 이전 프롬프트는 제외");
+    }
+
+    #[test]
+    fn prompt_sessions_for_norms_unions_multiple_norms() {
+        use crate::model::{EventKind, NormalizedEvent};
+        use crate::rules::r6_repeated_prompts::normalize;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |sess: &str, text: &str, ts: &str| NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
+            uuid: Some(format!("{sess}-0")), parent_uuid: None, is_sidechain: false,
+            ts: Some(ts.into()), source_file: "s.jsonl".into(), source_offset: 0,
+            msg_id: None, kind: EventKind::UserPrompt { preview: text.into() },
+        };
+        store.upsert_events(&[
+            mk("s1", "리뷰 코멘트 종합 검토해줘", "2026-07-01T10:00:00Z"),
+            mk("s2", "리뷰 코멘트 종합 반영 부탁", "2026-07-01T11:00:00Z"),
+        ]).unwrap();
+        let n1 = normalize("리뷰 코멘트 종합 검토해줘").unwrap();
+        let n2 = normalize("리뷰 코멘트 종합 반영 부탁").unwrap();
+
+        let rows = store.prompt_sessions_for_norms("Windows", &[n1, n2]).unwrap();
+        let sessions: std::collections::HashSet<&str> =
+            rows.iter().map(|(s, _)| s.as_str()).collect();
+        assert!(sessions.contains("s1") && sessions.contains("s2"), "두 norm의 세션 합집합");
+    }
+
+    #[test]
+    fn prompt_sessions_for_norms_empty_returns_empty() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        assert!(store.prompt_sessions_for_norms("Windows", &[]).unwrap().is_empty());
     }
 
     #[test]
