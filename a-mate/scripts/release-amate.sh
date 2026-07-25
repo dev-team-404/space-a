@@ -24,6 +24,12 @@ check_wsl() {
     echo "ERROR: powershell.exe를 찾을 수 없습니다 (WSL↔Windows 상호운용 필요)." >&2
     return 1
   fi
+  if ! powershell.exe -NoProfile -Command exit >/dev/null 2>&1; then
+    echo "ERROR: powershell.exe 실행 실패 — WSL↔Windows interop이 꺼져 있습니다 (systemd-binfmt가 WSLInterop을 지움)." >&2
+    echo "  → 즉시 복구: sudo sh -c 'echo \":WSLInterop:M::MZ::/init:PF\" > /proc/sys/fs/binfmt_misc/register'" >&2
+    echo "  → 영구 복구: sudo systemctl mask systemd-binfmt.service  후  (Windows에서) wsl --shutdown" >&2
+    return 1
+  fi
 }
 
 check_version_fmt() {

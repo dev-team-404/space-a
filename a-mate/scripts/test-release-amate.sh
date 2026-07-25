@@ -125,7 +125,10 @@ test_wsl() {
   printf '#!/usr/bin/env bash\ntrue\n' > "$tmp/bin/powershell.exe"
   chmod +x "$tmp/bin/powershell.exe"
   PROC_VERSION_FILE="$tmp/proc_ms"; echo "Linux x microsoft-standard-WSL2 x" > "$PROC_VERSION_FILE"
-  PATH="$tmp/bin:$PATH" assert_ok   check_wsl                 # microsoft + powershell.exe
+  PATH="$tmp/bin:$PATH" assert_ok   check_wsl                 # microsoft + powershell.exe 실행 가능
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$tmp/bin/powershell.exe"  # interop 꺼짐: 실행 실패
+  PATH="$tmp/bin:$PATH" assert_fail check_wsl                 # powershell.exe 있으나 실행 실패
+  printf '#!/usr/bin/env bash\ntrue\n' > "$tmp/bin/powershell.exe"    # 원복
   PROC_VERSION_FILE="$tmp/proc_plain"; echo "Linux x generic x" > "$PROC_VERSION_FILE"
   PATH="$tmp/bin:$PATH" assert_fail check_wsl                 # microsoft 없음
   PROC_VERSION_FILE="$tmp/proc_ms"
