@@ -5,7 +5,8 @@
 # 사전 준비:
 #  - updater 개인키: ~/.tauri/a-mate-updater.key (팀 공용 키, 커밋 금지)
 #  - 개인키 암호:   ~/.tauri/a-mate-updater.pass (또는 TAURI_SIGNING_PRIVATE_KEY_PASSWORD)
-#  - 공개 릴리스 저장소: dev-team-404/a-mate-releases (최초 1회 gh repo create --public)
+#  - 공개 릴리스 저장소: dev-team-404/a-mate-releases
+#    (최초 1회 gh repo create --public --add-readme — 빈 저장소면 릴리스가 draft로 떨어진다)
 # 오버라이드 env: AMATE_RELEASE_REPO, AMATE_WIN_BUILD, AMATE_KEY_FILE, AMATE_KEY_PASS_FILE
 set -euo pipefail
 
@@ -62,7 +63,9 @@ check_gh_auth() {
 check_release_repo() {
   if ! gh repo view "$RELEASE_REPO" >/dev/null 2>&1; then
     echo "ERROR: 릴리스 저장소 없음: $RELEASE_REPO" >&2
-    echo "  → 최초 1회: gh repo create $RELEASE_REPO --public  (updater가 익명으로 받으므로 반드시 public)" >&2
+    echo "  → 최초 1회: gh repo create $RELEASE_REPO --public --add-readme" >&2
+    echo "     (updater가 익명으로 받으므로 반드시 public. --add-readme로 커밋을 1개 만들어야" >&2
+    echo "      릴리스가 draft로 떨어지지 않는다 — 빈 저장소면 자동 업데이트가 동작하지 않음)" >&2
     return 1
   fi
 }
@@ -92,6 +95,14 @@ warn_branch() {
   if [[ "$br" != "main" ]]; then
     echo "WARN: 현재 브랜치가 '$br' 입니다 (main 아님). 계속 진행합니다." >&2
   fi
+}
+
+# 버전 문자열만 치환한다. JSON을 파싱·재직렬화하면 파일 전체가 재포맷돼
+# 릴리스마다 diff 노이즈가 생기므로, 두 파일 모두 첫 version 줄만 sed로 바꾼다.
+bump_version() {
+  local v=$1
+  sed -i -E "0,/\"version\": \"[^\"]*\"/s//\"version\": \"$v\"/" "$CONF"
+  sed -i -E "0,/^version = \"[^\"]*\"/s//version = \"$v\"/" "$CARGO"
 }
 
 init_paths() {
@@ -142,8 +153,7 @@ main() {
   fi
 
   echo "[1/6] 버전 $VERSION 반영 (tauri.conf.json + Cargo.toml)"
-  node -e "const f='$CONF';const j=require(f);j.version='$VERSION';require('fs').writeFileSync(f, JSON.stringify(j,null,2)+'\n')"
-  sed -i -E "0,/^version = \"[^\"]*\"/s//version = \"$VERSION\"/" "$CARGO"
+  bump_version "$VERSION"
   git -C "$REPO" add "$CONF" "$CARGO"
   git -C "$REPO" commit -m "chore(agent): release v$VERSION"
   git -C "$REPO" tag "v$VERSION"
