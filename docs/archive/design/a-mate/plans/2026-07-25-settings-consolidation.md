@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-25
+---
+
 # 설정 표면 통합 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -8,7 +13,7 @@
 
 **Tech Stack:** Tauri v2 (Rust) + Svelte 5 runes + Vite + TypeScript, Vitest(프론트) / `cargo test`(Rust)
 
-**설계 스펙:** [`docs/design/a-mate/specs/2026-07-25-settings-consolidation-design.md`](../specs/2026-07-25-settings-consolidation-design.md)
+**설계 스펙:** [`docs/archive/design/a-mate/specs/2026-07-25-settings-consolidation-design.md`](../specs/2026-07-25-settings-consolidation-design.md)
 
 ## Global Constraints
 
