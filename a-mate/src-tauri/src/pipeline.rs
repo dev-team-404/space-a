@@ -560,14 +560,20 @@ mod runtime {
         for f in picked {
             let Some(content) = hub::render_share(&f) else { continue };
 
+            // 질의·매칭 모두 마커를 쓴다 — 허브가 발행 Page 제목을 summary로 만들어서
+            // 이슈 제목으로는 되찾을 수 없다. org 전체 검색이라 다른 팀 지식도 인용 대상이다.
             // 검색 실패는 무해 — 빈 결과로 보고 기존 발행 경로로 폴백한다.
-            let hits = client
-                .search_knowledge(&cfg.space_id, &content.title, 5)
-                .unwrap_or_else(|e| {
-                    log::warn!("hub {}: search 실패(발행으로 폴백): {e}", f.dedup_key);
-                    Vec::new()
-                });
-            let citable = hub::pick_citable(&hits, &content.title, &cfg.user_id).cloned();
+            let citable = if content.marker.is_empty() {
+                None
+            } else {
+                let hits = client
+                    .search_knowledge(None, &content.marker, 5)
+                    .unwrap_or_else(|e| {
+                        log::warn!("hub {}: search 실패(발행으로 폴백): {e}", f.dedup_key);
+                        Vec::new()
+                    });
+                hub::pick_citable(&hits, &content.marker, &cfg.user_id).cloned()
+            };
 
             let issue_id = match client.open_issue(&cfg.space_id, &content.title) {
                 Ok(id) => id,

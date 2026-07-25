@@ -111,11 +111,14 @@ pub fn select_shareable<'a>(
 // ─────────────────────────────────────────────────────────────────────────
 
 /// 발행 콘텐츠. 제목/요약/steps 전부 결정론(LLM 무개입). 수치는 "약(~)" 라벨.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShareContent {
     pub title: String,
     pub summary: String,
     pub steps: Vec<String>,
+    /// 같은 지식 판별용 안정 키(`share_marker`). summary에 심겨 발행 Page 제목에 남는다.
+    /// 비어 있으면 검색·인용을 시도하지 않는다(중복 발행 방지보다 오인용 방지가 우선).
+    pub marker: String,
 }
 
 fn ev_str<'a>(ev: &'a Value, key: &str) -> Option<&'a str> {
@@ -160,6 +163,7 @@ pub fn render_share(f: &FindingRow) -> Option<ShareContent> {
                     format!("적용: claude mcp remove {server}"),
                     format!("효과: 세션당 약 ~{est} 토큰 절약 (추정, 약(~) 라벨)"),
                 ],
+                marker: String::new(),
             })
         }
         "R2" => {
@@ -182,6 +186,7 @@ pub fn render_share(f: &FindingRow) -> Option<ShareContent> {
                     format!("적용: claude plugin disable {plugin}"),
                     format!("효과: 세션당 약 ~{est} 토큰 절약 (추정)"),
                 ],
+                marker: String::new(),
             })
         }
         "R10" => {
@@ -202,6 +207,7 @@ pub fn render_share(f: &FindingRow) -> Option<ShareContent> {
                     format!("적용: 자동화 도구의 모델 설정을 {to_model} 등 하위 모델로"),
                     format!("효과: 비용-등가 기준 약 ~{est} 토큰 절약 (추정)"),
                 ],
+                marker: String::new(),
             })
         }
         "R11" => {
@@ -228,6 +234,7 @@ pub fn render_share(f: &FindingRow) -> Option<ShareContent> {
                     format!("적용: 프로젝트 .claude/settings.json permissions.allow에 추가: {tool_list}"),
                     "효과: 반복 승인 마찰 제거 (팀 공용 레포면 커밋해 공유)".into(),
                 ],
+                marker: String::new(),
             })
         }
         "R12" => {
@@ -253,6 +260,7 @@ pub fn render_share(f: &FindingRow) -> Option<ShareContent> {
                     format!("적용: 해당 작업 시 스킬 사용: {skill_list}"),
                     "효과: 반복 작업 표준화 + 토큰 절약".into(),
                 ],
+                marker: String::new(),
             })
         }
         "R8" => {
@@ -270,10 +278,11 @@ pub fn render_share(f: &FindingRow) -> Option<ShareContent> {
             Some(ShareContent {
                 title: share_title_r8(&server),
                 summary: format!(
-                    "MCP '{server}'가 최근 {days}일 동안 대형 결과를 {n}회 반환했다\
+                    "{marker} MCP '{server}'가 최근 {days}일 동안 대형 결과를 {n}회 반환했다\
                      (평균 약 ~{avg_tok} 토큰, 합계 약 ~{total_tok} 토큰 추정). 결과 전체가 \
                      컨텍스트에 실리면 정작 중요한 내용이 밀려난다. 같은 MCP를 쓰는 팀원에게도 \
-                     동일하게 발생하므로, 질의 범위를 좁히는 방법은 팀 공용 지식이 된다."
+                     동일하게 발생하므로, 질의 범위를 좁히는 방법은 팀 공용 지식이 된다.",
+                    marker = share_marker("R8", &server)
                 ),
                 steps: vec![
                     format!("감지: '{server}' 응답이 임계 문자수를 넘긴 호출 {n}회 (a-mate R8)"),
@@ -281,29 +290,40 @@ pub fn render_share(f: &FindingRow) -> Option<ShareContent> {
                     format!("적용: '{server}' 호출 시 범위·필드·limit 파라미터로 결과를 줄인다"),
                     format!("효과: 호출당 약 ~{avg_tok} 토큰 규모의 컨텍스트 점유 감소 (추정)"),
                 ],
+                marker: share_marker("R8", &server),
             })
         }
         _ => None,
     }
 }
 
-/// R8 공유 제목 — 검색·인용의 매칭 키. 결정론이라 같은 서버면 누가 만들어도 같은 문자열이다.
+/// R8 공유 제목(이슈 제목).
 pub fn share_title_r8(server: &str) -> String {
     format!("[a-mate] MCP '{server}' 대형 결과 반복 — 질의 범위 좁히기")
 }
 
+/// 같은 지식인지 기계가 판별하는 안정 키. 예: `[a-mate:R8:github]`.
+///
+/// **본문(summary) 안에 심는다.** 허브가 `resolve_issue`에서 발행 Page의 제목을
+/// **이슈 제목이 아니라 summary로** 만들기 때문이다(`services.py` resolve_issue: `title=summary`).
+/// 그래서 이슈 제목으로는 나중에 그 지식을 다시 찾을 수 없다 — E2E로 확인한 사실이다.
+/// 마커는 provenance 표시도 겸한다(이 글이 a-mate R8에서 왔다는 근거).
+pub fn share_marker(rule_id: &str, key: &str) -> String {
+    format!("[a-mate:{rule_id}:{key}]")
+}
+
 /// 검색 결과에서 인용할 페이지를 고른다 (순수 함수).
 ///
-/// 규칙: 제목이 **완전히 일치**하고 **자기 글이 아닌** 첫 페이지.
-/// 렌더가 결정론이므로 같은 룰·같은 대상이면 제목이 같다 — 느슨한 유사도는 오인용 위험이 있어 쓰지 않는다.
+/// 규칙: 제목에 **마커가 포함**되고 **자기 글이 아닌** 첫 페이지.
+/// 마커는 결정론이라 같은 룰·같은 대상이면 동일하다 — 느슨한 유사도 매칭은 오인용 위험이 있어 쓰지 않는다.
 pub fn pick_citable<'a>(
     results: &'a [HubSearchHit],
-    want_title: &str,
+    marker: &str,
     own_agent_id: &str,
 ) -> Option<&'a HubSearchHit> {
     results
         .iter()
-        .find(|h| h.title == want_title && h.created_by.as_deref() != Some(own_agent_id))
+        .find(|h| h.title.contains(marker) && h.created_by.as_deref() != Some(own_agent_id))
 }
 
 /// `POST /pages/search` 결과 1건.
@@ -408,12 +428,26 @@ impl HubClient {
         Ok(())
     }
 
-    /// 지식 검색 — 발행 전에 "이미 팀이 풀어놨는지" 확인한다 (스펙 §4).
-    pub fn search_knowledge(&self, space_id: &str, query: &str, limit: u32) -> Result<Vec<HubSearchHit>> {
+    /// 지식 검색 — 발행 전에 "이미 누가 풀어놨는지" 확인한다 (스펙 §4).
+    ///
+    /// `space_id=None`이면 **org 전체**(내가 볼 수 있는 모든 공간)를 검색한다. 기본값이 None인
+    /// 이유: README의 핵심 시나리오가 "A팀이 등록한 걸 **B팀**이 찾아 쓴다"이기 때문이다.
+    /// 자기 공간으로 좁히면 교차 팀 재사용이 구조적으로 불가능해진다(허브 `search_knowledge`는
+    /// space_id가 있으면 그 공간만 본다).
+    pub fn search_knowledge(
+        &self,
+        space_id: Option<&str>,
+        query: &str,
+        limit: u32,
+    ) -> Result<Vec<HubSearchHit>> {
+        let mut body = serde_json::json!({ "query": query, "limit": limit });
+        if let Some(sid) = space_id {
+            body["space_id"] = serde_json::json!(sid);
+        }
         let resp: Value = self
             .req("POST", "/pages/search")
             .set("Content-Type", "application/json; charset=utf-8")
-            .send_json(serde_json::json!({ "query": query, "space_id": space_id, "limit": limit }))
+            .send_json(body)
             .map_err(|e| anyhow!("hub search_knowledge 실패: {e}"))?
             .into_json()?;
         Ok(resp
@@ -861,16 +895,22 @@ pub fn run_share(store: &crate::store::SqliteStore, cfg: &HubConfig) -> Result<S
     for f in picked {
         let Some(content) = render_share(&f) else { continue };
 
-        // ③-a 발행 전에 검색: 팀이 이미 풀어놨으면 중복 발행 대신 인용한다(스펙 §4).
+        // ③-a 발행 전에 검색: 이미 누가 풀어놨으면 중복 발행 대신 인용한다(스펙 §4).
+        //     질의·매칭 모두 마커를 쓴다 — 허브가 발행 Page 제목을 summary로 만들기 때문에
+        //     이슈 제목으로는 되찾을 수 없다(E2E로 확인). org 전체를 뒤져 교차 팀 재사용을 가능케 한다.
         //     검색 실패는 무해 — 빈 결과로 취급해 기존 발행 경로로 폴백한다.
-        let hits = match client.search_knowledge(&cfg.space_id, &content.title, 5) {
-            Ok(h) => h,
-            Err(e) => {
-                report.warnings.push(format!("{}: search 실패(발행으로 폴백): {e}", f.dedup_key));
-                Vec::new()
-            }
+        let citable = if content.marker.is_empty() {
+            None
+        } else {
+            let hits = match client.search_knowledge(None, &content.marker, 5) {
+                Ok(h) => h,
+                Err(e) => {
+                    report.warnings.push(format!("{}: search 실패(발행으로 폴백): {e}", f.dedup_key));
+                    Vec::new()
+                }
+            };
+            pick_citable(&hits, &content.marker, &cfg.user_id).cloned()
         };
-        let citable = pick_citable(&hits, &content.title, &cfg.user_id).cloned();
 
         let issue_id = match client.open_issue(&cfg.space_id, &content.title) {
             Ok(id) => id,
@@ -1000,9 +1040,14 @@ mod tests {
         });
         let c = render_share(&f).expect("R8은 렌더된다");
 
-        // 제목은 결정론 — 검색·인용의 매칭 키다.
+        // 제목은 결정론.
         assert_eq!(c.title, share_title_r8("github"));
         assert_eq!(c.title, "[a-mate] MCP 'github' 대형 결과 반복 — 질의 범위 좁히기");
+
+        // 마커는 summary에 심긴다 — 허브가 발행 Page 제목을 summary로 만들기 때문에,
+        // 마커가 본문에 없으면 나중에 그 지식을 되찾아 인용할 수 없다.
+        assert_eq!(c.marker, "[a-mate:R8:github]");
+        assert!(c.summary.contains(&c.marker), "마커가 summary에 없으면 재사용 판별이 불가능하다");
 
         // 스크럽: 로컬 경로 슬러그·세션·프롬프트가 새어나가지 않는다.
         let blob = format!("{} {} {}", c.title, c.summary, c.steps.join(" "));
@@ -1012,28 +1057,30 @@ mod tests {
     }
 
     #[test]
-    fn pick_citable_requires_exact_title_and_skips_own_pages() {
-        let want = share_title_r8("github");
-        let hit = |title: &str, by: &str| HubSearchHit {
+    fn pick_citable_matches_marker_and_skips_own_pages() {
+        let want = share_marker("R8", "github");
+        // 실제 허브가 만드는 Page 제목 = summary(마커 포함)
+        let page_title = |m: &str| format!("{m} MCP가 큰 결과를 반환했다…");
+        let hit = |title: String, by: &str| HubSearchHit {
             page_id: format!("page-{by}"),
-            title: title.into(),
+            title,
             created_by: Some(by.into()),
         };
 
-        // 남이 쓴 같은 제목 → 인용
-        let hits = vec![hit("다른 글", "bob"), hit(&want, "bob")];
+        // 남이 쓴 같은 마커 → 인용
+        let hits = vec![hit("무관한 글".into(), "bob"), hit(page_title(&want), "bob")];
         assert_eq!(pick_citable(&hits, &want, "me").unwrap().page_id, "page-bob");
 
         // 내 글만 있으면 인용하지 않는다 (자기 인용은 재사용이 아니다)
-        let mine = vec![hit(&want, "me")];
+        let mine = vec![hit(page_title(&want), "me")];
         assert!(pick_citable(&mine, &want, "me").is_none());
 
-        // 제목이 다르면 인용하지 않는다 (느슨한 매칭 금지)
-        let other = vec![hit(&share_title_r8("gitlab"), "bob")];
+        // 다른 대상(서버)이면 인용하지 않는다 (느슨한 매칭 금지)
+        let other = vec![hit(page_title(&share_marker("R8", "gitlab")), "bob")];
         assert!(pick_citable(&other, &want, "me").is_none());
 
         // created_by가 없는 응답도 안전하게 인용 대상이 된다
-        let anon = vec![HubSearchHit { page_id: "p1".into(), title: want.clone(), created_by: None }];
+        let anon = vec![HubSearchHit { page_id: "p1".into(), title: page_title(&want), created_by: None }];
         assert_eq!(pick_citable(&anon, &want, "me").unwrap().page_id, "p1");
     }
 
