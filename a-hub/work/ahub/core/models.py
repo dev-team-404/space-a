@@ -65,6 +65,7 @@ class ReuseEvent:
     page_id: str
     agent_id: str
     cross_team: bool = False
+    created_at: str | None = None  # ISO 8601 UTC, 인용 시각 (a-lens 최신순 표시용)
 
 
 @dataclass

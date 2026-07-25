@@ -196,3 +196,8 @@ class DynamoDBStore(Store):
 
     def add_reuse_event(self, event: ReuseEvent) -> None:
         self._put(_REUSE, event.id, event)
+
+    def all_reuse_events(self) -> list[ReuseEvent]:
+        events = self._all(_REUSE, ReuseEvent)
+        # created_at 최신 우선. 값이 없던 시절 항목은 뒤로 보낸다.
+        return sorted(events, key=lambda e: (e.created_at or ""), reverse=True)

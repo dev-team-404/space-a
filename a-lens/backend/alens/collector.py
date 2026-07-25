@@ -399,6 +399,19 @@ def _hub_snapshot() -> dict:
     with httpx.Client(base_url=cfg["work_url"].rstrip("/"), headers=headers, timeout=8) as client:
         spaces_raw = _hub_get(client, "/spaces").get("spaces", [])
 
+        # 재사용(북극성 지표) — 허브의 GET /reuse-events. 구버전 허브엔 없으므로 강등 처리.
+        # 한 번만 받아 space별로 집계한다(공간마다 재호출하지 않는다).
+        try:
+            hub_reuse = _hub_get(client, "/reuse-events?limit=200").get("reuse_events", [])
+        except _DEGRADE as e:
+            log.warning("reuse-events 수집 실패(구버전 허브면 정상): %s", e)
+            hub_reuse = []
+        space_reuse_counts: dict[str, int] = {}
+        for ev in hub_reuse:
+            sid_ = ev.get("space_id")
+            if sid_:
+                space_reuse_counts[sid_] = space_reuse_counts.get(sid_, 0) + 1
+
         for i, s in enumerate(spaces_raw):
             sid = s.get("id")
             if not sid:
@@ -441,6 +454,8 @@ def _hub_snapshot() -> dict:
             knowledge = len(pages)
             totals["issues"] += len(issues)
             totals["knowledge"] += knowledge
+            reuse_count = space_reuse_counts.get(sid, 0)
+            totals["reuses"] += reuse_count
 
             # 활동 열기(0~3): 실측 근거가 생기기 전까지는 축적량 기반 근사
             volume = knowledge + len(issues)
@@ -452,8 +467,7 @@ def _hub_snapshot() -> dict:
                     "name": sname,
                     "floor": i + 1,
                     "activity": activity,
-                    # reuse: 허브에 ReuseEvent 조회 endpoint가 아직 없다 (#40 후속 요청 후보)
-                    "stats": {"knowledge": knowledge, "resolved": resolved, "reuse": 0},
+                    "stats": {"knowledge": knowledge, "resolved": resolved, "reuse": reuse_count},
                     "highlight": None,  # 서버 서사 부재 — 아래 활동 피드에서 결정론 선정
                 }
             )
@@ -484,6 +498,7 @@ def _hub_snapshot() -> dict:
     # 활동 피드 합성: knowledge_created만 (타임스탬프·재사용 피드는 #40·후속 대기).
     # 서사 문장은 구조 필드로 소비자가 조합 — 계약 consumerAutonomy가 허용하는 방식.
     all_pages.sort(key=lambda p: _id_seq(p["page_id"]), reverse=True)
+    page_title = {p["page_id"]: p.get("title", p["page_id"]) for p in all_pages}
     events = [
         {
             "type": "knowledge_created",
@@ -493,6 +508,31 @@ def _hub_snapshot() -> dict:
         }
         for p in all_pages
     ]
+    # 재사용 이벤트 — 로비 하이라이트는 reused를 knowledge_created보다 위에 랭크한다(pipeline).
+    # 실데이터에서도 하이라이트가 뜨려면 여기서 실제 이벤트를 넣어줘야 한다.
+    reuse_events = [
+        {
+            "reuse_id": ev.get("reuse_id"),
+            "doc_id": ev.get("page_id"),
+            "space_id": ev.get("space_id"),
+            "by": ev.get("cited_by_name") or ev.get("cited_by"),
+            "cross_team": bool(ev.get("cross_team")),
+            "at": ev.get("created_at"),
+        }
+        for ev in hub_reuse
+    ]
+    for ev in reuse_events:
+        title = page_title.get(ev["doc_id"], ev["doc_id"])
+        scope = "다른 팀의" if ev["cross_team"] else "팀의"
+        events.append(
+            {
+                "type": "reused",
+                "doc_id": ev["doc_id"],
+                "space_id": ev["space_id"],
+                "at": ev["at"],
+                "summary": f"{ev['by']}님의 에이전트가 {scope} 지식 『{title}』을 재사용했습니다",
+            }
+        )
 
     return {
         "source": "hub",
@@ -502,7 +542,7 @@ def _hub_snapshot() -> dict:
         "totals": totals,
         "tokens_saved_est": None,  # 실측 재료 없음 (#40 후순위 항목)
         "events": events,
-        "reuse_events": [],
+        "reuse_events": reuse_events,
     }
 
 
