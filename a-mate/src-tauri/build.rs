@@ -10,7 +10,13 @@ fn main() {
     // rustc-link-arg-bins(resource.lib)가 이미 bin을 커버하고, 같은 리소스를 한 번 더
     // 링크하면 link.exe가 중복 VERSION 리소스로 실패한다(CVT1100/LNK1123 실측).
     // GNU ld만 동일 아카이브 중복을 무해하게 처리한다.
-    if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() != Ok("msvc") {
+    // libresource.a는 Windows(GNU)에서만 tauri-build가 생성한다. macOS/Linux에서는
+    // 존재하지 않으므로 target_os=="windows" 로도 가드해야 한다. (그러지 않으면
+    // non-msvc인 macOS/Linux에서 없는 아카이브를 링크하려다 clang: no such file 로 실패.)
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os == "windows"
+        && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() != Ok("msvc")
+    {
         println!(
             "cargo::rustc-link-arg={}/libresource.a",
             std::env::var("OUT_DIR").expect("OUT_DIR")
