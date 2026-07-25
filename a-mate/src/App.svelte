@@ -5,7 +5,7 @@
   import DiaryTab from './lib/ui/DiaryTab.svelte';
   import ChatTab from './lib/ui/ChatTab.svelte';
   import GuestbookTab from './lib/ui/GuestbookTab.svelte';
-  import LifeSettingsTab from './lib/ui/LifeSettingsTab.svelte';
+  import SettingsTab from './lib/ui/settings/SettingsTab.svelte';
   import RobotPortrait from './lib/ui/RobotPortrait.svelte';
   import UpdateBanner from './lib/ui/UpdateBanner.svelte';
   import { runCheck } from './lib/ui/update-store.svelte';
@@ -178,7 +178,7 @@
         {:else if tab === 'guestbook'}
           <GuestbookTab lifeId={currentLifeId} {meId} isOwner={currentLifeId===myLifeId}/>
         {:else}
-          <LifeSettingsTab />
+          <SettingsTab />
         {/if}
       </main>
       <nav class="tabs">
