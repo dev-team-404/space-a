@@ -137,6 +137,15 @@ def _fixture(name: str) -> dict:
     return json.loads((_FIXTURES / name).read_text(encoding="utf-8"))
 
 
+# a-mate가 같은 지식을 되찾으려고 본문 앞에 심는 기계 키(예: `[a-mate:R8:github]`).
+# 사람이 보는 화면에서는 지운다 — 판별에는 필요하지만 읽는 사람에겐 노이즈다.
+_MACHINE_MARKER = re.compile(r"^\s*\[a-mate:[^\]]+\]\s*")
+
+
+def _display_title(title: str) -> str:
+    return _MACHINE_MARKER.sub("", title or "")
+
+
 def _hub_get(client: httpx.Client, path: str) -> dict:
     """커넥션 풀 공유 — 스냅숏 한 번에 3+N번 호출하므로 핸드셰이크를 재사용한다."""
     r = client.get(path)
@@ -522,7 +531,7 @@ def _hub_snapshot() -> dict:
         for ev in hub_reuse
     ]
     for ev in reuse_events:
-        title = page_title.get(ev["doc_id"], ev["doc_id"])
+        title = _display_title(page_title.get(ev["doc_id"], ev["doc_id"]))
         scope = "다른 팀의" if ev["cross_team"] else "팀의"
         events.append(
             {
