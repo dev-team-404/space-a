@@ -196,6 +196,13 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     // 코칭 가치 재설계 후속(2026-07-23): F(R24 컨텍스트 위생) 은퇴 — 룰·에피소드 세그먼터 완전 제거.
     // 8자↑ 프롬프트=새 작업 경계가 후속질문을 작업전환으로 오인 → 결정론으로 정확도 확보 불가(스펙 참조).
     store.delete_findings_by_rule_and_scope("R24", "project")?;
+    // 하니스 주입 프롬프트(크론 `<scheduled-task …>`, 슬래시 커맨드 로그)는 R6 대상이 아니다.
+    // 수집 시점 필터(normalize)는 신규 수집분만 막으므로, 이미 쌓인 행과 그 카드는 여기서 정리한다.
+    // 안 그러면 기존 사용자는 계속 오탐 카드를 본다 (실측 2026-07-25: R6 3건 전부 오탐).
+    let purged = store.purge_harness_injected_prompts()?;
+    if purged > 0 {
+        log::debug!("R6: 하니스 주입 프롬프트 {purged}행 정리");
+    }
     let engine = RuleEngine::new(registered_rules());
     let findings = engine.run(store)?;
     let now = chrono::Utc::now().to_rfc3339();
