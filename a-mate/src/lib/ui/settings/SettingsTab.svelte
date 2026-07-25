@@ -1,5 +1,6 @@
 <script lang="ts">
   import { DEFAULT_GROUP, SETTINGS_GROUPS, type SettingsGroup } from './groups';
+  import AppInfo from './AppInfo.svelte';
   import ConnectionGroup from './ConnectionGroup.svelte';
   import LookGroup from './LookGroup.svelte';
   import MeGroup from './MeGroup.svelte';
@@ -24,6 +25,8 @@
     {:else if active === 'privacy'}<PrivacyGroup/>
     {:else}<LookGroup/>{/if}
   </div>
+  <!-- 그룹과 무관하게 항상 보인다 — 버전을 찾으려고 그룹을 헤매지 않도록 -->
+  <AppInfo/>
 </div>
 
 <style>
