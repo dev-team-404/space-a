@@ -75,7 +75,8 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 .cloned()
                 .unwrap_or_else(|| tauri::image::Image::new_owned(vec![0, 0, 0, 0], 1, 1)),
         )
-        .tooltip("Agent Mentor")
+        // 툴팁에 버전 — 자동 업데이트가 적용됐는지 확인할 가장 싼 경로
+        .tooltip(format!("Agent Mentor {}", app.package_info().version))
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, e| match e.id().as_ref() {

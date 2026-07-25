@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "chat·mascot·settings 창 기본 권한",
-  "windows": ["chat", "mascot", "settings"],
+  "description": "chat·mascot 창 기본 권한",
+  "windows": ["chat", "mascot"],
   "permissions": [
     "core:default",
     "core:window:allow-set-size",
