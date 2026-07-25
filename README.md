@@ -142,6 +142,7 @@ bash a-mate/scripts/release-amate.sh 0.2.0             # 실제 발행
 
 발행 전 **프리플라이트**가 서명 키·`gh` 인증·릴리스 저장소·워킹트리·태그 중복을 검사해,
 실패하면 해결 명령과 함께 중단한다. **최초 1회** 공개 릴리스 저장소 생성
-(`gh repo create dev-team-404/a-mate-releases --public`)과 팀 공용 서명 키 배치
+(`gh repo create dev-team-404/a-mate-releases --public --add-readme` — **빈 저장소면
+릴리스가 draft로 떨어져 자동 업데이트가 안 된다**)과 팀 공용 서명 키 배치
 (`~/.tauri/a-mate-updater.{key,pass}`)가 필요하다 —
 자세한 셋업은 [build-and-run "릴리스" 섹션](./docs/design/a-mate/build-and-run.md)을 참고.

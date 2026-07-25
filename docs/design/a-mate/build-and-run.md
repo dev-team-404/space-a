@@ -192,7 +192,7 @@ bash a-mate/scripts/release-amate.sh 0.2.0             # 실제 발행
 
 | 항목 | 방법 |
 |------|------|
-| 공개 릴리스 저장소 | `gh repo create dev-team-404/a-mate-releases --public` (updater가 익명 fetch하므로 **반드시 public**) |
+| 공개 릴리스 저장소 | `gh repo create dev-team-404/a-mate-releases --public --add-readme` (updater가 익명 fetch하므로 **반드시 public**, 커밋이 최소 1개 있어야 함 — [아래 참고](#릴리스-저장소는-비어-있으면-안-된다)) |
 | 서명 키(팀 공용) | updater 개인키 + 암호를 안전 채널(1Password 등)로 받아 `~/.tauri/a-mate-updater.{key,pass}`에 배치(`chmod 600`). **커밋 금지.** 모두 **같은 키**여야 자동 업데이트가 깨지지 않는다. 개발·테스트라면 [레포 내 `dev-key/`](#개발용-서명-키--레포-내-a-matedev-key)를 그대로 쓸 수 있다 |
 | `gh` 인증 | `gh auth login` |
 
@@ -203,6 +203,34 @@ bash a-mate/scripts/release-amate.sh 0.2.0             # 실제 발행
 > **기존 설치본 자동 업데이트가 깨진다.** 따라서 개인키+암호를 **팀 공유 비밀번호 관리자
 > (예: 1Password 공유 볼트)에 백업**해 두고, 새 릴리서는 거기서 받아 `~/.tauri/a-mate-updater.{key,pass}`에
 > 배치(`chmod 600`)한다.
+
+#### 릴리스 저장소는 비어 있으면 안 된다
+
+`gh repo create`로 갓 만든 저장소는 **커밋이 0개**다. 이 상태에서 `gh release create`를 실행하면
+태그를 붙일 커밋이 없어 **draft 릴리스**로 생성되고, 자산 URL이 `v<버전>` 대신
+`untagged-<해시>` 형태가 된다:
+
+```
+https://github.com/OWNER/REPO/releases/download/untagged-6398235ab8755b39b5e5/latest.json
+```
+
+그런데 `latest.json`이 스스로 담고 있는 설치 파일 주소와 `tauri.conf.json`의 `endpoints`는
+모두 `releases/latest/download/...`를 전제한다. **draft 릴리스는 `latest`로 잡히지 않고
+자산도 익명으로 받을 수 없어, 발행은 성공한 듯 보여도 자동 업데이트가 동작하지 않는다.**
+
+| 시점 | 조치 |
+|------|------|
+| 저장소 생성 시 | `--add-readme`를 붙여 초기 커밋을 만든다 (또는 아무 파일이나 1개 push) |
+| 이미 draft로 발행돼 버렸다면 | 커밋 1개를 넣은 뒤 `gh release edit v<버전> --repo OWNER/REPO --draft=false` |
+
+확인 방법 — `isDraft: false`이고 URL에 `untagged-`가 없어야 정상이다:
+
+```bash
+gh release view v0.2.0 --repo dev-team-404/a-mate-releases --json isDraft,url
+```
+
+> 프리플라이트의 `check_release_repo`는 저장소 **존재**만 검사하고 비어 있는지는 보지 않는다.
+> 따라서 이 함정은 프리플라이트를 통과한 뒤 발행 단계에서 조용히 발생한다.
 
 ### 오버라이드 env — 스크립트 수정 없이 동작 바꾸기
 
@@ -222,7 +250,7 @@ bash a-mate/scripts/release-amate.sh 0.2.0             # 실제 발행
 **① 내 개인 fork에 시험 발행** — 팀 공용 저장소를 건드리지 않고 릴리스 전 과정을 검증한다.
 
 ```bash
-gh repo create my-id/a-mate-releases-test --public          # 최초 1회
+gh repo create my-id/a-mate-releases-test --public --add-readme   # 최초 1회 (빈 저장소 금지)
 AMATE_RELEASE_REPO=my-id/a-mate-releases-test \
   bash a-mate/scripts/release-amate.sh --dry-run 0.2.0
 ```
@@ -374,7 +402,8 @@ powershell.exe -NoProfile -Command " ... \
 
 > 사용자가 적어 재설치를 감수한다면, 두 곳만 바꾸고 기존 사용자는 새 repo에서 재설치하게 하면 된다.
 
-- 새 저장소도 **반드시 public**: `gh repo create owner/new-repo --public`
+- 새 저장소도 **반드시 public**이고 **커밋이 1개 이상** 있어야 한다: `gh repo create owner/new-repo --public --add-readme`
+  ([왜 그런가](#릴리스-저장소는-비어-있으면-안-된다) — 빈 저장소면 릴리스가 draft로 떨어져 자동 업데이트가 안 된다)
 - 서명 키(pubkey)는 저장소와 무관하다 — **그대로 유지**하면 자동 업데이트가 안 깨진다(repo만 바뀌고 키가 동일하면 OK). [서명 키 공유 원칙](#릴리스--자동-업데이트-채널로-발행) 참고.
 
 ### 폴백 — 설치 파일만 전달 (자동 업데이트 없음)

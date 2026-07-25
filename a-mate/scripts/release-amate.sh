@@ -5,7 +5,8 @@
 # 사전 준비:
 #  - updater 개인키: ~/.tauri/a-mate-updater.key (팀 공용 키, 커밋 금지)
 #  - 개인키 암호:   ~/.tauri/a-mate-updater.pass (또는 TAURI_SIGNING_PRIVATE_KEY_PASSWORD)
-#  - 공개 릴리스 저장소: dev-team-404/a-mate-releases (최초 1회 gh repo create --public)
+#  - 공개 릴리스 저장소: dev-team-404/a-mate-releases
+#    (최초 1회 gh repo create --public --add-readme — 빈 저장소면 릴리스가 draft로 떨어진다)
 # 오버라이드 env: AMATE_RELEASE_REPO, AMATE_WIN_BUILD, AMATE_KEY_FILE, AMATE_KEY_PASS_FILE
 set -euo pipefail
 
@@ -62,7 +63,9 @@ check_gh_auth() {
 check_release_repo() {
   if ! gh repo view "$RELEASE_REPO" >/dev/null 2>&1; then
     echo "ERROR: 릴리스 저장소 없음: $RELEASE_REPO" >&2
-    echo "  → 최초 1회: gh repo create $RELEASE_REPO --public  (updater가 익명으로 받으므로 반드시 public)" >&2
+    echo "  → 최초 1회: gh repo create $RELEASE_REPO --public --add-readme" >&2
+    echo "     (updater가 익명으로 받으므로 반드시 public. --add-readme로 커밋을 1개 만들어야" >&2
+    echo "      릴리스가 draft로 떨어지지 않는다 — 빈 저장소면 자동 업데이트가 동작하지 않음)" >&2
     return 1
   fi
 }
