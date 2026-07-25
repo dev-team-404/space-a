@@ -271,6 +271,11 @@ mod tests {
         );
     }
 
+    /// Windows 실경로 문자열로 형제 경로 파생을 검증한다.
+    /// Windows 전용인 이유: Unix에서는 `\`가 경로 구분자가 아니라
+    /// `C:\Users\jibin\.claude`가 단일 컴포넌트로 취급돼 parent()가 다르게 나온다.
+    /// 플랫폼 중립 검증은 아래 `host_source_derives_sibling_paths_platform_native`가 담당한다.
+    #[cfg(windows)]
     #[test]
     fn host_source_derives_sibling_paths() {
         let hs = HostSource {
@@ -282,6 +287,18 @@ mod tests {
         let a = hs.adapter();
         assert_eq!(a.host, "Windows");
         assert_eq!(a.root, PathBuf::from(r"C:\Users\jibin\.claude"));
+    }
+
+    /// 같은 파생 규칙을 플랫폼 네이티브 경로로 검증 — 전 플랫폼에서 돈다.
+    #[test]
+    fn host_source_derives_sibling_paths_platform_native() {
+        let home = PathBuf::from("home").join("jibin");
+        let hs = HostSource { host: "Windows".into(), claude_root: home.join(".claude") };
+        assert_eq!(hs.claude_json(), home.join(".claude.json"));
+        assert_eq!(hs.settings_json(), home.join(".claude").join("settings.json"));
+        let a = hs.adapter();
+        assert_eq!(a.host, "Windows");
+        assert_eq!(a.root, home.join(".claude"));
     }
 
     #[test]
