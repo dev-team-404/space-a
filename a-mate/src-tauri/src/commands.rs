@@ -996,17 +996,6 @@ pub fn mascot_set_expanded(state: State<AppState>, expanded: bool) {
         .store(expanded, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// 설정 창 열기 (마스코트 메뉴에서 "서버 연결" 안내용).
-#[tauri::command]
-pub fn open_settings_window(app: tauri::AppHandle) {
-    use tauri::Manager;
-    if let Some(w) = app.get_webview_window("settings") {
-        let _ = w.show();
-        let _ = w.unminimize();
-        let _ = w.set_focus();
-    }
-}
-
 #[cfg_attr(test, allow(dead_code))]
 pub(crate) fn valid_tab(tab: &str) -> bool {
     // settings는 트레이·마스코트가 설정 탭으로 딥링크할 때 쓴다(target=그룹 id).

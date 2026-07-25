@@ -228,7 +228,6 @@ export const lifeSetBubble = (body: string) => invoke<{bubble:string}>('life_set
 export const lifeSyncMascotImage = () => invoke<boolean>('life_sync_mascot_image');
 export const lifeMascotImage = (agentId: string) => invoke<string | null>('life_mascot_image', { agentId });
 export const robotSpecForSeed = (seed: string) => invoke<RobotSpec>('robot_spec_for_seed', { seed });
-export const openSettingsWindow = () => invoke<void>('open_settings_window');
 // 마스코트 창 확장/복귀 — 위치+크기를 네이티브에서 한 번에 적용 (중간 프레임 깜빡임 방지)
 export const mascotSetExpanded = (expanded: boolean) =>
   invoke<void>('mascot_set_expanded', { expanded });

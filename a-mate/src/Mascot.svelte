@@ -4,7 +4,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   import './lib/theme.css';
   import {
     emitOccasionToday, getChatterPool, getMascotSeed, getSettings, getSummary, getTodayOccasions,
-    hubSettingsGet, listFindings, mascotSetExpanded, openChatTab, openSettingsWindow,
+    hubSettingsGet, listFindings, mascotSetExpanded, openChatTab,
     lifeGoto, lifeView, lifeList, lifeSetBubble, setSetting,
     onDiaryReady, onNewFindings, onScanDone, onSettingsChanged,
     type LifeListEntry, getSprite } from './lib/api';
@@ -290,7 +290,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   {#if lifeMenu !== null}
     <div class="menu" class:away={curLifeId !== myLifeId} class:editor={bubbleEditor} class:rooms={roomBrowser}>
       {#if !hubOn}
-        <button class="item" onclick={() => { openSettingsWindow(); closeLifeMenu(); }}>
+        <button class="item" onclick={() => { openChatTab('settings', 'conn'); closeLifeMenu(); }}>
           서버 미연결 — 설정 열기
         </button>
       {:else if bubbleEditor}

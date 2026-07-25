@@ -205,10 +205,14 @@ fn show_chat(app: &AppHandle) {
     }
 }
 
+/// 설정 = 미니홈피 창의 설정 탭(연결 그룹). 별도 설정 창은 없다.
 fn show_settings(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window("settings") {
-        let _ = w.show();
-        let _ = w.unminimize();
-        let _ = w.set_focus();
+    use tauri::Emitter;
+    show_chat(app);
+    if let Err(error) = app.emit(
+        "chat:goto-tab",
+        crate::commands::GotoTabPayload { tab: "settings".into(), target: Some("conn".into()) },
+    ) {
+        log::error!("설정 탭 이동 이벤트 전송 실패: {error}");
     }
 }
