@@ -204,7 +204,80 @@ bash a-mate/scripts/release-amate.sh 0.2.0             # 실제 발행
 > (예: 1Password 공유 볼트)에 백업**해 두고, 새 릴리서는 거기서 받아 `~/.tauri/a-mate-updater.{key,pass}`에
 > 배치(`chmod 600`)한다.
 
-오버라이드 env: `AMATE_RELEASE_REPO`, `AMATE_WIN_BUILD`, `AMATE_KEY_FILE`, `AMATE_KEY_PASS_FILE`.
+### 오버라이드 env — 스크립트 수정 없이 동작 바꾸기
+
+`release-amate.sh`는 하드코딩 대신 네 개의 env로 주요 경로·대상을 바꿀 수 있다.
+**스크립트 앞에 붙여 그 실행에만 적용**하거나(권장), `export`로 셸 세션 전체에 적용한다.
+`.env` 파일은 읽지 않는다 — 그건 앱 dev 빌드용이다.
+
+| env | 기본값 | 무엇을 바꾸나 |
+|-----|--------|---------------|
+| `AMATE_RELEASE_REPO` | `dev-team-404/a-mate-releases` | 릴리스를 **발행할 GitHub 저장소**. 프리플라이트의 저장소 존재 확인, `gh release create --repo`, `latest.json`의 다운로드 URL이 모두 이 값을 따른다 |
+| `AMATE_WIN_BUILD` | `%USERPROFILE%\amate-build\a-mate` | Windows 쪽 **빌드 작업 폴더**(NTFS). 소스를 rsync로 복사하고 `npm run tauri build`를 이 폴더에서 돌린다 |
+| `AMATE_KEY_FILE` | `~/.tauri/a-mate-updater.key` | **개인키 파일 경로**(WSL 경로). 내용이 `TAURI_SIGNING_PRIVATE_KEY`로 주입된다 |
+| `AMATE_KEY_PASS_FILE` | `~/.tauri/a-mate-updater.pass` | **개인키 암호 파일 경로**(WSL 경로). 단, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`가 설정돼 있으면 **그쪽이 우선**이고 이 파일은 안 읽는다 |
+
+#### 사용 예시
+
+**① 내 개인 fork에 시험 발행** — 팀 공용 저장소를 건드리지 않고 릴리스 전 과정을 검증한다.
+
+```bash
+gh repo create my-id/a-mate-releases-test --public          # 최초 1회
+AMATE_RELEASE_REPO=my-id/a-mate-releases-test \
+  bash a-mate/scripts/release-amate.sh --dry-run 0.2.0
+```
+
+**② 빌드 폴더를 다른 드라이브로** — C: 용량이 부족하거나 빌드 캐시를 분리하고 싶을 때.
+값은 **Windows 형식 경로**(백슬래시)여야 한다 — PowerShell `Set-Location`과 `wslpath`에 그대로 넘어가므로
+백슬래시가 셸에 먹히지 않게 **싱글쿼트**로 감싼다.
+
+```bash
+AMATE_WIN_BUILD='D:\build\a-mate' bash a-mate/scripts/release-amate.sh 0.2.0
+```
+
+**③ 레포 내 개발용 키로 서명** — `~/.tauri/`로 복사·이름 변경 없이 바로 가리킨다
+([개발용 서명 키](#개발용-서명-키--레포-내-a-matedev-key) 참고).
+
+```bash
+AMATE_KEY_FILE=a-mate/dev-key/a-mate-updater.key.usefordev \
+AMATE_KEY_PASS_FILE=a-mate/dev-key/a-mate-updater.pass \
+  bash a-mate/scripts/release-amate.sh --dry-run 0.2.0
+```
+
+**④ 암호를 파일 없이 직접** — 1Password에서 값만 복사해 왔을 때. 이때 `AMATE_KEY_PASS_FILE`은 무시된다.
+
+```bash
+read -rsp '개인키 암호: ' TAURI_SIGNING_PRIVATE_KEY_PASSWORD; echo   # 화면에 안 찍힘
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD                          # 개인키 파일(.key)은 여전히 필요
+bash a-mate/scripts/release-amate.sh 0.2.0
+```
+
+**⑤ 여러 개 동시 + 세션 전체 적용** — 반복 실행할 때는 `export`가 편하다.
+
+```bash
+export AMATE_RELEASE_REPO=my-id/a-mate-releases-test
+export AMATE_WIN_BUILD='D:\build\a-mate'
+bash a-mate/scripts/release-amate.sh --dry-run 0.2.0
+bash a-mate/scripts/release-amate.sh --dry-run 0.2.1
+```
+
+> **적용됐는지는 `--dry-run`으로 확인한다.** dry-run이 해석된 값을 그대로 출력한다:
+> ```
+> [dry-run] 릴리스 대상 : my-id/a-mate-releases-test
+> [dry-run] 빌드 폴더   : D:\build\a-mate  (/mnt/d/build/a-mate)
+> ```
+
+#### 주의
+
+- **`AMATE_RELEASE_REPO`는 발행 대상만 바꾼다.** 설치본이 업데이트를 확인하는 주소는
+  `tauri.conf.json`의 `endpoints`에 컴파일돼 있어 그대로다 — 시험 발행한 릴리스를 실제 사용자가 받지는 않는다.
+  진짜 저장소 이전은 [릴리스 저장소 변경](#릴리스-저장소-변경) 절차를 따른다.
+- **`AMATE_WIN_BUILD`는 전용 폴더로.** rsync가 `--delete`로 동기화하므로 그 폴더의 다른 내용은 지워진다.
+  또한 WSL의 ext4 경로(`/home/...`)를 주면 안 된다 — Windows에서 빌드가 돌아야 하므로 **NTFS 경로**여야 한다.
+- **`AMATE_KEY_FILE`은 키 파일의 경로이지 키 내용이 아니다.** 내용을 직접 넘기려면 Tauri의
+  `TAURI_SIGNING_PRIVATE_KEY`를 쓰는 방식이 되는데, 이 스크립트는 항상 파일에서 읽으므로 경로로 지정한다.
+- 테스트 전용 훅으로 `PROC_VERSION_FILE`(기본 `/proc/version`)도 있다 — `check_wsl`을 가짜 파일로
+  검증하기 위한 것이니 릴리스 시엔 건드리지 않는다.
 
 ### 개발용 서명 키 — 레포 내 `a-mate/dev-key/`
 
