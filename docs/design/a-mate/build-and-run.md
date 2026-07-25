@@ -206,6 +206,35 @@ bash a-mate/scripts/release-amate.sh 0.2.0             # 실제 발행
 
 오버라이드 env: `AMATE_RELEASE_REPO`, `AMATE_WIN_BUILD`, `AMATE_KEY_FILE`, `AMATE_KEY_PASS_FILE`.
 
+### 서명 키 3파일과 빌드 (어떻게 다시 쓰이나)
+
+`tauri signer generate`는 세 요소를 만든다 — 역할과 사용 시점이 다르다.
+
+| 파일 | 종류 | 빌드에서 쓰이나 · 어떻게 |
+|------|------|--------------------------|
+| `~/.tauri/a-mate-updater.key` | **개인키** | ✅ **릴리스 빌드 시.** 파일 **내용**을 env `TAURI_SIGNING_PRIVATE_KEY`로 주입 → `tauri build`가 설치 파일을 서명해 `.sig`를 생성 |
+| `~/.tauri/a-mate-updater.pass` | **개인키 암호** | ✅ **릴리스 빌드 시.** env `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`로 주입 → 개인키 잠금 해제 |
+| `~/.tauri/a-mate-updater.key.pub` | **공개키** | ❌ 빌드에 직접 넣지 않음. 최초 셋업 때 이 내용을 `tauri.conf.json`의 `plugins.updater.pubkey`에 **한 번** 복사. 설치된 앱이 이 값으로 `.sig`를 검증. `.pub` 파일은 그 값의 출처 사본일 뿐 |
+
+`release-amate.sh`가 이 주입을 자동으로 한다 (env를 직접 만질 필요 없음) — `[3/6] 서명 빌드` 발췌:
+
+```bash
+KEY_CONTENT="$(cat "$KEY_FILE")"            # a-mate-updater.key 내용
+# KEY_PW 는 a-mate-updater.pass (또는 TAURI_SIGNING_PRIVATE_KEY_PASSWORD env)에서 읽음
+powershell.exe -NoProfile -Command " ... \
+  \$env:TAURI_SIGNING_PRIVATE_KEY='$KEY_CONTENT'; \        # 개인키
+  \$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD='$KEY_PW'; \    # 개인키 암호
+  ... npm run tauri build"                                 # 이 두 env가 있어야 .sig 생성
+```
+
+정리: **빌드에 필요한 건 `.key` + `.pass` 둘뿐**이고, `.pub`은 이미 `tauri.conf.json`에 박혀 있어 빌드에 다시 넣지 않는다. 두 env가 없으면 `createUpdaterArtifacts`가 켜져 있어도 `.sig`가 안 나와 자동 업데이트가 성립하지 않는다.
+
+> 스크립트 없이 Windows PowerShell에서 직접 서명 빌드하려면 같은 두 env를 손으로 세팅한다
+> (개행 제거 위해 `.Trim()`):
+> `$env:TAURI_SIGNING_PRIVATE_KEY = (Get-Content -Raw "$HOME\.tauri\a-mate-updater.key").Trim()` ·
+> `$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = (Get-Content -Raw "$HOME\.tauri\a-mate-updater.pass").Trim()`
+> → `npm run tauri build`.
+
 ### 주의사항
 
 | 항목 | 내용 |
