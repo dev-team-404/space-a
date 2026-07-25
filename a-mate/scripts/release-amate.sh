@@ -23,6 +23,18 @@ check_version_fmt() {
   fi
 }
 
+check_signing_key() {
+  if [[ ! -f "$KEY_FILE" ]]; then
+    echo "ERROR: 서명 키 없음: $KEY_FILE" >&2
+    echo "  → 팀 공용 updater 개인키를 안전 채널로 받아 위 경로에 두세요 (chmod 600)." >&2
+    return 1
+  fi
+  if [[ -z "${KEY_PW:-}" ]]; then
+    echo "ERROR: 서명 키 암호가 비어 있음 ($KEY_PASS_FILE 또는 TAURI_SIGNING_PRIVATE_KEY_PASSWORD)." >&2
+    return 1
+  fi
+}
+
 init_paths() {
   REPO="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
   CONF="$REPO/a-mate/src-tauri/tauri.conf.json"

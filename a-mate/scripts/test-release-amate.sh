@@ -56,8 +56,21 @@ EOF
   rm -rf "$tmp"
 }
 
+test_signing_key() {
+  echo "test_signing_key"
+  local tmp; tmp="$(mktemp -d)"
+  KEY_FILE="$tmp/key"; KEY_PW=""
+  assert_fail check_signing_key            # 키 파일 없음
+  : > "$KEY_FILE"; KEY_PW=""
+  assert_fail check_signing_key            # 키는 있으나 암호 빔
+  KEY_PW="secret"
+  assert_ok   check_signing_key            # 둘 다 있음
+  rm -rf "$tmp"
+}
+
 test_version_fmt
 test_init_paths
+test_signing_key
 
 echo "---"
 echo "PASS=$pass FAIL=$fail"
