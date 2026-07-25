@@ -300,6 +300,13 @@ cargo test           # Rust 백엔드 테스트 (워크스페이스 전체)
 - **`link.exe`/`cl.exe` not found, `error: linker ... not found`**
   → Visual Studio C++ Build Tools의 "C++를 사용한 데스크톱 개발" 워크로드가 없습니다.
   위 [사전 요구사항 3](#3-visual-studio-c-build-tools-msvc-링커--c-컴파일러)을 설치하세요.
+- **릴리스 시 `powershell.exe: cannot execute binary file: Exec format error`**
+  → WSL↔Windows **interop이 꺼진** 상태입니다 (주로 `/etc/wsl.conf`의 `systemd=true`에서
+  `systemd-binfmt`가 부팅 때 `WSLInterop` 등록을 지움). 확인: `ls /proc/sys/fs/binfmt_misc/`에
+  `WSLInterop`이 없음.
+  즉시 복구: `sudo sh -c 'echo ":WSLInterop:M::MZ::/init:PF" > /proc/sys/fs/binfmt_misc/register'`.
+  영구 복구: `sudo systemctl mask systemd-binfmt.service` 후 (Windows에서) `wsl --shutdown`.
+  `release-amate.sh`의 프리플라이트(`check_wsl`)가 이 상태를 감지해 같은 안내와 함께 중단한다.
 - **WSL에서 실행했더니 GUI가 안 뜸 / 빌드가 이상함**
   → WSL이 아니라 **Windows PowerShell/cmd**에서 실행해야 합니다. 맨 위 실행 환경 안내 참조.
 - **`cargo`/`node`를 찾을 수 없음**
