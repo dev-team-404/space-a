@@ -196,6 +196,14 @@ bash a-mate/scripts/release-amate.sh 0.2.0             # 실제 발행
 | 서명 키(팀 공용) | updater 개인키 + 암호를 안전 채널(1Password 등)로 받아 `~/.tauri/a-mate-updater.{key,pass}`에 배치(`chmod 600`). **커밋 금지.** 모두 **같은 키**여야 자동 업데이트가 깨지지 않는다 |
 | `gh` 인증 | `gh auth login` |
 
+> **서명 키 출처 (어디서 받나).** 이 키페어는 최초에 `tauri signer generate`로 **한 번 생성**됐다.
+> public key는 `tauri.conf.json`의 `pubkey`에 커밋돼 있고(공개, 안전), **private key + 암호는
+> 릴리스 최초 셋업자가 자신의 `~/.tauri/`에 보관**한다. 중앙 발급처는 없다 — 새 릴리서는
+> **그 보관자에게서** 받는다. 노트북 분실 시 키가 사라지면 재생성해야 하고, 그러면 pubkey가 바뀌어
+> **기존 설치본 자동 업데이트가 깨진다.** 따라서 개인키+암호를 **팀 공유 비밀번호 관리자
+> (예: 1Password 공유 볼트)에 백업**해 두고, 새 릴리서는 거기서 받아 `~/.tauri/a-mate-updater.{key,pass}`에
+> 배치(`chmod 600`)한다.
+
 오버라이드 env: `AMATE_RELEASE_REPO`, `AMATE_WIN_BUILD`, `AMATE_KEY_FILE`, `AMATE_KEY_PASS_FILE`.
 
 ### 주의사항
@@ -206,6 +214,26 @@ bash a-mate/scripts/release-amate.sh 0.2.0             # 실제 발행
 | **버전 인자 필수** | `release-amate.sh <version>` — 형식 `X.Y.Z`. 이미 존재하는 태그면 프리플라이트가 중단 |
 | **WSL에서 실행** | 스크립트가 `powershell.exe`로 Windows 빌드를 구동. 네이티브 Windows 단독 실행용 아님 |
 | **WebView2 필요** | Windows 11엔 기본 포함. 없는 환경이면 NSIS 설치기가 안내하거나, [사전 요구사항 4](#4-webview2-런타임)를 먼저 설치해야 합니다 |
+
+### 릴리스 저장소 변경
+
+릴리스 저장소를 다른 repo로 옮기려면 **두 곳**을 바꿔야 한다 — 성격이 다르다.
+
+| 곳 | 역할 | 변경 방법 |
+|----|------|-----------|
+| `scripts/release-amate.sh`의 `RELEASE_REPO` | 릴리스를 **발행(push)** 하는 대상 | 한 번만: `AMATE_RELEASE_REPO=owner/new-repo bash a-mate/scripts/release-amate.sh 0.2.0` · 영구: 스크립트 기본값 수정. `latest.json` 다운로드 URL은 `$RELEASE_REPO`로 자동 생성돼 함께 일관됨 |
+| `src-tauri/tauri.conf.json`의 `plugins.updater.endpoints` | 설치본이 업데이트를 **확인(fetch)** 하는 주소 | 값 안의 `dev-team-404/a-mate-releases`를 새 `owner/repo`로 수정 후 **그 버전을 빌드** |
+
+⚠️ `endpoints`는 빌드 시 앱 바이너리에 **컴파일**되므로, **기존 설치본은 옛 주소를 계속 폴링**한다. 깔끔히 이전하려면:
+
+1. `tauri.conf.json`의 endpoint를 **새 repo**로 수정한다.
+2. **옛 repo에** 한 버전 더 발행한다 → 기존 사용자가 이 업데이트를 받으며 endpoint가 새 repo로 전환된다.
+3. 이후부터 **새 repo에** 발행한다.
+
+> 사용자가 적어 재설치를 감수한다면, 두 곳만 바꾸고 기존 사용자는 새 repo에서 재설치하게 하면 된다.
+
+- 새 저장소도 **반드시 public**: `gh repo create owner/new-repo --public`
+- 서명 키(pubkey)는 저장소와 무관하다 — **그대로 유지**하면 자동 업데이트가 안 깨진다(repo만 바뀌고 키가 동일하면 OK). [서명 키 공유 원칙](#릴리스--자동-업데이트-채널로-발행) 참고.
 
 ### 폴백 — 설치 파일만 전달 (자동 업데이트 없음)
 
