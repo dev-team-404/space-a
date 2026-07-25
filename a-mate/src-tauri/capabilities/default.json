@@ -5,7 +5,6 @@
   "windows": ["chat", "mascot"],
   "permissions": [
     "core:default",
-    "core:app:allow-version",
     "core:window:allow-set-size",
     "core:window:allow-set-position",
     "core:window:allow-outer-position",
