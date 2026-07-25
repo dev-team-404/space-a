@@ -1,9 +1,14 @@
+---
+status: done
+archived: 2026-07-25
+---
+
 # release-amate.sh 팀 범용화 + 프리플라이트 검증 설계
 
 - **날짜**: 2026-07-25
 - **컴포넌트**: a-mate (Pillar 1)
 - **범위**: 로컬 릴리스 스크립트 `a-mate/scripts/release-amate.sh`를 팀 소수가 각자 WSL에서 안전하게 실행할 수 있도록 (1) 개인 환경 하드코딩 제거, (2) 변경 이전 프리플라이트 검증 추가, (3) 프리플라이트 로직 단위 테스트, (4) stale 문서 갱신. **CI 미도입** — 빌드·서명·발행 모두 로컬 유지.
-- **부모 설계**: [2026-07-22-auto-update-design.md](./2026-07-22-auto-update-design.md) — updater/서명/릴리스 채널을 확정한 문서. 본 문서는 그 릴리스 스크립트를 팀이 공유하도록 다듬는 후속.
+- **부모 설계**: [2026-07-22-auto-update-design.md](../../../../design/a-mate/specs/2026-07-22-auto-update-design.md) — updater/서명/릴리스 채널을 확정한 문서. 본 문서는 그 릴리스 스크립트를 팀이 공유하도록 다듬는 후속.
 
 ## 배경 / 문제
 
