@@ -95,9 +95,9 @@ src/lib/ui/settings/
   MeGroup.svelte           # 개인정보 + 주인 메모리
   PrivacyGroup.svelte      # 일촌 관리 + 다이어리 공개 범위
   LookGroup.svelte         # 테마
-  SettingsSection.svelte   # 제목 + 설명 + 본문 껍데기 (프레젠테이션)
   StatusLine.svelte        # idle/ok/err/busy 상태 배지 (프레젠테이션)
   groups.ts                # 그룹 목록 + target 정규화 (순수 함수)
+  status.ts                # Status 타입 + idle/busy/ok/err 생성자 (순수 함수)
 
 src/lib/ui/tab-routing.ts  # Tab 타입 + 방 변경 시 탭 결정 (순수 함수, "방문 중 처리" 참고)
 ```
@@ -109,9 +109,13 @@ src/lib/ui/tab-routing.ts  # Tab 타입 + 방 변경 시 탭 결정 (순수 함�
 - `LifeSettingsTab.svelte`는 삭제하고 `App.svelte`의 import를 `SettingsTab`으로 교체한다.
 - **각 그룹은 자기 데이터만 로드·저장하고 서로 상태를 공유하지 않는다.**
   `SettingsTab`은 어떤 그룹을 보여줄지만 결정한다 — 데이터를 알지 않는다.
-- `StatusLine`이 필요한 이유: 지금 `Settings.svelte`의 `.status`/`.source`와
+- `StatusLine` + `status.ts`가 필요한 이유: 지금 `Settings.svelte`의 `.status`/`.source`와
   `LifeSettingsTab`의 `.pstatus`가 같은 `{kind:'idle'|'ok'|'err'|'busy'; text}` 패턴을
   세 번 다르게 구현하고 있다.
+- **섹션 껍데기 컴포넌트는 두지 않는다.** 코드베이스에 snippet(`{@render}`) 사용례가 없어
+  래퍼 컴포넌트를 만들면 새 idiom을 들여오게 된다. 각 그룹이 `<section><h2>…</h2>`를 직접 쓰고
+  공용 섹션 스타일(제목·설명·구분선)은 `SettingsTab.svelte`의 `:global` 블록이 제공한다 —
+  기존 컴포넌트들이 섹션을 인라인으로 쓰는 방식과 같다.
 
 `groups.ts` 공개 인터페이스:
 
