@@ -181,7 +181,52 @@ test_dry_run_no_mutation() {
   rm -rf "$GREEN_BIN" "$GREEN_REPO"
 }
 
+test_bump_version() {
+  echo "test_bump_version"
+  local tmp; tmp="$(mktemp -d)"
+  CONF="$tmp/tauri.conf.json"; CARGO="$tmp/Cargo.toml"
+  cat > "$CONF" <<'EOF'
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Agent Mentor",
+  "version": "0.1.0",
+  "app": {
+    "security": { "csp": null }
+  },
+  "bundle": {
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico", "icons/128x128.png"]
+  }
+}
+EOF
+  cat > "$CARGO" <<'EOF'
+[package]
+name = "agent-mentor"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+some-crate = { version = "1.0" }
+EOF
+  local conf_before; conf_before="$(cat "$CONF")"
+
+  bump_version 9.9.9
+
+  grep -q '"version": "9.9.9"' "$CONF"   && ok "conf version bumped"  || bad "conf version not bumped"
+  grep -q '^version = "9.9.9"'  "$CARGO" && ok "cargo version bumped" || bad "cargo version not bumped"
+  # 포맷 보존: version 줄을 뺀 나머지가 한 바이트도 달라지면 안 된다 (재포맷 금지)
+  if diff -q <(printf '%s\n' "$conf_before" | grep -v '"version"') <(grep -v '"version"' "$CONF") >/dev/null; then
+    ok "conf formatting preserved"
+  else
+    bad "conf was reformatted (버전 줄 외 변경 발생)"
+  fi
+  # Cargo.toml은 첫 version만 — 의존성의 version은 건드리지 않는다
+  grep -q 'some-crate = { version = "1.0" }' "$CARGO" && ok "cargo dep version untouched" || bad "cargo dep version changed"
+  rm -rf "$tmp"
+}
+
 test_version_fmt
+test_bump_version
 test_init_paths
 test_signing_key
 test_gh_checks

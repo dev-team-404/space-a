@@ -97,6 +97,14 @@ warn_branch() {
   fi
 }
 
+# 버전 문자열만 치환한다. JSON을 파싱·재직렬화하면 파일 전체가 재포맷돼
+# 릴리스마다 diff 노이즈가 생기므로, 두 파일 모두 첫 version 줄만 sed로 바꾼다.
+bump_version() {
+  local v=$1
+  sed -i -E "0,/\"version\": \"[^\"]*\"/s//\"version\": \"$v\"/" "$CONF"
+  sed -i -E "0,/^version = \"[^\"]*\"/s//version = \"$v\"/" "$CARGO"
+}
+
 init_paths() {
   REPO="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
   CONF="$REPO/a-mate/src-tauri/tauri.conf.json"
@@ -145,8 +153,7 @@ main() {
   fi
 
   echo "[1/6] 버전 $VERSION 반영 (tauri.conf.json + Cargo.toml)"
-  node -e "const f='$CONF';const j=require(f);j.version='$VERSION';require('fs').writeFileSync(f, JSON.stringify(j,null,2)+'\n')"
-  sed -i -E "0,/^version = \"[^\"]*\"/s//version = \"$VERSION\"/" "$CARGO"
+  bump_version "$VERSION"
   git -C "$REPO" add "$CONF" "$CARGO"
   git -C "$REPO" commit -m "chore(agent): release v$VERSION"
   git -C "$REPO" tag "v$VERSION"
