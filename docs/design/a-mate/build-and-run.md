@@ -171,11 +171,45 @@ AGENT_MENTOR_ENGINE_MODEL=gpt-4.1-mini
 
 ---
 
-## 배포 — 동료에게 설치 파일 전달
+## 릴리스 — 자동 업데이트 채널로 발행
 
-동료 PC에 넘길 **Windows 설치 파일(NSIS `.exe`)**을 만드는 절차입니다. 아직 CI가 없으므로
-**로컬 Windows에서 수동 빌드**합니다. (`tauri.conf.json`의 `bundle.active: true`,
-`targets: ["nsis"]` 설정으로 `tauri build` 시 설치 파일이 생성됩니다.)
+updater·서명이 연결돼 있어(`tauri.conf.json`의 `plugins.updater` + `createUpdaterArtifacts`),
+새 버전은 **공개 릴리스 저장소** `dev-team-404/a-mate-releases`에 발행하면 설치본이
+앱 내에서 자동 업데이트된다. 발행은 **WSL에서 로컬 스크립트**로 한다(현재 CI 미도입).
+
+```bash
+# 저장소 루트에서 (WSL)
+bash a-mate/scripts/release-amate.sh --dry-run 0.2.0   # 프리플라이트만 점검
+bash a-mate/scripts/release-amate.sh 0.2.0             # 실제 발행
+```
+
+스크립트가 하는 일: 버전 갱신(commit·tag) → NTFS 빌드 폴더로 rsync → Windows에서 서명 빌드
+→ `latest.json` 생성 → `gh release create`로 setup.exe·latest.json 업로드. 실행 전
+**프리플라이트**가 서명 키·`gh` 인증·릴리스 저장소·워킹트리·태그 중복을 검사해, 실패하면
+변경 이전에 해결 명령과 함께 중단한다.
+
+### 최초 1회 셋업
+
+| 항목 | 방법 |
+|------|------|
+| 공개 릴리스 저장소 | `gh repo create dev-team-404/a-mate-releases --public` (updater가 익명 fetch하므로 **반드시 public**) |
+| 서명 키(팀 공용) | updater 개인키 + 암호를 안전 채널(1Password 등)로 받아 `~/.tauri/a-mate-updater.{key,pass}`에 배치(`chmod 600`). **커밋 금지.** 모두 **같은 키**여야 자동 업데이트가 깨지지 않는다 |
+| `gh` 인증 | `gh auth login` |
+
+오버라이드 env: `AMATE_RELEASE_REPO`, `AMATE_WIN_BUILD`, `AMATE_KEY_FILE`, `AMATE_KEY_PASS_FILE`.
+
+### 주의사항
+
+| 항목 | 내용 |
+|------|------|
+| **코드 서명 인증서 없음** | updater 서명키(무료)만 사용. 최초 **수동 설치 1회**만 SmartScreen 경고("추가 정보 → 실행"). 이후 인앱 자동 업데이트엔 지장 없음 |
+| **버전 인자 필수** | `release-amate.sh <version>` — 형식 `X.Y.Z`. 이미 존재하는 태그면 프리플라이트가 중단 |
+| **WSL에서 실행** | 스크립트가 `powershell.exe`로 Windows 빌드를 구동. 네이티브 Windows 단독 실행용 아님 |
+| **WebView2 필요** | Windows 11엔 기본 포함. 없는 환경이면 NSIS 설치기가 안내하거나, [사전 요구사항 4](#4-webview2-런타임)를 먼저 설치해야 합니다 |
+
+### 폴백 — 설치 파일만 전달 (자동 업데이트 없음)
+
+자동 업데이트 없이 설치 파일 하나만 동료에게 넘기려면 Windows에서 직접 빌드한다:
 
 ```powershell
 cd a-mate
@@ -183,27 +217,11 @@ npm install                 # 최초 1회 (또는 의존성 변경 시)
 npm run tauri build         # 프론트 빌드 → Rust 릴리스 컴파일 → NSIS 설치 파일 번들
 ```
 
-산출물 위치:
-
-```
-a-mate/src-tauri/target/release/bundle/nsis/Agent Mentor_<버전>_x64-setup.exe
-```
-
-이 `*-setup.exe` 하나를 동료에게 전달하면 됩니다. 실행하면 시작 메뉴 등록·아이콘·제거
-기능이 있는 형태로 설치됩니다.
-
-### 배포 전 체크 & 주의사항
-
-| 항목 | 내용 |
-|------|------|
-| **버전 올리기** | 새로 배포할 땐 `src-tauri/tauri.conf.json`의 `version`을 먼저 올리세요. 파일명·설치 정보에 반영됩니다. |
-| **코드 서명 없음** | 현재 서명 인프라가 없어(설계상 3단계 보류) 설치 시 **Windows SmartScreen 경고**가 뜹니다. 동료는 "추가 정보 → 실행"으로 진행해야 합니다. |
-| **자동 업데이트 없음** | `updater` 미도입 상태입니다. 새 버전은 **다시 빌드 → 설치 파일 재전달 → 동료가 재설치**해야 반영됩니다. |
-| **WebView2 필요** | Windows 11엔 기본 포함. 없는 환경이면 NSIS 설치기가 안내하거나, [사전 요구사항 4](#4-webview2-런타임)를 먼저 설치해야 합니다. |
+산출물: `a-mate/src-tauri/target/release/bundle/nsis/Agent Mentor_<버전>_x64-setup.exe` —
+이 `*-setup.exe`를 전달하면 시작 메뉴 등록·아이콘·제거 기능과 함께 설치된다.
 
 > MSI도 함께 만들려면 `tauri.conf.json`의 `bundle.targets`를 `["nsis", "msi"]`로 두면
-> `bundle/msi/`에도 산출됩니다. 코드 서명·자동 업데이트 활성화는 서명 인프라가 확정되는
-> [로드맵 3단계](04-history-and-roadmap.md)에서 다룹니다.
+> `bundle/msi/`에도 산출된다.
 
 ---
 
