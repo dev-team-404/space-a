@@ -35,6 +35,21 @@ check_signing_key() {
   fi
 }
 
+check_gh_auth() {
+  if ! gh auth status >/dev/null 2>&1; then
+    echo "ERROR: gh 미인증. → gh auth login" >&2
+    return 1
+  fi
+}
+
+check_release_repo() {
+  if ! gh repo view "$RELEASE_REPO" >/dev/null 2>&1; then
+    echo "ERROR: 릴리스 저장소 없음: $RELEASE_REPO" >&2
+    echo "  → 최초 1회: gh repo create $RELEASE_REPO --public  (updater가 익명으로 받으므로 반드시 public)" >&2
+    return 1
+  fi
+}
+
 init_paths() {
   REPO="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
   CONF="$REPO/a-mate/src-tauri/tauri.conf.json"

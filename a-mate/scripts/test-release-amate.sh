@@ -25,6 +25,16 @@ setup_repo() {
   echo "$dir/work"
 }
 
+# writes a `gh` stub into $1/bin that exits with $STUB_GH_EXIT (default 0)
+make_gh_stub() {
+  mkdir -p "$1/bin"
+  cat > "$1/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+exit ${STUB_GH_EXIT:-0}
+EOF
+  chmod +x "$1/bin/gh"
+}
+
 # shellcheck disable=SC1090
 source "$SUT"
 set +eu +o pipefail   # SUT enabled `set -euo pipefail`; relax so all tests run
@@ -68,9 +78,20 @@ test_signing_key() {
   rm -rf "$tmp"
 }
 
+test_gh_checks() {
+  echo "test_gh_checks"
+  local tmp; tmp="$(mktemp -d)"; make_gh_stub "$tmp"
+  PATH="$tmp/bin:$PATH" STUB_GH_EXIT=0 assert_ok   check_gh_auth
+  PATH="$tmp/bin:$PATH" STUB_GH_EXIT=1 assert_fail check_gh_auth
+  PATH="$tmp/bin:$PATH" STUB_GH_EXIT=0 assert_ok   check_release_repo
+  PATH="$tmp/bin:$PATH" STUB_GH_EXIT=1 assert_fail check_release_repo
+  rm -rf "$tmp"
+}
+
 test_version_fmt
 test_init_paths
 test_signing_key
+test_gh_checks
 
 echo "---"
 echo "PASS=$pass FAIL=$fail"
