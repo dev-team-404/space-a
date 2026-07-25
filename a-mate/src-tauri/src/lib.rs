@@ -395,6 +395,8 @@ pub fn run() {
                 commands::chat_send,
                 commands::engine_settings_get,
                 commands::engine_settings_set,
+                commands::knowledge_hub_settings_get,
+                commands::knowledge_hub_settings_set,
                 commands::theme_get,
                 commands::theme_set,
                 commands::engine_test,

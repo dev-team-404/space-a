@@ -47,6 +47,42 @@ pub struct HubConfig {
 }
 
 impl HubConfig {
+    /// 해석 우선순위: **설정(store) → 환경변수**. `resolve_engine`과 같은 규율이다.
+    ///
+    /// store를 먼저 보는 이유: `.env`는 `#[cfg(debug_assertions)]`에서만 로드되므로
+    /// **배포(릴리스) 빌드는 환경변수만으로는 허브에 절대 연결되지 않는다.** 설정 창에서
+    /// 값을 넣으면 배포본에서도 지식 공유가 동작해야 한다.
+    /// (설정 키는 `knowledge_hub_*` — 기존 `hub_*` 키는 Life 서버 몫이라 이름을 분리한다.)
+    pub fn resolve(store: &crate::store::SqliteStore) -> Option<HubConfig> {
+        let get = |k: &str| {
+            store
+                .get_setting(k)
+                .ok()
+                .flatten()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        };
+        let Some(base_url) = get("knowledge_hub_url") else {
+            return HubConfig::from_env();
+        };
+        // 설정에서 명시적으로 껐으면 env로 되살아나지 않는다.
+        if store.get_setting("knowledge_hub_share").ok().flatten().as_deref() == Some("off") {
+            return None;
+        }
+        Some(HubConfig {
+            base_url: base_url.trim_end_matches('/').to_string(),
+            api_key: get("knowledge_hub_api_key").unwrap_or_default(),
+            token: get("knowledge_hub_token"),
+            space_id: get("knowledge_hub_space_id").unwrap_or_else(|| "sw-innov".into()),
+            user_id: get("knowledge_hub_user")
+                .or_else(|| get("user_name"))
+                .unwrap_or_else(|| "unknown".into()),
+            min_tokens: get("knowledge_hub_min_tokens")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(DEFAULT_MIN_TOKENS),
+        })
+    }
+
     /// URL 미설정 또는 SPACE_A_SHARE=off → None (공유 기능 전체 no-op).
     pub fn from_env() -> Option<HubConfig> {
         let base_url = std::env::var("SPACE_A_HUB_URL").ok()?;
@@ -1140,6 +1176,28 @@ mod tests {
     fn render_non_whitelisted_rule_is_none() {
         assert!(render_share(&row("R7", 99999, 9, "new", "R7|x")).is_none());
         assert!(render_share(&row("R5", 7000, 2, "new", "R5|y")).is_none());
+    }
+
+    /// 배포 빌드는 .env를 로드하지 않으므로, 설정(store)만으로도 허브가 잡혀야 한다.
+    #[test]
+    fn config_resolves_from_store_before_env() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        store.set_setting("knowledge_hub_url", "https://hub.example.com/").unwrap();
+        store.set_setting("knowledge_hub_space_id", "sw-innov").unwrap();
+        store.set_setting("knowledge_hub_user", "alice").unwrap();
+
+        let cfg = HubConfig::resolve(&store).expect("설정만으로 허브 구성이 잡혀야 한다");
+        assert_eq!(cfg.base_url, "https://hub.example.com", "끝 슬래시는 정규화된다");
+        assert_eq!(cfg.space_id, "sw-innov");
+        assert_eq!(cfg.user_id, "alice");
+    }
+
+    #[test]
+    fn config_off_switch_in_store_wins_over_env() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        store.set_setting("knowledge_hub_url", "https://hub.example.com").unwrap();
+        store.set_setting("knowledge_hub_share", "off").unwrap();
+        assert!(HubConfig::resolve(&store).is_none(), "설정에서 끄면 env로 되살아나지 않는다");
     }
 
     #[test]

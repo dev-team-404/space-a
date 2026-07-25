@@ -560,6 +560,73 @@ pub fn engine_settings_set(
     Ok(())
 }
 
+/// 지식 허브(a-hub work) 연결 설정 스냅샷.
+///
+/// ⚠ Life 서버 설정(`hub_url`/`hub_token`)과 **다른 것**이다. 이름이 비슷해 혼동되지만
+/// 이쪽은 코칭 지식을 발행·인용하는 협업 백엔드다.
+/// source: "store"(설정 창) | "env"(환경변수 폴백) | "none".
+#[derive(Debug, Clone, Serialize)]
+pub struct KnowledgeHubSettings {
+    pub url: String,
+    pub api_key: String,
+    pub space_id: String,
+    pub user: String,
+    pub source: String,
+}
+
+#[tauri::command(async)]
+pub fn knowledge_hub_settings_get(state: State<AppState>) -> Result<KnowledgeHubSettings, String> {
+    let guard = lock(&state)?;
+    let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
+    let stored = get("knowledge_hub_url").trim().to_string();
+    if !stored.is_empty() {
+        return Ok(KnowledgeHubSettings {
+            url: stored,
+            api_key: get("knowledge_hub_api_key"),
+            space_id: get("knowledge_hub_space_id"),
+            user: get("knowledge_hub_user"),
+            source: "store".into(),
+        });
+    }
+    Ok(match agent_mentor::hub::HubConfig::from_env() {
+        Some(c) => KnowledgeHubSettings {
+            url: c.base_url,
+            api_key: c.api_key,
+            space_id: c.space_id,
+            user: c.user_id,
+            source: "env".into(),
+        },
+        None => KnowledgeHubSettings {
+            url: String::new(),
+            api_key: String::new(),
+            space_id: String::new(),
+            user: String::new(),
+            source: "none".into(),
+        },
+    })
+}
+
+#[tauri::command(async)]
+pub fn knowledge_hub_settings_set(
+    state: State<AppState>,
+    url: String,
+    api_key: String,
+    space_id: String,
+    user: String,
+) -> Result<(), String> {
+    let url = url.trim();
+    if !url.is_empty() && !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err("허브 URL은 http:// 또는 https:// 로 시작해야 해요".into());
+    }
+    let guard = lock(&state)?;
+    // url을 비우면 store 값이 지워져 env 폴백으로 돌아간다 (engine_settings_set 선례)
+    guard.set_setting("knowledge_hub_url", url).map_err(|e| e.to_string())?;
+    guard.set_setting("knowledge_hub_api_key", api_key.trim()).map_err(|e| e.to_string())?;
+    guard.set_setting("knowledge_hub_space_id", space_id.trim()).map_err(|e| e.to_string())?;
+    guard.set_setting("knowledge_hub_user", user.trim()).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// 미니홈피 테마 설정 스냅샷. mode: light|dark|system, skin: sky|mint|peach|lavender.
 #[derive(Debug, Clone, Serialize)]
 pub struct ThemeSettings {
