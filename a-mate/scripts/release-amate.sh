@@ -15,6 +15,17 @@ KEY_PASS_FILE="${AMATE_KEY_PASS_FILE:-$HOME/.tauri/a-mate-updater.pass}"
 PROC_VERSION_FILE="${PROC_VERSION_FILE:-/proc/version}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+check_wsl() {
+  if ! grep -qi microsoft "$PROC_VERSION_FILE" 2>/dev/null; then
+    echo "ERROR: WSL 환경이 아닙니다. 이 스크립트는 WSL에서 실행하세요." >&2
+    return 1
+  fi
+  if ! command -v powershell.exe >/dev/null 2>&1; then
+    echo "ERROR: powershell.exe를 찾을 수 없습니다 (WSL↔Windows 상호운용 필요)." >&2
+    return 1
+  fi
+}
+
 check_version_fmt() {
   local v=$1
   if [[ ! $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then

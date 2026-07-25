@@ -118,6 +118,21 @@ test_warn_branch() {
   assert_ok warn_branch                    # non-main → 여전히 0 (경고만)
 }
 
+test_wsl() {
+  echo "test_wsl"
+  local tmp; tmp="$(mktemp -d)"
+  mkdir -p "$tmp/bin"
+  printf '#!/usr/bin/env bash\ntrue\n' > "$tmp/bin/powershell.exe"
+  chmod +x "$tmp/bin/powershell.exe"
+  PROC_VERSION_FILE="$tmp/proc_ms"; echo "Linux x microsoft-standard-WSL2 x" > "$PROC_VERSION_FILE"
+  PATH="$tmp/bin:$PATH" assert_ok   check_wsl                 # microsoft + powershell.exe
+  PROC_VERSION_FILE="$tmp/proc_plain"; echo "Linux x generic x" > "$PROC_VERSION_FILE"
+  PATH="$tmp/bin:$PATH" assert_fail check_wsl                 # microsoft 없음
+  PROC_VERSION_FILE="$tmp/proc_ms"
+  PATH="/usr/bin:/bin" assert_fail check_wsl                  # microsoft 있으나 powershell.exe 없음
+  rm -rf "$tmp"
+}
+
 test_version_fmt
 test_init_paths
 test_signing_key
@@ -125,6 +140,7 @@ test_gh_checks
 test_clean_tree
 test_tag_absent
 test_warn_branch
+test_wsl
 
 echo "---"
 echo "PASS=$pass FAIL=$fail"
