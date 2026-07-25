@@ -50,6 +50,33 @@ check_release_repo() {
   fi
 }
 
+check_clean_tree() {
+  if [[ -n "$(git -C "$REPO" status --porcelain)" ]]; then
+    echo "ERROR: 워킹트리에 커밋 안 된 변경이 있습니다. 먼저 커밋/스태시하세요." >&2
+    return 1
+  fi
+}
+
+check_tag_absent() {
+  local v=$1
+  if git -C "$REPO" rev-parse -q --verify "refs/tags/v$v" >/dev/null 2>&1; then
+    echo "ERROR: 태그 v$v 가 이미 로컬에 존재합니다." >&2
+    return 1
+  fi
+  if [[ -n "$(git -C "$REPO" ls-remote origin "refs/tags/v$v" 2>/dev/null)" ]]; then
+    echo "ERROR: 태그 v$v 가 이미 원격(origin)에 존재합니다." >&2
+    return 1
+  fi
+}
+
+warn_branch() {
+  local br
+  br="$(git -C "$REPO" rev-parse --abbrev-ref HEAD)"
+  if [[ "$br" != "main" ]]; then
+    echo "WARN: 현재 브랜치가 '$br' 입니다 (main 아님). 계속 진행합니다." >&2
+  fi
+}
+
 init_paths() {
   REPO="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
   CONF="$REPO/a-mate/src-tauri/tauri.conf.json"

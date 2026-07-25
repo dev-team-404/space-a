@@ -88,10 +88,43 @@ test_gh_checks() {
   rm -rf "$tmp"
 }
 
+test_clean_tree() {
+  echo "test_clean_tree"
+  REPO="$(setup_repo)"
+  assert_ok   check_clean_tree             # clean
+  echo x > "$REPO/dirty.txt"
+  assert_fail check_clean_tree             # untracked change
+}
+
+test_tag_absent() {
+  echo "test_tag_absent"
+  REPO="$(setup_repo)"
+  assert_ok   check_tag_absent 9.9.9       # 없음
+  git -C "$REPO" tag v9.9.9
+  assert_fail check_tag_absent 9.9.9       # 로컬 태그 존재
+
+  REPO="$(setup_repo)"                     # fresh repo for remote case
+  git -C "$REPO" tag v8.8.8
+  git -C "$REPO" push -q origin v8.8.8
+  git -C "$REPO" tag -d v8.8.8             # 로컬만 삭제, 원격 유지
+  assert_fail check_tag_absent 8.8.8       # 원격 태그 존재
+}
+
+test_warn_branch() {
+  echo "test_warn_branch"
+  REPO="$(setup_repo)"
+  assert_ok warn_branch                    # main → 0
+  git -C "$REPO" checkout -q -b feature
+  assert_ok warn_branch                    # non-main → 여전히 0 (경고만)
+}
+
 test_version_fmt
 test_init_paths
 test_signing_key
 test_gh_checks
+test_clean_tree
+test_tag_absent
+test_warn_branch
 
 echo "---"
 echo "PASS=$pass FAIL=$fail"
