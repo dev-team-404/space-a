@@ -5,21 +5,22 @@
   import DiaryTab from './lib/ui/DiaryTab.svelte';
   import ChatTab from './lib/ui/ChatTab.svelte';
   import GuestbookTab from './lib/ui/GuestbookTab.svelte';
-  import LifeSettingsTab from './lib/ui/LifeSettingsTab.svelte';
+  import SettingsTab from './lib/ui/settings/SettingsTab.svelte';
   import RobotPortrait from './lib/ui/RobotPortrait.svelte';
   import UpdateBanner from './lib/ui/UpdateBanner.svelte';
   import { runCheck } from './lib/ui/update-store.svelte';
   import {
     getSummary, getDailyLine, listFindings, onScanDone, onGotoTab,
     onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, onUpdateCheckRequested,
-    lifeContentAccess, lifeView, type Summary,
+    lifeContentAccess, lifeGoto, lifeView, type Summary,
   } from './lib/api';
   import {
     diaryNotice, findingNotice, loadNotices, occasionNotice, pushNotice, saveNotices,
     type Notice, type NoticeDest,
   } from './lib/notices';
+  import { isTab, resolveTabAfterLifeChange, type Tab } from './lib/ui/tab-routing';
+  import { normalizeGroup, type SettingsGroup } from './lib/ui/settings/groups';
 
-  type Tab = 'home' | 'diary' | 'coach' | 'chat' | 'guestbook' | 'settings';
   const TABS: { id: Tab; label: string }[] = [
     { id: 'home', label: '홈' },
     { id: 'diary', label: '다이어리' },
@@ -30,6 +31,11 @@
   ];
 
   let tab = $state<Tab>('home');
+  // 방문 중에 설정 딥링크를 받으면 내 방으로 돌아간 뒤 착지해야 한다.
+  // 방 변경 시 홈으로 리셋하는 폴링 로직이 그 의도를 덮어쓰지 않도록 예약해 둔다.
+  let pendingTab = $state<Tab | null>(null);
+  // 그룹은 지연하지 않는다 — 설정 탭이 안 보이는 동안 바뀌어도 관측되는 효과가 없다.
+  let settingsGroup = $state<SettingsGroup>('conn');
 
   // 방문 컨텍스트 (docs/design/life-visit.md §3) — 남의 방을 보는 동안에는
   // 사적 탭(일기·코칭·채팅)을 숨긴다. 데이터는 원래 로컬 전용이라 유출은 없지만,
@@ -55,9 +61,12 @@
         ownerAgentId = v.life.owner_agent_id;
         ownerImageVersion = v.life.owner_mascot_image_sha256 || '';
         currentLifeId=v.life.life_id;myLifeId=v.me.my_life_id;meId=v.me.agent_id;
-        if (lifeChanged) tab = 'home';
+        const next = resolveTabAfterLifeChange(lifeChanged, pendingTab, tab);
+        tab = next.tab;
+        pendingTab = next.pendingTab;
         canViewDiary = !visiting || (await lifeContentAccess(v.life.life_id)).features.diary.can_view;
-        if (visiting && (!['home','diary','guestbook'].includes(tab) || (tab === 'diary' && !canViewDiary))) tab = 'home';
+        // 설정 착지를 예약한 상태(내 방으로 돌아오는 중)면 홈으로 밀지 않는다 — 다음 tick이 착지시킨다.
+        if (!pendingTab && visiting && (!['home','diary','guestbook'].includes(tab) || (tab === 'diary' && !canViewDiary))) tab = 'home';
       } catch {
         visiting = false;
         lifeOwner = '';
@@ -95,7 +104,14 @@
     return () => { un.then((u) => u()); };
   });
   onGotoTab(({ tab: t, target }) => {
-    if (!(t === 'home' || t === 'diary' || t === 'coach' || t === 'chat')) return;
+    if (!isTab(t) || t === 'guestbook') return; // 방명록은 방 문맥이 필요해 딥링크 대상이 아니다
+    if (t === 'settings') {
+      settingsGroup = normalizeGroup(target);
+      // 남의 방 방문 중이면 내 방으로 돌아간 뒤 착지한다 (내 설정이 방 주인 것으로 오독되지 않게)
+      if (visiting) { pendingTab = 'settings'; lifeGoto(myLifeId).catch(() => { pendingTab = null; }); }
+      else tab = 'settings';
+      return;
+    }
     if (target && t === 'coach') gotoCoach(target);
     else if (target && t === 'diary') gotoDiary(target);
     else tab = t;
@@ -178,7 +194,7 @@
         {:else if tab === 'guestbook'}
           <GuestbookTab lifeId={currentLifeId} {meId} isOwner={currentLifeId===myLifeId}/>
         {:else}
-          <LifeSettingsTab />
+          <SettingsTab group={settingsGroup} />
         {/if}
       </main>
       <nav class="tabs">

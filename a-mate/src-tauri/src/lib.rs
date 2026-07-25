@@ -179,7 +179,7 @@ pub(crate) fn resolve_sprite_cfg(store: &SqliteStore) -> Option<agent_mentor::sp
 /// content_protected 설정을 두 창(chat·mascot)에 적용 — 화면 캡처/녹화에서 제외 (스펙 §7).
 pub(crate) fn apply_content_protection(app: &tauri::AppHandle, on: bool) {
     use tauri::Manager;
-    for label in ["chat", "mascot", "settings"] {
+    for label in ["chat", "mascot"] {
         if let Some(w) = app.get_webview_window(label) {
             if let Err(e) = w.set_content_protected(on) {
                 log::warn!("content_protected({label}) 적용 실패: {e}");
@@ -222,8 +222,8 @@ pub fn run() {
             .plugin(tauri_plugin_process::init()) // 업데이트 후 재시작
             .on_window_event(|window, event| {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    // 상주: destroy 대신 hide (스펙 §3). settings도 동일 — destroy되면 트레이에서 재오픈 불가
-                    if matches!(window.label(), "chat" | "settings") {
+                    // 상주: destroy 대신 hide (스펙 §3) — destroy되면 트레이에서 재오픈 불가
+                    if window.label() == "chat" {
                         let _ = window.hide();
                         api.prevent_close();
                     }
@@ -424,7 +424,6 @@ pub fn run() {
                 commands::life_mascot_image,
                 commands::robot_spec_for_seed,
                 commands::mascot_set_expanded,
-                commands::open_settings_window,
             ])
             .run(tauri::generate_context!())
             .expect("tauri 실행 실패");

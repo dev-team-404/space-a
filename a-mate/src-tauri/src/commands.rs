@@ -996,20 +996,10 @@ pub fn mascot_set_expanded(state: State<AppState>, expanded: bool) {
         .store(expanded, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// 설정 창 열기 (마스코트 메뉴에서 "서버 연결" 안내용).
-#[tauri::command]
-pub fn open_settings_window(app: tauri::AppHandle) {
-    use tauri::Manager;
-    if let Some(w) = app.get_webview_window("settings") {
-        let _ = w.show();
-        let _ = w.unminimize();
-        let _ = w.set_focus();
-    }
-}
-
 #[cfg_attr(test, allow(dead_code))]
 pub(crate) fn valid_tab(tab: &str) -> bool {
-    matches!(tab, "home" | "diary" | "coach" | "chat")
+    // settings는 트레이·마스코트가 설정 탭으로 딥링크할 때 쓴다(target=그룹 id).
+    matches!(tab, "home" | "diary" | "coach" | "chat" | "settings")
 }
 
 /// chat:goto-tab payload — target은 탭 문맥으로 해석(coach→dedup_key, diary→YYYY-MM-DD).
@@ -1071,6 +1061,17 @@ mod tests {
         assert!(!valid_content_status("resolved") && !valid_content_status(""));
         let store = SqliteStore::open_in_memory().unwrap();
         assert!(content_inner(&store, false).unwrap().is_empty());
+    }
+
+    #[test]
+    fn valid_tab_allows_deeplinkable_tabs_including_settings() {
+        for tab in ["home", "diary", "coach", "chat", "settings"] {
+            assert!(valid_tab(tab), "{tab}은 딥링크 대상이어야 한다");
+        }
+        // 방명록은 방 문맥이 필요해 딥링크 대상이 아니다 (프론트 onGotoTab 가드와 일치)
+        assert!(!valid_tab("guestbook"));
+        assert!(!valid_tab("bogus"));
+        assert!(!valid_tab(""));
     }
 
     #[test]

@@ -228,7 +228,6 @@ export const lifeSetBubble = (body: string) => invoke<{bubble:string}>('life_set
 export const lifeSyncMascotImage = () => invoke<boolean>('life_sync_mascot_image');
 export const lifeMascotImage = (agentId: string) => invoke<string | null>('life_mascot_image', { agentId });
 export const robotSpecForSeed = (seed: string) => invoke<RobotSpec>('robot_spec_for_seed', { seed });
-export const openSettingsWindow = () => invoke<void>('open_settings_window');
 // 마스코트 창 확장/복귀 — 위치+크기를 네이티브에서 한 번에 적용 (중간 프레임 깜빡임 방지)
 export const mascotSetExpanded = (expanded: boolean) =>
   invoke<void>('mascot_set_expanded', { expanded });
@@ -276,6 +275,16 @@ export async function getSprite(): Promise<string | null> {
 export async function getOccupantSprite(seed: string): Promise<string | null> {
   try { return await invoke<string | null>('get_occupant_sprite', { seed }); } catch { return null; }
 }
+
+/** 텍스트 LLM 엔진 설정 — 일기·한마디·잡담·채팅이 쓰는 OpenAI 호환 엔드포인트. */
+export interface EngineSettings { url: string; key: string; model: string; source: 'store' | 'env' | 'none' }
+
+export const engineSettingsGet = () => invoke<EngineSettings>('engine_settings_get');
+export const engineSettingsSet = (url: string, key: string, model: string) =>
+  invoke<void>('engine_settings_set', { url, key, model });
+/** 연결 확인 — 성공 시 사람이 읽는 메시지를 돌려준다. */
+export const engineTest = (url: string, key: string, model: string) =>
+  invoke<string>('engine_test', { url, key, model });
 
 /** 캐릭터 이미지 모델 설정 (텍스트 엔진과 분리 — 사내 LLM은 이미지 생성을 못 하므로). */
 export interface ImageSettings { url: string; key: string; model: string; source: 'store' | 'env' | 'none' }
