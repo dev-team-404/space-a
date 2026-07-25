@@ -121,9 +121,13 @@ fn cmd_hub_share(store: &SqliteStore) -> Result<()> {
     for (key, page) in &report.published {
         println!("published: {key} → page {page}");
     }
+    for (key, page, reuse) in &report.cited {
+        println!("cited(재사용): {key} → 기존 page {page} (reuse {reuse})");
+    }
     println!(
-        "hub-share: {}건 발행({}건 재개), {}건 보류/비대상",
+        "hub-share: {}건 발행, {}건 인용(재사용), {}건 재개, {}건 보류/비대상",
         report.published.len(),
+        report.cited.len(),
         report.resumed,
         report.skipped
     );

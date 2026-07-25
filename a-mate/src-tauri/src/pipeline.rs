@@ -553,9 +553,22 @@ mod runtime {
             }
         }
 
-        // ④ 신규: open_issue → 마크 → resolve(발행) → 마크
+        // ④ 신규: 검색 → (있으면) 인용 / (없으면) open_issue → resolve(발행)
+        //    검색은 "팀이 이미 풀어놨는지" 확인이다. 있으면 중복 발행 대신 인용해
+        //    ReuseEvent를 남긴다 — README의 "다른 에이전트가 검색·인용해 재사용".
+        let mut cited = 0usize;
         for f in picked {
             let Some(content) = hub::render_share(&f) else { continue };
+
+            // 검색 실패는 무해 — 빈 결과로 보고 기존 발행 경로로 폴백한다.
+            let hits = client
+                .search_knowledge(&cfg.space_id, &content.title, 5)
+                .unwrap_or_else(|e| {
+                    log::warn!("hub {}: search 실패(발행으로 폴백): {e}", f.dedup_key);
+                    Vec::new()
+                });
+            let citable = hub::pick_citable(&hits, &content.title, &cfg.user_id).cloned();
+
             let issue_id = match client.open_issue(&cfg.space_id, &content.title) {
                 Ok(id) => id,
                 Err(e) => { log::warn!("hub {}: open_issue 실패: {e}", f.dedup_key); continue; }
@@ -563,20 +576,38 @@ mod runtime {
             if let Ok(store) = store_mutex.lock() {
                 let _ = store.hub_mark_issue(&f.dedup_key, &issue_id, &now);
             }
-            match client.resolve_issue(&issue_id, &content.summary, &content.steps) {
-                Ok(Some(page_id)) => {
-                    if let Ok(store) = store_mutex.lock() {
-                        let _ = store.hub_mark_published(&f.dedup_key, &page_id, &now);
+
+            match citable {
+                Some(hit) => {
+                    match client.cite_knowledge(&issue_id, &hit.page_id, "a-mate: 같은 진단을 로컬에서 재확인") {
+                        Ok(_) => {
+                            // 인용도 처리 완료 — 평생 1회 원칙 유지 (page_id는 인용한 상대 페이지)
+                            if let Ok(store) = store_mutex.lock() {
+                                let _ = store.hub_mark_published(&f.dedup_key, &hit.page_id, &now);
+                            }
+                            cited += 1;
+                        }
+                        Err(e) => log::warn!("hub {}: cite 실패(다음 스캔 재개): {e}", f.dedup_key),
                     }
-                    published += 1;
                 }
-                Ok(None) => log::warn!("hub {}: resolve 응답에 page_id 없음", f.dedup_key),
-                Err(e) => log::warn!("hub {}: resolve 실패(다음 스캔 재개): {e}", f.dedup_key),
+                None => match client.resolve_issue(&issue_id, &content.summary, &content.steps) {
+                    Ok(Some(page_id)) => {
+                        if let Ok(store) = store_mutex.lock() {
+                            let _ = store.hub_mark_published(&f.dedup_key, &page_id, &now);
+                        }
+                        published += 1;
+                    }
+                    Ok(None) => log::warn!("hub {}: resolve 응답에 page_id 없음", f.dedup_key),
+                    Err(e) => log::warn!("hub {}: resolve 실패(다음 스캔 재개): {e}", f.dedup_key),
+                },
             }
         }
 
-        if published > 0 {
-            log::info!("hub 지식 공유: {published}건 발행 (space {})", cfg.space_id);
+        if published > 0 || cited > 0 {
+            log::info!(
+                "hub 지식 공유: {published}건 발행, {cited}건 인용(재사용) (space {})",
+                cfg.space_id
+            );
         }
     }
 
