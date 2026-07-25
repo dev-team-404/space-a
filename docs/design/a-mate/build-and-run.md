@@ -171,11 +171,215 @@ AGENT_MENTOR_ENGINE_MODEL=gpt-4.1-mini
 
 ---
 
-## 배포 — 동료에게 설치 파일 전달
+## 릴리스 — 자동 업데이트 채널로 발행
 
-동료 PC에 넘길 **Windows 설치 파일(NSIS `.exe`)**을 만드는 절차입니다. 아직 CI가 없으므로
-**로컬 Windows에서 수동 빌드**합니다. (`tauri.conf.json`의 `bundle.active: true`,
-`targets: ["nsis"]` 설정으로 `tauri build` 시 설치 파일이 생성됩니다.)
+updater·서명이 연결돼 있어(`tauri.conf.json`의 `plugins.updater` + `createUpdaterArtifacts`),
+새 버전은 **공개 릴리스 저장소** `dev-team-404/a-mate-releases`에 발행하면 설치본이
+앱 내에서 자동 업데이트된다. 발행은 **WSL에서 로컬 스크립트**로 한다(현재 CI 미도입).
+
+```bash
+# 저장소 루트에서 (WSL)
+bash a-mate/scripts/release-amate.sh --dry-run 0.2.0   # 프리플라이트만 점검
+bash a-mate/scripts/release-amate.sh 0.2.0             # 실제 발행
+```
+
+스크립트가 하는 일: 버전 갱신(commit·tag) → NTFS 빌드 폴더로 rsync → Windows에서 서명 빌드
+→ `latest.json` 생성 → `gh release create`로 setup.exe·latest.json 업로드. 실행 전
+**프리플라이트**가 서명 키·`gh` 인증·릴리스 저장소·워킹트리·태그 중복을 검사해, 실패하면
+변경 이전에 해결 명령과 함께 중단한다.
+
+### 최초 1회 셋업
+
+| 항목 | 방법 |
+|------|------|
+| 공개 릴리스 저장소 | `gh repo create dev-team-404/a-mate-releases --public` (updater가 익명 fetch하므로 **반드시 public**) |
+| 서명 키(팀 공용) | updater 개인키 + 암호를 안전 채널(1Password 등)로 받아 `~/.tauri/a-mate-updater.{key,pass}`에 배치(`chmod 600`). **커밋 금지.** 모두 **같은 키**여야 자동 업데이트가 깨지지 않는다. 개발·테스트라면 [레포 내 `dev-key/`](#개발용-서명-키--레포-내-a-matedev-key)를 그대로 쓸 수 있다 |
+| `gh` 인증 | `gh auth login` |
+
+> **서명 키 출처 (어디서 받나).** 이 키페어는 최초에 `tauri signer generate`로 **한 번 생성**됐다.
+> public key는 `tauri.conf.json`의 `pubkey`에 커밋돼 있고(공개, 안전), **private key + 암호는
+> 릴리스 최초 셋업자가 자신의 `~/.tauri/`에 보관**한다. 중앙 발급처는 없다 — 새 릴리서는
+> **그 보관자에게서** 받는다. 노트북 분실 시 키가 사라지면 재생성해야 하고, 그러면 pubkey가 바뀌어
+> **기존 설치본 자동 업데이트가 깨진다.** 따라서 개인키+암호를 **팀 공유 비밀번호 관리자
+> (예: 1Password 공유 볼트)에 백업**해 두고, 새 릴리서는 거기서 받아 `~/.tauri/a-mate-updater.{key,pass}`에
+> 배치(`chmod 600`)한다.
+
+### 오버라이드 env — 스크립트 수정 없이 동작 바꾸기
+
+`release-amate.sh`는 하드코딩 대신 네 개의 env로 주요 경로·대상을 바꿀 수 있다.
+**스크립트 앞에 붙여 그 실행에만 적용**하거나(권장), `export`로 셸 세션 전체에 적용한다.
+`.env` 파일은 읽지 않는다 — 그건 앱 dev 빌드용이다.
+
+| env | 기본값 | 무엇을 바꾸나 |
+|-----|--------|---------------|
+| `AMATE_RELEASE_REPO` | `dev-team-404/a-mate-releases` | 릴리스를 **발행할 GitHub 저장소**. 프리플라이트의 저장소 존재 확인, `gh release create --repo`, `latest.json`의 다운로드 URL이 모두 이 값을 따른다 |
+| `AMATE_WIN_BUILD` | `%USERPROFILE%\amate-build\a-mate` | Windows 쪽 **빌드 작업 폴더**(NTFS). 소스를 rsync로 복사하고 `npm run tauri build`를 이 폴더에서 돌린다 |
+| `AMATE_KEY_FILE` | `~/.tauri/a-mate-updater.key` | **개인키 파일 경로**(WSL 경로). 내용이 `TAURI_SIGNING_PRIVATE_KEY`로 주입된다 |
+| `AMATE_KEY_PASS_FILE` | `~/.tauri/a-mate-updater.pass` | **개인키 암호 파일 경로**(WSL 경로). 단, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`가 설정돼 있으면 **그쪽이 우선**이고 이 파일은 안 읽는다 |
+
+#### 사용 예시
+
+**① 내 개인 fork에 시험 발행** — 팀 공용 저장소를 건드리지 않고 릴리스 전 과정을 검증한다.
+
+```bash
+gh repo create my-id/a-mate-releases-test --public          # 최초 1회
+AMATE_RELEASE_REPO=my-id/a-mate-releases-test \
+  bash a-mate/scripts/release-amate.sh --dry-run 0.2.0
+```
+
+**② 빌드 폴더를 다른 드라이브로** — C: 용량이 부족하거나 빌드 캐시를 분리하고 싶을 때.
+값은 **Windows 형식 경로**(백슬래시)여야 한다 — PowerShell `Set-Location`과 `wslpath`에 그대로 넘어가므로
+백슬래시가 셸에 먹히지 않게 **싱글쿼트**로 감싼다.
+
+```bash
+AMATE_WIN_BUILD='D:\build\a-mate' bash a-mate/scripts/release-amate.sh 0.2.0
+```
+
+**③ 레포 내 개발용 키로 서명** — `~/.tauri/`로 복사·이름 변경 없이 바로 가리킨다
+([개발용 서명 키](#개발용-서명-키--레포-내-a-matedev-key) 참고).
+
+```bash
+AMATE_KEY_FILE=a-mate/dev-key/a-mate-updater.key.usefordev \
+AMATE_KEY_PASS_FILE=a-mate/dev-key/a-mate-updater.pass \
+  bash a-mate/scripts/release-amate.sh --dry-run 0.2.0
+```
+
+**④ 암호를 파일 없이 직접** — 1Password에서 값만 복사해 왔을 때. 이때 `AMATE_KEY_PASS_FILE`은 무시된다.
+
+```bash
+read -rsp '개인키 암호: ' TAURI_SIGNING_PRIVATE_KEY_PASSWORD; echo   # 화면에 안 찍힘
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD                          # 개인키 파일(.key)은 여전히 필요
+bash a-mate/scripts/release-amate.sh 0.2.0
+```
+
+**⑤ 여러 개 동시 + 세션 전체 적용** — 반복 실행할 때는 `export`가 편하다.
+
+```bash
+export AMATE_RELEASE_REPO=my-id/a-mate-releases-test
+export AMATE_WIN_BUILD='D:\build\a-mate'
+bash a-mate/scripts/release-amate.sh --dry-run 0.2.0
+bash a-mate/scripts/release-amate.sh --dry-run 0.2.1
+```
+
+> **적용됐는지는 `--dry-run`으로 확인한다.** dry-run이 해석된 값을 그대로 출력한다:
+> ```
+> [dry-run] 릴리스 대상 : my-id/a-mate-releases-test
+> [dry-run] 빌드 폴더   : D:\build\a-mate  (/mnt/d/build/a-mate)
+> ```
+
+#### 주의
+
+- **`AMATE_RELEASE_REPO`는 발행 대상만 바꾼다.** 설치본이 업데이트를 확인하는 주소는
+  `tauri.conf.json`의 `endpoints`에 컴파일돼 있어 그대로다 — 시험 발행한 릴리스를 실제 사용자가 받지는 않는다.
+  진짜 저장소 이전은 [릴리스 저장소 변경](#릴리스-저장소-변경) 절차를 따른다.
+- **`AMATE_WIN_BUILD`는 전용 폴더로.** rsync가 `--delete`로 동기화하므로 그 폴더의 다른 내용은 지워진다.
+  또한 WSL의 ext4 경로(`/home/...`)를 주면 안 된다 — Windows에서 빌드가 돌아야 하므로 **NTFS 경로**여야 한다.
+- **`AMATE_KEY_FILE`은 키 파일의 경로이지 키 내용이 아니다.** 내용을 직접 넘기려면 Tauri의
+  `TAURI_SIGNING_PRIVATE_KEY`를 쓰는 방식이 되는데, 이 스크립트는 항상 파일에서 읽으므로 경로로 지정한다.
+- 테스트 전용 훅으로 `PROC_VERSION_FILE`(기본 `/proc/version`)도 있다 — `check_wsl`을 가짜 파일로
+  검증하기 위한 것이니 릴리스 시엔 건드리지 않는다.
+
+### 개발용 서명 키 — 레포 내 `a-mate/dev-key/`
+
+개발·테스트 목적의 릴리스는 1Password를 거치지 않고 **레포에 포함된 키를 그대로 쓴다.**
+`a-mate/dev-key/`에 세 파일이 있고, 이 키의 pubkey는 `tauri.conf.json`의 `pubkey`와 **동일**하므로
+이 키로 서명한 릴리스는 기존 설치본이 정상 검증한다(= 자동 업데이트가 그대로 동작).
+
+| `a-mate/dev-key/` 파일 | 역할 |
+|------|------|
+| `a-mate-updater.key.usefordev` | **개인키** — 이름 그대로는 스크립트가 못 찾는다 (아래 참고) |
+| `a-mate-updater.pass` | 개인키 암호 |
+| `a-mate-updater.key.pub` | 공개키 (이미 `tauri.conf.json`에 반영돼 있어 빌드에 쓰지 않음) |
+
+**⚠️ `key.` 뒤의 접미사를 제거해야 한다.** 개인키 파일명이 `a-mate-updater.key.usefordev`인 것은
+루트 `.gitignore`의 `*.key` 규칙이 `a-mate-updater.key`를 무시해 레포에 담을 수 없기 때문이다.
+스크립트(`KEY_FILE` 기본값)는 **`a-mate-updater.key`** 를 찾으므로, 배치할 때
+**`key.` 뒤의 `usefordev`를 떼어** 확장자를 `.key`로 되돌려야 인식된다.
+
+```bash
+# 저장소 루트에서 (WSL)
+mkdir -p ~/.tauri
+cp a-mate/dev-key/a-mate-updater.key.usefordev ~/.tauri/a-mate-updater.key   # ← .usefordev 제거
+cp a-mate/dev-key/a-mate-updater.pass          ~/.tauri/a-mate-updater.pass
+chmod 600 ~/.tauri/a-mate-updater.key ~/.tauri/a-mate-updater.pass
+
+bash a-mate/scripts/release-amate.sh --dry-run 0.2.0    # 프리플라이트 통과 확인
+```
+
+복사·이름 변경 없이 **env로 직접 가리키는** 방법도 된다 (이때는 접미사를 떼지 않아도 무방):
+
+```bash
+AMATE_KEY_FILE=a-mate/dev-key/a-mate-updater.key.usefordev \
+AMATE_KEY_PASS_FILE=a-mate/dev-key/a-mate-updater.pass \
+bash a-mate/scripts/release-amate.sh --dry-run 0.2.0
+```
+
+> **이 키는 "개발 전용 별도 키"가 아니다.** pubkey가 배포본과 같은 **실제 서명 키**이므로,
+> 유출되면 누구나 모든 설치본이 신뢰하는 업데이트를 서명할 수 있다. `space-a` 레포를
+> **private로 유지**하고 외부에 공유하지 않는다. `~/.tauri/`로 복사한 사본도 `chmod 600`.
+> 정식 릴리스 담당자는 [서명 키 출처](#최초-1회-셋업)대로 공유 볼트에서 받은 키를 쓴다.
+
+### 서명 키 3파일과 빌드 (어떻게 다시 쓰이나)
+
+`tauri signer generate`는 세 요소를 만든다 — 역할과 사용 시점이 다르다.
+
+| 파일 | 종류 | 빌드에서 쓰이나 · 어떻게 |
+|------|------|--------------------------|
+| `~/.tauri/a-mate-updater.key` | **개인키** | ✅ **릴리스 빌드 시.** 파일 **내용**을 env `TAURI_SIGNING_PRIVATE_KEY`로 주입 → `tauri build`가 설치 파일을 서명해 `.sig`를 생성 |
+| `~/.tauri/a-mate-updater.pass` | **개인키 암호** | ✅ **릴리스 빌드 시.** env `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`로 주입 → 개인키 잠금 해제 |
+| `~/.tauri/a-mate-updater.key.pub` | **공개키** | ❌ 빌드에 직접 넣지 않음. 최초 셋업 때 이 내용을 `tauri.conf.json`의 `plugins.updater.pubkey`에 **한 번** 복사. 설치된 앱이 이 값으로 `.sig`를 검증. `.pub` 파일은 그 값의 출처 사본일 뿐 |
+
+`release-amate.sh`가 이 주입을 자동으로 한다 (env를 직접 만질 필요 없음) — `[3/6] 서명 빌드` 발췌:
+
+```bash
+KEY_CONTENT="$(cat "$KEY_FILE")"            # a-mate-updater.key 내용
+# KEY_PW 는 a-mate-updater.pass (또는 TAURI_SIGNING_PRIVATE_KEY_PASSWORD env)에서 읽음
+powershell.exe -NoProfile -Command " ... \
+  \$env:TAURI_SIGNING_PRIVATE_KEY='$KEY_CONTENT'; \        # 개인키
+  \$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD='$KEY_PW'; \    # 개인키 암호
+  ... npm run tauri build"                                 # 이 두 env가 있어야 .sig 생성
+```
+
+정리: **빌드에 필요한 건 `.key` + `.pass` 둘뿐**이고, `.pub`은 이미 `tauri.conf.json`에 박혀 있어 빌드에 다시 넣지 않는다. 두 env가 없으면 `createUpdaterArtifacts`가 켜져 있어도 `.sig`가 안 나와 자동 업데이트가 성립하지 않는다.
+
+> 스크립트 없이 Windows PowerShell에서 직접 서명 빌드하려면 같은 두 env를 손으로 세팅한다
+> (개행 제거 위해 `.Trim()`):
+> `$env:TAURI_SIGNING_PRIVATE_KEY = (Get-Content -Raw "$HOME\.tauri\a-mate-updater.key").Trim()` ·
+> `$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = (Get-Content -Raw "$HOME\.tauri\a-mate-updater.pass").Trim()`
+> → `npm run tauri build`.
+
+### 주의사항
+
+| 항목 | 내용 |
+|------|------|
+| **코드 서명 인증서 없음** | updater 서명키(무료)만 사용. 최초 **수동 설치 1회**만 SmartScreen 경고("추가 정보 → 실행"). 이후 인앱 자동 업데이트엔 지장 없음 |
+| **버전 인자 필수** | `release-amate.sh <version>` — 형식 `X.Y.Z`. 이미 존재하는 태그면 프리플라이트가 중단 |
+| **WSL에서 실행** | 스크립트가 `powershell.exe`로 Windows 빌드를 구동. 네이티브 Windows 단독 실행용 아님 |
+| **WebView2 필요** | Windows 11엔 기본 포함. 없는 환경이면 NSIS 설치기가 안내하거나, [사전 요구사항 4](#4-webview2-런타임)를 먼저 설치해야 합니다 |
+
+### 릴리스 저장소 변경
+
+릴리스 저장소를 다른 repo로 옮기려면 **두 곳**을 바꿔야 한다 — 성격이 다르다.
+
+| 곳 | 역할 | 변경 방법 |
+|----|------|-----------|
+| `scripts/release-amate.sh`의 `RELEASE_REPO` | 릴리스를 **발행(push)** 하는 대상 | 한 번만: `AMATE_RELEASE_REPO=owner/new-repo bash a-mate/scripts/release-amate.sh 0.2.0` · 영구: 스크립트 기본값 수정. `latest.json` 다운로드 URL은 `$RELEASE_REPO`로 자동 생성돼 함께 일관됨 |
+| `src-tauri/tauri.conf.json`의 `plugins.updater.endpoints` | 설치본이 업데이트를 **확인(fetch)** 하는 주소 | 값 안의 `dev-team-404/a-mate-releases`를 새 `owner/repo`로 수정 후 **그 버전을 빌드** |
+
+⚠️ `endpoints`는 빌드 시 앱 바이너리에 **컴파일**되므로, **기존 설치본은 옛 주소를 계속 폴링**한다. 깔끔히 이전하려면:
+
+1. `tauri.conf.json`의 endpoint를 **새 repo**로 수정한다.
+2. **옛 repo에** 한 버전 더 발행한다 → 기존 사용자가 이 업데이트를 받으며 endpoint가 새 repo로 전환된다.
+3. 이후부터 **새 repo에** 발행한다.
+
+> 사용자가 적어 재설치를 감수한다면, 두 곳만 바꾸고 기존 사용자는 새 repo에서 재설치하게 하면 된다.
+
+- 새 저장소도 **반드시 public**: `gh repo create owner/new-repo --public`
+- 서명 키(pubkey)는 저장소와 무관하다 — **그대로 유지**하면 자동 업데이트가 안 깨진다(repo만 바뀌고 키가 동일하면 OK). [서명 키 공유 원칙](#릴리스--자동-업데이트-채널로-발행) 참고.
+
+### 폴백 — 설치 파일만 전달 (자동 업데이트 없음)
+
+자동 업데이트 없이 설치 파일 하나만 동료에게 넘기려면 Windows에서 직접 빌드한다:
 
 ```powershell
 cd a-mate
@@ -183,27 +387,11 @@ npm install                 # 최초 1회 (또는 의존성 변경 시)
 npm run tauri build         # 프론트 빌드 → Rust 릴리스 컴파일 → NSIS 설치 파일 번들
 ```
 
-산출물 위치:
-
-```
-a-mate/src-tauri/target/release/bundle/nsis/Agent Mentor_<버전>_x64-setup.exe
-```
-
-이 `*-setup.exe` 하나를 동료에게 전달하면 됩니다. 실행하면 시작 메뉴 등록·아이콘·제거
-기능이 있는 형태로 설치됩니다.
-
-### 배포 전 체크 & 주의사항
-
-| 항목 | 내용 |
-|------|------|
-| **버전 올리기** | 새로 배포할 땐 `src-tauri/tauri.conf.json`의 `version`을 먼저 올리세요. 파일명·설치 정보에 반영됩니다. |
-| **코드 서명 없음** | 현재 서명 인프라가 없어(설계상 3단계 보류) 설치 시 **Windows SmartScreen 경고**가 뜹니다. 동료는 "추가 정보 → 실행"으로 진행해야 합니다. |
-| **자동 업데이트 없음** | `updater` 미도입 상태입니다. 새 버전은 **다시 빌드 → 설치 파일 재전달 → 동료가 재설치**해야 반영됩니다. |
-| **WebView2 필요** | Windows 11엔 기본 포함. 없는 환경이면 NSIS 설치기가 안내하거나, [사전 요구사항 4](#4-webview2-런타임)를 먼저 설치해야 합니다. |
+산출물: `a-mate/src-tauri/target/release/bundle/nsis/Agent Mentor_<버전>_x64-setup.exe` —
+이 `*-setup.exe`를 전달하면 시작 메뉴 등록·아이콘·제거 기능과 함께 설치된다.
 
 > MSI도 함께 만들려면 `tauri.conf.json`의 `bundle.targets`를 `["nsis", "msi"]`로 두면
-> `bundle/msi/`에도 산출됩니다. 코드 서명·자동 업데이트 활성화는 서명 인프라가 확정되는
-> [로드맵 3단계](04-history-and-roadmap.md)에서 다룹니다.
+> `bundle/msi/`에도 산출된다.
 
 ---
 
@@ -225,6 +413,13 @@ cargo test           # Rust 백엔드 테스트 (워크스페이스 전체)
 - **`link.exe`/`cl.exe` not found, `error: linker ... not found`**
   → Visual Studio C++ Build Tools의 "C++를 사용한 데스크톱 개발" 워크로드가 없습니다.
   위 [사전 요구사항 3](#3-visual-studio-c-build-tools-msvc-링커--c-컴파일러)을 설치하세요.
+- **릴리스 시 `powershell.exe: cannot execute binary file: Exec format error`**
+  → WSL↔Windows **interop이 꺼진** 상태입니다 (주로 `/etc/wsl.conf`의 `systemd=true`에서
+  `systemd-binfmt`가 부팅 때 `WSLInterop` 등록을 지움). 확인: `ls /proc/sys/fs/binfmt_misc/`에
+  `WSLInterop`이 없음.
+  즉시 복구: `sudo sh -c 'echo ":WSLInterop:M::MZ::/init:PF" > /proc/sys/fs/binfmt_misc/register'`.
+  영구 복구: `sudo systemctl mask systemd-binfmt.service` 후 (Windows에서) `wsl --shutdown`.
+  `release-amate.sh`의 프리플라이트(`check_wsl`)가 이 상태를 감지해 같은 안내와 함께 중단한다.
 - **WSL에서 실행했더니 GUI가 안 뜸 / 빌드가 이상함**
   → WSL이 아니라 **Windows PowerShell/cmd**에서 실행해야 합니다. 맨 위 실행 환경 안내 참조.
 - **`cargo`/`node`를 찾을 수 없음**
