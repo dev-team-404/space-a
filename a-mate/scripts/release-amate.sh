@@ -100,10 +100,40 @@ init_paths() {
   KEY_PW="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-$(cat "$KEY_PASS_FILE" 2>/dev/null || echo '')}"
 }
 
+preflight() {
+  local v=$1
+  check_version_fmt "$v" || return 1
+  check_signing_key      || return 1
+  check_gh_auth          || return 1
+  check_release_repo     || return 1
+  check_clean_tree       || return 1
+  check_tag_absent "$v"  || return 1
+  warn_branch
+}
+
 main() {
-  local VERSION="${1:?사용법: release-amate.sh [--dry-run] <version> (예: 0.2.0)}"
-  check_version_fmt "$VERSION"
+  local DRY_RUN=0 VERSION=""
+  for a in "$@"; do
+    case "$a" in
+      --dry-run) DRY_RUN=1 ;;
+      -*) echo "ERROR: 알 수 없는 옵션: $a" >&2; return 2 ;;
+      *) VERSION="$a" ;;
+    esac
+  done
+  : "${VERSION:?사용법: release-amate.sh [--dry-run] <version> (예: 0.2.0)}"
+
+  check_wsl   || return 1
   init_paths
+  preflight "$VERSION" || return 1
+
+  if [[ $DRY_RUN -eq 1 ]]; then
+    echo "[dry-run] 릴리스 대상 : $RELEASE_REPO"
+    echo "[dry-run] 저장소      : $REPO"
+    echo "[dry-run] 빌드 폴더   : $WIN_BUILD_WIN  ($WIN_BUILD_WSL)"
+    echo "[dry-run] 태그        : v$VERSION"
+    echo "[dry-run] 프리플라이트 통과. 실제 발행은 --dry-run 없이 실행하세요."
+    return 0
+  fi
 
   echo "[1/6] 버전 $VERSION 반영 (tauri.conf.json + Cargo.toml)"
   node -e "const f='$CONF';const j=require(f);j.version='$VERSION';require('fs').writeFileSync(f, JSON.stringify(j,null,2)+'\n')"

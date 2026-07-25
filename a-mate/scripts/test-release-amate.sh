@@ -133,6 +133,51 @@ test_wsl() {
   rm -rf "$tmp"
 }
 
+# builds a sandbox where every check passes; sets globals GREEN_BIN, GREEN_REPO
+# + the check globals. Call WITHOUT $() so the assignments reach the caller.
+setup_green_env() {
+  local tmp; tmp="$(mktemp -d)"
+  GREEN_REPO="$(setup_repo)"
+  GREEN_BIN="$tmp/bin"
+  mkdir -p "$GREEN_BIN"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$GREEN_BIN/gh"
+  cat > "$GREEN_BIN/powershell.exe" <<'EOF'
+#!/usr/bin/env bash
+printf '%s' 'C:\Users\tester'
+EOF
+  chmod +x "$GREEN_BIN/gh" "$GREEN_BIN/powershell.exe"
+  KEY_FILE="$tmp/key"; : > "$KEY_FILE"
+  KEY_PASS_FILE="$tmp/pass"; echo secret > "$KEY_PASS_FILE"
+  PROC_VERSION_FILE="$tmp/proc"; echo microsoft > "$PROC_VERSION_FILE"
+  SCRIPT_DIR="$GREEN_REPO"
+  RELEASE_REPO="owner/repo"
+  unset AMATE_WIN_BUILD TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+}
+
+test_preflight_pass_and_fail() {
+  echo "test_preflight_pass_and_fail"
+  if ! command -v wslpath >/dev/null 2>&1; then echo "  skip: wslpath 없음"; return; fi
+  setup_green_env
+  PATH="$GREEN_BIN:$PATH" init_paths           # stub powershell + sets KEY_PW
+  ( PATH="$GREEN_BIN:$PATH"; preflight 9.9.9 ); [[ $? -eq 0 ]] && ok "preflight all-green" || bad "preflight should pass"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$GREEN_BIN/gh"
+  ( PATH="$GREEN_BIN:$PATH"; preflight 9.9.9 ); [[ $? -ne 0 ]] && ok "preflight fails on gh" || bad "preflight should fail"
+  rm -rf "$GREEN_BIN" "$GREEN_REPO"
+}
+
+test_dry_run_no_mutation() {
+  echo "test_dry_run_no_mutation"
+  if ! command -v wslpath >/dev/null 2>&1; then echo "  skip: wslpath 없음"; return; fi
+  setup_green_env
+  local before after rc
+  before="$(git -C "$GREEN_REPO" tag -l)"
+  ( PATH="$GREEN_BIN:$PATH"; main --dry-run 9.9.9 ) >/dev/null 2>&1; rc=$?
+  after="$(git -C "$GREEN_REPO" tag -l)"
+  [[ $rc -eq 0 ]] && ok "dry-run exit 0" || bad "dry-run exit=$rc"
+  [[ "$before" == "$after" ]] && ok "dry-run created no tag" || bad "dry-run mutated tags: '$after'"
+  rm -rf "$GREEN_BIN" "$GREEN_REPO"
+}
+
 test_version_fmt
 test_init_paths
 test_signing_key
@@ -141,6 +186,8 @@ test_clean_tree
 test_tag_absent
 test_warn_branch
 test_wsl
+test_preflight_pass_and_fail
+test_dry_run_no_mutation
 
 echo "---"
 echo "PASS=$pass FAIL=$fail"
