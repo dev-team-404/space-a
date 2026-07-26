@@ -768,7 +768,7 @@ mod runtime {
         };
         let Some(cfg) = cfg else { return };
         let spec = agent_mentor::mascot::robot_spec_from_profile(&uuid, mbti.as_deref());
-        let desc = sprite::character_description(&spec, &uuid);
+        let desc = sprite::character_description(&spec, mbti.as_deref(), &uuid);
         match sprite::generate(&cfg, &desc) {
             Ok(png) => {
                 let _ = std::fs::create_dir_all(&dir);

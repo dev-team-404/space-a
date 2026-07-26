@@ -1666,32 +1666,46 @@ pub fn memory_delete(state: State<AppState>, id: i64) -> Result<(), String> {
     guard.delete_memory(id).map_err(|e| e.to_string())
 }
 
-/// 내 캐릭터 재생성 — 이미지 모델로 새로 그려 캐시를 교체. 네트워크는 **락 밖**(규율 동일).
-/// 완료 시 `sprite:ready` emit → 마스코트가 즉시 교체된다.
+/// 마스코트 미리보기 — 새 변주 시드로 후보를 생성해 sprite.candidate.png에 저장하고 base64 반환.
+/// sprite.png(실사용본)는 건드리지 않는다. 네트워크는 락 밖.
 #[tauri::command(async)]
-pub fn regenerate_sprite(app: tauri::AppHandle, state: State<AppState>) -> Result<(), String> {
-    use tauri::{Emitter as _, Manager as _};
-    // 락 범위: 설정 해석 + 프로필(uuid·mbti)만
-    let (cfg, uuid, mbti) = {
+pub fn mascot_preview(app: tauri::AppHandle, state: State<AppState>) -> Result<String, String> {
+    use base64::Engine as _;
+    use tauri::Manager as _;
+    let (cfg, mbti) = {
         let guard = lock(&state)?;
         let cfg = crate::resolve_sprite_cfg(&guard);
-        let (uuid, mbti) = sprite_identity(&guard)?;
-        (cfg, uuid, mbti)
+        let (_uuid, mbti) = sprite_identity(&guard)?;
+        (cfg, mbti)
     };
     let Some(cfg) = cfg else {
-        return Err("이미지 모델이 설정되지 않았어요 — 설정 → 캐릭터 이미지에서 URL·키를 넣어주세요".into());
+        return Err("이미지 모델이 설정되지 않았어요 — 설정 → 연결 → 캐릭터 이미지에서 URL·키를 넣어주세요".into());
     };
-    let spec = agent_mentor::mascot::robot_spec_from_profile(&uuid, mbti.as_deref());
-    let desc = agent_mentor::sprite::character_description(&spec, &uuid);
-    // 락 밖 네트워크 (수십 초 걸릴 수 있음 — async 커맨드라 UI는 안 막힌다)
+    // 변주 시드 = 새 UUID(재생성마다 다른 후보). spec·묘사 모두 이 시드로 뽑는다.
+    let seed = uuid::Uuid::new_v4().to_string();
+    let spec = agent_mentor::mascot::robot_spec_from_profile(&seed, mbti.as_deref());
+    let desc = agent_mentor::sprite::character_description(&spec, mbti.as_deref(), &seed);
     let png = agent_mentor::sprite::generate(&cfg, &desc).map_err(|e| e.to_string())?;
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join("sprite.png"), png).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join("sprite.candidate.png"), &png).map_err(|e| e.to_string())?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&png))
+}
+
+/// 마스코트 저장 — candidate를 실사용본(sprite.png)으로 승격하고 반영(emit + 허브 업로드).
+#[tauri::command(async)]
+pub fn mascot_commit(app: tauri::AppHandle, state: State<AppState>) -> Result<(), String> {
+    use tauri::{Emitter as _, Manager as _};
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let candidate = dir.join("sprite.candidate.png");
+    let png = std::fs::read(&candidate)
+        .map_err(|_| "저장할 미리보기가 없어요 — 먼저 '재생성'을 눌러주세요".to_string())?;
+    std::fs::write(dir.join("sprite.png"), &png).map_err(|e| e.to_string())?;
+    let _ = std::fs::remove_file(&candidate);
     if let Some(client) = hub_client(&state)? {
         let _ = upload_cached_mascot(&app, &client);
     }
-    log::info!("캐릭터 재생성 완료");
+    log::info!("마스코트 저장(commit) 완료");
     let _ = app.emit("sprite:ready", ());
     Ok(())
 }
