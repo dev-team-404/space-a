@@ -737,7 +737,7 @@ pub fn hub_connect(
     };
     if !existing.1.is_empty() {
         let client = LifeClient { base_url: url.clone(), token: existing.1, api_key: key_opt.clone() };
-        match client.rename(&user) {
+        match client.rename(&user, &owner_os_user()) {
             Ok(_) => {
                 let guard = lock(&state)?;
                 guard.set_setting("hub_url", &url).map_err(|e| e.to_string())?;
@@ -766,7 +766,7 @@ pub fn hub_connect(
         (u, o)
     };
     // 네트워크는 락 밖
-    let os_user = std::env::var("USERNAME").or_else(|_| std::env::var("USER")).unwrap_or_default();
+    let os_user = owner_os_user();
     let v = life_client::register_profile(&url, key_opt.as_deref(), &user, &uuid, &org, &uuid, &os_user)
         .map_err(|e| e.to_string())?;
     let token = v["token"].as_str().unwrap_or_default().to_string();
@@ -1563,6 +1563,11 @@ pub(crate) fn owner_title(store: &SqliteStore) -> String {
         .unwrap_or_else(|| agent_mentor::mascot::DEFAULT_OWNER_TITLE.to_string())
 }
 
+/// 주인 OS 계정명 — Life 등록·갱신에 실을 숨은 주인 식별자(§F). 없으면 빈 문자열.
+fn owner_os_user() -> String {
+    std::env::var("USERNAME").or_else(|_| std::env::var("USER")).unwrap_or_default()
+}
+
 /// 스프라이트 생성 정체성 = (uuid, mbti). uuid는 없으면 생성.
 pub(crate) fn sprite_identity(store: &SqliteStore) -> Result<(String, Option<String>), String> {
     let uuid = ensure_uuid(store)?;
@@ -1615,7 +1620,7 @@ pub fn profile_set(
     };
     if name != old_name {
         if let Some(client) = hub_client(&state)? {
-            client.rename(&name).map_err(|e| format!("Life 서버 이름 변경 실패: {e}"))?;
+            client.rename(&name, &owner_os_user()).map_err(|e| format!("Life 서버 이름 변경 실패: {e}"))?;
         }
     }
     {

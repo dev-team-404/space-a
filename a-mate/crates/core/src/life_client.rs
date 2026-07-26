@@ -110,9 +110,16 @@ impl LifeClient {
         self.req("GET", "/life/me").call().map_err(err_of)?.into_json().map_err(Into::into)
     }
 
-    pub fn rename(&self, name: &str) -> Result<Value> {
+    /// 이름 변경(에이전트 + 내 방 주인 이름). 주인 OS 계정(owner_os_user)도 함께 실어
+    /// 기존 연결도 §F 주인 식별자를 갱신한다 — register_profile과 같은 규약(빈 값은 생략,
+    /// 서버는 모르는 필드를 무시하므로 하위호환. register·PATCH가 동일 body 모델).
+    pub fn rename(&self, name: &str, owner_os_user: &str) -> Result<Value> {
+        let mut body = json!({ "name": name });
+        if !owner_os_user.trim().is_empty() {
+            body["owner_os_user"] = json!(owner_os_user);
+        }
         self.req("PATCH", "/life/me")
-            .send_json(json!({ "name": name }))
+            .send_json(body)
             .map_err(err_of)?
             .into_json()
             .map_err(Into::into)
