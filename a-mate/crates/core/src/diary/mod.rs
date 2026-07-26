@@ -1081,17 +1081,19 @@ const IDLE_PALETTE: &[&str] = &[
 ];
 
 /// date(YYYY-MM-DD)의 day-of-year로 팔레트에서 3개를 회전 선택. 파싱 실패 시 앞 3개.
-fn idle_palette_spotlight(date: &str) -> String {
+/// 팔레트 항목 중 하나("주인이 두고 간 …")가 기본 호칭을 담고 있어 honorific으로 치환한다.
+fn idle_palette_spotlight(date: &str, honorific: &str) -> String {
     let start = NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .map(|d| d.ordinal() as usize)
         .unwrap_or(0);
     let n = IDLE_PALETTE.len();
-    (0..3).map(|k| IDLE_PALETTE[(start + k) % n]).collect::<Vec<_>>().join(" / ")
+    let joined = (0..3).map(|k| IDLE_PALETTE[(start + k) % n]).collect::<Vec<_>>().join(" / ");
+    joined.replace("주인", honorific)
 }
 
 /// 무활동일 일기 시스템 프롬프트 — 작업 사실 없이 마스코트의 자유 시간을 능청스러운 상상 일기로.
 pub fn build_idle_prompt(cfg: &DiaryConfig, idle: &IdleContext, memories: &[String]) -> String {
-    let spotlight = idle_palette_spotlight(&idle.date);
+    let spotlight = idle_palette_spotlight(&idle.date, &cfg.honorific);
     let mbti_voice = crate::mascot::mbti_voice_hint(cfg.mbti.as_deref());
     // 공휴일이면 '주인이 안 온 날'로 열지 않는다 — '다 같이 쉬는 날'로 연다(평일 idle 프레이밍 방지).
     let opening = if idle.is_holiday {
@@ -2444,5 +2446,13 @@ mod tests {
         cfg.mbti = Some("INTJ".into());
         let p = build_system_prompt(&cfg, 5, &[]);
         assert!(p.contains("냉정")); // T 성향 톤이 일기 본문 프롬프트에도
+    }
+
+    #[test]
+    fn idle_palette_spotlight_uses_custom_honorific() {
+        // 2026-01-06의 day-of-year(6) 회전이 팔레트 index 6("주인이 두고 간 …")을 포함하는 날짜.
+        let s = idle_palette_spotlight("2026-01-06", "대장");
+        assert!(s.contains("대장이 두고 간"));
+        assert!(!s.contains("주인이 두고"));
     }
 }
