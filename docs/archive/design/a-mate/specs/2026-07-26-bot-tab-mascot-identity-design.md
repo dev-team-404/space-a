@@ -8,7 +8,7 @@ archived: 2026-07-26
 - **날짜**: 2026-07-26
 - **컴포넌트**: a-mate (Pillar 1)
 - **브랜치**: `feat/bot-tab-mascot-identity` (worktree)
-- **관계**: [2026-07-22-profile-and-mbti-mascot-design.md](./2026-07-22-profile-and-mbti-mascot-design.md)의 일부(이름의 의미·MBTI 저장 시 재생성 동작)를 **갱신·대체**한다. 방문/소셜을 일기·마스코트에 반영하는 후속 아이템은 별도 로드맵 [2026-07-26-life-social-diary-followups-roadmap.md](../plans/2026-07-26-life-social-diary-followups-roadmap.md)로 분리한다.
+- **관계**: [2026-07-22-profile-and-mbti-mascot-design.md](../../../../design/a-mate/specs/2026-07-22-profile-and-mbti-mascot-design.md)의 일부(이름의 의미·MBTI 저장 시 재생성 동작)를 **갱신·대체**한다. 방문/소셜을 일기·마스코트에 반영하는 후속 아이템은 별도 로드맵 [2026-07-26-life-social-diary-followups-roadmap.md](../../../../design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md)로 분리한다.
 
 ## 배경 — 현재 구조 (조사 결과)
 
