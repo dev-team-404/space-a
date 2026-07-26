@@ -887,6 +887,7 @@ pub struct DiaryConfig {
     pub honorific: String,
     pub locale: Option<String>,
     pub include_dev_days: bool,
+    pub mbti: Option<String>,
 }
 
 impl Default for DiaryConfig {
@@ -897,6 +898,7 @@ impl Default for DiaryConfig {
             honorific: "주인".to_string(),
             locale: None,
             include_dev_days: true,
+            mbti: None,
         }
     }
 }
@@ -969,6 +971,7 @@ fn memory_section(memories: &[String]) -> String {
 
 pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize, memories: &[String]) -> String {
     let (target, paras) = diary_length(commit_count);
+    let mbti_voice = crate::mascot::mbti_voice_hint(cfg.mbti.as_deref());
     format!(
         "당신은 사용자의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
          오늘 하루 자신이 겪은 일을 스스로 되돌아보는 1인칭 일기를 씁니다. \
@@ -977,7 +980,7 @@ pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize, memories: &[S
          톤 프리셋은 '{tone}'(A=감성, B=균형, C=분석)이며, 톤과 무관하게 기본적으로 \
          가볍고 유머러스하게, 다마고치풍의 능청과 장난기를 살려 쓰세요(단 과하지 않게). \
          \
-         {voice} \
+         {voice}{mbti_voice} \
          \
          정밀도의 선(반드시 지킬 것): 아래 JSON 브리프의 사실과 수치에만 근거해 서술하고, \
          브리프에 없는 구체적 수치를 지어내지 마세요. \
@@ -1024,6 +1027,7 @@ pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize, memories: &[S
         honorific = cfg.honorific,
         tone = cfg.tone,
         voice = voice_guidance(),
+        mbti_voice = mbti_voice,
         target = target,
         paras = paras,
         mem = memory_section(memories),
@@ -1088,6 +1092,7 @@ fn idle_palette_spotlight(date: &str) -> String {
 /// 무활동일 일기 시스템 프롬프트 — 작업 사실 없이 마스코트의 자유 시간을 능청스러운 상상 일기로.
 pub fn build_idle_prompt(cfg: &DiaryConfig, idle: &IdleContext, memories: &[String]) -> String {
     let spotlight = idle_palette_spotlight(&idle.date);
+    let mbti_voice = crate::mascot::mbti_voice_hint(cfg.mbti.as_deref());
     // 공휴일이면 '주인이 안 온 날'로 열지 않는다 — '다 같이 쉬는 날'로 연다(평일 idle 프레이밍 방지).
     let opening = if idle.is_holiday {
         format!("오늘은 다들 쉬는 공휴일 — {honorific}도 안 보이고, 나(마스코트)의 느긋한 자유 시간입니다.", honorific = cfg.honorific)
@@ -1096,7 +1101,7 @@ pub fn build_idle_prompt(cfg: &DiaryConfig, idle: &IdleContext, memories: &[Stri
     };
     format!(
         "당신은 {honorific}의 AI 코딩 여정을 함께하는 마스코트입니다. {opening} \
-         {voice} \
+         {voice}{mbti_voice} \
          단, 이건 작업 기록이 아니라 마스코트의 상상 일기입니다 — 위 문체 가이드의 '브리프 사실만' 조항은 여기선 무시하고 \
          (문체·자연스러움 규칙은 그대로 지키되) 나만의 하루를 맘껏 능청스럽게 지어내세요. 업무 이야기는 하지 마세요. \
          나에겐 옆 동네 다른 에이전트 친구들이 있고 혼자만의 취미도 있습니다. 오늘은 특히 이런 결의 소재를 살려보세요: {spotlight}. \
@@ -1108,6 +1113,7 @@ pub fn build_idle_prompt(cfg: &DiaryConfig, idle: &IdleContext, memories: &[Stri
         honorific = cfg.honorific,
         opening = opening,
         voice = voice_guidance(),
+        mbti_voice = mbti_voice,
         spotlight = spotlight,
         mem = memory_section(memories),
     )
@@ -2409,5 +2415,17 @@ mod tests {
         };
         let p = build_idle_prompt(&DiaryConfig::default(), &idle, &["주인은 고양이를 키움".to_string()]);
         assert!(p.contains("주인은 고양이를 키움"));
+    }
+
+    #[test]
+    fn diary_prompt_injects_mbti_voice() {
+        let mut cfg = DiaryConfig::default();
+        cfg.mbti = Some("INTJ".into());
+        let idle = IdleContext {
+            date: "2026-07-11".into(), is_weekend: false, is_holiday: false, days_idle: None,
+            occasions: vec![], recent_diaries: vec![],
+        };
+        let p = build_idle_prompt(&cfg, &idle, &[]);
+        assert!(p.contains("냉정")); // T 성향 톤이 idle 프롬프트에도
     }
 }
