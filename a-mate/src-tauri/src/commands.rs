@@ -1466,6 +1466,55 @@ pub fn image_settings_set(
     Ok(())
 }
 
+/// 프로브 판정 → 사람이 읽는 결과. Ok(초록)/Err(빨강)로 StatusLine에 표시된다. (순수)
+fn probe_result_message(
+    verdict: agent_mentor::sprite::ProbeVerdict,
+    model: &str,
+) -> Result<String, String> {
+    use agent_mentor::sprite::ProbeVerdict as V;
+    match verdict {
+        V::Ok => Ok("확인됨 — 엔드포인트·키·모델 OK. 실제 그림은 '캐릭터 재생성'으로 확인하세요".into()),
+        V::ModelMissing(ids) => {
+            let sample = if ids.is_empty() {
+                String::new()
+            } else {
+                format!(" (목록: {})", ids.join(", "))
+            };
+            Err(format!("연결·인증은 OK인데 '{model}' 모델이 목록에 없어요. 모델명을 확인하세요{sample}"))
+        }
+        V::NotOpenAiCompat => {
+            Err("이 URL은 모델 목록(/models)을 주지 않아요 — 엔드포인트가 OpenAI 호환 /v1 인지 확인하세요".into())
+        }
+        V::AuthFailed(c) => Err(format!("인증 실패 ({c}) — API 키를 확인하세요")),
+        V::RateLimited => Err("레이트 리밋 (429) — 잠시 후 다시 시도하세요".into()),
+        V::HttpError(c) => Err(format!("엔드포인트 오류 (HTTP {c}) — URL을 확인하세요")),
+        V::Connection(t) => Err(format!("연결 실패 — URL·포트를 확인하세요: {t}")),
+    }
+}
+
+/// 저장 전 값으로 이미지 엔드포인트를 검증한다 (무과금 — `GET /models`).
+/// 폼 값을 그대로 받아 실제 생성 없이 URL·키·모델을 확인한다. `engine_test` 미러링.
+#[tauri::command(async)]
+pub fn image_test(url: String, key: String, model: String) -> Result<String, String> {
+    let url = url.trim();
+    if url.is_empty() {
+        return Err("엔드포인트 URL을 입력하세요".into());
+    }
+    let model_in = model.trim();
+    // env 폴백 없이 폼 값 그대로 검증 (SpriteConfig::resolve의 env 경로를 쓰지 않는다).
+    let cfg = agent_mentor::sprite::SpriteConfig {
+        base_url: url.trim_end_matches('/').to_string(),
+        api_key: key.trim().to_string(),
+        model: if model_in.is_empty() {
+            agent_mentor::sprite::DEFAULT_IMAGE_MODEL.to_string()
+        } else {
+            model_in.to_string()
+        },
+    };
+    let verdict = agent_mentor::sprite::probe_endpoint(&cfg);
+    probe_result_message(verdict, &cfg.model)
+}
+
 /// 조직 기본값 — 개인정보 미입력 시.
 pub(crate) const DEFAULT_ORG: &str = "S/W 혁신팀";
 
@@ -1764,4 +1813,38 @@ pub fn save_skill_draft(slug: String, markdown: String) -> Result<String, String
     let path = agent_mentor::skill_draft::write_draft(&base, &slug, &markdown)
         .map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().into_owned())
+}
+
+#[cfg(test)]
+mod probe_message_tests {
+    use super::*;
+    use agent_mentor::sprite::ProbeVerdict as V;
+
+    #[test]
+    fn ok_verdict_is_green_and_points_to_regenerate() {
+        let msg = probe_result_message(V::Ok, "m").expect("Ok → Ok(초록)");
+        assert!(msg.contains("확인됨"), "성공 문구: {msg}");
+        assert!(msg.contains("캐릭터 재생성"), "재생성 안내 포함: {msg}");
+    }
+
+    #[test]
+    fn model_missing_is_error_with_model_and_list() {
+        let e = probe_result_message(V::ModelMissing(vec!["gpt-4o".into()]), "gemini/x")
+            .expect_err("ModelMissing → Err(빨강)");
+        assert!(e.contains("gemini/x"), "설정 모델명 포함: {e}");
+        assert!(e.contains("gpt-4o"), "목록 샘플 포함: {e}");
+    }
+
+    #[test]
+    fn auth_failed_mentions_code_and_key() {
+        let e = probe_result_message(V::AuthFailed(401), "m").expect_err("401 → Err");
+        assert!(e.contains("401") && e.contains("API 키"), "{e}");
+    }
+
+    #[test]
+    fn connection_mentions_url() {
+        let e = probe_result_message(V::Connection("dns error".into()), "m")
+            .expect_err("Connection → Err");
+        assert!(e.contains("연결 실패"), "{e}");
+    }
 }

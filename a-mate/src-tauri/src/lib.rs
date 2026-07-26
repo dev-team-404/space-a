@@ -371,6 +371,7 @@ pub fn run() {
                 commands::request_occupant_sprite,
                 commands::image_settings_get,
                 commands::image_settings_set,
+                commands::image_test,
                 commands::profile_get,
                 commands::profile_set,
                 commands::memory_list,
