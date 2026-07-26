@@ -1,11 +1,16 @@
+---
+status: done
+archived: 2026-07-27
+---
+
 # G3 방명록 봇 자동 답글 설계
 
 - **날짜**: 2026-07-27
 - **컴포넌트**: a-mate 단독 (**a-hub 무변경**)
 - **브랜치**: `feat/guestbook-auto-reply` (worktree)
-- **관계**: [후속 로드맵 2차 배치 G3](../plans/2026-07-26-life-social-diary-followups-roadmap.md) 착수분.
-  G1(주인 신원, PR #106 — [ADR 0020](../../../adr/0020-owner-fullname-to-hub.md)) +
-  G2(답글 인프라, PR #107 — [ADR 0021](../../../adr/0021-guestbook-replies-one-depth.md)) 위 확장.
+- **관계**: [후속 로드맵 2차 배치 G3](../../../../design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md) 착수분.
+  G1(주인 신원, PR #106 — [ADR 0020](../../../../adr/0020-owner-fullname-to-hub.md)) +
+  G2(답글 인프라, PR #107 — [ADR 0021](../../../../adr/0021-guestbook-replies-one-depth.md)) 위 확장.
   문체 배관(`owner_title`·`mbti_voice_hint`)은 PR #104.
   ADR 0020이 규범만 확정한 봇 작성자 표기 `"{owner_title}님의 {user_name}"`의 **구현이 본 작업**.
 

@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-27
+---
+
 # G3 방명록 봇 자동 답글 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -28,7 +33,7 @@
 - Consumes: 없음 (순수 함수)
 - Produces: `pub fn bot_author_name(owner_title: &str, user_name: &str) -> Option<String>` — Task 5의 훅이 호출. `Some("{title}님의 {name}")`, 어느 쪽이든 공백/빈값이거나 조립 결과가 80자(chars) 초과면 `None`(= 서버 fallback 위임, ADR 0020 규범·스펙 §D).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `a-mate/crates/core/src/mascot.rs` 파일 끝(기존 `chatter_tests` mod 뒤)에 추가:
 
@@ -60,12 +65,12 @@ mod guestbook_reply_tests {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run (from `a-mate/`): `cargo test -p agent-mentor guestbook_reply`
 Expected: COMPILE ERROR — `cannot find function 'bot_author_name'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `mascot.rs`의 `compute_chatter_pool` 함수 끝(`}` 뒤, `#[cfg(test)] mod tests` 앞)에 추가:
 
@@ -84,12 +89,12 @@ pub fn bot_author_name(owner_title: &str, user_name: &str) -> Option<String> {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test -p agent-mentor guestbook_reply`
 Expected: PASS — `3 passed`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add a-mate/crates/core/src/mascot.rs
@@ -110,7 +115,7 @@ git commit -m "feat(agent): add bot author name assembly for guestbook replies"
   - `pub const GUESTBOOK_REPLY_MAX_PER_SCAN: usize = 3;`
   - `pub fn select_reply_targets(entries: &[serde_json::Value], my_agent_id: &str, cap: usize) -> Vec<ReplyTarget>` — 오래된 순, 최대 `cap`개.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `guestbook_reply_tests` mod 안에 추가:
 
@@ -188,12 +193,12 @@ git commit -m "feat(agent): add bot author name assembly for guestbook replies"
     }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test -p agent-mentor guestbook_reply`
 Expected: COMPILE ERROR — `cannot find struct 'ReplyTarget'` / `cannot find function 'select_reply_targets'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `bot_author_name` 아래에 추가:
 
@@ -248,12 +253,12 @@ pub fn select_reply_targets(
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test -p agent-mentor guestbook_reply`
 Expected: PASS — `8 passed` (Task 1의 3개 + 신규 5개)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add a-mate/crates/core/src/mascot.rs
@@ -271,7 +276,7 @@ git commit -m "feat(agent): add guestbook auto-reply target selection"
 - Consumes: `mbti_voice_hint(Option<&str>) -> String`(내부에서 정규화, 무효 MBTI는 빈 문자열), `crate::diary::voice_guidance()` — 둘 다 기존.
 - Produces: `pub fn build_guestbook_reply_prompt(honorific: &str, mbti: Option<&str>, visitor_name: &str, post_body: &str) -> String` — Task 4가 호출.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `guestbook_reply_tests` mod에 추가:
 
@@ -298,12 +303,12 @@ git commit -m "feat(agent): add guestbook auto-reply target selection"
     }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test -p agent-mentor guestbook_reply`
 Expected: COMPILE ERROR — `cannot find function 'build_guestbook_reply_prompt'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `select_reply_targets` 아래에 추가 (페르소나 전문은 `build_daily_line_prompt`/`build_chatter_prompt`와 동일 문구 — 동일 인물 규약):
 
@@ -338,12 +343,12 @@ pub fn build_guestbook_reply_prompt(
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test -p agent-mentor guestbook_reply`
 Expected: PASS — `10 passed`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add a-mate/crates/core/src/mascot.rs
@@ -361,7 +366,7 @@ git commit -m "feat(agent): add guestbook reply prompt builder"
 - Consumes: Task 2 `ReplyTarget`, Task 3 `build_guestbook_reply_prompt`, 기존 `Engine` trait(`crate::diary::engine::Engine`, `generate(&self, system, user) -> Result<EngineOutput>`), 기존 `parse_chatter_lines(raw, max_n)`.
 - Produces: `pub fn compute_guestbook_reply(engine: &dyn crate::diary::engine::Engine, honorific: &str, mbti: Option<&str>, target: &ReplyTarget) -> anyhow::Result<String>` — Task 5가 호출. store 접근 없음(호출자가 락 밖에서 부른다 — `compute_daily_line` 선례).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `guestbook_reply_tests` mod에 추가 (mod 상단 `use super::*;` 옆에 `use crate::diary::engine::MockEngine;` 추가):
 
@@ -393,12 +398,12 @@ git commit -m "feat(agent): add guestbook reply prompt builder"
     }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cargo test -p agent-mentor guestbook_reply`
 Expected: COMPILE ERROR — `cannot find function 'compute_guestbook_reply'`
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 `build_guestbook_reply_prompt` 아래에 추가:
 
@@ -422,7 +427,7 @@ pub fn compute_guestbook_reply(
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cargo test -p agent-mentor guestbook_reply`
 Expected: PASS — `13 passed`
@@ -430,7 +435,7 @@ Expected: PASS — `13 passed`
 또한 core 전체 무회귀: `cargo test -p agent-mentor`
 Expected: 기존 실패(macOS라면 `hosts` 1건) 외 전부 PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add a-mate/crates/core/src/mascot.rs
@@ -448,7 +453,7 @@ git commit -m "feat(agent): add guestbook reply generation"
 - Consumes: Task 1 `bot_author_name`, Task 2 `select_reply_targets`·`GUESTBOOK_REPLY_MAX_PER_SCAN`, Task 4 `compute_guestbook_reply`, 기존 `normalize_mbti`, 기존 `crate::resolve_engine(&SqliteStore) -> Option<OpenAiCompatEngine>`, 기존 `crate::commands::owner_title(&SqliteStore) -> String`(pub(crate)), 기존 `LifeClient { base_url, token, api_key }`·`guestbook`·`add_guestbook`, settings 키 `hub_url`/`hub_token`/`hub_api_key`/`hub_life_id`/`hub_agent_id`/`user_name`/`user_mbti`.
 - Produces: `fn maybe_reply_guestbook(store_mutex: &std::sync::Mutex<SqliteStore>)` — 파이프라인 내부 전용, 외부 인터페이스 없음.
 
-- [ ] **Step 1: 훅 함수 구현**
+- [x] **Step 1: 훅 함수 구현**
 
 `pipeline.rs`의 `maybe_generate_chatter_pool` 함수 끝(`}` 뒤, `mod runtime` 닫는 `}` 앞)에 추가:
 
@@ -525,7 +530,7 @@ git commit -m "feat(agent): add guestbook reply generation"
     }
 ```
 
-- [ ] **Step 2: 훅 연쇄에 등록**
+- [x] **Step 2: 훅 연쇄에 등록**
 
 `run_pipeline_once`의 훅 연쇄에서 `maybe_generate_chatter_pool(&state.store);` 바로 다음 줄에 추가:
 
@@ -534,7 +539,7 @@ git commit -m "feat(agent): add guestbook reply generation"
                 maybe_reply_guestbook(&state.store);
 ```
 
-- [ ] **Step 3: 컴파일·무회귀 검증**
+- [x] **Step 3: 컴파일·무회귀 검증**
 
 Run (from `a-mate/`):
 - `cargo check -p agent-mentor-app` — Expected: PASS (macOS에서도 check는 링크 안 함)
@@ -542,7 +547,7 @@ Run (from `a-mate/`):
 
 훅 자체 단위 테스트는 없음 — `mod runtime`은 `#[cfg(not(test))]`이고 기존 `maybe_*` 훅 전부 동일 관행. 판정·생성 로직은 Task 1~4에서 core 테스트로 검증 완료.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add a-mate/src-tauri/src/pipeline.rs
@@ -560,7 +565,7 @@ git commit -m "feat(agent): auto-reply to own guestbook posts on scan"
 - Consumes: Task 1~5 완료 상태
 - Produces: 머지 가능한 PR (ADR 0013 DoD 충족)
 
-- [ ] **Step 1: 권위 테스트 (Windows PowerShell)**
+- [x] **Step 1: 권위 테스트 (Windows PowerShell)**
 
 Windows PowerShell, `a-mate/`에서:
 
@@ -572,7 +577,7 @@ Expected: 전부 PASS (워크스페이스 전체 — core + src-tauri). macOS에
 
 프론트엔드는 무변경이므로 `npm test`는 필수 아님 — CI/리뷰어 요구 시에만.
 
-- [ ] **Step 2: 플랜 체크박스 완료 확인 + docs-archive**
+- [x] **Step 2: 플랜 체크박스 완료 확인 + docs-archive**
 
 본 plan의 모든 체크박스가 완료됐는지 확인 후, `docs-archive` 스킬을 실행해 본 plan과 스펙(`2026-07-27-guestbook-auto-reply-design.md`)을 `docs/archive/` 미러로 이동·커밋한다 (같은 PR — ADR 0013). 로드맵(`2026-07-26-life-social-diary-followups-roadmap.md`)은 다른 아이템이 남아 있으므로 이동하지 않고, G3 항목에 완료 표시(`✅ 완료(2026-07-27, PR #NN)`)만 추가한다.
 
@@ -581,7 +586,7 @@ git add docs/
 git commit -m "docs(archive): archive G3 guestbook auto-reply spec and plan"
 ```
 
-- [ ] **Step 3: PR 생성**
+- [x] **Step 3: PR 생성**
 
 ```bash
 git push -u origin feat/guestbook-auto-reply
@@ -596,8 +601,8 @@ gh pr create --title "feat(agent): guestbook bot auto-reply (G3)" --body "$(cat 
 - a-hub·프론트엔드 무변경. 설계: docs/archive/design/a-mate/specs/2026-07-27-guestbook-auto-reply-design.md
 
 ## Test plan
-- [ ] Windows PowerShell `cargo test` (워크스페이스) 전부 PASS
-- [ ] core 신규 테스트 13건 (선정 필터·상한·정렬 / 프롬프트 / 생성·truncate / 표기 조립)
+- [x] Windows PowerShell `cargo test` (워크스페이스) 전부 PASS
+- [x] core 신규 테스트 13건 (선정 필터·상한·정렬 / 프롬프트 / 생성·truncate / 표기 조립)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
