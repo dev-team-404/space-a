@@ -60,6 +60,26 @@ pub fn normalize_mbti(raw: &str) -> Option<String> {
     ok.then_some(up)
 }
 
+/// 호칭 기본값 — owner_title 미설정 시 이 문자열을 쓴다(전 채널 공용).
+pub const DEFAULT_OWNER_TITLE: &str = "주인";
+
+/// MBTI 4축 → 마스코트 발화 톤 지침. 유효 MBTI가 아니면 빈 문자열(기존 페르소나 유지).
+/// 기본 페르소나(1인칭·능청) 위에 성향 색을 얹는 용도 — 일기·한마디·잡담·채팅·코칭 공용.
+pub fn mbti_voice_hint(mbti: Option<&str>) -> String {
+    let Some(m) = mbti.and_then(normalize_mbti) else {
+        return String::new();
+    };
+    let b = m.as_bytes();
+    let ei = if b[0] == b'E' { "말은 활기차게, 감탄사·리액션을 곁들여" } else { "말은 차분하고 사색적으로, 담백하게 절제해" };
+    let sn = if b[1] == b'S' { "구체적인 사실과 디테일 위주로" } else { "비유와 큰 그림, 아이디어를 곁들여" };
+    let tf = if b[2] == b'T' { "감정 완충은 최소로 사실·수치에 근거해 냉정하고 직설적으로" } else { "공감과 따뜻함을 담아 관계 중심으로" };
+    let jp = if b[3] == b'J' { "정돈된 결론 중심으로" } else { "유연하고 개방적으로 여지를 남기며" };
+    format!(
+        " 성향({m}) 반영: {tf} 말하되, {ei}, {sn}, {jp} 표현하세요. \
+         (단 마스코트 특유의 능청스러운 1인칭 톤은 유지합니다.)"
+    )
+}
+
 /// 부분집합에서 uuid 해시 바이트로 하나 고른다(결정론).
 fn pick(group: &[u8], byte: u8) -> u8 {
     group[(byte as usize) % group.len()]
@@ -384,6 +404,20 @@ mod tests {
             .map(|i| robot_spec_from_profile(&format!("uuid-{i}"), Some("ENFP")))
             .collect();
         assert!(set.len() > 1, "같은 MBTI라도 uuid로 세부가 달라야 함 (distinct={})", set.len());
+    }
+
+    #[test]
+    fn mbti_voice_hint_covers_axes_and_empty() {
+        assert_eq!(mbti_voice_hint(None), "");
+        assert_eq!(mbti_voice_hint(Some("bad")), ""); // 무효 → 빈 문자열
+        let t = mbti_voice_hint(Some("INTJ"));
+        assert!(t.contains("사실") && t.contains("냉정")); // T: 팩트 기반 냉정
+        assert!(t.contains("차분"));                       // I
+        assert!(t.contains("비유") || t.contains("큰 그림")); // N
+        assert!(t.contains("결론"));                       // J
+        let f = mbti_voice_hint(Some("ENFP"));
+        assert!(f.contains("공감") || f.contains("따뜻"));  // F
+        assert!(f.contains("활기") || f.contains("감탄"));  // E
     }
 }
 
