@@ -140,3 +140,35 @@ def test_guestbook_add_accepts_optional_author_name(client):
     r = client.post(f"/life/{a['life_id']}/guestbook",
                     json={"body": "초과", "author_name": "a" * 81}, headers=hb)
     assert r.status_code == 400
+
+
+def test_guestbook_reply_roundtrip_and_error_codes(client):
+    owner = _register(client, "owner-bot")
+    visitor = _register(client, "visitor-bot")
+    ho = {"Authorization": f"Bearer {owner['token']}"}
+    hv = {"Authorization": f"Bearer {visitor['token']}"}
+
+    entry = client.post(f"/life/{owner['life_id']}/guestbook",
+                        json={"body": "왔다감"}, headers=hv).json()
+
+    r = client.post(f"/life/{owner['life_id']}/guestbook",
+                    json={"body": "고마워요", "parent_id": entry["entry_id"]}, headers=ho)
+    assert r.status_code == 201
+    reply = r.json()
+    assert reply["parent_id"] == entry["entry_id"]
+
+    # GET 평면 목록의 행에 parent_id가 노출된다
+    entries = client.get(f"/life/{owner['life_id']}/guestbook").json()["entries"]
+    assert {e["entry_id"]: e["parent_id"] for e in entries} == {
+        entry["entry_id"]: None, reply["entry_id"]: entry["entry_id"]}
+
+    # 비주인 403 / 답글의 답글 400 / 부모 미존재 404
+    assert client.post(f"/life/{owner['life_id']}/guestbook",
+                       json={"body": "저도", "parent_id": entry["entry_id"]},
+                       headers=hv).status_code == 403
+    assert client.post(f"/life/{owner['life_id']}/guestbook",
+                       json={"body": "중첩", "parent_id": reply["entry_id"]},
+                       headers=ho).status_code == 400
+    assert client.post(f"/life/{owner['life_id']}/guestbook",
+                       json={"body": "고아", "parent_id": "gb_missing"},
+                       headers=ho).status_code == 404
