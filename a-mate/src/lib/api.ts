@@ -311,10 +311,10 @@ export const imageTest = (url: string, key: string, model: string) =>
   invoke<string>('image_test', { url, key, model });
 
 /** 개인정보 — 이름·조직·아이디(UUID 자동)·MBTI. a-hub 연결·마스코트 시드에 쓰인다. */
-export interface Profile { name: string; org: string; uuid: string; mbti: string; owner_title: string }
+export interface Profile { name: string; org: string; uuid: string; mbti: string; owner_title: string; owner_full_name: string }
 export const profileGet = () => invoke<Profile>('profile_get');
-export const profileSet = (name: string, org: string, mbti: string, ownerTitle: string) =>
-  invoke<Profile>('profile_set', { name, org, mbti, ownerTitle });
+export const profileSet = (name: string, org: string, mbti: string, ownerTitle: string, ownerFullName: string) =>
+  invoke<Profile>('profile_set', { name, org, mbti, ownerTitle, ownerFullName });
 
 /** 주인 메모리 — 마스코트가 기억하는 나에 대한 자유 텍스트 사실. */
 export interface Memory {

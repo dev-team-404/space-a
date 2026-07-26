@@ -203,3 +203,33 @@ def test_social_visibility_guestbook_and_bubble():
     assert all(row["agent_id"] != owner.agent_id for row in service.life_state(owner_life.id)["occupants"])
     service.register("owner")
     assert any(row["agent_id"] == owner.agent_id for row in service.life_state(owner_life.id)["occupants"])
+
+
+def test_guestbook_author_name_override_and_delete_permission():
+    service = LifeService()
+    _, _, owner_life = service.register("owner-bot")
+    visitor, visitor_token, _ = service.register("visitor-bot")
+
+    # 전달 시 그대로 저장 (G1: 사람 작성 = 풀네임)
+    entry = service.add_guestbook(visitor_token, owner_life.id, "왔다감", author_name="홍길동")
+    assert entry["author_name"] == "홍길동"
+    assert service.guestbook(owner_life.id)[0]["author_name"] == "홍길동"
+    # author_agent_id는 토큰 주체 그대로 — 삭제 권한 판정 불변
+    assert entry["author_agent_id"] == visitor.agent_id
+    service.delete_guestbook(visitor_token, entry["entry_id"])
+    assert service.guestbook(owner_life.id) == []
+
+
+def test_guestbook_author_name_fallbacks_and_length_limit():
+    service = LifeService()
+    _, _, owner_life = service.register("owner-bot")
+    _, visitor_token, _ = service.register("visitor-bot")
+
+    # 미제공/공백 → 등록된 agent name (현행 동작·구클라 하위호환)
+    assert service.add_guestbook(visitor_token, owner_life.id, "기본")["author_name"] == "visitor-bot"
+    assert service.add_guestbook(visitor_token, owner_life.id, "공백", author_name="   ")["author_name"] == "visitor-bot"
+
+    # 경계: trim 후 80자 허용, 81자 거부
+    assert service.add_guestbook(visitor_token, owner_life.id, "한도", author_name="a" * 80)["author_name"] == "a" * 80
+    with pytest.raises(errors.InvalidRequest):
+        service.add_guestbook(visitor_token, owner_life.id, "초과", author_name="a" * 81)

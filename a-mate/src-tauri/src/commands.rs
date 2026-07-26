@@ -721,9 +721,11 @@ pub fn hub_connect(
     if url.is_empty() {
         return Err("서버 URL을 입력하세요".into());
     }
-    let user = {
+    let (user, full_name) = {
         let guard = lock(&state)?;
-        guard.get_setting("user_name").ok().flatten().unwrap_or_default().trim().to_string()
+        let user =
+            guard.get_setting("user_name").ok().flatten().unwrap_or_default().trim().to_string();
+        (user, owner_full_name(&guard))
     };
     if user.is_empty() {
         return Err("봇 탭의 마스코트 정보에서 마스코트 이름을 먼저 입력하세요".into());
@@ -737,7 +739,7 @@ pub fn hub_connect(
     };
     if !existing.1.is_empty() {
         let client = LifeClient { base_url: url.clone(), token: existing.1, api_key: key_opt.clone() };
-        match client.rename(&user, &owner_os_user()) {
+        match client.rename(&user, &owner_os_user(), &full_name) {
             Ok(_) => {
                 let guard = lock(&state)?;
                 guard.set_setting("hub_url", &url).map_err(|e| e.to_string())?;
@@ -767,7 +769,7 @@ pub fn hub_connect(
     };
     // 네트워크는 락 밖
     let os_user = owner_os_user();
-    let v = life_client::register_profile(&url, key_opt.as_deref(), &user, &uuid, &org, &uuid, &os_user)
+    let v = life_client::register_profile(&url, key_opt.as_deref(), &user, &uuid, &org, &uuid, &os_user, &full_name)
         .map_err(|e| e.to_string())?;
     let token = v["token"].as_str().unwrap_or_default().to_string();
     let agent_id = v["agent_id"].as_str().unwrap_or_default().to_string();
@@ -952,7 +954,13 @@ pub async fn life_guestbook(state: State<'_, AppState>, life_id: String) -> Resu
 #[tauri::command]
 pub async fn life_add_guestbook(state: State<'_, AppState>, life_id: String, body: String) -> Result<serde_json::Value, String> {
     let Some(client) = hub_client(&state)? else { return Err("hub_not_connected".into()) };
-    run_life_http("life_add_guestbook", move || client.add_guestbook(&life_id, &body).map_err(|e| e.to_string())).await
+    // 사람 작성 경로 = 풀네임 서명 (G1 스펙 §C). 미설정이면 미전달 → 서버가 봇 이름 fallback.
+    let full_name = { let guard = lock(&state)?; owner_full_name(&guard) };
+    run_life_http("life_add_guestbook", move || {
+        let author = (!full_name.is_empty()).then_some(full_name.as_str());
+        client.add_guestbook(&life_id, &body, author).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -1413,6 +1421,26 @@ mod tests {
         store.set_setting("owner_title", "   ").unwrap(); // 공백 → 기본값
         assert_eq!(owner_title(&store), "주인");
     }
+
+    #[test]
+    fn profile_serializes_owner_full_name_snake_case() {
+        let p = Profile {
+            name: "둘쇠".into(), org: "S/W 혁신팀".into(), uuid: "u-1".into(),
+            mbti: String::new(), owner_title: "주인".into(), owner_full_name: "홍길동".into(),
+        };
+        let v = serde_json::to_value(&p).unwrap();
+        assert_eq!(v["owner_full_name"], serde_json::json!("홍길동"));
+    }
+
+    #[test]
+    fn owner_full_name_roundtrips_and_trims() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        assert_eq!(owner_full_name(&store), ""); // 미설정 → 빈값 (옵트인, 기본값 없음)
+        store.set_setting("owner_full_name", "  홍길동  ").unwrap();
+        assert_eq!(owner_full_name(&store), "홍길동");
+        store.set_setting("owner_full_name", "   ").unwrap(); // 공백 → 미설정과 동일
+        assert_eq!(owner_full_name(&store), "");
+    }
 }
 
 /// AI 스프라이트(캐시) — app_data/sprite.png를 base64로. 없으면 None(프론트는 절차 생성 폴백).
@@ -1541,6 +1569,7 @@ pub struct Profile {
     pub uuid: String,
     pub mbti: String,
     pub owner_title: String,
+    pub owner_full_name: String,
 }
 
 /// user_uuid를 읽고, 없으면 UUID v4를 1회 생성·저장한 뒤 반환한다(이후 고정).
@@ -1561,6 +1590,13 @@ pub(crate) fn owner_title(store: &SqliteStore) -> String {
     store.get_setting("owner_title").ok().flatten()
         .map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
         .unwrap_or_else(|| agent_mentor::mascot::DEFAULT_OWNER_TITLE.to_string())
+}
+
+/// 주인 풀네임(실명) 설정 — 미설정/공백이면 빈 문자열(옵트인, G1 스펙 §A).
+pub(crate) fn owner_full_name(store: &SqliteStore) -> String {
+    store.get_setting("owner_full_name").ok().flatten()
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
 }
 
 /// 주인 OS 계정명 — Life 등록·갱신에 실을 숨은 주인 식별자(§F). 없으면 빈 문자열.
@@ -1588,7 +1624,10 @@ pub fn profile_get(state: State<AppState>) -> Result<Profile, String> {
         let o = get("user_org");
         if o.trim().is_empty() { DEFAULT_ORG.to_string() } else { o }
     };
-    Ok(Profile { name: get("user_name"), org, uuid, mbti: get("user_mbti"), owner_title: owner_title(&guard) })
+    Ok(Profile {
+        name: get("user_name"), org, uuid, mbti: get("user_mbti"),
+        owner_title: owner_title(&guard), owner_full_name: owner_full_name(&guard),
+    })
 }
 
 /// 개인정보 저장. uuid는 불변(여기서 안 받음). mbti는 빈값(미설정) 또는 유효 4글자만 허용.
@@ -1599,6 +1638,7 @@ pub fn profile_set(
     org: String,
     mbti: String,
     owner_title: String,
+    owner_full_name: String,
 ) -> Result<Profile, String> {
     let name = name.trim().to_string();
     if name.is_empty() {
@@ -1614,13 +1654,17 @@ pub fn profile_set(
     let org = if org.is_empty() { DEFAULT_ORG } else { org };
     let title = owner_title.trim();
     let title = if title.is_empty() { agent_mentor::mascot::DEFAULT_OWNER_TITLE } else { title };
-    let old_name = {
+    let full_name = owner_full_name.trim().to_string();
+    let (old_name, old_full_name) = {
         let guard = lock(&state)?;
-        guard.get_setting("user_name").ok().flatten().unwrap_or_default()
+        let old = guard.get_setting("user_name").ok().flatten().unwrap_or_default();
+        (old, self::owner_full_name(&guard))
     };
-    if name != old_name {
+    // 이름·풀네임 어느 쪽이 바뀌어도 rename으로 서버의 주인 식별자를 갱신한다 (G1 스펙 §B)
+    if name != old_name || full_name != old_full_name {
         if let Some(client) = hub_client(&state)? {
-            client.rename(&name, &owner_os_user()).map_err(|e| format!("Life 서버 이름 변경 실패: {e}"))?;
+            client.rename(&name, &owner_os_user(), &full_name)
+                .map_err(|e| format!("Life 서버 이름 변경 실패: {e}"))?;
         }
     }
     {
@@ -1630,6 +1674,7 @@ pub fn profile_set(
         guard.set_setting("user_org", org).map_err(|e| e.to_string())?;
         guard.set_setting("user_mbti", &mbti_norm).map_err(|e| e.to_string())?;
         guard.set_setting("owner_title", title).map_err(|e| e.to_string())?;
+        guard.set_setting("owner_full_name", &full_name).map_err(|e| e.to_string())?;
     }
     profile_get(state)
 }

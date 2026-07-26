@@ -54,11 +54,12 @@ fn with_api_key(req: ureq::Request, api_key: Option<&str>) -> ureq::Request {
 /// (어느 방에서든 내 데스크톱 마스코트와 같은 모습으로 보이게).
 /// api_key는 관문이 켜진 서버용 — 비우면 미첨부.
 pub fn register(base_url: &str, api_key: Option<&str>, name: &str, mascot_seed: &str) -> Result<Value> {
-    register_profile(base_url, api_key, name, mascot_seed, "", "", "")
+    register_profile(base_url, api_key, name, mascot_seed, "", "", "", "")
 }
 
-/// 프로필 포함 등록 — org·agent_uuid·owner_os_user를 함께 보낸다. 현재 서버는 모르는 필드를
-/// 무시하므로 하위호환이며, 서버가 프로필을 저장하도록 확장되면 그대로 쓰인다. 빈 값은 생략한다.
+/// 프로필 포함 등록 — org·agent_uuid·owner_os_user·owner_full_name을 함께 보낸다. 현재 서버는
+/// 모르는 필드를 무시하므로 하위호환이며, 서버가 프로필을 저장하도록 확장되면 그대로 쓰인다.
+/// 빈 값은 생략한다.
 pub fn register_profile(
     base_url: &str,
     api_key: Option<&str>,
@@ -67,7 +68,19 @@ pub fn register_profile(
     org: &str,
     agent_uuid: &str,
     owner_os_user: &str,
+    owner_full_name: &str,
 ) -> Result<Value> {
+    let req = ureq::post(&format!("{}/life/register", base(base_url)))
+        .timeout(std::time::Duration::from_secs(10));
+    with_api_key(req, api_key)
+        .send_json(register_body(name, mascot_seed, org, agent_uuid, owner_os_user, owner_full_name))
+        .map_err(err_of)?
+        .into_json()
+        .map_err(Into::into)
+}
+
+fn register_body(name: &str, mascot_seed: &str, org: &str, agent_uuid: &str,
+                 owner_os_user: &str, owner_full_name: &str) -> Value {
     let mut body = json!({ "name": name, "mascot_seed": mascot_seed });
     if !org.trim().is_empty() {
         body["org"] = json!(org);
@@ -78,13 +91,30 @@ pub fn register_profile(
     if !owner_os_user.trim().is_empty() {
         body["owner_os_user"] = json!(owner_os_user);
     }
-    let req = ureq::post(&format!("{}/life/register", base(base_url)))
-        .timeout(std::time::Duration::from_secs(10));
-    with_api_key(req, api_key)
-        .send_json(body)
-        .map_err(err_of)?
-        .into_json()
-        .map_err(Into::into)
+    if !owner_full_name.trim().is_empty() {
+        body["owner_full_name"] = json!(owner_full_name);
+    }
+    body
+}
+
+fn rename_body(name: &str, owner_os_user: &str, owner_full_name: &str) -> Value {
+    let mut body = json!({ "name": name });
+    if !owner_os_user.trim().is_empty() {
+        body["owner_os_user"] = json!(owner_os_user);
+    }
+    if !owner_full_name.trim().is_empty() {
+        body["owner_full_name"] = json!(owner_full_name);
+    }
+    body
+}
+
+/// 방명록 body — author_name은 있고 비어있지 않을 때만 실린다(G1: 사람 작성 = 풀네임 서명).
+fn guestbook_body(body: &str, author_name: Option<&str>) -> Value {
+    let mut v = json!({ "body": body });
+    if let Some(name) = author_name.map(str::trim).filter(|n| !n.is_empty()) {
+        v["author_name"] = json!(name);
+    }
+    v
 }
 
 /// 방 목록은 공개 — 토큰 불필요. 단, 관문이 켜진 서버는 x-api-key를 요구한다.
@@ -110,16 +140,12 @@ impl LifeClient {
         self.req("GET", "/life/me").call().map_err(err_of)?.into_json().map_err(Into::into)
     }
 
-    /// 이름 변경(에이전트 + 내 방 주인 이름). 주인 OS 계정(owner_os_user)도 함께 실어
-    /// 기존 연결도 §F 주인 식별자를 갱신한다 — register_profile과 같은 규약(빈 값은 생략,
+    /// 이름 변경(에이전트 + 내 방 주인 이름). 주인 OS 계정(owner_os_user)·풀네임(owner_full_name)도
+    /// 함께 실어 기존 연결도 §F 주인 식별자를 갱신한다 — register_profile과 같은 규약(빈 값은 생략,
     /// 서버는 모르는 필드를 무시하므로 하위호환. register·PATCH가 동일 body 모델).
-    pub fn rename(&self, name: &str, owner_os_user: &str) -> Result<Value> {
-        let mut body = json!({ "name": name });
-        if !owner_os_user.trim().is_empty() {
-            body["owner_os_user"] = json!(owner_os_user);
-        }
+    pub fn rename(&self, name: &str, owner_os_user: &str, owner_full_name: &str) -> Result<Value> {
         self.req("PATCH", "/life/me")
-            .send_json(body)
+            .send_json(rename_body(name, owner_os_user, owner_full_name))
             .map_err(err_of)?
             .into_json()
             .map_err(Into::into)
@@ -204,9 +230,9 @@ impl LifeClient {
             .call().map_err(err_of)?.into_json().map_err(Into::into)
     }
 
-    pub fn add_guestbook(&self, life_id: &str, body: &str) -> Result<Value> {
+    pub fn add_guestbook(&self, life_id: &str, body: &str, author_name: Option<&str>) -> Result<Value> {
         self.req("POST", &format!("/life/{life_id}/guestbook"))
-            .send_json(json!({"body": body})).map_err(err_of)?.into_json().map_err(Into::into)
+            .send_json(guestbook_body(body, author_name)).map_err(err_of)?.into_json().map_err(Into::into)
     }
 
     pub fn delete_guestbook(&self, entry_id: &str) -> Result<Value> {
@@ -268,5 +294,46 @@ mod tests {
     #[test]
     fn api_key_header_trims_surrounding_whitespace() {
         assert_eq!(api_key_header(Some("  secret  ")), Some("secret"));
+    }
+
+    #[test]
+    fn register_body_includes_owner_full_name_when_set() {
+        let b = register_body("둘쇠", "seed", "조직", "uuid-1", "jibin", "홍길동");
+        assert_eq!(b["owner_full_name"], serde_json::json!("홍길동"));
+        // 풀네임이 os_user를 대체하지 않는다 (병행, G1 결정)
+        assert_eq!(b["owner_os_user"], serde_json::json!("jibin"));
+    }
+
+    #[test]
+    fn register_body_omits_blank_owner_full_name() {
+        let b = register_body("둘쇠", "seed", "", "", "", "   ");
+        assert!(b.get("owner_full_name").is_none());
+    }
+
+    #[test]
+    fn rename_body_includes_owner_full_name_when_set() {
+        let b = rename_body("둘쇠", "jibin", "홍길동");
+        assert_eq!(b["owner_full_name"], serde_json::json!("홍길동"));
+        assert_eq!(b["owner_os_user"], serde_json::json!("jibin"));
+    }
+
+    #[test]
+    fn rename_body_omits_blank_fields() {
+        let b = rename_body("둘쇠", "", "");
+        assert!(b.get("owner_os_user").is_none());
+        assert!(b.get("owner_full_name").is_none());
+    }
+
+    #[test]
+    fn guestbook_body_includes_author_name_when_some() {
+        let b = guestbook_body("왔다감", Some("홍길동"));
+        assert_eq!(b["body"], serde_json::json!("왔다감"));
+        assert_eq!(b["author_name"], serde_json::json!("홍길동"));
+    }
+
+    #[test]
+    fn guestbook_body_omits_author_name_when_none_or_blank() {
+        assert!(guestbook_body("왔다감", None).get("author_name").is_none());
+        assert!(guestbook_body("왔다감", Some("  ")).get("author_name").is_none());
     }
 }
