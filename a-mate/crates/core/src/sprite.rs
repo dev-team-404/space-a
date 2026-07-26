@@ -270,6 +270,42 @@ pub fn make_background_transparent(png_bytes: &[u8]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+/// 이미지 생성 응답에서 PNG 바이트를 추출한다. 게이트웨이마다 이미지를 담는 위치가 달라서
+/// (같은 "OpenAI 호환"이라도) 알려진 형태를 순서대로 시도하는 **관용적 파서**다:
+/// - OpenRouter: `choices[0].message.images[0].image_url.url` = data URL
+/// - LiteLLM(gemini-2.5-flash-image): `choices[0].message.content` 문자열 안에 `data:image…;base64,…`
+///
+/// 둘 다 없으면 에러. 새 게이트웨이가 또 다른 위치를 쓰면 여기 후보만 추가하면 된다.
+fn extract_image_bytes(resp: &serde_json::Value) -> Result<Vec<u8>> {
+    let msg = resp.pointer("/choices/0/message");
+    // 1) OpenRouter 확장 필드
+    let from_images = msg
+        .and_then(|m| m.pointer("/images/0/image_url/url"))
+        .and_then(|v| v.as_str());
+    // 2) LiteLLM: content 문자열에 박힌 data URL
+    let from_content = msg
+        .and_then(|m| m.get("content"))
+        .and_then(|v| v.as_str())
+        .and_then(|c| c.find("data:image").map(|i| &c[i..]));
+    let data_url = from_images
+        .or(from_content)
+        .ok_or_else(|| anyhow!("sprite 응답에 이미지 없음"))?;
+    decode_data_url(data_url)
+}
+
+/// `data:image/png;base64,<payload>` → 디코드된 바이트. 모델이 뒤에 붙인 잡담·개행은 잘라낸다
+/// (base64 표준 알파벳에는 공백이 없으므로 첫 공백 전까지가 페이로드).
+fn decode_data_url(data_url: &str) -> Result<Vec<u8>> {
+    let payload = data_url
+        .split_once(',')
+        .map(|(_, b)| b)
+        .ok_or_else(|| anyhow!("sprite data URL 형식 아님"))?;
+    let payload = payload.split_whitespace().next().unwrap_or("");
+    base64::engine::general_purpose::STANDARD
+        .decode(payload)
+        .map_err(|e| anyhow!("sprite base64 디코드 실패: {e}"))
+}
+
 /// 이미지 생성 — 스타일 앵커 + 인물 묘사. 반환 = PNG 바이트.
 pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
     let ref_b64 = base64::engine::general_purpose::STANDARD.encode(STYLE_REF_JPG);
@@ -298,17 +334,7 @@ pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
         .send_json(body)
         .map_err(|e| anyhow!("sprite 생성 요청 실패: {e}"))?
         .into_json()?;
-    let url = resp
-        .pointer("/choices/0/message/images/0/image_url/url")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow!("sprite 응답에 이미지 없음"))?;
-    let b64 = url
-        .split_once(',')
-        .map(|(_, b)| b)
-        .ok_or_else(|| anyhow!("sprite data URL 형식 아님"))?;
-    let png = base64::engine::general_purpose::STANDARD
-        .decode(b64)
-        .map_err(|e| anyhow!("sprite base64 디코드 실패: {e}"))?;
+    let png = extract_image_bytes(&resp)?;
     // 흰 배경 → 투명. 실패해도 캐릭터는 보여야 하므로 원본으로 폴백(무해).
     match make_background_transparent(&png) {
         Ok(t) => Ok(t),
@@ -435,5 +461,54 @@ mod tests {
     #[test]
     fn style_ref_asset_is_bundled() {
         assert!(STYLE_REF_JPG.len() > 10_000, "스타일 앵커 이미지 번들 확인");
+    }
+
+    fn data_url_resp_openrouter(bytes: &[u8]) -> serde_json::Value {
+        let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+        serde_json::json!({
+            "choices": [{"message": {"role": "assistant",
+                "images": [{"image_url": {"url": format!("data:image/png;base64,{b64}")}}]}}]
+        })
+    }
+
+    #[test]
+    fn extract_image_reads_openrouter_images_field() {
+        let raw = vec![0x89u8, 0x50, 0x4e, 0x47, 1, 2, 3, 42];
+        let got = extract_image_bytes(&data_url_resp_openrouter(&raw)).expect("OpenRouter 포맷");
+        assert_eq!(got, raw);
+    }
+
+    #[test]
+    fn extract_image_reads_litellm_content_data_url() {
+        // LiteLLM(gemini-2.5-flash-image)은 이미지를 message.content 안에 data URL로 실어 보낸다.
+        let raw = vec![0x89u8, 0x50, 0x4e, 0x47, 9, 8, 7, 6];
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&raw);
+        let resp = serde_json::json!({
+            "choices": [{"message": {"role": "assistant",
+                "content": format!("Here you go! data:image/png;base64,{b64}")}}]
+        });
+        let got = extract_image_bytes(&resp).expect("LiteLLM content 포맷");
+        assert_eq!(got, raw);
+    }
+
+    #[test]
+    fn extract_image_ignores_trailing_prose_after_data_url() {
+        // 모델이 이미지 뒤에 잡담을 붙여도 base64만 잘라 디코드해야 한다.
+        let raw = vec![1u8, 2, 3, 4, 5];
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&raw);
+        let resp = serde_json::json!({
+            "choices": [{"message": {"role": "assistant",
+                "content": format!("data:image/png;base64,{b64}\n\nHope you like it!")}}]
+        });
+        let got = extract_image_bytes(&resp).expect("뒤 잡담 무시");
+        assert_eq!(got, raw);
+    }
+
+    #[test]
+    fn extract_image_errors_when_no_image_present() {
+        let resp = serde_json::json!({
+            "choices": [{"message": {"role": "assistant", "content": "sorry, I can't draw that"}}]
+        });
+        assert!(extract_image_bytes(&resp).is_err(), "이미지 없으면 에러여야 함");
     }
 }
