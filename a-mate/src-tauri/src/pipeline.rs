@@ -117,6 +117,8 @@ mod runtime {
                 maybe_generate_daily_line(app, &state.store);
                 // 잡담 풀 — 동일 규율, 이벤트 없음(프론트 타이머가 pull)
                 maybe_generate_chatter_pool(&state.store);
+                // G3 방명록 봇 자동 답글 — hub 미연결·엔진 없으면 no-op, 실패는 조용히(다음 스캔 재시도)
+                maybe_reply_guestbook(&state.store);
                 // a-hub 지식 공유 — 유의미 finding을 이슈→해결로 발행 (env 미설정 시 no-op)
                 maybe_share_findings(&state.store);
                 // 텔레메트리(#46) — 전날 파생 신호 하루 1회 발행 (env 미설정 시 no-op)
@@ -823,6 +825,77 @@ mod runtime {
                 }
             }
             Err(e) => log::warn!("store lock poisoned: {e}"),
+        }
+    }
+
+    /// G3 — 내 방 방명록의 미답글 원글에 봇 성향 답글 (스펙 §A·§E). hub 미연결·엔진
+    /// 미설정이면 no-op. 모든 실패는 warn 후 skip — 다음 스캔 재시도. 구서버(G2 미배포)가
+    /// parent_id를 무시하면 답글이 원글로 저장돼 dedup이 깨지고 스캔마다 도배되므로,
+    /// POST 응답의 parent_id 에코를 검증해 불일치 시 앱 실행 동안 비활성(maybe_probe_docs 선례).
+    fn maybe_reply_guestbook(store_mutex: &std::sync::Mutex<SqliteStore>) {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static INCOMPATIBLE: AtomicBool = AtomicBool::new(false);
+        if INCOMPATIBLE.load(Ordering::SeqCst) { return; }
+
+        // ① 락: 엔진·hub 설정·페르소나 읽기 → 즉시 해제 (maybe_generate_chatter_pool 선례)
+        let (engine, url, token, api_key, life_id, agent_id, title, user_name, mbti) =
+            match store_mutex.lock() {
+                Ok(store) => {
+                    let get = |k: &str| store.get_setting(k).ok().flatten().unwrap_or_default();
+                    (
+                        crate::resolve_engine(&store),
+                        get("hub_url"), get("hub_token"), get("hub_api_key"),
+                        get("hub_life_id"), get("hub_agent_id"),
+                        crate::commands::owner_title(&store), get("user_name"), get("user_mbti"),
+                    )
+                }
+                Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+            };
+        let Some(engine) = engine else { return; };
+        if url.trim().is_empty() || token.is_empty() || life_id.is_empty() || agent_id.is_empty() {
+            return;
+        }
+
+        // ② 락 없이 네트워크: 조회 → 선정 → 후보별 [생성 → 게시]
+        let client = agent_mentor::life_client::LifeClient {
+            base_url: url,
+            token,
+            api_key: { let k = api_key.trim(); (!k.is_empty()).then(|| k.to_string()) },
+        };
+        let entries = match client.guestbook(&life_id) {
+            Ok(v) => v.get("entries").and_then(|e| e.as_array()).cloned().unwrap_or_default(),
+            Err(e) => { log::warn!("방명록 자동 답글: 조회 실패(다음 스캔 재시도): {e}"); return; }
+        };
+        let targets = agent_mentor::mascot::select_reply_targets(
+            &entries, &agent_id, agent_mentor::mascot::GUESTBOOK_REPLY_MAX_PER_SCAN);
+        if targets.is_empty() { return; }
+        let author = agent_mentor::mascot::bot_author_name(&title, &user_name);
+        let mbti = agent_mentor::mascot::normalize_mbti(&mbti);
+        for t in &targets {
+            let reply = match agent_mentor::mascot::compute_guestbook_reply(
+                &engine, &title, mbti.as_deref(), t)
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    log::warn!("방명록 자동 답글: 생성 실패(entry {}): {e}", t.entry_id);
+                    continue;
+                }
+            };
+            match client.add_guestbook(&life_id, &reply, author.as_deref(), Some(&t.entry_id)) {
+                Ok(resp) => {
+                    let echoed = resp.get("parent_id").and_then(|p| p.as_str())
+                        == Some(t.entry_id.as_str());
+                    if !echoed {
+                        log::warn!("방명록 자동 답글: 서버가 parent_id 미지원(G2 미배포) — 이번 실행 동안 비활성");
+                        INCOMPATIBLE.store(true, Ordering::SeqCst);
+                        return;
+                    }
+                }
+                Err(e) => {
+                    log::warn!("방명록 자동 답글: 게시 실패(entry {}): {e}", t.entry_id);
+                    continue;
+                }
+            }
         }
     }
 }
