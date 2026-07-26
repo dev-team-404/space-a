@@ -245,6 +245,9 @@ pub fn chat_context_inner(store: &SqliteStore) -> anyhow::Result<agent_mentor::c
             .map(|f| (f.detail, f.suggested_action))
             .collect(),
         memories,
+        honorific: owner_title(store),
+        mbti: store.get_setting("user_mbti").ok().flatten()
+            .and_then(|m| agent_mentor::mascot::normalize_mbti(&m)),
     })
 }
 
@@ -1399,6 +1402,16 @@ mod tests {
         store.delete_memory(id).unwrap();
         assert_eq!(store.count_memories().unwrap(), 0);
     }
+
+    #[test]
+    fn owner_title_defaults_and_roundtrips() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        assert_eq!(owner_title(&store), "주인");
+        store.set_setting("owner_title", "대장").unwrap();
+        assert_eq!(owner_title(&store), "대장");
+        store.set_setting("owner_title", "   ").unwrap(); // 공백 → 기본값
+        assert_eq!(owner_title(&store), "주인");
+    }
 }
 
 /// AI 스프라이트(캐시) — app_data/sprite.png를 base64로. 없으면 None(프론트는 절차 생성 폴백).
@@ -1526,6 +1539,7 @@ pub struct Profile {
     pub org: String,
     pub uuid: String,
     pub mbti: String,
+    pub owner_title: String,
 }
 
 /// user_uuid를 읽고, 없으면 UUID v4를 1회 생성·저장한 뒤 반환한다(이후 고정).
@@ -1539,6 +1553,13 @@ pub(crate) fn ensure_uuid(store: &SqliteStore) -> Result<String, String> {
     let u = uuid::Uuid::new_v4().to_string();
     store.set_setting("user_uuid", &u).map_err(|e| e.to_string())?;
     Ok(u)
+}
+
+/// 호칭 설정(owner_title) — 없거나 공백이면 기본 "주인".
+pub(crate) fn owner_title(store: &SqliteStore) -> String {
+    store.get_setting("owner_title").ok().flatten()
+        .map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+        .unwrap_or_else(|| agent_mentor::mascot::DEFAULT_OWNER_TITLE.to_string())
 }
 
 /// 스프라이트 생성 정체성 = (uuid, mbti). uuid는 없으면 생성.
@@ -1561,7 +1582,7 @@ pub fn profile_get(state: State<AppState>) -> Result<Profile, String> {
         let o = get("user_org");
         if o.trim().is_empty() { DEFAULT_ORG.to_string() } else { o }
     };
-    Ok(Profile { name: get("user_name"), org, uuid, mbti: get("user_mbti") })
+    Ok(Profile { name: get("user_name"), org, uuid, mbti: get("user_mbti"), owner_title: owner_title(&guard) })
 }
 
 /// 개인정보 저장. uuid는 불변(여기서 안 받음). mbti는 빈값(미설정) 또는 유효 4글자만 허용.
@@ -1571,6 +1592,7 @@ pub fn profile_set(
     name: String,
     org: String,
     mbti: String,
+    owner_title: String,
 ) -> Result<Profile, String> {
     let name = name.trim().to_string();
     if name.is_empty() {
@@ -1584,6 +1606,8 @@ pub fn profile_set(
     };
     let org = org.trim();
     let org = if org.is_empty() { DEFAULT_ORG } else { org };
+    let title = owner_title.trim();
+    let title = if title.is_empty() { agent_mentor::mascot::DEFAULT_OWNER_TITLE } else { title };
     let old_name = {
         let guard = lock(&state)?;
         guard.get_setting("user_name").ok().flatten().unwrap_or_default()
@@ -1599,6 +1623,7 @@ pub fn profile_set(
         guard.set_setting("hub_user", &name).map_err(|e| e.to_string())?;
         guard.set_setting("user_org", org).map_err(|e| e.to_string())?;
         guard.set_setting("user_mbti", &mbti_norm).map_err(|e| e.to_string())?;
+        guard.set_setting("owner_title", title).map_err(|e| e.to_string())?;
     }
     profile_get(state)
 }
