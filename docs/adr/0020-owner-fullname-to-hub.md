@@ -3,7 +3,7 @@
 - 상태: 채택
 - 날짜: 2026-07-26
 - 대상: a-mate 설정·Life 클라이언트, a-hub life 방명록 API
-- 관련: [G1 설계 스펙](../design/a-mate/specs/2026-07-26-owner-identity-design.md),
+- 관련: [G1 설계 스펙](../archive/design/a-mate/specs/2026-07-26-owner-identity-design.md),
   [ADR 0019](0019-owner-memory-transmission-boundary.md)(LLM 엔진 경계 — 별개 축),
   PR #104 §F(주인 식별 데이터 전송)
 

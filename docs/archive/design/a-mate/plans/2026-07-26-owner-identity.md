@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-26
+---
+
 # G1 주인 신원 체계 (Owner Identity) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -8,7 +13,7 @@
 
 **Tech Stack:** Rust(Tauri v2 커맨드 + `crates/core` ureq 클라이언트), Python(FastAPI + pydantic v2), Svelte 5 + TypeScript.
 
-**스펙:** [2026-07-26-owner-identity-design.md](../specs/2026-07-26-owner-identity-design.md) · **ADR:** [0020](../../../adr/0020-owner-fullname-to-hub.md)
+**스펙:** [2026-07-26-owner-identity-design.md](../specs/2026-07-26-owner-identity-design.md) · **ADR:** [0020](../../../../adr/0020-owner-fullname-to-hub.md)
 
 ## Global Constraints
 

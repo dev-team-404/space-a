@@ -1,11 +1,16 @@
+---
+status: done
+archived: 2026-07-26
+---
+
 # G1 주인 신원 체계 설계 — 호칭 표시 + 풀네임 식별
 
 - **날짜**: 2026-07-26
 - **컴포넌트**: a-mate (+ a-hub life 방명록 API 소폭)
 - **브랜치**: `feat/amate-owner-identity` (worktree)
-- **관계**: [후속 로드맵 2차 배치 G1](../plans/2026-07-26-life-social-diary-followups-roadmap.md) 착수분.
-  PR #104의 신원 배관([아카이브 스펙](../../../archive/design/a-mate/specs/2026-07-26-bot-tab-mascot-identity-design.md) §F) 위 확장.
-  프라이버시 경계 결정은 [ADR 0020](../../../adr/0020-owner-fullname-to-hub.md).
+- **관계**: [후속 로드맵 2차 배치 G1](../../../../design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md) 착수분.
+  PR #104의 신원 배관([아카이브 스펙](2026-07-26-bot-tab-mascot-identity-design.md) §F) 위 확장.
+  프라이버시 경계 결정은 [ADR 0020](../../../../adr/0020-owner-fullname-to-hub.md).
 
 ## 배경 — 현재 상태 (조사 결과)
 
@@ -104,7 +109,7 @@
 실명이 ① 허브로 전송되기 시작하고 ② 타인 방 방명록 행에 **영구 스냅샷**으로 저장된다
 (개명·설정 삭제해도 소급 수정 없음, 항목 삭제로만 제거). 옵트인(빈값 기본)이며,
 LLM 엔진 경계(ADR 0019)와는 별개의 허브 경계 결정 — 상세·대안은
-[ADR 0020](../../../adr/0020-owner-fullname-to-hub.md).
+[ADR 0020](../../../../adr/0020-owner-fullname-to-hub.md).
 
 ## 테스트 (TDD)
 
