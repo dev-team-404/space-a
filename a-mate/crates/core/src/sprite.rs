@@ -345,6 +345,67 @@ pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
     }
 }
 
+/// 이미지 엔드포인트 프로브 결과 — 무과금 `GET /models` 기반.
+/// 실제 이미지 생성 능력까지는 확인하지 못한다(그건 `generate`뿐).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProbeVerdict {
+    /// 200 + 설정 모델이 /models 목록에 있음.
+    Ok,
+    /// 200 이나 설정 모델이 목록에 없음 (샘플 id 최대 5개).
+    ModelMissing(Vec<String>),
+    /// 200 이나 `data[]` 배열이 없음 — OpenAI 호환 /models 아님.
+    NotOpenAiCompat,
+    /// 401 / 403.
+    AuthFailed(u16),
+    /// 429.
+    RateLimited,
+    /// 기타 non-2xx.
+    HttpError(u16),
+    /// 전송 실패(연결 불가·DNS 등).
+    Connection(String),
+}
+
+/// `GET /models` 200 응답 본문 + 설정 모델명 → 판정 (순수).
+/// OpenAI 규격: `{"data":[{"id":"..."}, ...]}`.
+pub fn classify_models_body(body: &serde_json::Value, model: &str) -> ProbeVerdict {
+    let Some(list) = body.get("data").and_then(|d| d.as_array()) else {
+        return ProbeVerdict::NotOpenAiCompat;
+    };
+    let ids: Vec<String> = list
+        .iter()
+        .filter_map(|m| m.get("id").and_then(|v| v.as_str()))
+        .map(|s| s.to_string())
+        .collect();
+    let want = model.trim();
+    if ids.iter().any(|id| id.trim() == want) {
+        ProbeVerdict::Ok
+    } else {
+        ProbeVerdict::ModelMissing(ids.into_iter().take(5).collect())
+    }
+}
+
+/// 무과금 프로브 — `GET {base_url}/models`로 엔드포인트·키·모델을 확인한다.
+/// (네트워크 — 단위테스트 제외, 로컬 LiteLLM 수동 확인.)
+pub fn probe_endpoint(cfg: &SpriteConfig) -> ProbeVerdict {
+    let url = format!("{}/models", cfg.base_url);
+    let mut req = ureq::get(&url).timeout(std::time::Duration::from_secs(10));
+    if !cfg.api_key.is_empty() {
+        req = req.set("Authorization", &format!("Bearer {}", cfg.api_key));
+    }
+    match req.call() {
+        Ok(resp) => {
+            let body: serde_json::Value = resp.into_json().unwrap_or(serde_json::Value::Null);
+            classify_models_body(&body, &cfg.model)
+        }
+        Err(ureq::Error::Status(code, _)) => match code {
+            401 | 403 => ProbeVerdict::AuthFailed(code),
+            429 => ProbeVerdict::RateLimited,
+            _ => ProbeVerdict::HttpError(code),
+        },
+        Err(ureq::Error::Transport(t)) => ProbeVerdict::Connection(t.to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -510,5 +571,42 @@ mod tests {
             "choices": [{"message": {"role": "assistant", "content": "sorry, I can't draw that"}}]
         });
         assert!(extract_image_bytes(&resp).is_err(), "이미지 없으면 에러여야 함");
+    }
+
+    #[test]
+    fn classify_models_body_ok_when_model_listed() {
+        let body = serde_json::json!({"data":[
+            {"id":"gpt-4o"},
+            {"id":"gemini/gemini-2.5-flash-image"}
+        ]});
+        assert_eq!(
+            classify_models_body(&body, "gemini/gemini-2.5-flash-image"),
+            ProbeVerdict::Ok
+        );
+    }
+
+    #[test]
+    fn classify_models_body_missing_when_model_absent() {
+        let body = serde_json::json!({"data":[{"id":"gpt-4o"},{"id":"gpt-4o-mini"}]});
+        match classify_models_body(&body, "gemini/gemini-2.5-flash-image") {
+            ProbeVerdict::ModelMissing(ids) => {
+                assert!(ids.contains(&"gpt-4o".to_string()), "샘플 id 포함: {ids:?}");
+                assert!(ids.len() <= 5, "샘플은 최대 5개");
+            }
+            v => panic!("ModelMissing 기대, got {v:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_models_body_not_openai_when_no_data_array() {
+        // data[] 배열이 없으면(예: 에러 오브젝트/HTML) OpenAI 호환이 아니다.
+        let body = serde_json::json!({"error":"not found"});
+        assert_eq!(classify_models_body(&body, "x"), ProbeVerdict::NotOpenAiCompat);
+    }
+
+    #[test]
+    fn classify_models_body_trims_model_before_compare() {
+        let body = serde_json::json!({"data":[{"id":"some/model"}]});
+        assert_eq!(classify_models_body(&body, "  some/model  "), ProbeVerdict::Ok);
     }
 }
