@@ -1,5 +1,7 @@
 """SQLite 영속화 — 재시작(새 LifeService + 같은 DB) 후 토큰·방·위치·디자인 복원."""
 
+import sqlite3
+
 from life_server.life import LifeService
 from life_server.store import SqliteStore
 
@@ -134,3 +136,43 @@ def test_legacy_combined_dining_assets_are_dropped(tmp_path):
 
     state = LifeService(store=SqliteStore(db)).life_state(life.id)
     assert state["design"]["objects"] == []
+
+
+def test_guestbook_replies_survive_restart_and_cascade(tmp_path):
+    db = str(tmp_path / "life-gb.db")
+    s1 = LifeService(store=SqliteStore(db))
+    _, owner_token, owner_life = s1.register("owner-bot")
+    _, visitor_token, _ = s1.register("visitor-bot")
+    entry = s1.add_guestbook(visitor_token, owner_life.id, "왔다감")
+    reply = s1.add_guestbook(owner_token, owner_life.id, "고마워요", parent_id=entry["entry_id"])
+
+    # 재시작 — parent_id 복원
+    s2 = LifeService(store=SqliteStore(db))
+    rows = {r["entry_id"]: r for r in s2.guestbook(owner_life.id)}
+    assert rows[reply["entry_id"]]["parent_id"] == entry["entry_id"]
+    assert rows[entry["entry_id"]]["parent_id"] is None
+
+    # 원글 삭제 → DB에서도 답글 cascade — 재시작 후에도 비어 있다
+    s2.delete_guestbook(visitor_token, entry["entry_id"])
+    s3 = LifeService(store=SqliteStore(db))
+    assert s3.guestbook(owner_life.id) == []
+
+
+def test_legacy_guestbook_db_gains_parent_id_column(tmp_path):
+    db = str(tmp_path / "life-legacy.db")
+    # parent_id 없는 구 스키마 DB를 직접 구성
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE guestbook (entry_id TEXT PRIMARY KEY, life_id TEXT NOT NULL,"
+        " author_agent_id TEXT NOT NULL, author_name TEXT NOT NULL, body TEXT NOT NULL,"
+        " created_at TEXT NOT NULL)"
+    )
+    conn.execute("INSERT INTO guestbook VALUES ('gb_legacy', 'l1', 'a1', '옛손님', '옛글',"
+                 " '2026-01-01T00:00:00+00:00')")
+    conn.commit()
+    conn.close()
+
+    _, _, _, guestbook = SqliteStore(db).load_social()
+    assert guestbook == [{"entry_id": "gb_legacy", "life_id": "l1", "author_agent_id": "a1",
+                          "author_name": "옛손님", "body": "옛글", "parent_id": None,
+                          "created_at": "2026-01-01T00:00:00+00:00"}]
