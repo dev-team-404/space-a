@@ -952,13 +952,13 @@ pub async fn life_guestbook(state: State<'_, AppState>, life_id: String) -> Resu
 }
 
 #[tauri::command]
-pub async fn life_add_guestbook(state: State<'_, AppState>, life_id: String, body: String) -> Result<serde_json::Value, String> {
+pub async fn life_add_guestbook(state: State<'_, AppState>, life_id: String, body: String, parent_id: Option<String>) -> Result<serde_json::Value, String> {
     let Some(client) = hub_client(&state)? else { return Err("hub_not_connected".into()) };
     // 사람 작성 경로 = 풀네임 서명 (G1 스펙 §C). 미설정이면 미전달 → 서버가 봇 이름 fallback.
     let full_name = { let guard = lock(&state)?; owner_full_name(&guard) };
     run_life_http("life_add_guestbook", move || {
         let author = (!full_name.is_empty()).then_some(full_name.as_str());
-        client.add_guestbook(&life_id, &body, author).map_err(|e| e.to_string())
+        client.add_guestbook(&life_id, &body, author, parent_id.as_deref()).map_err(|e| e.to_string())
     })
     .await
 }
