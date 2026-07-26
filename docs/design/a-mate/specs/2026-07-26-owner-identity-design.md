@@ -113,7 +113,9 @@ LLM 엔진 경계(ADR 0019)와는 별개의 허브 경계 결정 — 상세·대
 - **Rust (cargo)**: `owner_full_name` 설정 왕복·trim / `profile_get`·`profile_set` 포함 /
   `register_profile`·`rename` body에 포함·빈값 생략 / `add_guestbook` body에
   `author_name` 포함·`None` 생략.
-- **프론트 (Vitest)**: MeGroup 주인 이름 필드 렌더 + `profileSet` 전달.
+- **프론트**: 컴포넌트 렌더 테스트 인프라가 없어(Vitest는 순수 `.ts` 모듈만 — 레포 관행)
+  Svelte 필드 렌더 테스트는 두지 않는다. 값 왕복은 Rust `profile` 테스트가 커버하고,
+  기존 Vitest 스위트 무회귀만 확인한다.
 
 검증 환경: 권위 실행은 **Windows PowerShell**(`cargo test` 워크스페이스 · `npm test`).
 macOS 로컬은 부분 신호만 — core 크레이트의 `hosts` 테스트 1건(Windows 경로 기대)과
