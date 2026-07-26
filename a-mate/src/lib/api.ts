@@ -210,7 +210,7 @@ export const lifeSaveDesign = (lifeId: string, design: LifeState['design']) =>
   invoke<LifeState>('life_save_design', { lifeId, design }).then((value) => { invalidateLifeView(); return value; });
 export interface LifePerson { agent_id: string; name: string; life_id: string; is_friend: boolean }
 export interface SharedDiary { date: string; body: string; visibility: 'friends' | 'public' }
-export interface GuestbookEntry { entry_id: string; life_id: string; author_agent_id: string; author_name: string; body: string; created_at: string }
+export interface GuestbookEntry { entry_id: string; life_id: string; author_agent_id: string; author_name: string; body: string; parent_id?: string | null; created_at: string }
 export const lifePeople = () => invoke<{people: LifePerson[]}>('life_people');
 export const lifeSetFriend = (agentId: string, enabled: boolean) => invoke('life_set_friend', { agentId, enabled });
 export type ContentVisibility = 'private'|'friends'|'public';
@@ -222,7 +222,7 @@ export const lifeSetDiaryVisibility = (date: string, body: string, visibility: '
   invoke('life_set_diary_visibility', { date, body, visibility });
 export const lifeDiaries = (lifeId: string) => invoke<{diaries: SharedDiary[]}>('life_diaries', { lifeId });
 export const lifeGuestbook = (lifeId: string) => invoke<{entries: GuestbookEntry[]}>('life_guestbook', { lifeId });
-export const lifeAddGuestbook = (lifeId: string, body: string) => invoke<GuestbookEntry>('life_add_guestbook', { lifeId, body });
+export const lifeAddGuestbook = (lifeId: string, body: string, parentId?: string) => invoke<GuestbookEntry>('life_add_guestbook', { lifeId, body, parentId });
 export const lifeDeleteGuestbook = (entryId: string) => invoke('life_delete_guestbook', { entryId });
 export const lifeSetBubble = (body: string) => invoke<{bubble:string}>('life_set_bubble', { body }).then((v)=>{invalidateLifeView();return v});
 export const lifeSyncMascotImage = () => invoke<boolean>('life_sync_mascot_image');
