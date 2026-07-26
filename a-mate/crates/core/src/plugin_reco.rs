@@ -216,7 +216,7 @@ mod tests {
             let sid = format!("fe{i}");
             store.upsert_events(&[
                 ev(&sid, &format!("{sid}-p"), 0, now,
-                    EventKind::UserPrompt { preview: format!("컴포넌트 {i} 스타일을 다듬어줘") }),
+                    EventKind::UserPrompt { preview: format!("컴포넌트 {i} 스타일을 다듬어줘"), is_command: false }),
                 ev(&sid, &format!("{sid}-t"), 1, now, EventKind::AssistantTurn {
                     model: NormModel::from_raw_id("claude-sonnet-4-6"),
                     usage: TokenUsage::default(), web_search: 0, web_fetch: 0,

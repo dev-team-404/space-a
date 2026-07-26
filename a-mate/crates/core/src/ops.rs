@@ -318,7 +318,7 @@ mod tests {
                     session_id: sid.clone(), uuid: Some(format!("{sid}-p")), parent_uuid: None,
                     is_sidechain: false, ts: Some(now.clone()),
                     source_file: format!("{sid}.jsonl"), source_offset: 0, msg_id: None,
-                    kind: EventKind::UserPrompt { preview: "버튼 컴포넌트 스타일 다듬어줘".into() },
+                    kind: EventKind::UserPrompt { preview: "버튼 컴포넌트 스타일 다듬어줘".into(), is_command: false },
                 },
                 NormalizedEvent {
                     source_agent: "claude-code".into(), schema_version: "t".into(),
@@ -502,7 +502,7 @@ mod tests {
                 session_id: "s1".into(), uuid: Some(format!("p{i}")), parent_uuid: None,
                 is_sidechain: false, ts: Some(ts.clone()), source_file: "s.jsonl".into(),
                 source_offset: i * 2, msg_id: None,
-                kind: EventKind::UserPrompt { preview: format!("에피소드 {i} 실질 작업 지시 문장") },
+                kind: EventKind::UserPrompt { preview: format!("에피소드 {i} 실질 작업 지시 문장"), is_command: false },
             });
             evs.push(NormalizedEvent {
                 source_agent: "claude-code".into(), schema_version: "t".into(),

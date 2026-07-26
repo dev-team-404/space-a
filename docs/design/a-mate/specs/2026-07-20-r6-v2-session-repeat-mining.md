@@ -172,12 +172,34 @@ CREATE TABLE IF NOT EXISTS prompt_events (
 
 ### 8.3 조치
 
-- `normalize()`가 **스킬/슬래시커맨드 호출 프롬프트를 반복 마이닝에서 제외**한다
-  (`is_command_invocation`). 스킬 참조 토큰 `<ns>:<name>`(예 `superpowers:executing-plans`)
-  또는 선두 슬래시 커맨드(`/code-review`)를 감지. 이미 코드화된 지시이므로 후보가 아니다.
-- ⚠ 토큰이 60자 컷 뒤에 오므로 **truncate 전 전문**에서 검사. `regex` 무의존
-  (ASCII-safe 바이트 스캔 — `:`·`/`·식별자는 한글 멀티바이트에 없음).
-- 정밀도 경계: 경로(`docs/superpowers/plans`, 콜론 없음)·시각(`11:04`)·한글 콜론
-  (`주의:`)·`/mnt/c/…` 경로는 오탐 아님 — `normalize_excludes_command_invocations_only` 참조.
+**어댑터가 raw 첫 줄에서 판정, 이벤트에 `is_command` 플래그로 전달**한다
+(`adapter::is_command_invocation`). store는 `is_command`면 `prompt_events` 적재를
+건너뛰되(R6 반복 마이닝 제외), `first_prompt_preview`(세션 대표)는 **보존**한다 —
+사이드체인 제외와 같은 지점·같은 방식(§4). `EventKind::UserPrompt`에 `is_command: bool` 추가.
+
+- **왜 어댑터인가 (검사 위치):** `preview`는 `extract_prompt_first_line`이 **첫 줄 120자**로
+  자른 결과다. 스킬 토큰은 그 뒤에 오는 경우가 흔해(실측: windows-hook 프롬프트는 preview가
+  정확히 120자에서 잘려 `superpowers:`를 잃음) `normalize(preview)`로는 못 잡는다. 그래서
+  **자르기 전 raw 첫 줄**에서 판정한다.
+- **왜 first_prompt는 보존인가 (스코프):** first_prompt는 hub 공유·다이어리·세션 상세의
+  세션 대표 프롬프트다. 스킬 호출도 사용자가 직접 친 지시이므로 대표로는 유효 — R6 반복
+  마이닝에서만 뺀다.
+- **판정 규칙 (정밀도):** 스킬 참조 토큰 `<ns>:<name>`에서 **이름이 하이픈 포함 다단어**일
+  때만 인정(`executing-plans`, `subagent-driven-development`). 이 제약이 도커 태그
+  (`node:latest`)·git 참조(`origin:main`) 같은 단일단어 우변을 배제한다. `regex` 무의존
+  (ASCII-safe 바이트 스캔). 슬래시 커맨드(`/codex:review` 등)는 별도 처리 불필요 —
+  `<command-*>` 합성마커라 `is_synthetic_marker`가 이미 거른다.
+- **잔여 한계:** `origin:feature-x`처럼 하이픈 브랜치를 콜론으로 쓴 git 참조는 오검출 가능
+  (드물고 저위험 — 미제안 넛지 1건). 슬래시 아닌 순수 텍스트로 부른 단일단어 스킬
+  (`codex:review`)은 미검출(실제로는 슬래시=합성마커 경로라 무관).
+- 테스트: `adapter::is_command_invocation_precision`,
+  `map_user_prompt_command_invocation_detected_past_preview_cut`(120자 뒤 토큰),
+  `store::prompt_events_skip_command_invocations_but_keep_first_prompt`,
+  `r6::r6_ignores_command_invocation_prompts`.
 - 마이그레이션 `user_version → 8`: 기존 `prompt_events`에 남은 호출 프롬프트를 소급
-  제거할 수 없어 전체 재수집 + R6 활성('new') 카드 정화 (dismissed/resolved 보존, v6 전례).
+  제거할 수 없어 전체 재수집(어댑터가 재수집 때 `is_command`로 제외) + R6 활성('new') 카드
+  정화 (dismissed/resolved 보존, v6 전례).
+
+> **경위:** 최초 구현은 `normalize()`에서 검사(슬래시 규칙 포함)했으나 Codex 리뷰가 3건
+> 지적 — ① 콜론 토큰이 너무 관대(`node:latest` 오검출) ② `normalize`는 잘린 preview를 받아
+> 120자 뒤 토큰을 놓침 ③ 선두 단일 경로(`/tmp …`)를 슬래시 커맨드로 오검출. 위 설계로 전부 반영.

@@ -96,7 +96,10 @@ pub enum EventKind {
     /// result_len = 결과 content의 문자 수 (R8 대형 결과 탐지 재료 — 본문은 미저장).
     ToolResult { tool_use_id: String, status: ResultStatus, result_len: u64 },
     Compaction,
-    UserPrompt { preview: String },
+    /// is_command: 첫 줄이 스킬/커맨드 호출 지시(예 "…superpowers:executing-plans 로 실행")인지.
+    /// 이미 코드화된 지시라 R6 반복 마이닝(prompt_events)에서 제외하되, first_prompt는 보존.
+    /// ⚠ preview(120자 컷) 이후에 스킬 토큰이 오는 경우가 많아 어댑터가 raw 첫 줄에서 판정한다.
+    UserPrompt { preview: String, is_command: bool },
     /// permission-mode 라인 (plan·bypassPermissions 등) — R16/R19 재료 (코칭 v3 §4.1-4)
     PermissionMode { mode: String },
     /// 프롬프트/명령에서 시크릿 패턴 감지 — 본문 미저장, pattern_id만 (코칭 v3 §4.2)

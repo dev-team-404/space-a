@@ -31,63 +31,11 @@ impl Default for R6RepeatedPrompts {
 /// 프롬프트 정규화 — 공백 붕괴 + 소문자 + 60자 컷. 너무 짧으면(일반어) 제외.
 /// R6 후속(skill_draft)이 세션 매칭에 같은 기준을 쓰도록 crate 공개.
 pub(crate) fn normalize(p: &str) -> Option<String> {
-    // 스킬/슬래시커맨드 호출은 이미 "코드화된" 지시라 반복 마이닝 대상이 아니다 —
-    // "스킬로 묶어라"를 스킬 호출에 다시 권하는 순환 오탐 방지 (2026-07-23 실사용 판정).
-    // ⚠ 스킬 참조 토큰은 60자 컷 뒤에 오는 경우가 많아 반드시 truncate 전 전문에서 검사한다.
-    if is_command_invocation(p) {
-        return None;
-    }
     let collapsed = p.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
     if collapsed.chars().count() < 8 {
         return None;
     }
     Some(collapsed.chars().take(60).collect())
-}
-
-/// 프롬프트가 스킬/슬래시커맨드를 호출하는지 — 그렇다면 이미 재사용 커맨드로 코드화된
-/// 지시이므로(브랜치·플랜문서 등 인자만 바뀌는 템플릿형 반복) R6 스킬화 제안 대상 아님.
-/// 예: "…플랜을 superpowers:executing-plans 로 실행" / "/code-review".
-/// ':' 와 '/'·ASCII 식별자는 멀티바이트(한글) 시퀀스에 나타나지 않으므로 바이트 스캔이 안전하다.
-fn is_command_invocation(p: &str) -> bool {
-    // 1) 슬래시 커맨드: 첫 토큰이 "/이름" (경로 "/mnt/c/…" 처럼 '/'가 또 들어가면 제외).
-    let head = p.trim_start();
-    if let Some(rest) = head.strip_prefix('/') {
-        let tok = rest.split_whitespace().next().unwrap_or("");
-        if tok.len() >= 2
-            && !tok.contains('/')
-            && tok.starts_with(|c: char| c.is_ascii_lowercase())
-        {
-            return true;
-        }
-    }
-    // 2) 스킬 참조 토큰 <ns>:<name> — 양쪽 ASCII 소문자 식별자, 이름 ≥3자.
-    //    시각("11:04")·URL 스킴("http://")·한글 "주의:" 등은 경계·글자종류로 걸러진다.
-    let b = p.as_bytes();
-    let is_ident = |c: u8| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-' || c == b'_';
-    for i in 0..b.len() {
-        if b[i] != b':' {
-            continue;
-        }
-        let mut l = i;
-        while l > 0 && is_ident(b[l - 1]) {
-            l -= 1;
-        }
-        let mut r = i + 1;
-        while r < b.len() && is_ident(b[r]) {
-            r += 1;
-        }
-        // l..i 는 ':' 앞의 최대 식별자 런 → 경계는 자동 보장. ns/name 글자종류로만 판정한다.
-        let ns = &b[l..i];
-        let name = &b[i + 1..r];
-        if ns.len() >= 2
-            && ns[0].is_ascii_lowercase()
-            && name.len() >= 3
-            && name[0].is_ascii_lowercase()
-        {
-            return true;
-        }
-    }
-    false
 }
 
 fn hash8(s: &str) -> String {
@@ -201,13 +149,34 @@ mod tests {
                 source_file: "s.jsonl".into(),
                 source_offset: offset,
                 msg_id: None,
-                kind: EventKind::UserPrompt { preview: prompt.into() },
+                kind: EventKind::UserPrompt { preview: prompt.into(), is_command: false },
             }])
             .unwrap();
     }
 
     fn seed_session(store: &SqliteStore, sess: &str, prompt: &str, ts: &str) {
         seed_prompt_at(store, sess, prompt, ts, 0);
+    }
+
+    /// 스킬/커맨드 호출로 판정된 프롬프트 시드 (어댑터가 is_command=true로 방출한 것과 동치).
+    fn seed_command(store: &SqliteStore, sess: &str, prompt: &str, ts: &str) {
+        store
+            .upsert_events(&[NormalizedEvent {
+                source_agent: "claude-code".into(),
+                schema_version: "t".into(),
+                host: "Windows".into(),
+                project_id: "p".into(),
+                session_id: sess.into(),
+                uuid: Some(format!("{sess}-cmd")),
+                parent_uuid: None,
+                is_sidechain: false,
+                ts: Some(ts.into()),
+                source_file: "s.jsonl".into(),
+                source_offset: 0,
+                msg_id: None,
+                kind: EventKind::UserPrompt { preview: prompt.into(), is_command: true },
+            }])
+            .unwrap();
     }
 
     /// 논리 dedup 키(ts+내용)가 같은 ts·내용을 한 행으로 접으므로,
@@ -312,35 +281,17 @@ mod tests {
     fn r6_ignores_command_invocation_prompts() {
         // 실사용 오탐(2026-07-23): "…플랜을 superpowers:executing-plans 로 실행" 처럼
         // 이미 스킬/커맨드를 호출하는 지시는 브랜치·플랜문서만 바뀌는 템플릿형 반복이라
-        // R6이 "스킬로 묶어라"를 순환 제안한다 → 반복 마이닝에서 제외해야 한다.
-        // ⚠ 스킬 참조 토큰(superpowers:…)은 60자 컷 뒤에 오므로 전문에서 걸러야 발화하지 않는다.
+        // R6이 "스킬로 묶어라"를 순환 제안한다. 어댑터가 is_command=true로 표시한 프롬프트는
+        // store가 prompt_events에서 제외하므로 R6 재료가 되지 않는다.
         let store = SqliteStore::open_in_memory().unwrap();
-        seed_session(&store, "s1",
-            "feat/install-signal 브랜치에서 docs/superpowers/plans/2026-07-10-install-signal.md 플랜을 superpowers:subagent-driven-development 로 실행. 완료 후 PR.",
-            &ts_at(0));
-        seed_session(&store, "s2",
-            "feat/install-signal 브랜치에서 docs/superpowers/plans/2026-07-10-install-signal.md 플랜을 superpowers:subagent-driven-development 로 실행. 완료 후 PR.",
-            &ts_at(1));
-        seed_session(&store, "s3",
-            "feat/windows-hook-shell-fix 브랜치에서 docs/superpowers/plans/2026-07-20-windows-hook-shell-fix.md의 Task 12–14만 superpowers:executing-plans로 실행해줘.",
-            &ts_at(2));
+        seed_command(&store, "s1",
+            "feat/install-signal 브랜치에서 …플랜을 superpowers:subagent-driven-development 로 실행", &ts_at(0));
+        seed_command(&store, "s2",
+            "feat/install-signal 브랜치에서 …플랜을 superpowers:subagent-driven-development 로 실행", &ts_at(1));
+        seed_command(&store, "s3",
+            "feat/windows-hook-shell-fix 브랜치에서 …Task 12–14만 superpowers:executing-plans로 실행", &ts_at(2));
         assert!(R6RepeatedPrompts::default().evaluate(&store).unwrap().is_empty(),
             "스킬/커맨드 호출 프롬프트는 R6 카드로 올라오면 안 됨");
-    }
-
-    #[test]
-    fn normalize_excludes_command_invocations_only() {
-        // 스킬/커맨드 호출 → 제외(None)
-        assert!(normalize("이 플랜을 superpowers:executing-plans 로 실행해줘").is_none());
-        assert!(normalize("끝나면 codex:rescue 돌려줘").is_none());
-        assert!(normalize("/code-review 이 브랜치 검토").is_none());
-        assert!(normalize("feat/x 브랜치에서 docs/p.md 를 superpowers:subagent-driven-development로").is_none());
-        // 일반 지시·엣지케이스 → 보존(Some). 경로 슬래시·시각·한글 콜론은 오탐 아님.
-        assert!(normalize("매일 아침 판매 리포트 뽑아줘").is_some());
-        assert!(normalize("docs/superpowers/plans 폴더 정리해줘").is_some()); // 경로일 뿐, 콜론 없음
-        assert!(normalize("11:04 에 배포된 버전 확인해줘").is_some());        // 시각
-        assert!(normalize("주의: 이 파일은 건드리지 마").is_some());          // 한글 콜론
-        assert!(normalize("/mnt/c/work 경로의 로그 확인").is_some());         // 경로(두 번째 '/')
     }
 
     #[test]
