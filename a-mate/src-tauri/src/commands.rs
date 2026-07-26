@@ -726,7 +726,7 @@ pub fn hub_connect(
         guard.get_setting("user_name").ok().flatten().unwrap_or_default().trim().to_string()
     };
     if user.is_empty() {
-        return Err("미니홈피 설정의 개인정보에서 이름을 먼저 입력하세요".into());
+        return Err("봇 탭의 마스코트 정보에서 마스코트 이름을 먼저 입력하세요".into());
     }
     let key_opt = opt_key(api_key.clone());
     // 기존 연결 확인 (락은 읽기 동안만)
@@ -766,7 +766,8 @@ pub fn hub_connect(
         (u, o)
     };
     // 네트워크는 락 밖
-    let v = life_client::register_profile(&url, key_opt.as_deref(), &user, &uuid, &org, &uuid)
+    let os_user = std::env::var("USERNAME").or_else(|_| std::env::var("USER")).unwrap_or_default();
+    let v = life_client::register_profile(&url, key_opt.as_deref(), &user, &uuid, &org, &uuid, &os_user)
         .map_err(|e| e.to_string())?;
     let token = v["token"].as_str().unwrap_or_default().to_string();
     let agent_id = v["agent_id"].as_str().unwrap_or_default().to_string();
