@@ -438,6 +438,8 @@ mod daily_line_tests {
                 .map(|i| (format!("detail {i}"), format!("action {i}")))
                 .collect(),
             memories: vec![],
+            honorific: "주인".into(),
+            mbti: None,
         }
     }
 
@@ -535,6 +537,8 @@ mod chatter_tests {
                 .map(|i| (format!("detail {i}"), format!("action {i}")))
                 .collect(),
             memories: vec![],
+            honorific: "주인".into(),
+            mbti: None,
         }
     }
 
