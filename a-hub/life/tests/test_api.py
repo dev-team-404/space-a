@@ -118,3 +118,25 @@ def test_api_key_gate_rejects_wrong_key(monkeypatch):
 def test_api_key_gate_off_when_unset(client):
     # LIFE_SERVER_API_KEY 미설정이면 x-api-key 없이도 통과 (로컬·테스트 기본)
     assert client.get("/capabilities").status_code == 200
+
+
+def test_guestbook_add_accepts_optional_author_name(client):
+    a = _register(client, "A")
+    b = _register(client, "B")
+    hb = {"Authorization": f"Bearer {b['token']}"}
+
+    # author_name 전달 → 그대로 저장·반환
+    r = client.post(f"/life/{a['life_id']}/guestbook",
+                    json={"body": "왔다감", "author_name": "홍길동"}, headers=hb)
+    assert r.status_code == 201
+    assert r.json()["author_name"] == "홍길동"
+
+    # 미전달 → 등록된 agent name (구클라 하위호환)
+    r = client.post(f"/life/{a['life_id']}/guestbook", json={"body": "기본"}, headers=hb)
+    assert r.status_code == 201
+    assert r.json()["author_name"] == "B"
+
+    # 80자 초과 → 400 (InvalidRequest 매핑)
+    r = client.post(f"/life/{a['life_id']}/guestbook",
+                    json={"body": "초과", "author_name": "a" * 81}, headers=hb)
+    assert r.status_code == 400

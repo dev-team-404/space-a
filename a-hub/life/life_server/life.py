@@ -380,16 +380,24 @@ class LifeService:
                 raise errors.NotFound(f"life '{life_id}' not found")
             return [dict(row) for row in reversed(self._guestbook) if row["life_id"] == life_id]
 
-    def add_guestbook(self, token: str | None, life_id: str, body: str) -> dict:
+    def add_guestbook(self, token: str | None, life_id: str, body: str,
+                      author_name: str | None = None) -> dict:
         author = self._authed(token)
         body = body.strip()
         if not body or len(body) > 500:
             raise errors.InvalidRequest("방명록은 1~500자여야 함")
+        # G1: 클라이언트가 작성자 표기를 조립해 보낸다(사람=풀네임, 봇="{호칭}님의 {봇이름}").
+        # 미제공이면 현행대로 등록된 agent name — 구클라 하위호환.
+        name = (author_name or "").strip()
+        if len(name) > 80:
+            raise errors.InvalidRequest("작성자 이름은 80자 이하여야 함")
+        if not name:
+            name = author.name
         with self._lock:
             if life_id not in self._life:
                 raise errors.NotFound(f"life '{life_id}' not found")
             row = {"entry_id": f"gb_{uuid.uuid4().hex[:12]}", "life_id": life_id,
-                   "author_agent_id": author.agent_id, "author_name": author.name, "body": body,
+                   "author_agent_id": author.agent_id, "author_name": name, "body": body,
                    "created_at": datetime.now(timezone.utc).isoformat()}
             self._guestbook.append(row)
             if self._store:

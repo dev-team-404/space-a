@@ -81,6 +81,11 @@ class TextBody(BaseModel):
     body: str = ""
 
 
+class GuestbookAddBody(BaseModel):
+    body: str = ""
+    author_name: str | None = None
+
+
 def _bearer(authorization: str | None) -> str:
     if not authorization or not authorization.startswith("Bearer "):
         raise errors.Unauthorized("missing bearer token")
@@ -199,8 +204,8 @@ def create_app(life: LifeService | None = None) -> FastAPI:
         return {"entries": life.guestbook(life_id)}
 
     @app.post("/life/{life_id}/guestbook", status_code=201)
-    def life_guestbook_add(life_id: str, body: TextBody, authorization: str | None = Header(default=None)):
-        return life.add_guestbook(_bearer(authorization), life_id, body.body)
+    def life_guestbook_add(life_id: str, body: GuestbookAddBody, authorization: str | None = Header(default=None)):
+        return life.add_guestbook(_bearer(authorization), life_id, body.body, body.author_name)
 
     @app.delete("/life/guestbook/{entry_id}")
     def life_guestbook_delete(entry_id: str, authorization: str | None = Header(default=None)):
