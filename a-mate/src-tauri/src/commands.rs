@@ -1423,6 +1423,16 @@ mod tests {
     }
 
     #[test]
+    fn profile_serializes_owner_full_name_snake_case() {
+        let p = Profile {
+            name: "둘쇠".into(), org: "S/W 혁신팀".into(), uuid: "u-1".into(),
+            mbti: String::new(), owner_title: "주인".into(), owner_full_name: "홍길동".into(),
+        };
+        let v = serde_json::to_value(&p).unwrap();
+        assert_eq!(v["owner_full_name"], serde_json::json!("홍길동"));
+    }
+
+    #[test]
     fn owner_full_name_roundtrips_and_trims() {
         let store = SqliteStore::open_in_memory().unwrap();
         assert_eq!(owner_full_name(&store), ""); // 미설정 → 빈값 (옵트인, 기본값 없음)
@@ -1559,6 +1569,7 @@ pub struct Profile {
     pub uuid: String,
     pub mbti: String,
     pub owner_title: String,
+    pub owner_full_name: String,
 }
 
 /// user_uuid를 읽고, 없으면 UUID v4를 1회 생성·저장한 뒤 반환한다(이후 고정).
@@ -1613,7 +1624,10 @@ pub fn profile_get(state: State<AppState>) -> Result<Profile, String> {
         let o = get("user_org");
         if o.trim().is_empty() { DEFAULT_ORG.to_string() } else { o }
     };
-    Ok(Profile { name: get("user_name"), org, uuid, mbti: get("user_mbti"), owner_title: owner_title(&guard) })
+    Ok(Profile {
+        name: get("user_name"), org, uuid, mbti: get("user_mbti"),
+        owner_title: owner_title(&guard), owner_full_name: owner_full_name(&guard),
+    })
 }
 
 /// 개인정보 저장. uuid는 불변(여기서 안 받음). mbti는 빈값(미설정) 또는 유효 4글자만 허용.
@@ -1624,6 +1638,7 @@ pub fn profile_set(
     org: String,
     mbti: String,
     owner_title: String,
+    owner_full_name: String,
 ) -> Result<Profile, String> {
     let name = name.trim().to_string();
     if name.is_empty() {
@@ -1639,14 +1654,16 @@ pub fn profile_set(
     let org = if org.is_empty() { DEFAULT_ORG } else { org };
     let title = owner_title.trim();
     let title = if title.is_empty() { agent_mentor::mascot::DEFAULT_OWNER_TITLE } else { title };
-    let (old_name, stored_full_name) = {
+    let full_name = owner_full_name.trim().to_string();
+    let (old_name, old_full_name) = {
         let guard = lock(&state)?;
         let old = guard.get_setting("user_name").ok().flatten().unwrap_or_default();
-        (old, owner_full_name(&guard))
+        (old, self::owner_full_name(&guard))
     };
-    if name != old_name {
+    // 이름·풀네임 어느 쪽이 바뀌어도 rename으로 서버의 주인 식별자를 갱신한다 (G1 스펙 §B)
+    if name != old_name || full_name != old_full_name {
         if let Some(client) = hub_client(&state)? {
-            client.rename(&name, &owner_os_user(), &stored_full_name)
+            client.rename(&name, &owner_os_user(), &full_name)
                 .map_err(|e| format!("Life 서버 이름 변경 실패: {e}"))?;
         }
     }
@@ -1657,6 +1674,7 @@ pub fn profile_set(
         guard.set_setting("user_org", org).map_err(|e| e.to_string())?;
         guard.set_setting("user_mbti", &mbti_norm).map_err(|e| e.to_string())?;
         guard.set_setting("owner_title", title).map_err(|e| e.to_string())?;
+        guard.set_setting("owner_full_name", &full_name).map_err(|e| e.to_string())?;
     }
     profile_get(state)
 }
