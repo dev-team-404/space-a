@@ -1473,7 +1473,9 @@ fn probe_result_message(
 ) -> Result<String, String> {
     use agent_mentor::sprite::ProbeVerdict as V;
     match verdict {
-        V::Ok => Ok("확인됨 — 엔드포인트·키·모델 OK. 실제 그림은 '캐릭터 재생성'으로 확인하세요".into()),
+        // 키 검증을 주장하지 않는다: 공개 `/models`(예: OpenRouter)는 잘못된 키로도 200을 주므로
+        // 여기 도달했다고 키가 유효하다는 보장이 없다. 엔드포인트·모델만 확인하고 나머지는 재생성으로.
+        V::Ok => Ok("엔드포인트·모델 확인됨 — 실제 그림은 '캐릭터 재생성'으로 확인하세요".into()),
         V::ModelMissing(ids) => {
             let sample = if ids.is_empty() {
                 String::new()
@@ -1825,6 +1827,8 @@ mod probe_message_tests {
         let msg = probe_result_message(V::Ok, "m").expect("Ok → Ok(초록)");
         assert!(msg.contains("확인됨"), "성공 문구: {msg}");
         assert!(msg.contains("캐릭터 재생성"), "재생성 안내 포함: {msg}");
+        // 공개 /models(OpenRouter 등)는 키를 검증 못 하므로 키 유효성을 주장하면 안 된다.
+        assert!(!msg.contains("키"), "키 검증을 주장하지 않는다: {msg}");
     }
 
     #[test]

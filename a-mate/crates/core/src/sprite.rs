@@ -306,6 +306,17 @@ fn decode_data_url(data_url: &str) -> Result<Vec<u8>> {
         .map_err(|e| anyhow!("sprite base64 디코드 실패: {e}"))
 }
 
+/// 키가 있으면 `Authorization: Bearer <key>`를 붙이고, 비면 헤더를 **생략**한다.
+/// 익명 접근을 허용하는 게이트웨이를 지원하며, 프로브와 실제 생성이 **동일하게 인증**하도록 통일한다
+/// (빈 키에 프로브는 생략·생성은 빈 Bearer를 보내던 불일치를 제거 — 테스트가 재생성을 충실히 예측).
+fn with_bearer(req: ureq::Request, api_key: &str) -> ureq::Request {
+    if api_key.is_empty() {
+        req
+    } else {
+        req.set("Authorization", &format!("Bearer {}", api_key))
+    }
+}
+
 /// 이미지 생성 — 스타일 앵커 + 인물 묘사. 반환 = PNG 바이트.
 pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
     let ref_b64 = base64::engine::general_purpose::STANDARD.encode(STYLE_REF_JPG);
@@ -327,10 +338,10 @@ pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
         }],
         "modalities": ["image", "text"],
     });
-    let resp: serde_json::Value = ureq::post(&format!("{}/chat/completions", cfg.base_url))
+    let req = ureq::post(&format!("{}/chat/completions", cfg.base_url))
         .timeout(std::time::Duration::from_secs(120))
-        .set("Authorization", &format!("Bearer {}", cfg.api_key))
-        .set("Content-Type", "application/json")
+        .set("Content-Type", "application/json");
+    let resp: serde_json::Value = with_bearer(req, &cfg.api_key)
         .send_json(body)
         .map_err(|e| anyhow!("sprite 생성 요청 실패: {e}"))?
         .into_json()?;
@@ -388,11 +399,8 @@ pub fn classify_models_body(body: &serde_json::Value, model: &str) -> ProbeVerdi
 /// (네트워크 — 단위테스트 제외, 로컬 LiteLLM 수동 확인.)
 pub fn probe_endpoint(cfg: &SpriteConfig) -> ProbeVerdict {
     let url = format!("{}/models", cfg.base_url);
-    let mut req = ureq::get(&url).timeout(std::time::Duration::from_secs(10));
-    if !cfg.api_key.is_empty() {
-        req = req.set("Authorization", &format!("Bearer {}", cfg.api_key));
-    }
-    match req.call() {
+    let req = ureq::get(&url).timeout(std::time::Duration::from_secs(10));
+    match with_bearer(req, &cfg.api_key).call() {
         Ok(resp) => {
             let body: serde_json::Value = resp.into_json().unwrap_or(serde_json::Value::Null);
             classify_models_body(&body, &cfg.model)

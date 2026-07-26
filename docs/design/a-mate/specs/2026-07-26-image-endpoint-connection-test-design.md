@@ -73,7 +73,7 @@ pub enum ProbeVerdict {
 
 | 판정 | 메시지 | Status |
 |------|--------|--------|
-| `Ok` | "확인됨 — 엔드포인트·키·모델 OK. 실제 그림은 '캐릭터 재생성'으로 확인하세요" | ok(초록) |
+| `Ok` | "엔드포인트·모델 확인됨 — 실제 그림은 '캐릭터 재생성'으로 확인하세요" | ok(초록) |
 | `ModelMissing(ids)` | "연결·인증은 OK인데 '`{model}`' 모델이 목록에 없어요. 모델명을 확인하세요 (목록: {ids…})" | err(빨강) |
 | `NotOpenAiCompat` | "이 URL은 모델 목록(/models)을 주지 않아요 — 엔드포인트가 OpenAI 호환 /v1 인지 확인하세요" | err |
 | `AuthFailed(c)` | "인증 실패 ({c}) — API 키를 확인하세요" | err |
@@ -82,6 +82,10 @@ pub enum ProbeVerdict {
 | `Connection(t)` | "연결 실패 — URL·포트를 확인하세요: {t}" | err |
 
 `ModelMissing`는 연결·인증이 OK여도 사용자의 목표("이 모델이 동작")가 미달이므로 err(빨강)로 돌려, 메시지가 원인(모델명)을 명확히 한다.
+
+**Ok 메시지는 키 유효성을 주장하지 않는다** (코드리뷰 반영). 공개 `/models`(예: OpenRouter)는 잘못된 키로도 200을 주므로, `Ok` 도달이 키 유효를 보장하지 않는다. 따라서 성공 메시지는 엔드포인트·모델 확인까지만 말하고, 키·실제 생성 확정은 "캐릭터 재생성"에 맡긴다. (사내 LiteLLM처럼 키 인증을 강제하는 게이트웨이는 잘못된 키를 `AuthFailed`로 먼저 걸러낸다.)
+
+**빈 키 인증 동작 통일** (코드리뷰 반영). `sprite::with_bearer(req, key)` 헬퍼로 프로브와 `generate`가 동일하게 인증한다 — 키가 있으면 `Authorization: Bearer <key>`, 비면 헤더 **생략**. (이전엔 프로브는 생략·`generate`는 빈 Bearer를 보내, "no header 허용/빈 Bearer 거부" 게이트웨이에서 테스트 통과·재생성 실패의 위양성이 가능했다.)
 
 ### 4.3 등록 (`lib.rs`)
 
