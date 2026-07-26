@@ -721,9 +721,11 @@ pub fn hub_connect(
     if url.is_empty() {
         return Err("서버 URL을 입력하세요".into());
     }
-    let user = {
+    let (user, full_name) = {
         let guard = lock(&state)?;
-        guard.get_setting("user_name").ok().flatten().unwrap_or_default().trim().to_string()
+        let user =
+            guard.get_setting("user_name").ok().flatten().unwrap_or_default().trim().to_string();
+        (user, owner_full_name(&guard))
     };
     if user.is_empty() {
         return Err("봇 탭의 마스코트 정보에서 마스코트 이름을 먼저 입력하세요".into());
@@ -737,7 +739,7 @@ pub fn hub_connect(
     };
     if !existing.1.is_empty() {
         let client = LifeClient { base_url: url.clone(), token: existing.1, api_key: key_opt.clone() };
-        match client.rename(&user, &owner_os_user()) {
+        match client.rename(&user, &owner_os_user(), &full_name) {
             Ok(_) => {
                 let guard = lock(&state)?;
                 guard.set_setting("hub_url", &url).map_err(|e| e.to_string())?;
@@ -767,7 +769,7 @@ pub fn hub_connect(
     };
     // 네트워크는 락 밖
     let os_user = owner_os_user();
-    let v = life_client::register_profile(&url, key_opt.as_deref(), &user, &uuid, &org, &uuid, &os_user)
+    let v = life_client::register_profile(&url, key_opt.as_deref(), &user, &uuid, &org, &uuid, &os_user, &full_name)
         .map_err(|e| e.to_string())?;
     let token = v["token"].as_str().unwrap_or_default().to_string();
     let agent_id = v["agent_id"].as_str().unwrap_or_default().to_string();
@@ -952,7 +954,13 @@ pub async fn life_guestbook(state: State<'_, AppState>, life_id: String) -> Resu
 #[tauri::command]
 pub async fn life_add_guestbook(state: State<'_, AppState>, life_id: String, body: String) -> Result<serde_json::Value, String> {
     let Some(client) = hub_client(&state)? else { return Err("hub_not_connected".into()) };
-    run_life_http("life_add_guestbook", move || client.add_guestbook(&life_id, &body).map_err(|e| e.to_string())).await
+    // 사람 작성 경로 = 풀네임 서명 (G1 스펙 §C). 미설정이면 미전달 → 서버가 봇 이름 fallback.
+    let full_name = { let guard = lock(&state)?; owner_full_name(&guard) };
+    run_life_http("life_add_guestbook", move || {
+        let author = (!full_name.is_empty()).then_some(full_name.as_str());
+        client.add_guestbook(&life_id, &body, author).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -1631,13 +1639,15 @@ pub fn profile_set(
     let org = if org.is_empty() { DEFAULT_ORG } else { org };
     let title = owner_title.trim();
     let title = if title.is_empty() { agent_mentor::mascot::DEFAULT_OWNER_TITLE } else { title };
-    let old_name = {
+    let (old_name, stored_full_name) = {
         let guard = lock(&state)?;
-        guard.get_setting("user_name").ok().flatten().unwrap_or_default()
+        let old = guard.get_setting("user_name").ok().flatten().unwrap_or_default();
+        (old, owner_full_name(&guard))
     };
     if name != old_name {
         if let Some(client) = hub_client(&state)? {
-            client.rename(&name, &owner_os_user()).map_err(|e| format!("Life 서버 이름 변경 실패: {e}"))?;
+            client.rename(&name, &owner_os_user(), &stored_full_name)
+                .map_err(|e| format!("Life 서버 이름 변경 실패: {e}"))?;
         }
     }
     {
