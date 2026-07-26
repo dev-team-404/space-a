@@ -1413,6 +1413,16 @@ mod tests {
         store.set_setting("owner_title", "   ").unwrap(); // 공백 → 기본값
         assert_eq!(owner_title(&store), "주인");
     }
+
+    #[test]
+    fn owner_full_name_roundtrips_and_trims() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        assert_eq!(owner_full_name(&store), ""); // 미설정 → 빈값 (옵트인, 기본값 없음)
+        store.set_setting("owner_full_name", "  홍길동  ").unwrap();
+        assert_eq!(owner_full_name(&store), "홍길동");
+        store.set_setting("owner_full_name", "   ").unwrap(); // 공백 → 미설정과 동일
+        assert_eq!(owner_full_name(&store), "");
+    }
 }
 
 /// AI 스프라이트(캐시) — app_data/sprite.png를 base64로. 없으면 None(프론트는 절차 생성 폴백).
@@ -1561,6 +1571,13 @@ pub(crate) fn owner_title(store: &SqliteStore) -> String {
     store.get_setting("owner_title").ok().flatten()
         .map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
         .unwrap_or_else(|| agent_mentor::mascot::DEFAULT_OWNER_TITLE.to_string())
+}
+
+/// 주인 풀네임(실명) 설정 — 미설정/공백이면 빈 문자열(옵트인, G1 스펙 §A).
+pub(crate) fn owner_full_name(store: &SqliteStore) -> String {
+    store.get_setting("owner_full_name").ok().flatten()
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
 }
 
 /// 주인 OS 계정명 — Life 등록·갱신에 실을 숨은 주인 식별자(§F). 없으면 빈 문자열.
