@@ -244,6 +244,18 @@ fn migrate(conn: &Connection) -> Result<()> {
              PRAGMA user_version = 7;",
         )?;
     }
+    // v8 재수집 — 스킬/커맨드 호출 프롬프트 제외(어댑터 is_command, 2026-07-23 순환 오탐 판정)가
+    // prompt_events 재구축을 요구한다. 기존 uuid:offset 행에서 소급 제거할 수 없어 전체 재수집.
+    // 그 프롬프트로 만들어진 R6 활성('new') 카드도 정화 — dismissed/resolved는 사용자
+    // 기록(나깅 방지 쿨다운)이라 보존 (v6 전례).
+    if user_version < 8 {
+        conn.execute_batch(
+            "DELETE FROM events; DELETE FROM sessions; DELETE FROM ingest_state; DELETE FROM daily_rollup;
+             DELETE FROM prompt_events;
+             DELETE FROM findings WHERE rule_id='R6' AND status='new';
+             PRAGMA user_version = 8;",
+        )?;
+    }
     Ok(())
 }
 
@@ -312,7 +324,7 @@ impl SqliteStore {
                     )?;
                     continue;
                 }
-                EventKind::UserPrompt { preview } => {
+                EventKind::UserPrompt { preview, is_command } => {
                     self.conn.execute(
                         "INSERT INTO sessions
                            (session_id, host, project_id, agent, first_ts, last_ts,
@@ -329,7 +341,9 @@ impl SqliteStore {
                     )?;
                     // 세션 내 전체 프롬프트 축적 — R6 v2 재료 (스펙 §4.1). 8자 미만은 정규화가 거른다.
                     // 사이드체인(서브에이전트) 프롬프트는 사용자 지시가 아니므로 제외.
-                    if e.is_sidechain {
+                    // 스킬/커맨드 호출(is_command)은 이미 코드화된 지시라 반복 마이닝 제외 — 단
+                    // first_prompt(위 sessions 갱신)는 세션 대표로 보존 (스펙 §8, 2026-07-26).
+                    if e.is_sidechain || *is_command {
                         continue;
                     }
                     if let Some(norm60) = crate::rules::r6_repeated_prompts::normalize(preview) {
@@ -2437,7 +2451,7 @@ mod tests {
             session_id: sid.into(), uuid: Some(format!("{sid}-p-{ts}")), parent_uuid: None,
             is_sidechain: false, ts: Some(ts.into()),
             source_file: format!("{sid}.jsonl"), source_offset: 0, msg_id: None,
-            kind: crate::model::EventKind::UserPrompt { preview: preview.into() },
+            kind: crate::model::EventKind::UserPrompt { preview: preview.into(), is_command: false },
         }
     }
 
@@ -3087,7 +3101,7 @@ mod tests {
                 ts: Some("2026-07-07T10:00:00Z".into()),
                 source_file: "s1.jsonl".into(), source_offset: 10,
                 msg_id: None,
-                kind: EventKind::UserPrompt { preview: "Run this exact Bash command".into() },
+                kind: EventKind::UserPrompt { preview: "Run this exact Bash command".into(), is_command: false },
             },
         ]).unwrap();
         let (proj, _ts, cwd, prompt) = store.session_ctx("s1").unwrap().unwrap();
@@ -3300,7 +3314,7 @@ mod tests {
             ts: Some("2026-07-20T10:00:00Z".into()),
             source_file: "s1.jsonl".into(), source_offset: off,
             msg_id: None,
-            kind: EventKind::UserPrompt { preview: preview.into() },
+            kind: EventKind::UserPrompt { preview: preview.into(), is_command: false },
         };
         store.upsert_events(&[
             base("p1", 10, "매일 아침 판매 리포트 뽑아줘"),
@@ -3336,7 +3350,7 @@ mod tests {
                 project_id: "p".into(), session_id: "s1".into(), uuid: Some("u1".into()), parent_uuid: None,
                 is_sidechain: false, ts: Some("2026-07-06T10:00:00Z".into()),
                 source_file: "s.jsonl".into(), source_offset: 0, msg_id: None,
-                kind: EventKind::UserPrompt { preview: "이 파일 이름만 바꿔줘".into() },
+                kind: EventKind::UserPrompt { preview: "이 파일 이름만 바꿔줘".into(), is_command: false },
             },
         ]).unwrap();
         let ps = store.session_user_prompts("s1", 5).unwrap();
@@ -3354,21 +3368,21 @@ mod tests {
                 project_id: "p".into(), session_id: "s1".into(), uuid: Some("u1".into()), parent_uuid: None,
                 is_sidechain: false, ts: Some("2026-07-06T10:00:00Z".into()),
                 source_file: "s.jsonl".into(), source_offset: 0, msg_id: None,
-                kind: EventKind::UserPrompt { preview: "첫번째로 파일을 읽어줘".into() },
+                kind: EventKind::UserPrompt { preview: "첫번째로 파일을 읽어줘".into(), is_command: false },
             },
             NormalizedEvent {
                 source_agent: "claude-code".into(), schema_version: "t".into(), host: "Windows".into(),
                 project_id: "p".into(), session_id: "s1".into(), uuid: Some("u2".into()), parent_uuid: None,
                 is_sidechain: false, ts: Some("2026-07-06T10:01:00Z".into()),
                 source_file: "s.jsonl".into(), source_offset: 1, msg_id: None,
-                kind: EventKind::UserPrompt { preview: "두번째로 코드를 수정해줘".into() },
+                kind: EventKind::UserPrompt { preview: "두번째로 코드를 수정해줘".into(), is_command: false },
             },
             NormalizedEvent {
                 source_agent: "claude-code".into(), schema_version: "t".into(), host: "Windows".into(),
                 project_id: "p".into(), session_id: "s1".into(), uuid: Some("u3".into()), parent_uuid: None,
                 is_sidechain: false, ts: Some("2026-07-06T10:02:00Z".into()),
                 source_file: "s.jsonl".into(), source_offset: 2, msg_id: None,
-                kind: EventKind::UserPrompt { preview: "세번째로 테스트를 실행해줘".into() },
+                kind: EventKind::UserPrompt { preview: "세번째로 테스트를 실행해줘".into(), is_command: false },
             },
         ]).unwrap();
         let ps = store.session_user_prompts("s1", 5).unwrap();
@@ -3385,7 +3399,7 @@ mod tests {
             host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
             uuid: Some(format!("{sess}-{off}")), parent_uuid: None, is_sidechain: false,
             ts: Some(ts.into()), source_file: "s.jsonl".into(), source_offset: off,
-            msg_id: None, kind: EventKind::UserPrompt { preview: text.into() },
+            msg_id: None, kind: EventKind::UserPrompt { preview: text.into(), is_command: false },
         };
         // s1: 같은 지시 2회(다른 ts) + s2: 같은 지시 1회. (모두 8자↑ = norm60 대상)
         store.upsert_events(&[
@@ -3414,7 +3428,7 @@ mod tests {
             uuid: Some("old-0".into()), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-01-01T00:00:00Z".into()), source_file: "s.jsonl".into(),
             source_offset: 0, msg_id: None,
-            kind: EventKind::UserPrompt { preview: "관찰창 밖 오래된 지시".into() },
+            kind: EventKind::UserPrompt { preview: "관찰창 밖 오래된 지시".into(), is_command: false },
         }]).unwrap();
         let rows = store.prompt_occurrence_rows("2026-06-01T00:00:00Z").unwrap();
         assert!(rows.is_empty(), "cutoff 이전 프롬프트는 제외");
@@ -3430,7 +3444,7 @@ mod tests {
             host: "Windows".into(), project_id: "p".into(), session_id: sess.into(),
             uuid: Some(format!("{sess}-0")), parent_uuid: None, is_sidechain: false,
             ts: Some(ts.into()), source_file: "s.jsonl".into(), source_offset: 0,
-            msg_id: None, kind: EventKind::UserPrompt { preview: text.into() },
+            msg_id: None, kind: EventKind::UserPrompt { preview: text.into(), is_command: false },
         };
         store.upsert_events(&[
             mk("s1", "리뷰 코멘트 종합 검토해줘", "2026-07-01T10:00:00Z"),
@@ -3463,11 +3477,36 @@ mod tests {
             ts: Some("2026-07-20T10:00:00Z".into()),
             source_file: "s1.jsonl".into(), source_offset: 10,
             msg_id: None,
-            kind: EventKind::UserPrompt { preview: "서브에이전트 내부의 반복 프롬프트입니다".into() },
+            kind: EventKind::UserPrompt { preview: "서브에이전트 내부의 반복 프롬프트입니다".into(), is_command: false },
         }]).unwrap();
         let n: i64 = store.conn
             .query_row("SELECT COUNT(*) FROM prompt_events", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 0, "사이드체인 프롬프트는 prompt_events에 쌓이면 안 됨");
+    }
+
+    #[test]
+    fn prompt_events_skip_command_invocations_but_keep_first_prompt() {
+        // 스킬/커맨드 호출(is_command)은 R6 반복 마이닝(prompt_events)에서 제외하되,
+        // 세션 대표(first_prompt_preview)로는 보존한다 (Codex 리뷰 finding 2).
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_events(&[NormalizedEvent {
+            source_agent: "claude-code".into(), schema_version: "t".into(),
+            host: "Windows".into(), project_id: "p".into(), session_id: "s1".into(),
+            uuid: Some("c1".into()), parent_uuid: None, is_sidechain: false,
+            ts: Some("2026-07-20T10:00:00Z".into()),
+            source_file: "s1.jsonl".into(), source_offset: 10,
+            msg_id: None,
+            kind: EventKind::UserPrompt {
+                preview: "…플랜을 superpowers:executing-plans 로 실행".into(), is_command: true },
+        }]).unwrap();
+        let n: i64 = store.conn
+            .query_row("SELECT COUNT(*) FROM prompt_events", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0, "커맨드 호출 프롬프트는 prompt_events에 쌓이면 안 됨");
+        let fp: Option<String> = store.conn
+            .query_row("SELECT first_prompt_preview FROM sessions WHERE session_id='s1'",
+                [], |r| r.get(0)).unwrap();
+        assert!(fp.unwrap().contains("executing-plans"), "first_prompt는 세션 대표로 보존");
     }
 
     #[test]
@@ -3642,12 +3681,60 @@ mod tests {
         assert_eq!(status("R6|Windows|kept"), "dismissed", "R6 dismissed는 보존");
         assert_eq!(status("R11|Windows|keep"), "new", "무관 룰은 불변");
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(uv, 7);
+        assert!(uv >= 7, "v7 분기 통과 (후속 분기 연쇄로 더 올라갈 수 있음)");
         // 멱등 — 재오픈해도 안전
         drop(store);
         let store2 = SqliteStore::open(&path).unwrap();
         let uv2: i64 = store2.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(uv2, 7);
+        assert!(uv2 >= 7, "v7 분기 통과 (후속 분기 연쇄로 더 올라갈 수 있음)");
+    }
+
+    #[test]
+    fn migrate_v8_recollects_and_purges_command_invocation_r6() {
+        // 스킬/커맨드 호출 프롬프트 제외(normalize) → prompt_events 재구축 + 오염 R6 'new' 정화.
+        use crate::finding::{Finding, Severity};
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("mv8.db");
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(SCHEMA).unwrap();
+            conn.execute_batch(
+                "PRAGMA user_version = 7;
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 42);
+                 INSERT INTO prompt_events (dedup_key, session_id, host, project_id,
+                   source_file, source_offset, norm60, preview)
+                 VALUES ('old-key', 's1', 'Windows', 'p', 'f.jsonl', 0, 'x', 'x');",
+            ).unwrap();
+            let store = SqliteStore { conn };
+            let f = |rule: &str, key: &str| Finding {
+                rule_id: rule.into(), severity: Severity::Suggest,
+                scope_host: Some("Windows".into()), scope_project: None,
+                scope_kind: "pattern".into(), scope_ref: format!("pattern:{key}"),
+                evidence: serde_json::json!({}), est_tokens_saved: 0,
+                prescription: None, dedup_key: key.into(),
+            };
+            store.upsert_finding(&f("R6", "R6|Windows|cmd"), "2026-07-23T00:00:00Z").unwrap();
+            store.set_finding_status("R6|Windows|cmd", "new").unwrap(); // 스킬 호출로 뜬 오탐 카드
+            store.upsert_finding(&f("R6", "R6|Windows|muted"), "2026-07-23T00:00:00Z").unwrap();
+            store.set_finding_status("R6|Windows|muted", "dismissed").unwrap();
+            store.upsert_finding(&f("R1", "R1|Windows|keep"), "2026-07-23T00:00:00Z").unwrap();
+        }
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v8 분기 발화
+        for table in ["ingest_state", "prompt_events", "events", "daily_rollup", "sessions"] {
+            let n: i64 = store.conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap();
+            assert_eq!(n, 0, "{table}는 재수집을 위해 비워져야 함");
+        }
+        let keys: Vec<String> = {
+            let mut stmt = store.conn
+                .prepare("SELECT dedup_key FROM findings ORDER BY dedup_key").unwrap();
+            stmt.query_map([], |r| r.get(0)).unwrap()
+                .collect::<std::result::Result<_, _>>().unwrap()
+        };
+        assert_eq!(keys, vec!["R1|Windows|keep".to_string(), "R6|Windows|muted".to_string()],
+            "R6 'new'만 삭제 — dismissed·타 룰은 보존");
+        let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert!(uv >= 8, "v8 분기 통과");
     }
 
     #[test]
@@ -3797,9 +3884,9 @@ mod tests {
         };
         store.upsert_events(&[
             base("m1", 0, EventKind::SessionMeta { cwd: "D:\\Project\\cowork".into(), git_branch: Some("main".into()) }),
-            base("p1", 10, EventKind::UserPrompt { preview: "Run this exact Bash command".into() }),
+            base("p1", 10, EventKind::UserPrompt { preview: "Run this exact Bash command".into(), is_command: false }),
             // 나중 프롬프트는 COALESCE로 무시돼야 함
-            base("p2", 20, EventKind::UserPrompt { preview: "두 번째 프롬프트".into() }),
+            base("p2", 20, EventKind::UserPrompt { preview: "두 번째 프롬프트".into(), is_command: false }),
             base("a1", 30, EventKind::AssistantTurn {
                 model: NormModel::from_raw_id("claude-opus-4-8"),
                 usage: TokenUsage::default(), web_search: 0, web_fetch: 0 }),
@@ -4201,7 +4288,7 @@ mod tests {
             [("orig", "a.jsonl"), ("fork1", "b.jsonl"), ("fork2", "c.jsonl")].iter().enumerate()
         {
             store.upsert_events(&[hygiene_ev(sess, file, &format!("u{i}"), 0, None,
-                EventKind::UserPrompt { preview: "그 배포 버전 사내망에 올린 것 맞는지 확인해줘".into() },
+                EventKind::UserPrompt { preview: "그 배포 버전 사내망에 올린 것 맞는지 확인해줘".into(), is_command: false },
             )]).unwrap();
         }
         let n: i64 = store.conn.query_row(

@@ -193,7 +193,7 @@ mod tests {
             ts: Some("2026-07-06T10:20:00Z".into()),
             source_file: "s.jsonl".into(), source_offset: 600,
             msg_id: None,
-            kind: EventKind::UserPrompt { preview: "이 리포의 최근 커밋 요약해줘".into() },
+            kind: EventKind::UserPrompt { preview: "이 리포의 최근 커밋 요약해줘".into(), is_command: false },
         });
         store.upsert_events(&evs).unwrap();
 

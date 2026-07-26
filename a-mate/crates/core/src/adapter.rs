@@ -109,10 +109,12 @@ fn is_synthetic_marker(text: &str) -> bool {
         || t.starts_with("[Request interrupted")
 }
 
-/// user 프롬프트 미리보기(첫 줄 ≤120자). content가 문자열이면 그대로, 블록 배열이면
-/// 합성 마커 블록(<ide_opened_file> 등)을 제외하고 text 연결.
-/// tool_result 라인이나 빈 내용은 None. 합성 마커로 시작하면 None.
-fn extract_prompt_preview(content: Option<&Value>) -> Option<String> {
+/// user 프롬프트 첫 줄(정제, **자르지 않음**). content가 문자열이면 그대로, 블록 배열이면
+/// 합성 마커 블록(<ide_opened_file> 등)을 제외하고 text 연결한 뒤 첫 줄.
+/// tool_result 라인이나 빈 내용은 None. 합성 마커로 시작하거나 시크릿 포함 시 None.
+/// preview(≤120자)는 호출부에서 자른다 — 커맨드 호출 판정은 120자 이후 스킬 토큰도 봐야 하므로
+/// 자르기 전 전체 첫 줄이 필요하다.
+fn extract_prompt_first_line(content: Option<&Value>) -> Option<String> {
     let raw = match content {
         Some(Value::String(s)) => s.clone(),
         Some(Value::Array(arr)) => arr
@@ -131,7 +133,43 @@ fn extract_prompt_preview(content: Option<&Value>) -> Option<String> {
     if !crate::curation::find_secret_patterns(first_line).is_empty() {
         return None;
     }
-    Some(first_line.chars().take(120).collect())
+    Some(first_line.to_string())
+}
+
+/// 프롬프트 첫 줄이 스킬을 호출하는 지시인지 — 이미 재사용 커맨드로 코드화된 지시라
+/// R6 반복 마이닝(스킬화 제안) 대상이 아니다. 예: "…플랜을 superpowers:executing-plans 로 실행".
+/// 스킬 참조 토큰 `<ns>:<name>` 만 인정하되 **이름은 하이픈 포함 다단어**여야 한다
+/// (executing-plans, subagent-driven-development). 이 제약이 도커 태그(node:latest)·
+/// git 참조(origin:main) 같은 단일단어 우변을 배제한다. `:`·ASCII 식별자는 멀티바이트(한글)
+/// 시퀀스에 없어 바이트 스캔이 안전하다. (사용자가 슬래시로 부른 `/foo:bar` 는 `<command-*>`
+/// 합성마커라 이미 제외되므로 여기서 별도 처리하지 않는다.)
+fn is_command_invocation(first_line: &str) -> bool {
+    let b = first_line.as_bytes();
+    let is_ident = |c: u8| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-' || c == b'_';
+    for i in 0..b.len() {
+        if b[i] != b':' {
+            continue;
+        }
+        let mut l = i;
+        while l > 0 && is_ident(b[l - 1]) {
+            l -= 1;
+        }
+        let mut r = i + 1;
+        while r < b.len() && is_ident(b[r]) {
+            r += 1;
+        }
+        let ns = &b[l..i];
+        let name = &b[i + 1..r];
+        if ns.len() >= 2
+            && ns[0].is_ascii_lowercase()
+            && name.len() >= 3
+            && name[0].is_ascii_lowercase()
+            && name.contains(&b'-')
+        {
+            return true;
+        }
+    }
+    false
 }
 
 impl SourceAdapter for ClaudeCodeAdapter {
@@ -340,8 +378,10 @@ impl SourceAdapter for ClaudeCodeAdapter {
                 }
             }
             if !had_tool_result {
-                if let Some(preview) = extract_prompt_preview(content) {
-                    out.push(mk(EventKind::UserPrompt { preview }, 0)); // off_bump 0 = 라인 시작(deref 포인터)
+                if let Some(first_line) = extract_prompt_first_line(content) {
+                    let is_command = is_command_invocation(&first_line);
+                    let preview: String = first_line.chars().take(120).collect();
+                    out.push(mk(EventKind::UserPrompt { preview, is_command }, 0)); // off_bump 0 = 라인 시작(deref 포인터)
                 }
                 // 시크릿 스캔은 프롬프트 전문 대상 (미리보기 스킵과 독립 — 코칭 v3 §4.2)
                 // SecretFlag의 source_offset(off_bump 800대)은 dedup 전용이며 deref 포인터가 아니다
@@ -483,7 +523,7 @@ mod tests {
         let evs = adapter().map(line, "s1.jsonl", 500);
         let up = evs.iter().find(|e| matches!(e.kind, EventKind::UserPrompt { .. })).unwrap();
         match &up.kind {
-            EventKind::UserPrompt { preview } => assert_eq!(preview, "Run this exact Bash command"), // 첫 줄만
+            EventKind::UserPrompt { preview, .. } => assert_eq!(preview, "Run this exact Bash command"), // 첫 줄만
             k => panic!("expected UserPrompt, got {k:?}"),
         }
         assert_eq!(up.source_offset, 500, "deref 포인터는 라인 시작 offset(off_bump 0)");
@@ -498,6 +538,48 @@ mod tests {
     }
 
     #[test]
+    fn map_user_prompt_command_invocation_detected_past_preview_cut() {
+        use crate::model::EventKind;
+        // 스킬 토큰이 120자 preview 컷 뒤에 오는 실사용형 킥오프 — 어댑터는 자르기 전 첫 줄에서
+        // 판정하므로 is_command=true (Codex 리뷰 finding 2: truncation 전에 검사해야 함).
+        let filler = "feat/windows-hook-shell-fix 브랜치에서 docs/superpowers/plans/2026-07-20-windows-hook-shell-fix.md 의 매트릭스 v2 증분 Task 12-14 만 이어서 ";
+        assert!(filler.chars().count() > 120, "토큰이 preview 컷 뒤에 오도록 filler ≥120자");
+        let prompt = format!("{filler}superpowers:executing-plans 로 실행해줘");
+        let line = format!(
+            r#"{{"type":"user","sessionId":"s1","uuid":"u9","timestamp":"2026-07-20T10:00:00Z","message":{{"role":"user","content":{}}}}}"#,
+            serde_json::Value::String(prompt),
+        );
+        let evs = adapter().map(&line, "s1.jsonl", 0);
+        let up = evs.iter().find(|e| matches!(e.kind, EventKind::UserPrompt { .. })).unwrap();
+        match &up.kind {
+            EventKind::UserPrompt { preview, is_command } => {
+                assert_eq!(preview.chars().count(), 120, "preview는 120자 컷");
+                assert!(!preview.contains("superpowers:"), "스킬 토큰은 preview에서 잘려나감");
+                assert!(*is_command, "raw 첫 줄에서 스킬 호출로 판정돼야 함");
+            }
+            k => panic!("expected UserPrompt, got {k:?}"),
+        }
+    }
+
+    #[test]
+    fn is_command_invocation_precision() {
+        use super::is_command_invocation;
+        // 스킬 호출(하이픈 다단어 스킬명) → true
+        assert!(is_command_invocation("이 플랜을 superpowers:executing-plans 로 실행"));
+        assert!(is_command_invocation("끝나면 superpowers:subagent-driven-development 로"));
+        // 도커 태그·git 참조·시각·경로·한글 콜론 → false (Codex finding 1·3)
+        assert!(!is_command_invocation("node:latest 이미지로 다시 빌드해줘"));
+        assert!(!is_command_invocation("origin:main 기준으로 리베이스"));
+        assert!(!is_command_invocation("python:3.12 로 재현"));
+        assert!(!is_command_invocation("11:04 에 배포된 버전 확인"));
+        assert!(!is_command_invocation("/tmp 로그를 정리해줘")); // 선두 단일 경로 보존
+        assert!(!is_command_invocation("주의: 이 파일은 건드리지 마")); // 한글 콜론
+        assert!(!is_command_invocation("docs/superpowers/plans 폴더 정리")); // 경로, 콜론 없음
+        // codex:review 는 단일단어라 여기선 false 지만, 실제로는 /codex:review 합성마커로 이미 제외됨
+        assert!(!is_command_invocation("codex:review 돌려줘"));
+    }
+
+    #[test]
     fn map_user_prompt_skips_ide_synthetic_block() {
         use crate::model::EventKind;
         // VS Code 연동이 user content 배열 앞에 주입하는 <ide_opened_file> 블록은 지시가 아니다
@@ -508,7 +590,7 @@ mod tests {
         let evs = adapter().map(line, "s1.jsonl", 0);
         let up = evs.iter().find(|e| matches!(e.kind, EventKind::UserPrompt { .. })).unwrap();
         match &up.kind {
-            EventKind::UserPrompt { preview } => assert_eq!(preview, "리뷰 중에 잠깐 다음 단계 질문"),
+            EventKind::UserPrompt { preview, .. } => assert_eq!(preview, "리뷰 중에 잠깐 다음 단계 질문"),
             k => panic!("expected UserPrompt, got {k:?}"),
         }
     }

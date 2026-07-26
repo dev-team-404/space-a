@@ -293,7 +293,7 @@ mod tests {
             source_file: "s.jsonl".into(),
             source_offset: 0,
             msg_id: None,
-            kind: EventKind::UserPrompt { preview: prompt.into() },
+            kind: EventKind::UserPrompt { preview: prompt.into(), is_command: false },
         }];
         for (i, t) in tools.iter().enumerate() {
             evs.push(NormalizedEvent {

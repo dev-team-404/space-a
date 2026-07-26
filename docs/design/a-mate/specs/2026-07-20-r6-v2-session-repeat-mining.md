@@ -142,3 +142,64 @@ CREATE TABLE IF NOT EXISTS prompt_events (
 | 1 | `preview` 원문 저장 여부 | **원문 저장** — 기존 first_prompt와 동일 수준이고 skill_draft 표본 품질에 필요 | norm60 해시만 저장, 원문은 문턱 넘은 그룹만 |
 | 2 | bash 토큰 세분도 | **첫 단어까지** (`bash:gh`) — 워크플로 식별에 필요, 시크릿 위험 없음(단어 1개) | `bash` 단일 토큰 |
 | 3 | 신규 룰 번호 | **R23** (R13~R22는 코칭 v3 예약) | R6 하위 변형으로 통합 |
+
+## 8. 캘리브레이션 — 스킬/커맨드 호출 프롬프트 제외 (2026-07-23)
+
+### 8.1 오탐
+
+코치 탭에 다음 카드가 반복 노출됐다:
+
+> 💡 같은 지시를 3개 세션에서 반복했어요 —
+> "feat/install-signal 브랜치에서 docs/superpowers/plans/2026-07-10-"
+> 🧭 스킬(SKILL.md)로 묶으면 매번 다시 설명할 필요가 없어요
+
+### 8.2 근본 원인 (실데이터 확인)
+
+`prompt_events`를 만든 실제 프롬프트 3건(로컬 DB → WSL JSONL 원본 대조):
+
+| 세션 | host | 프롬프트 |
+|------|------|---------|
+| `78ca3a79` | wsl:Ubuntu | `…플랜을 superpowers:subagent-driven-development 로 실행. 완료 후 PR.` |
+| `d574816d` | wsl:Ubuntu | (동일) |
+| `a846c9ea` | wsl:Ubuntu | `…Task 12–14만 superpowers:executing-plans로 실행해줘…` |
+
+- 셋 다 `isSidechain=false`인 **진짜 사용자 프롬프트**다 — 사이드체인 누수(§4·마이그v4)가 아니다.
+- 셋 다 **이미 스킬을 호출하는 지시**다. 브랜치·플랜문서·태스크 번호 등 인자만 바뀌는
+  템플릿형 반복이라 `norm60`(60자 컷: `…브랜치에서 docs/superpowers/plans/2026-07-`)가
+  거의 동일 → 느슨한 묶기로 한 후보가 되어 발화.
+- R6이 "반복 지시 → 스킬로 묶어라"를 **스킬 호출에 다시 권하는** 순환 오탐.
+  변하는 부분(브랜치·문서)은 스킬의 인자일 뿐 새 스킬로 코드화할 대상이 아니다.
+
+### 8.3 조치
+
+**어댑터가 raw 첫 줄에서 판정, 이벤트에 `is_command` 플래그로 전달**한다
+(`adapter::is_command_invocation`). store는 `is_command`면 `prompt_events` 적재를
+건너뛰되(R6 반복 마이닝 제외), `first_prompt_preview`(세션 대표)는 **보존**한다 —
+사이드체인 제외와 같은 지점·같은 방식(§4). `EventKind::UserPrompt`에 `is_command: bool` 추가.
+
+- **왜 어댑터인가 (검사 위치):** `preview`는 `extract_prompt_first_line`이 **첫 줄 120자**로
+  자른 결과다. 스킬 토큰은 그 뒤에 오는 경우가 흔해(실측: windows-hook 프롬프트는 preview가
+  정확히 120자에서 잘려 `superpowers:`를 잃음) `normalize(preview)`로는 못 잡는다. 그래서
+  **자르기 전 raw 첫 줄**에서 판정한다.
+- **왜 first_prompt는 보존인가 (스코프):** first_prompt는 hub 공유·다이어리·세션 상세의
+  세션 대표 프롬프트다. 스킬 호출도 사용자가 직접 친 지시이므로 대표로는 유효 — R6 반복
+  마이닝에서만 뺀다.
+- **판정 규칙 (정밀도):** 스킬 참조 토큰 `<ns>:<name>`에서 **이름이 하이픈 포함 다단어**일
+  때만 인정(`executing-plans`, `subagent-driven-development`). 이 제약이 도커 태그
+  (`node:latest`)·git 참조(`origin:main`) 같은 단일단어 우변을 배제한다. `regex` 무의존
+  (ASCII-safe 바이트 스캔). 슬래시 커맨드(`/codex:review` 등)는 별도 처리 불필요 —
+  `<command-*>` 합성마커라 `is_synthetic_marker`가 이미 거른다.
+- **잔여 한계:** `origin:feature-x`처럼 하이픈 브랜치를 콜론으로 쓴 git 참조는 오검출 가능
+  (드물고 저위험 — 미제안 넛지 1건). 슬래시 아닌 순수 텍스트로 부른 단일단어 스킬
+  (`codex:review`)은 미검출(실제로는 슬래시=합성마커 경로라 무관).
+- 테스트: `adapter::is_command_invocation_precision`,
+  `map_user_prompt_command_invocation_detected_past_preview_cut`(120자 뒤 토큰),
+  `store::prompt_events_skip_command_invocations_but_keep_first_prompt`,
+  `r6::r6_ignores_command_invocation_prompts`.
+- 마이그레이션 `user_version → 8`: 기존 `prompt_events`에 남은 호출 프롬프트를 소급
+  제거할 수 없어 전체 재수집(어댑터가 재수집 때 `is_command`로 제외) + R6 활성('new') 카드
+  정화 (dismissed/resolved 보존, v6 전례).
+
+> **경위:** 최초 구현은 `normalize()`에서 검사(슬래시 규칙 포함)했으나 Codex 리뷰가 3건
+> 지적 — ① 콜론 토큰이 너무 관대(`node:latest` 오검출) ② `normalize`는 잘린 preview를 받아
+> 120자 뒤 토큰을 놓침 ③ 선두 단일 경로(`/tmp …`)를 슬래시 커맨드로 오검출. 위 설계로 전부 반영.

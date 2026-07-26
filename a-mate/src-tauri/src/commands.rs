@@ -1341,7 +1341,7 @@ mod tests {
                 ts: Some("2026-07-07T10:00:00Z".into()),
                 source_file: "s.jsonl".into(), source_offset: 10,
                 msg_id: None,
-                kind: EventKind::UserPrompt { preview: "커밋 요약해줘".into() },
+                kind: EventKind::UserPrompt { preview: "커밋 요약해줘".into(), is_command: false },
             },
         ]).unwrap();
         let items = sessions_ctx_inner(&store, &["s1".into()]).unwrap();

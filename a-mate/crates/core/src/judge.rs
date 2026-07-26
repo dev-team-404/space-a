@@ -191,7 +191,7 @@ mod tests {
             uuid: Some(format!("{sess}-0")), parent_uuid: None, is_sidechain: false,
             ts: Some("2026-07-01T10:00:00Z".into()), source_file: "s.jsonl".into(),
             source_offset: 0, msg_id: None,
-            kind: EventKind::UserPrompt { preview: text.into() },
+            kind: EventKind::UserPrompt { preview: text.into(), is_command: false },
         };
         store.upsert_events(&[
             mk("s1", "PR 리뷰 코멘트 종합 검토해서 조치해줘"),

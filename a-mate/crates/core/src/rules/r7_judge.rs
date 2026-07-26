@@ -166,7 +166,7 @@ mod tests {
                 project_id: "p".into(), session_id: "s1".into(), uuid: Some("u1".into()), parent_uuid: None,
                 is_sidechain: false, ts: Some("2026-07-06T10:00:00Z".into()),
                 source_file: "s.jsonl".into(), source_offset: 0, msg_id: None,
-                kind: crate::model::EventKind::UserPrompt { preview: "로그 파일 개수만 세줘".into() },
+                kind: crate::model::EventKind::UserPrompt { preview: "로그 파일 개수만 세줘".into(), is_command: false },
             },
         ]).unwrap();
         let c = PendingCandidate {

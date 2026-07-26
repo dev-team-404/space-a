@@ -149,13 +149,34 @@ mod tests {
                 source_file: "s.jsonl".into(),
                 source_offset: offset,
                 msg_id: None,
-                kind: EventKind::UserPrompt { preview: prompt.into() },
+                kind: EventKind::UserPrompt { preview: prompt.into(), is_command: false },
             }])
             .unwrap();
     }
 
     fn seed_session(store: &SqliteStore, sess: &str, prompt: &str, ts: &str) {
         seed_prompt_at(store, sess, prompt, ts, 0);
+    }
+
+    /// 스킬/커맨드 호출로 판정된 프롬프트 시드 (어댑터가 is_command=true로 방출한 것과 동치).
+    fn seed_command(store: &SqliteStore, sess: &str, prompt: &str, ts: &str) {
+        store
+            .upsert_events(&[NormalizedEvent {
+                source_agent: "claude-code".into(),
+                schema_version: "t".into(),
+                host: "Windows".into(),
+                project_id: "p".into(),
+                session_id: sess.into(),
+                uuid: Some(format!("{sess}-cmd")),
+                parent_uuid: None,
+                is_sidechain: false,
+                ts: Some(ts.into()),
+                source_file: "s.jsonl".into(),
+                source_offset: 0,
+                msg_id: None,
+                kind: EventKind::UserPrompt { preview: prompt.into(), is_command: true },
+            }])
+            .unwrap();
     }
 
     /// 논리 dedup 키(ts+내용)가 같은 ts·내용을 한 행으로 접으므로,
@@ -254,6 +275,23 @@ mod tests {
         seed_session(&store, "b1", "이건 두 번뿐인 반복 요청", &ts_at(5));
         seed_session(&store, "b2", "이건 두 번뿐인 반복 요청", &ts_at(6));
         assert!(R6RepeatedPrompts::default().evaluate(&store).unwrap().is_empty());
+    }
+
+    #[test]
+    fn r6_ignores_command_invocation_prompts() {
+        // 실사용 오탐(2026-07-23): "…플랜을 superpowers:executing-plans 로 실행" 처럼
+        // 이미 스킬/커맨드를 호출하는 지시는 브랜치·플랜문서만 바뀌는 템플릿형 반복이라
+        // R6이 "스킬로 묶어라"를 순환 제안한다. 어댑터가 is_command=true로 표시한 프롬프트는
+        // store가 prompt_events에서 제외하므로 R6 재료가 되지 않는다.
+        let store = SqliteStore::open_in_memory().unwrap();
+        seed_command(&store, "s1",
+            "feat/install-signal 브랜치에서 …플랜을 superpowers:subagent-driven-development 로 실행", &ts_at(0));
+        seed_command(&store, "s2",
+            "feat/install-signal 브랜치에서 …플랜을 superpowers:subagent-driven-development 로 실행", &ts_at(1));
+        seed_command(&store, "s3",
+            "feat/windows-hook-shell-fix 브랜치에서 …Task 12–14만 superpowers:executing-plans로 실행", &ts_at(2));
+        assert!(R6RepeatedPrompts::default().evaluate(&store).unwrap().is_empty(),
+            "스킬/커맨드 호출 프롬프트는 R6 카드로 올라오면 안 됨");
     }
 
     #[test]
