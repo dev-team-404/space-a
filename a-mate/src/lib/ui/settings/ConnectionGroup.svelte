@@ -2,7 +2,7 @@
   import {
     engineSettingsGet, engineSettingsSet, engineTest,
     hubConnect, hubDisconnect, hubSettingsGet,
-    imageSettingsGet, imageSettingsSet, regenerateSprite,
+    imageSettingsGet, imageSettingsSet, imageTest, regenerateSprite,
     type EngineSettings, type HubSettings, type ImageSettings,
   } from '../../api';
   import { IDLE, busy, err, ok, type Status } from './status';
@@ -64,6 +64,12 @@
     imgStatus = busy('캐릭터 그리는 중… 수십 초 걸릴 수 있어요');
     try { await regenerateSprite(); imgStatus = ok('새 캐릭터로 바뀌었어요 — 마스코트를 확인해보세요!'); }
     catch(e){ imgStatus = err(`생성 실패: ${e}`); }
+  }
+  async function testImage(){
+    imgStatus = busy('연결 확인 중…');
+    // image_test는 실패 시 이미 완성된 한국어 메시지를 reject하므로 접두어 없이 그대로 쓴다.
+    try { imgStatus = ok(await imageTest(img.url, img.key, img.model)); }
+    catch(e){ imgStatus = err(e); }
   }
   const imgSourceLabel = $derived(
     img.source === 'store' ? '설정 탭에서 지정한 값 사용 중'
@@ -127,6 +133,7 @@
   </div>
   <div class="actions">
     <button class="primary" onclick={saveImage} disabled={imgStatus.kind==='busy'}>저장</button>
+    <button onclick={testImage} disabled={imgStatus.kind==='busy'}>연결 테스트</button>
     <button onclick={regenerate} disabled={imgStatus.kind==='busy'}>캐릭터 재생성</button>
   </div>
   <StatusLine status={imgStatus}/>

@@ -302,6 +302,10 @@ export async function regenerateSprite(): Promise<void> {
   await invoke('regenerate_sprite');
 }
 
+/** 이미지 엔드포인트 검증 (무과금 — GET /models). 성공/실패 모두 사람이 읽는 메시지. 실패는 reject. */
+export const imageTest = (url: string, key: string, model: string) =>
+  invoke<string>('image_test', { url, key, model });
+
 /** 개인정보 — 이름·조직·아이디(UUID 자동)·MBTI. a-hub 연결·마스코트 시드에 쓰인다. */
 export interface Profile { name: string; org: string; uuid: string; mbti: string }
 export const profileGet = () => invoke<Profile>('profile_get');
