@@ -1,12 +1,17 @@
+---
+status: done
+archived: 2026-07-27
+---
+
 # G2 방명록 답글 설계 — 1단계, 중첩 불가
 
 - **날짜**: 2026-07-26
 - **컴포넌트**: a-hub life (+ a-mate 방명록 UI·클라이언트)
 - **브랜치**: `feat/guestbook-replies` (worktree)
-- **관계**: [후속 로드맵 2차 배치 G2](../plans/2026-07-26-life-social-diary-followups-roadmap.md) 착수분.
-  G1(주인 신원, PR #106 — [아카이브 스펙](../../../archive/design/a-mate/specs/2026-07-26-owner-identity-design.md))과
-  [ADR 0020](../../../adr/0020-owner-fullname-to-hub.md) 위 확장.
-  스키마·의미론 결정은 [ADR 0021](../../../adr/0021-guestbook-replies-one-depth.md).
+- **관계**: [후속 로드맵 2차 배치 G2](../../../../design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md) 착수분.
+  G1(주인 신원, PR #106 — [아카이브 스펙](2026-07-26-owner-identity-design.md))과
+  [ADR 0020](../../../../adr/0020-owner-fullname-to-hub.md) 위 확장.
+  스키마·의미론 결정은 [ADR 0021](../../../../adr/0021-guestbook-replies-one-depth.md).
 
 ## 배경 — 현재 상태 (조사 결과)
 

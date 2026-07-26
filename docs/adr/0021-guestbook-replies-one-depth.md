@@ -3,7 +3,7 @@
 - 상태: 채택
 - 날짜: 2026-07-26
 - 대상: a-hub life 방명록 스키마·API, a-mate 방명록 클라이언트
-- 관련: [G2 설계 스펙](../design/a-mate/specs/2026-07-26-guestbook-replies-design.md),
+- 관련: [G2 설계 스펙](../archive/design/a-mate/specs/2026-07-26-guestbook-replies-design.md),
   [ADR 0020](0020-owner-fullname-to-hub.md)(작성자 표기·실명 경계 — 답글에도 동일 적용)
 
 ## 배경

@@ -77,7 +77,7 @@
 - **의존·세션**: **G2·G3·G4의 선행 기반**. 신규 설정·payload 위주라 diary 미접촉. PR #104의 owner_title/owner_os_user 배관 위 확장.
 - **열린 질문**: 풀네임 노출 범위(방명록 표시=호칭 / payload=풀네임처럼 채널별 분리?)와 방 헤더 `name`(현재 봇 이름)·풀네임의 관계 정리.
 
-**G2 — 방명록 답글 (1단계, 중첩 불가)** (백로그 1)
+**G2 — 방명록 답글 (1단계, 중첩 불가)** (백로그 1) — ✅ 완료(2026-07-27, PR #107)
 - **현재 상태**: a-hub life 방명록은 **평면 목록만** — `GET/POST/DELETE /life/{id}/guestbook`(`api.py:197-207`), 스키마에 **parent/thread 필드 없음**.
 - **요구**: 방명록 항목에 **답글 1단계** 허용, **답글의 답글(중첩) 불가**.
 - **터치**: **a-hub** — guestbook 테이블에 `parent_id` 추가 + **1-depth 강제**(parent가 이미 답글이면 거부), reply 생성/조회 경로, `store.py` 마이그레이션. **a-mate** — `GuestbookTab.svelte` 답글 UI + `api.ts`.

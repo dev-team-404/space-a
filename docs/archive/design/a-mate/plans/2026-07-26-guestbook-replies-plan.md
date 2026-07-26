@@ -1,10 +1,15 @@
+---
+status: done
+archived: 2026-07-27
+---
+
 # G2 방명록 답글 (1단계) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** a-hub life 방명록에 방 주인 전용 1단계 답글(중첩 불가)을 추가하고 a-mate에 답글 UI를 붙인다.
 
-**Architecture:** 기존 `POST /life/{life_id}/guestbook`에 optional `parent_id`를 확장(신규 엔드포인트 없음), GET은 평면 목록 그대로 행에 `parent_id`를 노출하고 그룹핑은 클라이언트(`groupGuestbook`)가 한다. 원글 삭제 시 답글 cascade. 스펙: [2026-07-26-guestbook-replies-design.md](../specs/2026-07-26-guestbook-replies-design.md), 의미론 결정: [ADR 0021](../../../adr/0021-guestbook-replies-one-depth.md).
+**Architecture:** 기존 `POST /life/{life_id}/guestbook`에 optional `parent_id`를 확장(신규 엔드포인트 없음), GET은 평면 목록 그대로 행에 `parent_id`를 노출하고 그룹핑은 클라이언트(`groupGuestbook`)가 한다. 원글 삭제 시 답글 cascade. 스펙: [2026-07-26-guestbook-replies-design.md](../specs/2026-07-26-guestbook-replies-design.md), 의미론 결정: [ADR 0021](../../../../adr/0021-guestbook-replies-one-depth.md).
 
 **Tech Stack:** a-hub life = FastAPI + SQLite(opt-in, 인메모리 원본) + pytest. a-mate = Tauri v2(Rust: ureq/serde_json) + Svelte 5 + Vitest.
 
