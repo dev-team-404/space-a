@@ -3,7 +3,7 @@ export type SettingsGroup = 'conn' | 'me' | 'privacy' | 'look';
 
 export const SETTINGS_GROUPS: { id: SettingsGroup; label: string }[] = [
   { id: 'conn', label: '연결' },
-  { id: 'me', label: '나' },
+  { id: 'me', label: '봇' },
   { id: 'privacy', label: '공개' },
   { id: 'look', label: '모양' },
 ];
