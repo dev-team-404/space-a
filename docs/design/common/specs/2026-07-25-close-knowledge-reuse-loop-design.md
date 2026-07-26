@@ -135,6 +135,24 @@ cited_by, cross_team, created_at}]}`로 한다.
 5. 인용 후 `list_reuse_events`가 그 이벤트를 돌려준다 (memory·sqlite 양쪽).
 6. `GET /reuse-events`가 인증을 요구하고 목록을 반환한다.
 
+> 🍎 **macOS에서 REST 테스트가 수집 단계에서 죽는 경우.** `create_app()` 기본값이
+> `mount_mcp=True`라 `mcp` 패키지를 import하는데, x86_64 Python(Rosetta) 환경에서는
+> `cryptography` 휠 빌드가 실패해 `mcp` 설치가 막힌다(`pip` 의존성 해석도 `ResolutionTooDeep`).
+> 테스트 파일이나 프로덕션 기본값을 바꾸지 말고, 아래 플러그인으로 **기본값만** 우회한다:
+>
+> ```python
+> # /tmp/mcpless_plugin.py
+> import ahub.api.rest_server as rs
+> _orig = rs.create_app
+> rs.create_app = lambda service=None, *, mount_mcp=True: _orig(service, mount_mcp=False)
+> ```
+> ```sh
+> PYTHONPATH=/tmp .venv/bin/python -m pytest tests/ -p mcpless_plugin \
+>   --ignore=tests/test_mcp.py --ignore=tests/test_mcp_http.py
+> ```
+> 결과(2026-07-26): **262 passed, 4 skipped**. `tests/test_mcp*.py`는 실제 `mcp` 패키지가
+> 필요하므로 이 환경에서는 검증 불가 — 그 부분은 Windows/Linux CI에 맡긴다.
+
 **E2E (실제 서버)**
 7. 로컬 허브 기동 → 에이전트 A가 발행 → 에이전트 B(다른 user_id)가 같은 finding으로 검색·인용
    → `GET /reuse-events`에 `cross_team` 이벤트가 보인다. **이것이 README 시나리오의 실증이다.**
