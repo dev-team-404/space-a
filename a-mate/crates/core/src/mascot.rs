@@ -162,19 +162,20 @@ fn facts_block(ctx: &crate::chat::ChatContext) -> String {
 /// 오늘 요약(chat과 같은 사실 블록) + voice_guidance + "짧은 한 문장" 지시 (스펙 §5).
 pub fn build_daily_line_prompt(ctx: &crate::chat::ChatContext) -> String {
     format!(
-        "당신은 {user}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
+        "당신은 {honorific}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
          매일 일기를 쓰는 그 다마고치와 동일 인물로, 1인칭으로 가볍고 능청스럽게 \
-         사용자를 '주인'이라고 부릅니다. \
+         사용자를 '{honorific}'이라고 부릅니다.{voice} \
          \
-         {voice} \
+         {voice_guidance} \
          \
          정밀도의 선(반드시 지킬 것): 아래 오늘 요약의 사실과 수치에만 근거하고, \
          요약에 없는 구체적 수치를 지어내지 마세요.\n\n\
          {facts}\n\n\
          오늘 하루의 기분이나 재치를 담아 짧은 한 문장(40자 이내)으로 표현하세요. \
          대화가 아니라 오늘을 한마디로 요약하는 혼잣말입니다. 딱 한 문장만 출력하세요.",
-        user = ctx.user_name,
-        voice = crate::diary::voice_guidance(),
+        honorific = ctx.honorific,
+        voice = mbti_voice_hint(ctx.mbti.as_deref()),
+        voice_guidance = crate::diary::voice_guidance(),
         facts = facts_block(ctx),
     )
 }
@@ -188,12 +189,12 @@ pub const CHATTER_REST_SESSIONS: u64 = 5;
 /// 근무 맥락 코믹 지시 — 신호(주말·연속세션·장시간)가 있을 때만 소재 블록 생성, 없으면 빈 문자열.
 /// 위로가 아니라 능청·놀림 톤(다이어리 A5의 anti-monotony 결과 일관).
 fn comic_directives(ctx: &crate::chat::ChatContext, work: &crate::diary::WorkContext) -> String {
+    let h = &ctx.honorific;
     let mut items: Vec<String> = Vec::new();
     if work.is_weekend {
-        items.push(
-            "- 오늘은 주말인데 주인이 또 나와서 일하고 있다 — \"주말에 또 나왔어? 일중독이야ㅋㅋ\" 같은 능청."
-                .to_string(),
-        );
+        items.push(format!(
+            "- 오늘은 주말인데 {h}이 또 나와서 일하고 있다 — \"주말에 또 나왔어? 일중독이야ㅋㅋ\" 같은 능청."
+        ));
     }
     if ctx.session_count >= CHATTER_REST_SESSIONS {
         items.push(format!(
@@ -213,7 +214,7 @@ fn comic_directives(ctx: &crate::chat::ChatContext, work: &crate::diary::WorkCon
     format!(
         "\n\n[오늘 근무 맥락 — 코믹 소재]\n{}\n\
          위 근무 맥락은 사실이니 잡담 일부에 능청스럽게 녹이세요. \
-         걱정 어투 말고 웃기게 — 다마고치가 주인을 놀리는 톤.",
+         걱정 어투 말고 웃기게 — 다마고치가 {h}을 놀리는 톤.",
         items.join("\n")
     )
 }
@@ -227,11 +228,11 @@ pub fn build_chatter_prompt(
     n: usize,
 ) -> String {
     format!(
-        "당신은 {user}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
+        "당신은 {honorific}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
          매일 일기를 쓰는 그 다마고치와 동일 인물로, 1인칭으로 가볍고 능청스럽게 \
-         사용자를 '주인'이라고 부릅니다. \
+         사용자를 '{honorific}'이라고 부릅니다.{voice} \
          \
-         {voice} \
+         {voice_guidance} \
          \
          정밀도의 선(반드시 지킬 것): 아래 오늘 요약의 사실과 수치에만 근거하고, \
          요약에 없는 구체적 수치를 지어내지 마세요.\n\n\
@@ -239,8 +240,9 @@ pub fn build_chatter_prompt(
          위 요약을 재료로, 상주 마스코트가 가끔 툭 던질 가벼운 잡담·혼잣말을 {n}개 만드세요. \
          코칭 조언이나 보고처럼 굴지 마세요(조언은 다른 채널이 합니다). \
          한 줄에 하나씩, 각 40자 이내로, 번호·불릿·따옴표 없이 출력하세요.",
-        user = ctx.user_name,
-        voice = crate::diary::voice_guidance(),
+        honorific = ctx.honorific,
+        voice = mbti_voice_hint(ctx.mbti.as_deref()),
+        voice_guidance = crate::diary::voice_guidance(),
         facts = facts_block(ctx),
         comic = comic_directives(ctx, work),
     )
@@ -462,12 +464,22 @@ mod daily_line_tests {
     fn prompt_carries_persona_facts_voice_and_one_line_directive() {
         let p = build_daily_line_prompt(&ctx(3, 100, 200, 1));
         assert!(p.contains("주인"));                         // 페르소나 호칭
-        assert!(p.contains("jibin"));                        // 유저명
         assert!(p.contains("3건"));                          // 오늘 세션 수(사실)
         assert!(p.contains(crate::diary::voice_guidance())); // voice_guidance 그대로 주입
         assert!(p.contains("한 문장"));                      // 한 문장 지시
         assert!(p.contains("40자"));                         // 길이 상한
         assert!(p.contains("지어내지 마세요"));              // 정밀도의 선
+    }
+
+    #[test]
+    fn daily_line_prompt_uses_custom_honorific_and_mbti() {
+        let mut c = ctx(3, 100, 200, 1);
+        c.honorific = "대장".into();
+        c.mbti = Some("INTJ".into());
+        let p = build_daily_line_prompt(&c);
+        assert!(p.contains("대장"));
+        assert!(!p.contains("'주인'"));
+        assert!(p.contains("냉정")); // T 성향
     }
 
     use crate::diary::engine::MockEngine;
@@ -550,7 +562,6 @@ mod chatter_tests {
     fn chatter_prompt_carries_persona_facts_voice_and_directives() {
         let p = build_chatter_prompt(&ctx(3, 100, 200, 1), &Default::default(), 5);
         assert!(p.contains("주인"));                         // 페르소나 호칭
-        assert!(p.contains("jibin"));                        // 유저명
         assert!(p.contains("3건"));                          // 오늘 세션 수(사실)
         assert!(p.contains(crate::diary::voice_guidance())); // voice_guidance verbatim
         assert!(p.contains("잡담"));                         // 잡담 지시
