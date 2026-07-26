@@ -381,7 +381,7 @@ class LifeService:
             return [dict(row) for row in reversed(self._guestbook) if row["life_id"] == life_id]
 
     def add_guestbook(self, token: str | None, life_id: str, body: str,
-                      author_name: str | None = None) -> dict:
+                      author_name: str | None = None, parent_id: str | None = None) -> dict:
         author = self._authed(token)
         body = body.strip()
         if not body or len(body) > 500:
@@ -393,11 +393,23 @@ class LifeService:
             raise errors.InvalidRequest("작성자 이름은 80자 이하여야 함")
         if not name:
             name = author.name
+        parent_id = (parent_id or "").strip() or None
         with self._lock:
-            if life_id not in self._life:
+            life = self._life.get(life_id)
+            if life is None:
                 raise errors.NotFound(f"life '{life_id}' not found")
+            if parent_id is not None:
+                # G2(ADR 0021): 답글은 방 주인만, 1단계만 — 부모는 같은 방의 top-level 원글.
+                parent = next((r for r in self._guestbook if r["entry_id"] == parent_id), None)
+                if parent is None or parent["life_id"] != life_id:
+                    raise errors.NotFound("부모 방명록 항목을 찾을 수 없음")
+                if parent.get("parent_id"):
+                    raise errors.InvalidRequest("답글에는 답글을 달 수 없음")
+                if author.agent_id != life.owner_agent_id:
+                    raise errors.Forbidden("방 주인만 답글을 달 수 있음")
             row = {"entry_id": f"gb_{uuid.uuid4().hex[:12]}", "life_id": life_id,
                    "author_agent_id": author.agent_id, "author_name": name, "body": body,
+                   "parent_id": parent_id,
                    "created_at": datetime.now(timezone.utc).isoformat()}
             self._guestbook.append(row)
             if self._store:
@@ -413,7 +425,9 @@ class LifeService:
             life = self._life[row["life_id"]]
             if actor.agent_id not in (row["author_agent_id"], life.owner_agent_id):
                 raise errors.Forbidden("작성자 또는 방 주인만 삭제할 수 있음")
-            self._guestbook.remove(row)
+            # G2(ADR 0021): 원글 삭제 시 답글도 함께(cascade) — 고아 행 금지
+            self._guestbook = [r for r in self._guestbook
+                               if r["entry_id"] != entry_id and r.get("parent_id") != entry_id]
             if self._store:
                 self._store.delete_guestbook_entry(entry_id)
         return {"entry_id": entry_id, "deleted": True}

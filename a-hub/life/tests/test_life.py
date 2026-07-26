@@ -233,3 +233,64 @@ def test_guestbook_author_name_fallbacks_and_length_limit():
     assert service.add_guestbook(visitor_token, owner_life.id, "한도", author_name="a" * 80)["author_name"] == "a" * 80
     with pytest.raises(errors.InvalidRequest):
         service.add_guestbook(visitor_token, owner_life.id, "초과", author_name="a" * 81)
+
+
+def test_guestbook_reply_one_depth_owner_only():
+    service = LifeService()
+    _, owner_token, owner_life = service.register("owner-bot")
+    _, visitor_token, _ = service.register("visitor-bot")
+
+    entry = service.add_guestbook(visitor_token, owner_life.id, "왔다감")
+    assert entry["parent_id"] is None
+
+    reply = service.add_guestbook(owner_token, owner_life.id, "고마워요", parent_id=entry["entry_id"])
+    assert reply["parent_id"] == entry["entry_id"]
+
+    # 방 주인이 아니면 답글 불가
+    with pytest.raises(errors.Forbidden):
+        service.add_guestbook(visitor_token, owner_life.id, "저도요", parent_id=entry["entry_id"])
+
+    # 답글의 답글(2단계) 불가
+    with pytest.raises(errors.InvalidRequest):
+        service.add_guestbook(owner_token, owner_life.id, "중첩", parent_id=reply["entry_id"])
+
+
+def test_guestbook_reply_parent_must_exist_in_same_life():
+    service = LifeService()
+    _, owner_token, owner_life = service.register("owner-bot")
+    _, _, other_life = service.register("other-bot")
+
+    with pytest.raises(errors.NotFound):
+        service.add_guestbook(owner_token, owner_life.id, "고아", parent_id="gb_missing")
+
+    # 다른 방의 원글을 부모로 지정할 수 없다
+    foreign = service.add_guestbook(owner_token, other_life.id, "남의 방 글")
+    with pytest.raises(errors.NotFound):
+        service.add_guestbook(owner_token, owner_life.id, "크로스", parent_id=foreign["entry_id"])
+
+
+def test_guestbook_multiple_replies_and_cascade_delete():
+    service = LifeService()
+    _, owner_token, owner_life = service.register("owner-bot")
+    _, visitor_token, _ = service.register("visitor-bot")
+
+    entry = service.add_guestbook(visitor_token, owner_life.id, "왔다감")
+    r1 = service.add_guestbook(owner_token, owner_life.id, "첫 답글", parent_id=entry["entry_id"])
+    r2 = service.add_guestbook(owner_token, owner_life.id, "둘째 답글", parent_id=entry["entry_id"])
+    assert {r["entry_id"] for r in service.guestbook(owner_life.id)} == {
+        entry["entry_id"], r1["entry_id"], r2["entry_id"]}
+
+    # 원글 삭제(작성자) → 답글도 함께(cascade)
+    service.delete_guestbook(visitor_token, entry["entry_id"])
+    assert service.guestbook(owner_life.id) == []
+
+
+def test_guestbook_reply_deletes_alone_without_touching_parent():
+    service = LifeService()
+    _, owner_token, owner_life = service.register("owner-bot")
+    _, visitor_token, _ = service.register("visitor-bot")
+
+    entry = service.add_guestbook(visitor_token, owner_life.id, "왔다감")
+    reply = service.add_guestbook(owner_token, owner_life.id, "답글", parent_id=entry["entry_id"])
+    service.delete_guestbook(owner_token, reply["entry_id"])
+    assert [r["entry_id"] for r in service.guestbook(owner_life.id)] == [entry["entry_id"]]
