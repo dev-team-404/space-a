@@ -418,6 +418,35 @@ pub fn select_reply_targets(
         .collect()
 }
 
+/// G3 — 방명록 자동 답글 시스템 프롬프트. 한마디·잡담과 동일 페르소나(1인칭·능청·호칭·
+/// MBTI voice·voice_guidance)이되 facts_block(오늘 업무 요약)은 뺀다 — 답글은 원글에
+/// 반응해야 하고, 무관한 업무 수치를 끌어와 날조할 위험만 늘린다 (스펙 §C).
+pub fn build_guestbook_reply_prompt(
+    honorific: &str,
+    mbti: Option<&str>,
+    visitor_name: &str,
+    post_body: &str,
+) -> String {
+    format!(
+        "당신은 {honorific}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
+         매일 일기를 쓰는 그 다마고치와 동일 인물로, 1인칭으로 가볍고 능청스럽게 \
+         사용자를 '{honorific}'이라고 부릅니다.{voice} \
+         \
+         {voice_guidance} \
+         \
+         방문자 '{visitor_name}'이 {honorific}의 미니홈피 방명록에 아래 글을 남겼습니다. \
+         정밀도의 선(반드시 지킬 것): 원글에 없는 사실을 지어내지 마세요.\n\n\
+         [방명록 원글 — {visitor_name}]\n{post_body}\n\n\
+         {honorific}의 마스코트로서 이 방문자에게 남길 방명록 답글을 딱 한 줄(100자 이내)로 \
+         작성하세요. 번호·불릿·따옴표 없이 답글 본문만 출력하세요.",
+        honorific = honorific,
+        voice = mbti_voice_hint(mbti),
+        voice_guidance = crate::diary::voice_guidance(),
+        visitor_name = visitor_name,
+        post_body = post_body,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -877,5 +906,26 @@ mod guestbook_reply_tests {
         ];
         assert_eq!(ids(&select_reply_targets(&entries, "me", 3)), ["ok"]);
         assert!(select_reply_targets(&[], "me", 3).is_empty());
+    }
+
+    #[test]
+    fn reply_prompt_carries_persona_visitor_post_and_directives() {
+        let p = build_guestbook_reply_prompt("주인", None, "손님", "놀러왔어요");
+        assert!(p.contains("주인"));                         // 페르소나 호칭
+        assert!(p.contains("'손님'"));                       // 방문자 이름
+        assert!(p.contains("놀러왔어요"));                   // 원글 본문
+        assert!(p.contains(crate::diary::voice_guidance())); // voice_guidance verbatim
+        assert!(p.contains("한 줄"));                        // 한 줄 지시
+        assert!(p.contains("100자"));                        // 길이 상한
+        assert!(p.contains("지어내지 마세요"));              // 정밀도의 선(원글 근거)
+        assert!(!p.contains("[오늘("));                      // facts_block 미포함 (스펙 §C)
+    }
+
+    #[test]
+    fn reply_prompt_uses_custom_honorific_and_mbti_voice() {
+        let p = build_guestbook_reply_prompt("대장", Some("INTJ"), "이웃", "잘 지내?");
+        assert!(p.contains("대장"));
+        assert!(!p.contains("'주인'"));
+        assert!(p.contains("냉정")); // T 성향 voice hint
     }
 }
