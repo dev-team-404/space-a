@@ -447,6 +447,24 @@ pub fn build_guestbook_reply_prompt(
     )
 }
 
+/// G3 — 방명록 답글 한 줄 생성. store 접근 없음, 네트워크(LLM)만 — 호출자가 락 밖에서
+/// 부른다 (compute_daily_line 선례). 빈 출력은 Err(호출자 warn+skip), 서버 상한(500자)
+/// 초과분은 방어 truncate.
+pub fn compute_guestbook_reply(
+    engine: &dyn crate::diary::engine::Engine,
+    honorific: &str,
+    mbti: Option<&str>,
+    target: &ReplyTarget,
+) -> anyhow::Result<String> {
+    let system = build_guestbook_reply_prompt(honorific, mbti, &target.author_name, &target.body);
+    let raw = engine.generate(&system, "")?.text;
+    let line = parse_chatter_lines(&raw, 1)
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("방명록 답글 생성 결과가 비어 있음"))?;
+    Ok(line.chars().take(500).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -814,6 +832,7 @@ mod chatter_tests {
 #[cfg(test)]
 mod guestbook_reply_tests {
     use super::*;
+    use crate::diary::engine::MockEngine;
 
     #[test]
     fn bot_author_name_joins_title_and_name() {
@@ -927,5 +946,31 @@ mod guestbook_reply_tests {
         assert!(p.contains("대장"));
         assert!(!p.contains("'주인'"));
         assert!(p.contains("냉정")); // T 성향 voice hint
+    }
+
+    fn target() -> ReplyTarget {
+        ReplyTarget { entry_id: "e1".into(), author_name: "손님".into(), body: "놀러왔어요".into() }
+    }
+
+    #[test]
+    fn compute_reply_returns_first_cleaned_line() {
+        // parse_chatter_lines 재사용: 감싼 따옴표 벗기고, 여러 줄이면 첫 줄만.
+        let eng = MockEngine { canned: "  \"어서와, 반가워!\"  \n둘째 줄은 버림".into() };
+        let out = compute_guestbook_reply(&eng, "주인", None, &target()).unwrap();
+        assert_eq!(out, "어서와, 반가워!");
+    }
+
+    #[test]
+    fn compute_reply_errs_on_empty_output() {
+        let eng = MockEngine { canned: "   \n  ".into() };
+        assert!(compute_guestbook_reply(&eng, "주인", None, &target()).is_err());
+    }
+
+    #[test]
+    fn compute_reply_truncates_to_server_limit() {
+        // 서버 상한(500자) 방어 truncate — 400 반환·영구 재시도 루프 회피.
+        let eng = MockEngine { canned: "가".repeat(600) };
+        let out = compute_guestbook_reply(&eng, "주인", None, &target()).unwrap();
+        assert_eq!(out.chars().count(), 500);
     }
 }
