@@ -8,7 +8,7 @@
   import StatusLine from './StatusLine.svelte';
 
   const MBTI_OPTIONS = ['', 'ISTJ','ISFJ','INFJ','INTJ','ISTP','ISFP','INFP','INTP','ESTP','ESFP','ENFP','ENTP','ESTJ','ESFJ','ENFJ','ENTJ'];
-  let prof = $state<Profile>({ name: '', org: '', uuid: '', mbti: '', owner_title: '주인' });
+  let prof = $state<Profile>({ name: '', org: '', uuid: '', mbti: '', owner_title: '주인', owner_full_name: '' });
   let profMbti = $state('');
   let profStatus = $state<Status>(IDLE);
   async function loadProfile(){ try { prof = await profileGet(); profMbti = prof.mbti; } catch(e){ profStatus = err(e); } }
@@ -16,7 +16,7 @@
   async function saveProfile(){
     profStatus = busy('저장 중…');
     try {
-      prof = await profileSet(prof.name, prof.org, profMbti, prof.owner_title);
+      prof = await profileSet(prof.name, prof.org, profMbti, prof.owner_title, prof.owner_full_name);
       profMbti = prof.mbti;
       profStatus = ok('저장했어요.');
     } catch(e){ profStatus = err(e); }
@@ -65,6 +65,7 @@
     <label class="field"><span>마스코트 이름</span><input type="text" bind:value={prof.name} placeholder="예: 둘쇠" spellcheck="false"/></label>
     <label class="field"><span>조직</span><input type="text" bind:value={prof.org} placeholder="S/W 혁신팀" spellcheck="false"/></label>
     <label class="field"><span>호칭 <em>(주인을 부르는 말)</em></span><input type="text" bind:value={prof.owner_title} placeholder="주인" spellcheck="false"/></label>
+    <label class="field"><span>주인 이름 <em>(실명 — 방명록 서명·신원 확인, 선택)</em></span><input type="text" bind:value={prof.owner_full_name} placeholder="홍길동" maxlength="80" spellcheck="false"/></label>
     <label class="field"><span>아이디</span><input type="text" value={prof.uuid} readonly title="자동 부여된 고유 ID"/></label>
     <label class="field"><span>MBTI <em>(선택)</em></span>
       <select bind:value={profMbti}>{#each MBTI_OPTIONS as m}<option value={m}>{m === '' ? '미설정' : m}</option>{/each}</select></label>
