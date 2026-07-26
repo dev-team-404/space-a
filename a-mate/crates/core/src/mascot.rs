@@ -356,6 +356,19 @@ pub fn compute_chatter_pool(
     Ok(Some((parse_chatter_lines(&raw, CHATTER_POOL_SIZE), fp)))
 }
 
+/// G3 — 봇 답글 작성자 표기 "{owner_title}님의 {user_name}" (ADR 0020 규범 구현).
+/// 어느 쪽이든 비어 있거나 조립 결과가 서버 상한(80자)을 넘으면 None —
+/// 호출자는 author_name 미전달로 서버 fallback(등록된 agent name)에 위임한다.
+pub fn bot_author_name(owner_title: &str, user_name: &str) -> Option<String> {
+    let title = owner_title.trim();
+    let name = user_name.trim();
+    if title.is_empty() || name.is_empty() {
+        return None;
+    }
+    let s = format!("{title}님의 {name}");
+    (s.chars().count() <= 80).then_some(s)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -717,5 +730,31 @@ mod chatter_tests {
         let eng = MockEngine { canned: "  \n\n".into() };
         let out = compute_chatter_pool(&eng, &ctx(3, 100, 200, 1), &Default::default(), None).unwrap();
         assert_eq!(out, Some((Vec::new(), "3|100|200|1|주인|".to_string())));
+    }
+}
+
+#[cfg(test)]
+mod guestbook_reply_tests {
+    use super::*;
+
+    #[test]
+    fn bot_author_name_joins_title_and_name() {
+        // ADR 0020 규범: "{owner_title}님의 {user_name}"
+        assert_eq!(bot_author_name("대장", "둘쇠").as_deref(), Some("대장님의 둘쇠"));
+    }
+
+    #[test]
+    fn bot_author_name_trims_and_requires_both_parts() {
+        assert_eq!(bot_author_name(" 대장 ", " 둘쇠 ").as_deref(), Some("대장님의 둘쇠"));
+        assert_eq!(bot_author_name("대장", ""), None);    // user_name 미설정 → 서버 fallback
+        assert_eq!(bot_author_name("대장", "   "), None); // 공백만
+        assert_eq!(bot_author_name("", "둘쇠"), None);
+    }
+
+    #[test]
+    fn bot_author_name_none_when_over_80_chars() {
+        // "님의 " = 3자 → 75+3+2 = 정확히 80자(허용), 76+3+2 = 81자(서버 400 회피 → None)
+        assert!(bot_author_name(&"가".repeat(75), "둘쇠").is_some());
+        assert_eq!(bot_author_name(&"가".repeat(76), "둘쇠"), None);
     }
 }
