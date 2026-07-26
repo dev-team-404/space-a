@@ -1,32 +1,41 @@
 <script lang="ts">
   import {
     memoryAdd, memoryDelete, memoryList, memoryUpdate,
-    profileGet, profileSet, regenerateSprite,
+    profileGet, profileSet, mascotPreview, mascotCommit, getSprite,
     type Memory, type Profile,
   } from '../../api';
   import { IDLE, busy, err, ok, type Status } from './status';
   import StatusLine from './StatusLine.svelte';
 
   const MBTI_OPTIONS = ['', 'ISTJ','ISFJ','INFJ','INTJ','ISTP','ISFP','INFP','INTP','ESTP','ESFP','ENFP','ENTP','ESTJ','ESFJ','ENFJ','ENTJ'];
-  let prof = $state<Profile>({ name: '', org: '', uuid: '', mbti: '' });
+  let prof = $state<Profile>({ name: '', org: '', uuid: '', mbti: '', owner_title: '주인' });
   let profMbti = $state('');
   let profStatus = $state<Status>(IDLE);
   async function loadProfile(){ try { prof = await profileGet(); profMbti = prof.mbti; } catch(e){ profStatus = err(e); } }
   loadProfile();
   async function saveProfile(){
     profStatus = busy('저장 중…');
-    const mbtiChanged = profMbti !== prof.mbti;
     try {
-      prof = await profileSet(prof.name, prof.org, profMbti);
+      prof = await profileSet(prof.name, prof.org, profMbti, prof.owner_title);
       profMbti = prof.mbti;
-      if (mbtiChanged) {
-        profStatus = busy('MBTI가 바뀌어 캐릭터를 다시 그리는 중… (수십 초)');
-        try { await regenerateSprite(); profStatus = ok('저장 + 새 캐릭터 반영 완료'); }
-        catch(e){ profStatus = ok(`저장됨. 캐릭터 재생성은 실패(연결 그룹의 이미지 모델 설정 확인): ${e}`); }
-      } else {
-        profStatus = ok('저장했어요.');
-      }
+      profStatus = ok('저장했어요.');
     } catch(e){ profStatus = err(e); }
+  }
+
+  let sprite = $state<string | null>(null);
+  let hasCandidate = $state(false);
+  let genStatus = $state<Status>(IDLE);
+  async function loadSprite(){ sprite = await getSprite(); }
+  loadSprite();
+  async function regenMascot(){
+    genStatus = busy('마스코트 그리는 중… 수십 초 걸릴 수 있어요');
+    try { sprite = await mascotPreview(); hasCandidate = true; genStatus = ok('미리보기 완성 — 마음에 들면 저장하세요.'); }
+    catch(e){ genStatus = err(`생성 실패: ${e}`); }
+  }
+  async function saveMascot(){
+    genStatus = busy('저장 중…');
+    try { await mascotCommit(); hasCandidate = false; genStatus = ok('마스코트를 저장했어요!'); }
+    catch(e){ genStatus = err(e); }
   }
 
   let memories = $state<Memory[]>([]);
@@ -50,20 +59,38 @@
 </script>
 
 <section>
-  <h2>개인정보</h2>
-  <p class="hint">a-hub 연결과 마스코트 캐릭터에 쓰입니다. 아이디는 자동 부여되며 바뀌지 않아요.</p>
+  <h2>마스코트 정보</h2>
+  <p class="hint">봇(마스코트)의 이름·성향입니다. 아이디는 자동 부여되며 바뀌지 않아요.</p>
   <div class="fields">
-    <label class="field"><span>이름</span><input type="text" bind:value={prof.name} placeholder="예: 준녕" spellcheck="false"/></label>
+    <label class="field"><span>마스코트 이름</span><input type="text" bind:value={prof.name} placeholder="예: 둘쇠" spellcheck="false"/></label>
     <label class="field"><span>조직</span><input type="text" bind:value={prof.org} placeholder="S/W 혁신팀" spellcheck="false"/></label>
+    <label class="field"><span>호칭 <em>(주인을 부르는 말)</em></span><input type="text" bind:value={prof.owner_title} placeholder="주인" spellcheck="false"/></label>
     <label class="field"><span>아이디</span><input type="text" value={prof.uuid} readonly title="자동 부여된 고유 ID"/></label>
     <label class="field"><span>MBTI <em>(선택)</em></span>
       <select bind:value={profMbti}>{#each MBTI_OPTIONS as m}<option value={m}>{m === '' ? '미설정' : m}</option>{/each}</select></label>
   </div>
+  <p class="hint2">MBTI는 마스코트 외관 성향과 말투에 반영돼요. 외관은 아래 '마스코트 생성'에서 재생성·저장해야 실제로 바뀝니다.</p>
   <div class="actions">
     <button class="primary" onclick={saveProfile} disabled={profStatus.kind==='busy'}>저장</button>
   </div>
   <StatusLine status={profStatus}/>
-  <p class="hint2">MBTI를 바꾸고 저장하면 그 성향에 맞춰 캐릭터를 다시 그립니다. (연결 그룹의 이미지 모델 설정 필요)</p>
+</section>
+
+<section>
+  <h2>마스코트 생성</h2>
+  <p class="hint">MBTI·성향에 맞춰 마스코트를 그립니다. '재생성'으로 미리보고 '저장'을 눌러야 실제로 반영돼요. (연결 탭의 캐릭터 이미지 모델 설정 필요)</p>
+  <div class="preview">
+    {#if sprite}
+      <img src={`data:image/png;base64,${sprite}`} alt="마스코트 미리보기"/>
+    {:else}
+      <span class="noimg">아직 생성된 마스코트가 없어요.</span>
+    {/if}
+  </div>
+  <div class="actions">
+    <button onclick={regenMascot} disabled={genStatus.kind==='busy'}>재생성</button>
+    <button class="primary" onclick={saveMascot} disabled={!hasCandidate || genStatus.kind==='busy'}>저장</button>
+  </div>
+  <StatusLine status={genStatus}/>
 </section>
 
 <section>
@@ -106,6 +133,9 @@
   .actions button.primary{background:var(--accent);color:var(--accent-ink);font-weight:700}
   .actions button:disabled{opacity:.55;cursor:default}
   .hint2{color:var(--text-soft);font-size:11px;margin:8px 0 0}
+  .preview{margin-top:12px;display:flex;align-items:center;justify-content:center;min-height:140px;background:var(--surface-inset);border:1px solid var(--line);border-radius:8px}
+  .preview img{max-height:180px;image-rendering:pixelated}
+  .preview .noimg{color:var(--text-soft);font-size:12px}
   .memadd{display:flex;gap:8px;margin-top:12px}
   .memadd input{flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface-inset);color:var(--text);font:inherit}
   .memadd button{border:0;border-radius:99px;padding:7px 14px;background:var(--accent);color:var(--accent-ink);font-weight:700;cursor:pointer;font-size:inherit}

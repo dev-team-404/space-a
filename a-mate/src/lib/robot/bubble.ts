@@ -18,6 +18,7 @@ const RULE_LINE: Record<string, string> = {
 
 export function findingBubble(
   rows: { rule_id: string; est_tokens_saved: number; severity: string; dedup_key: string }[],
+  honorific: string,
 ): Bubble {
   const top = [...rows].sort((a, b) => b.est_tokens_saved - a.est_tokens_saved)[0];
   const line = RULE_LINE[top.rule_id] ?? '아낄 수 있는 게 보여요';
@@ -26,7 +27,7 @@ export function findingBubble(
     kind: 'finding',
     tab: 'coach',
     target: top.dedup_key,
-    text: `주인, ${line} (~${top.est_tokens_saved.toLocaleString()} tok)${more}`,
+    text: `${honorific}, ${line} (~${top.est_tokens_saved.toLocaleString()} tok)${more}`,
   };
 }
 
@@ -38,36 +39,37 @@ export function occasionBubble(labels: string[]): Bubble {
   return { kind: 'occasion', tab: 'home', text: `오늘 ${labels[0]}이래요! 🎉` };
 }
 
-const CHATTER: ((n: number | null) => string)[] = [
-  (n) => (n === null ? '오늘도 화이팅이에요, 주인!' : `오늘 벌써 ${n}세션이나 돌렸어요`),
+const CHATTER: ((n: number | null, h: string) => string)[] = [
+  (n, h) => (n === null ? `오늘도 화이팅이에요, ${h}!` : `오늘 벌써 ${n}세션이나 돌렸어요`),
   () => '토큰은 아끼라고 있는 거예요',
   () => '스킬로 만들면 편할 텐데…',
-  () => '주인, 물 한 잔 마시고 해요',
+  (_n, h) => `${h}, 물 한 잔 마시고 해요`,
   (n) => (n === null ? '심심해요…' : `${n}세션째… 저 좀 굴리는데요?`),
   () => '캐시 히트가 곧 절약이에요',
   () => '커밋은 자주, 후회는 짧게',
   () => '오늘 일기 기대해 주세요',
   () => '레지스트리에 새 스킬 구경 갈까요',
   () => 'zzz… 아 깨어있어요!',
-  () => '주인, 오늘도 제가 응원해요. 조용히, 근데 진심으로',
+  (_n, h) => `${h}, 오늘도 제가 응원해요. 조용히, 근데 진심으로`,
   () => '막히면 잠깐 산책 — 코드는 도망 안 가요',
   () => '어제보다 한 커밋만 더. 그게 성장이에요',
-  (n) => (n === null ? '오늘의 주인도 응원합니다!' : `${n}세션째 달리는 주인, 존경해요`),
+  (n, h) => (n === null ? `오늘의 ${h}도 응원합니다!` : `${n}세션째 달리는 ${h}, 존경해요`),
   () => '실패한 시도도 데이터예요. 제가 다 보고 있었어요',
 ];
 
 /** realtime_advice 옵트인: 스캔 후 최상위 활성 advice를 말풍선으로 (스펙 §6).
  *  target(dedup_key)은 코칭 카드 딥링크 대상 — 같은 조언 반복 방지는 호출측이 dedup_key로 수행. */
-export function adviceBubble(f: { dedup_key: string; detail: string }): Bubble {
-  return { kind: 'finding', tab: 'coach', text: `주인, ${f.detail}`, target: f.dedup_key };
+export function adviceBubble(f: { dedup_key: string; detail: string }, honorific: string): Bubble {
+  return { kind: 'finding', tab: 'coach', text: `${honorific}, ${f.detail}`, target: f.dedup_key };
 }
 
 /** 잡담 후보 전체 — LLM 풀(사용기록 연계) + 정적 큐레이션(잡담/응원, summary 렌더). */
 export function chatterCandidates(
   pool: string[],
   summary: { session_count: number } | null,
+  honorific: string,
 ): string[] {
-  return [...pool, ...CHATTER.map((f) => f(summary?.session_count ?? null))];
+  return [...pool, ...CHATTER.map((f) => f(summary?.session_count ?? null, honorific))];
 }
 
 /** 잡담 pick — 후보에서 최근 표시분(recent)을 제외하고 균등 랜덤.
@@ -77,8 +79,9 @@ export function pickChatter(
   summary: { session_count: number } | null,
   recent: string[],
   rand: () => number,
+  honorific: string,
 ): Bubble {
-  const all = chatterCandidates(pool, summary);
+  const all = chatterCandidates(pool, summary, honorific);
   const fresh = all.filter((t) => !recent.includes(t));
   const candidates = fresh.length ? fresh : all;
   return { kind: 'chatter', tab: 'home', text: candidates[Math.floor(rand() * candidates.length)] };

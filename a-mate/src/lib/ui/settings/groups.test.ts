@@ -4,11 +4,15 @@ import { SETTINGS_GROUPS, DEFAULT_GROUP, normalizeGroup } from './groups';
 describe('SETTINGS_GROUPS', () => {
   it('연결·나·공개·모양 4그룹이 이 순서로', () => {
     expect(SETTINGS_GROUPS.map((g) => g.id)).toEqual(['conn', 'me', 'privacy', 'look']);
-    expect(SETTINGS_GROUPS.map((g) => g.label)).toEqual(['연결', '나', '공개', '모양']);
+    expect(SETTINGS_GROUPS.map((g) => g.label)).toEqual(['연결', '봇', '공개', '모양']);
   });
   it('기본 그룹은 연결 — 처음 쓸 때 가장 먼저 필요한 설정', () => {
     expect(DEFAULT_GROUP).toBe('conn');
   });
+});
+
+it('me 그룹 라벨은 "봇"', () => {
+  expect(SETTINGS_GROUPS.find((g) => g.id === 'me')?.label).toBe('봇');
 });
 
 describe('normalizeGroup', () => {

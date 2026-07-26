@@ -2,7 +2,7 @@
   import {
     engineSettingsGet, engineSettingsSet, engineTest,
     hubConnect, hubDisconnect, hubSettingsGet,
-    imageSettingsGet, imageSettingsSet, regenerateSprite,
+    imageSettingsGet, imageSettingsSet, imageTest,
     type EngineSettings, type HubSettings, type ImageSettings,
   } from '../../api';
   import { IDLE, busy, err, ok, type Status } from './status';
@@ -60,10 +60,11 @@
     try { await imageSettingsSet(img.url, img.key, img.model); await loadImage(); imgStatus = ok('저장했어요.'); }
     catch(e){ imgStatus = err(e); }
   }
-  async function regenerate(){
-    imgStatus = busy('캐릭터 그리는 중… 수십 초 걸릴 수 있어요');
-    try { await regenerateSprite(); imgStatus = ok('새 캐릭터로 바뀌었어요 — 마스코트를 확인해보세요!'); }
-    catch(e){ imgStatus = err(`생성 실패: ${e}`); }
+  async function testImage(){
+    imgStatus = busy('연결 확인 중…');
+    // image_test는 실패 시 이미 완성된 한국어 메시지를 reject하므로 접두어 없이 그대로 쓴다.
+    try { imgStatus = ok(await imageTest(img.url, img.key, img.model)); }
+    catch(e){ imgStatus = err(e); }
   }
   const imgSourceLabel = $derived(
     img.source === 'store' ? '설정 탭에서 지정한 값 사용 중'
@@ -115,7 +116,7 @@
 
 <section>
   <h2>캐릭터 이미지</h2>
-  <p class="hint">마스코트 캐릭터를 그릴 이미지 생성 모델입니다. 사내 LLM은 그림을 못 그리므로 위 텍스트 엔진과 따로 지정합니다. 사람마다 한 번 생성해 캐시하므로 이후에는 호출하지 않습니다.</p>
+  <p class="hint">마스코트 캐릭터를 그릴 이미지 생성 모델입니다. 사내 LLM은 그림을 못 그리므로 위 텍스트 엔진과 따로 지정합니다. 사람마다 한 번 생성해 캐시하므로 이후에는 호출하지 않습니다. 캐릭터 생성·재생성은 봇 탭의 '마스코트 생성'에서 합니다.</p>
   <p class="source" data-kind={img.source}>{imgSourceLabel}</p>
   <div class="fields">
     <label class="field"><span>엔드포인트 URL</span>
@@ -127,7 +128,7 @@
   </div>
   <div class="actions">
     <button class="primary" onclick={saveImage} disabled={imgStatus.kind==='busy'}>저장</button>
-    <button onclick={regenerate} disabled={imgStatus.kind==='busy'}>캐릭터 재생성</button>
+    <button onclick={testImage} disabled={imgStatus.kind==='busy'}>연결 테스트</button>
   </div>
   <StatusLine status={imgStatus}/>
 </section>

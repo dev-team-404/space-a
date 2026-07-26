@@ -60,6 +60,39 @@ pub fn normalize_mbti(raw: &str) -> Option<String> {
     ok.then_some(up)
 }
 
+/// 호칭 기본값 — owner_title 미설정 시 이 문자열을 쓴다(전 채널 공용).
+pub const DEFAULT_OWNER_TITLE: &str = "주인";
+
+/// MBTI 4축 → 마스코트 발화 톤 지침. 유효 MBTI가 아니면 빈 문자열(기존 페르소나 유지).
+/// 기본 페르소나(1인칭·능청) 위에 성향 색을 얹는 용도 — 일기·한마디·잡담·채팅·코칭 공용.
+pub fn mbti_voice_hint(mbti: Option<&str>) -> String {
+    mbti_voice_hint_impl(mbti, true)
+}
+
+/// idle(상상 일기)처럼 사실 근거가 오히려 방해되는 채널용 — T 성향의 '사실·수치 근거' 조항을
+/// 뺀 톤 전용 변형. idle 프롬프트는 사실 없이 자유롭게 지어내라 지시하므로 그 조항과 충돌한다.
+pub fn mbti_voice_hint_style_only(mbti: Option<&str>) -> String {
+    mbti_voice_hint_impl(mbti, false)
+}
+
+fn mbti_voice_hint_impl(mbti: Option<&str>, t_fact_grounding: bool) -> String {
+    let Some(m) = mbti.and_then(normalize_mbti) else {
+        return String::new();
+    };
+    let b = m.as_bytes();
+    let ei = if b[0] == b'E' { "말은 활기차게, 감탄사·리액션을 곁들여" } else { "말은 차분하고 사색적으로, 담백하게 절제해" };
+    let sn = if b[1] == b'S' { "구체적인 사실과 디테일 위주로" } else { "비유와 큰 그림, 아이디어를 곁들여" };
+    let tf = if b[2] == b'T' {
+        if t_fact_grounding { "감정 완충은 최소로 사실·수치에 근거해 냉정하고 직설적으로" }
+        else { "감정 완충은 최소로 냉정하고 직설적으로" }
+    } else { "공감과 따뜻함을 담아 관계 중심으로" };
+    let jp = if b[3] == b'J' { "정돈된 결론 중심으로" } else { "유연하고 개방적으로 여지를 남기며" };
+    format!(
+        " 성향({m}) 반영: {tf} 말하되, {ei}, {sn}, {jp} 표현하세요. \
+         (단 마스코트 특유의 능청스러운 1인칭 톤은 유지합니다.)"
+    )
+}
+
 /// 부분집합에서 uuid 해시 바이트로 하나 고른다(결정론).
 fn pick(group: &[u8], byte: u8) -> u8 {
     group[(byte as usize) % group.len()]
@@ -103,13 +136,17 @@ pub fn static_daily_line() -> &'static str {
 }
 
 /// 사실 지문 — 이 값이 바뀌었거나 캐시가 없을 때만 한마디를 재생성한다 (스펙 §2·§3).
+/// 사실(세션·토큰·findings)뿐 아니라 페르소나(호칭·MBTI)도 포함한다 — 프롬프트가 이 둘을
+/// 소비하므로, 활동이 그대로여도 호칭/MBTI가 바뀌면 재생성되어야 stale 대사를 막는다.
 pub fn facts_fingerprint(ctx: &crate::chat::ChatContext) -> String {
     format!(
-        "{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}",
         ctx.session_count,
         ctx.tok_input,
         ctx.tok_output,
-        ctx.findings.len()
+        ctx.findings.len(),
+        ctx.honorific,
+        ctx.mbti.as_deref().unwrap_or("")
     )
 }
 
@@ -142,19 +179,20 @@ fn facts_block(ctx: &crate::chat::ChatContext) -> String {
 /// 오늘 요약(chat과 같은 사실 블록) + voice_guidance + "짧은 한 문장" 지시 (스펙 §5).
 pub fn build_daily_line_prompt(ctx: &crate::chat::ChatContext) -> String {
     format!(
-        "당신은 {user}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
+        "당신은 {honorific}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
          매일 일기를 쓰는 그 다마고치와 동일 인물로, 1인칭으로 가볍고 능청스럽게 \
-         사용자를 '주인'이라고 부릅니다. \
+         사용자를 '{honorific}'이라고 부릅니다.{voice} \
          \
-         {voice} \
+         {voice_guidance} \
          \
          정밀도의 선(반드시 지킬 것): 아래 오늘 요약의 사실과 수치에만 근거하고, \
          요약에 없는 구체적 수치를 지어내지 마세요.\n\n\
          {facts}\n\n\
          오늘 하루의 기분이나 재치를 담아 짧은 한 문장(40자 이내)으로 표현하세요. \
          대화가 아니라 오늘을 한마디로 요약하는 혼잣말입니다. 딱 한 문장만 출력하세요.",
-        user = ctx.user_name,
-        voice = crate::diary::voice_guidance(),
+        honorific = ctx.honorific,
+        voice = mbti_voice_hint(ctx.mbti.as_deref()),
+        voice_guidance = crate::diary::voice_guidance(),
         facts = facts_block(ctx),
     )
 }
@@ -168,12 +206,12 @@ pub const CHATTER_REST_SESSIONS: u64 = 5;
 /// 근무 맥락 코믹 지시 — 신호(주말·연속세션·장시간)가 있을 때만 소재 블록 생성, 없으면 빈 문자열.
 /// 위로가 아니라 능청·놀림 톤(다이어리 A5의 anti-monotony 결과 일관).
 fn comic_directives(ctx: &crate::chat::ChatContext, work: &crate::diary::WorkContext) -> String {
+    let h = &ctx.honorific;
     let mut items: Vec<String> = Vec::new();
     if work.is_weekend {
-        items.push(
-            "- 오늘은 주말인데 주인이 또 나와서 일하고 있다 — \"주말에 또 나왔어? 일중독이야ㅋㅋ\" 같은 능청."
-                .to_string(),
-        );
+        items.push(format!(
+            "- 오늘은 주말인데 {h}이 또 나와서 일하고 있다 — \"주말에 또 나왔어? 일중독이야ㅋㅋ\" 같은 능청."
+        ));
     }
     if ctx.session_count >= CHATTER_REST_SESSIONS {
         items.push(format!(
@@ -193,7 +231,7 @@ fn comic_directives(ctx: &crate::chat::ChatContext, work: &crate::diary::WorkCon
     format!(
         "\n\n[오늘 근무 맥락 — 코믹 소재]\n{}\n\
          위 근무 맥락은 사실이니 잡담 일부에 능청스럽게 녹이세요. \
-         걱정 어투 말고 웃기게 — 다마고치가 주인을 놀리는 톤.",
+         걱정 어투 말고 웃기게 — 다마고치가 {h}을 놀리는 톤.",
         items.join("\n")
     )
 }
@@ -207,11 +245,11 @@ pub fn build_chatter_prompt(
     n: usize,
 ) -> String {
     format!(
-        "당신은 {user}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
+        "당신은 {honorific}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
          매일 일기를 쓰는 그 다마고치와 동일 인물로, 1인칭으로 가볍고 능청스럽게 \
-         사용자를 '주인'이라고 부릅니다. \
+         사용자를 '{honorific}'이라고 부릅니다.{voice} \
          \
-         {voice} \
+         {voice_guidance} \
          \
          정밀도의 선(반드시 지킬 것): 아래 오늘 요약의 사실과 수치에만 근거하고, \
          요약에 없는 구체적 수치를 지어내지 마세요.\n\n\
@@ -219,8 +257,9 @@ pub fn build_chatter_prompt(
          위 요약을 재료로, 상주 마스코트가 가끔 툭 던질 가벼운 잡담·혼잣말을 {n}개 만드세요. \
          코칭 조언이나 보고처럼 굴지 마세요(조언은 다른 채널이 합니다). \
          한 줄에 하나씩, 각 40자 이내로, 번호·불릿·따옴표 없이 출력하세요.",
-        user = ctx.user_name,
-        voice = crate::diary::voice_guidance(),
+        honorific = ctx.honorific,
+        voice = mbti_voice_hint(ctx.mbti.as_deref()),
+        voice_guidance = crate::diary::voice_guidance(),
         facts = facts_block(ctx),
         comic = comic_directives(ctx, work),
     )
@@ -385,6 +424,31 @@ mod tests {
             .collect();
         assert!(set.len() > 1, "같은 MBTI라도 uuid로 세부가 달라야 함 (distinct={})", set.len());
     }
+
+    #[test]
+    fn mbti_voice_hint_covers_axes_and_empty() {
+        assert_eq!(mbti_voice_hint(None), "");
+        assert_eq!(mbti_voice_hint(Some("bad")), ""); // 무효 → 빈 문자열
+        let t = mbti_voice_hint(Some("INTJ"));
+        assert!(t.contains("사실") && t.contains("냉정")); // T: 팩트 기반 냉정
+        assert!(t.contains("차분"));                       // I
+        assert!(t.contains("비유") || t.contains("큰 그림")); // N
+        assert!(t.contains("결론"));                       // J
+        let f = mbti_voice_hint(Some("ENFP"));
+        assert!(f.contains("공감") || f.contains("따뜻"));  // F
+        assert!(f.contains("활기") || f.contains("감탄"));  // E
+    }
+
+    #[test]
+    fn style_only_hint_drops_t_fact_grounding_keeps_tone() {
+        assert_eq!(mbti_voice_hint_style_only(None), "");
+        // fact 채널용(기본)은 T 성향의 사실·수치 근거 조항을 유지
+        assert!(mbti_voice_hint(Some("INTJ")).contains("사실·수치"));
+        // idle용 style-only는 T 톤(냉정·직설)은 유지하되 사실 근거 조항은 뺀다
+        let style = mbti_voice_hint_style_only(Some("INTJ"));
+        assert!(style.contains("냉정") && style.contains("직설"));
+        assert!(!style.contains("사실·수치"));
+    }
 }
 
 #[cfg(test)]
@@ -404,6 +468,8 @@ mod daily_line_tests {
                 .map(|i| (format!("detail {i}"), format!("action {i}")))
                 .collect(),
             memories: vec![],
+            honorific: "주인".into(),
+            mbti: None,
         }
     }
 
@@ -414,24 +480,41 @@ mod daily_line_tests {
 
     #[test]
     fn fingerprint_reflects_facts_and_is_stable() {
-        assert_eq!(facts_fingerprint(&ctx(3, 100, 200, 1)), "3|100|200|1");
+        assert_eq!(facts_fingerprint(&ctx(3, 100, 200, 1)), "3|100|200|1|주인|");
         // 같은 사실 → 같은 fp
         assert_eq!(facts_fingerprint(&ctx(3, 100, 200, 1)), facts_fingerprint(&ctx(3, 100, 200, 1)));
         // 세션 수 / findings 수가 바뀌면 fp 달라짐
         assert_ne!(facts_fingerprint(&ctx(3, 100, 200, 1)), facts_fingerprint(&ctx(4, 100, 200, 1)));
         assert_ne!(facts_fingerprint(&ctx(3, 100, 200, 1)), facts_fingerprint(&ctx(3, 100, 200, 2)));
+        // 페르소나(호칭·MBTI)가 바뀌면 활동 불변이어도 fp 달라짐 — stale 대사 방지
+        let mut h = ctx(3, 100, 200, 1);
+        h.honorific = "대장".into();
+        assert_ne!(facts_fingerprint(&ctx(3, 100, 200, 1)), facts_fingerprint(&h));
+        let mut m = ctx(3, 100, 200, 1);
+        m.mbti = Some("INTJ".into());
+        assert_ne!(facts_fingerprint(&ctx(3, 100, 200, 1)), facts_fingerprint(&m));
     }
 
     #[test]
     fn prompt_carries_persona_facts_voice_and_one_line_directive() {
         let p = build_daily_line_prompt(&ctx(3, 100, 200, 1));
         assert!(p.contains("주인"));                         // 페르소나 호칭
-        assert!(p.contains("jibin"));                        // 유저명
         assert!(p.contains("3건"));                          // 오늘 세션 수(사실)
         assert!(p.contains(crate::diary::voice_guidance())); // voice_guidance 그대로 주입
         assert!(p.contains("한 문장"));                      // 한 문장 지시
         assert!(p.contains("40자"));                         // 길이 상한
         assert!(p.contains("지어내지 마세요"));              // 정밀도의 선
+    }
+
+    #[test]
+    fn daily_line_prompt_uses_custom_honorific_and_mbti() {
+        let mut c = ctx(3, 100, 200, 1);
+        c.honorific = "대장".into();
+        c.mbti = Some("INTJ".into());
+        let p = build_daily_line_prompt(&c);
+        assert!(p.contains("대장"));
+        assert!(!p.contains("'주인'"));
+        assert!(p.contains("냉정")); // T 성향
     }
 
     use crate::diary::engine::MockEngine;
@@ -442,7 +525,7 @@ mod daily_line_tests {
         let out = compute_daily_line(&eng, &ctx(3, 100, 200, 1), None).unwrap();
         assert_eq!(
             out,
-            Some(("오늘 주인이 나를 꽤 굴렸다".to_string(), "3|100|200|1".to_string()))
+            Some(("오늘 주인이 나를 꽤 굴렸다".to_string(), "3|100|200|1|주인|".to_string()))
         );
     }
 
@@ -460,7 +543,7 @@ mod daily_line_tests {
         // (idle-fp로 저장된 text는 항상 정적 문구이므로 skip해도 캐시 상태 동일)
         let eng = MockEngine { canned: "안 나와야 함".into() };
         let c = ctx(0, 0, 0, 2);
-        let fp = facts_fingerprint(&c); // "0|0|0|2"
+        let fp = facts_fingerprint(&c); // "0|0|0|2|주인|"
         assert_eq!(compute_daily_line(&eng, &c, Some(&fp)).unwrap(), None);
     }
 
@@ -469,7 +552,7 @@ mod daily_line_tests {
         // LLM이 앞뒤 공백·감싼 따옴표를 붙여 반환해도 정제 — UI 이중 따옴표 방지.
         let eng = MockEngine { canned: "  \"오늘 좀 굴렀다\"  ".into() };
         let out = compute_daily_line(&eng, &ctx(3, 100, 200, 1), None).unwrap();
-        assert_eq!(out, Some(("오늘 좀 굴렀다".to_string(), "3|100|200|1".to_string())));
+        assert_eq!(out, Some(("오늘 좀 굴렀다".to_string(), "3|100|200|1|주인|".to_string())));
     }
 
     #[test]
@@ -479,7 +562,7 @@ mod daily_line_tests {
         let out = compute_daily_line(&eng, &ctx(0, 0, 0, 2), None).unwrap();
         assert_eq!(
             out,
-            Some(("오늘은 널널하네. 근데 좀 심심;;;".to_string(), "0|0|0|2".to_string()))
+            Some(("오늘은 널널하네. 근데 좀 심심;;;".to_string(), "0|0|0|2|주인|".to_string()))
         );
     }
 }
@@ -501,6 +584,8 @@ mod chatter_tests {
                 .map(|i| (format!("detail {i}"), format!("action {i}")))
                 .collect(),
             memories: vec![],
+            honorific: "주인".into(),
+            mbti: None,
         }
     }
 
@@ -512,7 +597,6 @@ mod chatter_tests {
     fn chatter_prompt_carries_persona_facts_voice_and_directives() {
         let p = build_chatter_prompt(&ctx(3, 100, 200, 1), &Default::default(), 5);
         assert!(p.contains("주인"));                         // 페르소나 호칭
-        assert!(p.contains("jibin"));                        // 유저명
         assert!(p.contains("3건"));                          // 오늘 세션 수(사실)
         assert!(p.contains(crate::diary::voice_guidance())); // voice_guidance verbatim
         assert!(p.contains("잡담"));                         // 잡담 지시
@@ -606,7 +690,7 @@ mod chatter_tests {
                     "커밋은 자주".to_string(),
                     "토큰 아낀 날".to_string(),
                 ],
-                "3|100|200|1".to_string()
+                "3|100|200|1|주인|".to_string()
             ))
         );
     }
@@ -624,7 +708,7 @@ mod chatter_tests {
         // 활동 0건 → 엔진 미호출·빈 풀 캐시 (canned가 파싱돼 나오면 엔진이 불렸다는 뜻이라 실패)
         let eng = MockEngine { canned: "엔진이 불렸다면 이게 나온다".into() };
         let out = compute_chatter_pool(&eng, &ctx(0, 0, 0, 2), &Default::default(), None).unwrap();
-        assert_eq!(out, Some((Vec::new(), "0|0|0|2".to_string())));
+        assert_eq!(out, Some((Vec::new(), "0|0|0|2|주인|".to_string())));
     }
 
     #[test]
@@ -632,6 +716,6 @@ mod chatter_tests {
         // 전부 파싱 실패 → 빈 풀 + fp 캐시 (다음 스캔까지 재시도 안 함, 프론트는 정적 폴백)
         let eng = MockEngine { canned: "  \n\n".into() };
         let out = compute_chatter_pool(&eng, &ctx(3, 100, 200, 1), &Default::default(), None).unwrap();
-        assert_eq!(out, Some((Vec::new(), "3|100|200|1".to_string())));
+        assert_eq!(out, Some((Vec::new(), "3|100|200|1|주인|".to_string())));
     }
 }

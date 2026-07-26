@@ -4,7 +4,7 @@
   import { drawRobot, type RobotSpec } from '../robot/render';
   import { frameAt, type MascotState } from '../robot/anim';
 
-  let { advice }: { advice: string | null } = $props();
+  let { advice, honorific = '주인' }: { advice: string | null; honorific?: string } = $props();
 
   let canvas = $state<HTMLCanvasElement | null>(null);
   let spec = $state<RobotSpec | null>(null);
@@ -16,16 +16,18 @@
     return () => un?.();
   });
   let mode = $state<MascotState>('idle');
-  let line = $state('오늘도 화이팅이에요, 주인!');
+  // null = 아직 잡담/기분 대사 없음 → 호칭 반영 기본 인사를 파생값으로 보여준다(호칭 변경에 반응).
+  let line = $state<string | null>(null);
+  const shown = $derived(line ?? `오늘도 화이팅이에요, ${honorific}!`);
 
-  const CHATTER = [
-    '오늘도 화이팅이에요, 주인!',
+  const CHATTER = $derived([
+    `오늘도 화이팅이에요, ${honorific}!`,
     '토큰은 아끼라고 있는 거예요',
-    '주인, 물 한 잔 마시고 해요',
+    `${honorific}, 물 한 잔 마시고 해요`,
     '커밋은 자주, 후회는 짧게',
     '이 방 아늑하죠? 제 방이에요',
-  ];
-  const HAPPY = ['히히, 간지러워요!', '주인 최고!', '또 눌러 봐요!'];
+  ]);
+  const HAPPY = $derived(['히히, 간지러워요!', `${honorific} 최고!`, '또 눌러 봐요!']);
   const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
 
   // 대사 순환: 기분/advice/잡담 (스펙 §2)
@@ -61,7 +63,7 @@
 <div class="life">
   <div class="window"></div>
   <div class="plant">🪴</div>
-  <div class="bubble">{line}</div>
+  <div class="bubble">{shown}</div>
   <button class="robot" onclick={poke} aria-label="로봇 쓰다듬기">
     {#if sprite}
       <img class="spr" class:happy={mode === 'happy'} src={'data:image/png;base64,' + sprite} alt="마스코트" draggable="false" />

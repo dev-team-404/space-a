@@ -245,6 +245,9 @@ pub fn chat_context_inner(store: &SqliteStore) -> anyhow::Result<agent_mentor::c
             .map(|f| (f.detail, f.suggested_action))
             .collect(),
         memories,
+        honorific: owner_title(store),
+        mbti: store.get_setting("user_mbti").ok().flatten()
+            .and_then(|m| agent_mentor::mascot::normalize_mbti(&m)),
     })
 }
 
@@ -723,7 +726,7 @@ pub fn hub_connect(
         guard.get_setting("user_name").ok().flatten().unwrap_or_default().trim().to_string()
     };
     if user.is_empty() {
-        return Err("미니홈피 설정의 개인정보에서 이름을 먼저 입력하세요".into());
+        return Err("봇 탭의 마스코트 정보에서 마스코트 이름을 먼저 입력하세요".into());
     }
     let key_opt = opt_key(api_key.clone());
     // 기존 연결 확인 (락은 읽기 동안만)
@@ -734,7 +737,7 @@ pub fn hub_connect(
     };
     if !existing.1.is_empty() {
         let client = LifeClient { base_url: url.clone(), token: existing.1, api_key: key_opt.clone() };
-        match client.rename(&user) {
+        match client.rename(&user, &owner_os_user()) {
             Ok(_) => {
                 let guard = lock(&state)?;
                 guard.set_setting("hub_url", &url).map_err(|e| e.to_string())?;
@@ -763,7 +766,8 @@ pub fn hub_connect(
         (u, o)
     };
     // 네트워크는 락 밖
-    let v = life_client::register_profile(&url, key_opt.as_deref(), &user, &uuid, &org, &uuid)
+    let os_user = owner_os_user();
+    let v = life_client::register_profile(&url, key_opt.as_deref(), &user, &uuid, &org, &uuid, &os_user)
         .map_err(|e| e.to_string())?;
     let token = v["token"].as_str().unwrap_or_default().to_string();
     let agent_id = v["agent_id"].as_str().unwrap_or_default().to_string();
@@ -1399,6 +1403,16 @@ mod tests {
         store.delete_memory(id).unwrap();
         assert_eq!(store.count_memories().unwrap(), 0);
     }
+
+    #[test]
+    fn owner_title_defaults_and_roundtrips() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        assert_eq!(owner_title(&store), "주인");
+        store.set_setting("owner_title", "대장").unwrap();
+        assert_eq!(owner_title(&store), "대장");
+        store.set_setting("owner_title", "   ").unwrap(); // 공백 → 기본값
+        assert_eq!(owner_title(&store), "주인");
+    }
 }
 
 /// AI 스프라이트(캐시) — app_data/sprite.png를 base64로. 없으면 None(프론트는 절차 생성 폴백).
@@ -1466,6 +1480,57 @@ pub fn image_settings_set(
     Ok(())
 }
 
+/// 프로브 판정 → 사람이 읽는 결과. Ok(초록)/Err(빨강)로 StatusLine에 표시된다. (순수)
+fn probe_result_message(
+    verdict: agent_mentor::sprite::ProbeVerdict,
+    model: &str,
+) -> Result<String, String> {
+    use agent_mentor::sprite::ProbeVerdict as V;
+    match verdict {
+        // 키 검증을 주장하지 않는다: 공개 `/models`(예: OpenRouter)는 잘못된 키로도 200을 주므로
+        // 여기 도달했다고 키가 유효하다는 보장이 없다. 엔드포인트·모델만 확인하고 나머지는 재생성으로.
+        V::Ok => Ok("엔드포인트·모델 확인됨 — 실제 그림은 '캐릭터 재생성'으로 확인하세요".into()),
+        V::ModelMissing(ids) => {
+            let sample = if ids.is_empty() {
+                String::new()
+            } else {
+                format!(" (목록: {})", ids.join(", "))
+            };
+            Err(format!("연결·인증은 OK인데 '{model}' 모델이 목록에 없어요. 모델명을 확인하세요{sample}"))
+        }
+        V::NotOpenAiCompat => {
+            Err("이 URL은 모델 목록(/models)을 주지 않아요 — 엔드포인트가 OpenAI 호환 /v1 인지 확인하세요".into())
+        }
+        V::AuthFailed(c) => Err(format!("인증 실패 ({c}) — API 키를 확인하세요")),
+        V::RateLimited => Err("레이트 리밋 (429) — 잠시 후 다시 시도하세요".into()),
+        V::HttpError(c) => Err(format!("엔드포인트 오류 (HTTP {c}) — URL을 확인하세요")),
+        V::Connection(t) => Err(format!("연결 실패 — URL·포트를 확인하세요: {t}")),
+    }
+}
+
+/// 저장 전 값으로 이미지 엔드포인트를 검증한다 (무과금 — `GET /models`).
+/// 폼 값을 그대로 받아 실제 생성 없이 URL·키·모델을 확인한다. `engine_test` 미러링.
+#[tauri::command(async)]
+pub fn image_test(url: String, key: String, model: String) -> Result<String, String> {
+    let url = url.trim();
+    if url.is_empty() {
+        return Err("엔드포인트 URL을 입력하세요".into());
+    }
+    let model_in = model.trim();
+    // env 폴백 없이 폼 값 그대로 검증 (SpriteConfig::resolve의 env 경로를 쓰지 않는다).
+    let cfg = agent_mentor::sprite::SpriteConfig {
+        base_url: url.trim_end_matches('/').to_string(),
+        api_key: key.trim().to_string(),
+        model: if model_in.is_empty() {
+            agent_mentor::sprite::DEFAULT_IMAGE_MODEL.to_string()
+        } else {
+            model_in.to_string()
+        },
+    };
+    let verdict = agent_mentor::sprite::probe_endpoint(&cfg);
+    probe_result_message(verdict, &cfg.model)
+}
+
 /// 조직 기본값 — 개인정보 미입력 시.
 pub(crate) const DEFAULT_ORG: &str = "S/W 혁신팀";
 
@@ -1475,6 +1540,7 @@ pub struct Profile {
     pub org: String,
     pub uuid: String,
     pub mbti: String,
+    pub owner_title: String,
 }
 
 /// user_uuid를 읽고, 없으면 UUID v4를 1회 생성·저장한 뒤 반환한다(이후 고정).
@@ -1488,6 +1554,18 @@ pub(crate) fn ensure_uuid(store: &SqliteStore) -> Result<String, String> {
     let u = uuid::Uuid::new_v4().to_string();
     store.set_setting("user_uuid", &u).map_err(|e| e.to_string())?;
     Ok(u)
+}
+
+/// 호칭 설정(owner_title) — 없거나 공백이면 기본 "주인".
+pub(crate) fn owner_title(store: &SqliteStore) -> String {
+    store.get_setting("owner_title").ok().flatten()
+        .map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+        .unwrap_or_else(|| agent_mentor::mascot::DEFAULT_OWNER_TITLE.to_string())
+}
+
+/// 주인 OS 계정명 — Life 등록·갱신에 실을 숨은 주인 식별자(§F). 없으면 빈 문자열.
+fn owner_os_user() -> String {
+    std::env::var("USERNAME").or_else(|_| std::env::var("USER")).unwrap_or_default()
 }
 
 /// 스프라이트 생성 정체성 = (uuid, mbti). uuid는 없으면 생성.
@@ -1510,7 +1588,7 @@ pub fn profile_get(state: State<AppState>) -> Result<Profile, String> {
         let o = get("user_org");
         if o.trim().is_empty() { DEFAULT_ORG.to_string() } else { o }
     };
-    Ok(Profile { name: get("user_name"), org, uuid, mbti: get("user_mbti") })
+    Ok(Profile { name: get("user_name"), org, uuid, mbti: get("user_mbti"), owner_title: owner_title(&guard) })
 }
 
 /// 개인정보 저장. uuid는 불변(여기서 안 받음). mbti는 빈값(미설정) 또는 유효 4글자만 허용.
@@ -1520,6 +1598,7 @@ pub fn profile_set(
     name: String,
     org: String,
     mbti: String,
+    owner_title: String,
 ) -> Result<Profile, String> {
     let name = name.trim().to_string();
     if name.is_empty() {
@@ -1533,13 +1612,15 @@ pub fn profile_set(
     };
     let org = org.trim();
     let org = if org.is_empty() { DEFAULT_ORG } else { org };
+    let title = owner_title.trim();
+    let title = if title.is_empty() { agent_mentor::mascot::DEFAULT_OWNER_TITLE } else { title };
     let old_name = {
         let guard = lock(&state)?;
         guard.get_setting("user_name").ok().flatten().unwrap_or_default()
     };
     if name != old_name {
         if let Some(client) = hub_client(&state)? {
-            client.rename(&name).map_err(|e| format!("Life 서버 이름 변경 실패: {e}"))?;
+            client.rename(&name, &owner_os_user()).map_err(|e| format!("Life 서버 이름 변경 실패: {e}"))?;
         }
     }
     {
@@ -1548,6 +1629,7 @@ pub fn profile_set(
         guard.set_setting("hub_user", &name).map_err(|e| e.to_string())?;
         guard.set_setting("user_org", org).map_err(|e| e.to_string())?;
         guard.set_setting("user_mbti", &mbti_norm).map_err(|e| e.to_string())?;
+        guard.set_setting("owner_title", title).map_err(|e| e.to_string())?;
     }
     profile_get(state)
 }
@@ -1590,32 +1672,46 @@ pub fn memory_delete(state: State<AppState>, id: i64) -> Result<(), String> {
     guard.delete_memory(id).map_err(|e| e.to_string())
 }
 
-/// 내 캐릭터 재생성 — 이미지 모델로 새로 그려 캐시를 교체. 네트워크는 **락 밖**(규율 동일).
-/// 완료 시 `sprite:ready` emit → 마스코트가 즉시 교체된다.
+/// 마스코트 미리보기 — 새 변주 시드로 후보를 생성해 sprite.candidate.png에 저장하고 base64 반환.
+/// sprite.png(실사용본)는 건드리지 않는다. 네트워크는 락 밖.
 #[tauri::command(async)]
-pub fn regenerate_sprite(app: tauri::AppHandle, state: State<AppState>) -> Result<(), String> {
-    use tauri::{Emitter as _, Manager as _};
-    // 락 범위: 설정 해석 + 프로필(uuid·mbti)만
-    let (cfg, uuid, mbti) = {
+pub fn mascot_preview(app: tauri::AppHandle, state: State<AppState>) -> Result<String, String> {
+    use base64::Engine as _;
+    use tauri::Manager as _;
+    let (cfg, mbti) = {
         let guard = lock(&state)?;
         let cfg = crate::resolve_sprite_cfg(&guard);
-        let (uuid, mbti) = sprite_identity(&guard)?;
-        (cfg, uuid, mbti)
+        let (_uuid, mbti) = sprite_identity(&guard)?;
+        (cfg, mbti)
     };
     let Some(cfg) = cfg else {
-        return Err("이미지 모델이 설정되지 않았어요 — 설정 → 캐릭터 이미지에서 URL·키를 넣어주세요".into());
+        return Err("이미지 모델이 설정되지 않았어요 — 설정 → 연결 → 캐릭터 이미지에서 URL·키를 넣어주세요".into());
     };
-    let spec = agent_mentor::mascot::robot_spec_from_profile(&uuid, mbti.as_deref());
-    let desc = agent_mentor::sprite::character_description(&spec, &uuid);
-    // 락 밖 네트워크 (수십 초 걸릴 수 있음 — async 커맨드라 UI는 안 막힌다)
+    // 변주 시드 = 새 UUID(재생성마다 다른 후보). spec·묘사 모두 이 시드로 뽑는다.
+    let seed = uuid::Uuid::new_v4().to_string();
+    let spec = agent_mentor::mascot::robot_spec_from_profile(&seed, mbti.as_deref());
+    let desc = agent_mentor::sprite::character_description(&spec, mbti.as_deref(), &seed);
     let png = agent_mentor::sprite::generate(&cfg, &desc).map_err(|e| e.to_string())?;
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join("sprite.png"), png).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join("sprite.candidate.png"), &png).map_err(|e| e.to_string())?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&png))
+}
+
+/// 마스코트 저장 — candidate를 실사용본(sprite.png)으로 승격하고 반영(emit + 허브 업로드).
+#[tauri::command(async)]
+pub fn mascot_commit(app: tauri::AppHandle, state: State<AppState>) -> Result<(), String> {
+    use tauri::{Emitter as _, Manager as _};
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let candidate = dir.join("sprite.candidate.png");
+    let png = std::fs::read(&candidate)
+        .map_err(|_| "저장할 미리보기가 없어요 — 먼저 '재생성'을 눌러주세요".to_string())?;
+    std::fs::write(dir.join("sprite.png"), &png).map_err(|e| e.to_string())?;
+    let _ = std::fs::remove_file(&candidate);
     if let Some(client) = hub_client(&state)? {
         let _ = upload_cached_mascot(&app, &client);
     }
-    log::info!("캐릭터 재생성 완료");
+    log::info!("마스코트 저장(commit) 완료");
     let _ = app.emit("sprite:ready", ());
     Ok(())
 }
@@ -1764,4 +1860,40 @@ pub fn save_skill_draft(slug: String, markdown: String) -> Result<String, String
     let path = agent_mentor::skill_draft::write_draft(&base, &slug, &markdown)
         .map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().into_owned())
+}
+
+#[cfg(test)]
+mod probe_message_tests {
+    use super::*;
+    use agent_mentor::sprite::ProbeVerdict as V;
+
+    #[test]
+    fn ok_verdict_is_green_and_points_to_regenerate() {
+        let msg = probe_result_message(V::Ok, "m").expect("Ok → Ok(초록)");
+        assert!(msg.contains("확인됨"), "성공 문구: {msg}");
+        assert!(msg.contains("캐릭터 재생성"), "재생성 안내 포함: {msg}");
+        // 공개 /models(OpenRouter 등)는 키를 검증 못 하므로 키 유효성을 주장하면 안 된다.
+        assert!(!msg.contains("키"), "키 검증을 주장하지 않는다: {msg}");
+    }
+
+    #[test]
+    fn model_missing_is_error_with_model_and_list() {
+        let e = probe_result_message(V::ModelMissing(vec!["gpt-4o".into()]), "gemini/x")
+            .expect_err("ModelMissing → Err(빨강)");
+        assert!(e.contains("gemini/x"), "설정 모델명 포함: {e}");
+        assert!(e.contains("gpt-4o"), "목록 샘플 포함: {e}");
+    }
+
+    #[test]
+    fn auth_failed_mentions_code_and_key() {
+        let e = probe_result_message(V::AuthFailed(401), "m").expect_err("401 → Err");
+        assert!(e.contains("401") && e.contains("API 키"), "{e}");
+    }
+
+    #[test]
+    fn connection_mentions_url() {
+        let e = probe_result_message(V::Connection("dns error".into()), "m")
+            .expect_err("Connection → Err");
+        assert!(e.contains("연결 실패"), "{e}");
+    }
 }

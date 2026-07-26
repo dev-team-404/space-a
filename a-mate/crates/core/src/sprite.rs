@@ -63,36 +63,58 @@ impl SpriteConfig {
     }
 }
 
-/// 확장 특성 — 시드 해시의 미사용 바이트(6·7·8)로 체형·마감·부착물 축을 추가.
-/// (mascot::RobotSpec 계약은 d[0..5]만 사용 — 여기서 더 다양해진다)
-pub fn extended_traits(identity: &str) -> (&'static str, &'static str, &'static str) {
+/// MBTI 성향 + 변주 시드 → (체형, 마감, 악세사리, 스타일 무드) 묘사 조각.
+/// 각 축의 *부분집합*을 MBTI 성향으로 정의하고 변주 시드 해시가 그 안에서 고른다
+/// (같은 타입=일관 무드, 시드마다 다른 조합). MBTI 미설정이면 편향 없이 전체에서 고른다.
+fn mbti_traits(mbti: Option<&str>, seed: &str) -> (&'static str, &'static str, &'static str, &'static str) {
     use sha2::{Digest, Sha256};
-    let d = Sha256::digest(identity.as_bytes());
-    const BUILD: [&str; 3] = ["compact", "slender", "sturdy"];
-    const FINISH: [&str; 4] = [
-        "matte white",
-        "brushed steel",
-        "cream plastic",
-        "charcoal matte",
-    ];
-    const ACC: [&str; 6] = [
-        "",
-        "with a small shoulder lamp",
-        "with a slim backpack module",
-        "with headphone-style side units",
-        "with a tiny status light on its chest",
-        "with a utility tool belt",
-    ];
-    (
-        BUILD[(d[6] as usize) % 3],
-        FINISH[(d[7] as usize) % 4],
-        ACC[(d[8] as usize) % 6],
-    )
+    let d = Sha256::digest(seed.as_bytes());
+    let pick = |group: &[&'static str], byte: u8| group[(byte as usize) % group.len()];
+    let m = mbti.and_then(crate::mascot::normalize_mbti);
+    let mb = m.as_ref().map(|s| s.as_bytes());
+
+    // 체형 (S/N): S=단단·컴팩트 / N=슬렌더·경량
+    const BUILD_S: [&str; 2] = ["a compact sturdy body", "a solid grounded build"];
+    const BUILD_N: [&str; 2] = ["a slender lightweight body", "a tall willowy build"];
+    const BUILD_ANY: [&str; 3] = ["a compact body", "a slender body", "a sturdy build"];
+    let build = match mb { Some(b) if b[1] == b'S' => pick(&BUILD_S, d[6]),
+                           Some(b) if b[1] == b'N' => pick(&BUILD_N, d[6]),
+                           _ => pick(&BUILD_ANY, d[6]) };
+
+    // 마감·색온도 (T/F): T=차가운 금속 / F=따뜻·부드러움
+    const FINISH_T: [&str; 2] = ["a cool brushed-steel finish", "a charcoal matte finish"];
+    const FINISH_F: [&str; 2] = ["a warm cream plastic finish", "a soft matte-white finish"];
+    const FINISH_ANY: [&str; 4] = ["a matte white finish", "a brushed steel finish", "a cream plastic finish", "a charcoal matte finish"];
+    let finish = match mb { Some(b) if b[2] == b'T' => pick(&FINISH_T, d[7]),
+                            Some(b) if b[2] == b'F' => pick(&FINISH_F, d[7]),
+                            _ => pick(&FINISH_ANY, d[7]) };
+
+    // 악세사리: 성향 그룹(N_T 분석가 / N_F 외교관 / S_J 관리자 / S_P 탐험가) 테마
+    const ACC_NT: [&str; 3] = ["with a slim backpack module", "with a utility tool belt", "with a tiny status light on its chest"];
+    const ACC_NF: [&str; 3] = ["with headphone-style side units", "with a small shoulder lamp", "with soft glowing trim"];
+    const ACC_SJ: [&str; 3] = ["with a utility tool belt", "with a tiny status light on its chest", ""];
+    const ACC_SP: [&str; 3] = ["with a small shoulder lamp", "", "with a light travel pack"];
+    const ACC_ANY: [&str; 6] = ["", "with a small shoulder lamp", "with a slim backpack module", "with headphone-style side units", "with a tiny status light on its chest", "with a utility tool belt"];
+    let accessory = match mb {
+        Some(b) if b[1] == b'N' && b[2] == b'T' => pick(&ACC_NT, d[8]),
+        Some(b) if b[1] == b'N' && b[2] == b'F' => pick(&ACC_NF, d[8]),
+        Some(b) if b[1] == b'S' && b[3] == b'J' => pick(&ACC_SJ, d[8]),
+        Some(b) if b[1] == b'S' && b[3] == b'P' => pick(&ACC_SP, d[8]),
+        _ => pick(&ACC_ANY, d[8]),
+    };
+
+    // 스타일 무드 (S/N, 재미 요소): S=깔끔·단정 / N=개성·예술·몽환
+    let styling = match mb {
+        Some(b) if b[1] == b'S' => ", with a clean, tidy, conventional look",
+        Some(b) if b[1] == b'N' => ", with a quirky, artistic mix-and-match look and a dreamy vibe",
+        _ => "",
+    };
+    (build, finish, accessory, styling)
 }
 
-/// 시드 스펙 + 정체성 → **로봇** 묘사 (슬롯 의미는 유지 — 결정론).
-/// 제품이 AI 에이전트이므로 마스코트는 사람이 아닌 로봇이다. 화풍은 레퍼런스(치비 픽셀) 그대로.
-pub fn character_description(spec: &crate::mascot::RobotSpec, identity: &str) -> String {
+/// 시드 스펙 + MBTI + 변주 시드 → **로봇** 묘사. 화풍은 레퍼런스(치비 픽셀) 유지.
+/// `seed`가 체형/마감/악세/무드 변주를 좌우한다(재생성마다 다른 후보).
+pub fn character_description(spec: &crate::mascot::RobotSpec, mbti: Option<&str>, seed: &str) -> String {
     // antenna 슬롯 = 머리 형태
     const HEAD: [&str; 6] = [
         "a rounded helmet-shaped head with a short antenna",
@@ -130,7 +152,7 @@ pub fn character_description(spec: &crate::mascot::RobotSpec, identity: &str) ->
         "hands behind its back",
     ];
     let (cc, lc, ac) = COLORS[(spec.palette as usize) % 8];
-    let (build, finish, acc) = extended_traits(identity);
+    let (build, finish, accessory, styling) = mbti_traits(mbti, seed);
     let chassis = match (spec.body as usize) % 6 {
         0 => format!("a {cc} rounded chest plate with a small lit panel"),
         1 => format!("a {cc} armored torso with shoulder pauldrons"),
@@ -139,10 +161,10 @@ pub fn character_description(spec: &crate::mascot::RobotSpec, identity: &str) ->
         4 => format!("a white torso with {cc} trim and {cc} buttons"),
         _ => format!("a {cc} torso with an exposed cable harness"),
     };
-    let acc_part = if acc.is_empty() { String::new() } else { format!(", {acc}") };
+    let acc_part = if accessory.is_empty() { String::new() } else { format!(", {accessory}") };
     format!(
-        "a chibi pixel-art ROBOT (not a human) with a {build} {finish} body: {head}, {eyes}, \
-         {chassis}, {lc} leg units with flat feet, {ac} glowing accents{acc_part}, {pose}",
+        "a chibi pixel-art ROBOT (not a human) with {build} and {finish}: {head}, {eyes}, \
+         {chassis}, {lc} leg units with flat feet, {ac} glowing accents{acc_part}, {pose}{styling}",
         head = HEAD[(spec.antenna as usize) % 6],
         eyes = EYES[(spec.eyes as usize) % 6],
         pose = POSE[(spec.arms as usize) % 6],
@@ -161,7 +183,7 @@ pub fn seed_cache_name(seed: &str) -> String {
 /// 방문 시 다른 사람도 같은 화풍의 AI 캐릭터로 보이게 하는 용도(2026-07-19).
 pub fn sprite_for_seed(cfg: &SpriteConfig, seed: &str) -> Result<Vec<u8>> {
     let spec = crate::mascot::robot_spec_for(seed);
-    let desc = character_description(&spec, seed);
+    let desc = character_description(&spec, None, seed);
     generate(cfg, &desc)
 }
 
@@ -306,6 +328,17 @@ fn decode_data_url(data_url: &str) -> Result<Vec<u8>> {
         .map_err(|e| anyhow!("sprite base64 디코드 실패: {e}"))
 }
 
+/// 키가 있으면 `Authorization: Bearer <key>`를 붙이고, 비면 헤더를 **생략**한다.
+/// 익명 접근을 허용하는 게이트웨이를 지원하며, 프로브와 실제 생성이 **동일하게 인증**하도록 통일한다
+/// (빈 키에 프로브는 생략·생성은 빈 Bearer를 보내던 불일치를 제거 — 테스트가 재생성을 충실히 예측).
+fn with_bearer(req: ureq::Request, api_key: &str) -> ureq::Request {
+    if api_key.is_empty() {
+        req
+    } else {
+        req.set("Authorization", &format!("Bearer {}", api_key))
+    }
+}
+
 /// 이미지 생성 — 스타일 앵커 + 인물 묘사. 반환 = PNG 바이트.
 pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
     let ref_b64 = base64::engine::general_purpose::STANDARD.encode(STYLE_REF_JPG);
@@ -327,10 +360,10 @@ pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
         }],
         "modalities": ["image", "text"],
     });
-    let resp: serde_json::Value = ureq::post(&format!("{}/chat/completions", cfg.base_url))
+    let req = ureq::post(&format!("{}/chat/completions", cfg.base_url))
         .timeout(std::time::Duration::from_secs(120))
-        .set("Authorization", &format!("Bearer {}", cfg.api_key))
-        .set("Content-Type", "application/json")
+        .set("Content-Type", "application/json");
+    let resp: serde_json::Value = with_bearer(req, &cfg.api_key)
         .send_json(body)
         .map_err(|e| anyhow!("sprite 생성 요청 실패: {e}"))?
         .into_json()?;
@@ -345,17 +378,92 @@ pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
     }
 }
 
+/// 이미지 엔드포인트 프로브 결과 — 무과금 `GET /models` 기반.
+/// 실제 이미지 생성 능력까지는 확인하지 못한다(그건 `generate`뿐).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProbeVerdict {
+    /// 200 + 설정 모델이 /models 목록에 있음.
+    Ok,
+    /// 200 이나 설정 모델이 목록에 없음 (샘플 id 최대 5개).
+    ModelMissing(Vec<String>),
+    /// 200 이나 `data[]` 배열이 없음 — OpenAI 호환 /models 아님.
+    NotOpenAiCompat,
+    /// 401 / 403.
+    AuthFailed(u16),
+    /// 429.
+    RateLimited,
+    /// 기타 non-2xx.
+    HttpError(u16),
+    /// 전송 실패(연결 불가·DNS 등).
+    Connection(String),
+}
+
+/// `GET /models` 200 응답 본문 + 설정 모델명 → 판정 (순수).
+/// OpenAI 규격: `{"data":[{"id":"..."}, ...]}`.
+pub fn classify_models_body(body: &serde_json::Value, model: &str) -> ProbeVerdict {
+    let Some(list) = body.get("data").and_then(|d| d.as_array()) else {
+        return ProbeVerdict::NotOpenAiCompat;
+    };
+    let ids: Vec<String> = list
+        .iter()
+        .filter_map(|m| m.get("id").and_then(|v| v.as_str()))
+        .map(|s| s.to_string())
+        .collect();
+    let want = model.trim();
+    if ids.iter().any(|id| id.trim() == want) {
+        ProbeVerdict::Ok
+    } else {
+        ProbeVerdict::ModelMissing(ids.into_iter().take(5).collect())
+    }
+}
+
+/// 무과금 프로브 — `GET {base_url}/models`로 엔드포인트·키·모델을 확인한다.
+/// (네트워크 — 단위테스트 제외, 로컬 LiteLLM 수동 확인.)
+pub fn probe_endpoint(cfg: &SpriteConfig) -> ProbeVerdict {
+    let url = format!("{}/models", cfg.base_url);
+    let req = ureq::get(&url).timeout(std::time::Duration::from_secs(10));
+    match with_bearer(req, &cfg.api_key).call() {
+        Ok(resp) => {
+            let body: serde_json::Value = resp.into_json().unwrap_or(serde_json::Value::Null);
+            classify_models_body(&body, &cfg.model)
+        }
+        Err(ureq::Error::Status(code, _)) => match code {
+            401 | 403 => ProbeVerdict::AuthFailed(code),
+            429 => ProbeVerdict::RateLimited,
+            _ => ProbeVerdict::HttpError(code),
+        },
+        Err(ureq::Error::Transport(t)) => ProbeVerdict::Connection(t.to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::mascot::robot_spec_for;
 
     #[test]
+    fn description_varies_by_seed_and_reflects_mbti() {
+        let spec = robot_spec_for("seed-A");
+        // 같은 (spec, mbti, seed) → 결정론
+        let a1 = character_description(&spec, Some("INTJ"), "v1");
+        let a2 = character_description(&spec, Some("INTJ"), "v1");
+        assert_eq!(a1, a2);
+        // 다른 변주 시드 → 달라질 수 있다(표본에서 최소 2종)
+        use std::collections::HashSet;
+        let set: HashSet<_> = (0..12)
+            .map(|i| character_description(&spec, Some("INTJ"), &format!("v{i}")))
+            .collect();
+        assert!(set.len() > 1, "변주 시드로 묘사가 달라져야 함 (distinct={})", set.len());
+        // 로봇 어휘 유지
+        assert!(a1.contains("ROBOT") && a1.contains("leg units"));
+    }
+
+    #[test]
     fn description_is_deterministic_and_covers_slots() {
         let id = "DESKTOP-X|user";
         let spec = robot_spec_for(id);
-        let d1 = character_description(&spec, id);
-        let d2 = character_description(&spec, id);
+        let d1 = character_description(&spec, None, id);
+        let d2 = character_description(&spec, None, id);
         assert_eq!(d1, d2);
         assert!(d1.contains("chibi pixel-art"));
         // 마스코트는 사람이 아니라 로봇 — 화풍은 유지하되 인물 어휘가 섞이면 안 된다
@@ -364,12 +472,17 @@ mod tests {
         for human in ["skin", "hair", "pants", "sneakers", "hoodie"] {
             assert!(!d1.contains(human), "인물 어휘 '{human}'가 남아있음: {d1}");
         }
+        // MBTI가 있어도 인물 어휘가 섞이면 안 된다.
+        let d3 = character_description(&spec, Some("INTJ"), id);
+        for human in ["skin", "hair", "pants", "sneakers", "hoodie"] {
+            assert!(!d3.contains(human), "MBTI 묘사에 인물 어휘 '{human}'가 남아있음: {d3}");
+        }
     }
 
     #[test]
     fn different_seeds_can_differ() {
-        let a = character_description(&robot_spec_for("A|a"), "A|a");
-        let b = character_description(&robot_spec_for("B|bbbb"), "B|bbbb");
+        let a = character_description(&robot_spec_for("A|a"), None, "A|a");
+        let b = character_description(&robot_spec_for("B|bbbb"), None, "B|bbbb");
         assert_ne!(a, b);
     }
 
@@ -380,21 +493,6 @@ mod tests {
         assert_ne!(a, seed_cache_name("OTHER|user")); // 시드마다 다름
         assert_eq!(a.len(), 12);
         assert!(a.chars().all(|c| c.is_ascii_hexdigit()), "파일명 안전(hex): {a}");
-    }
-
-    #[test]
-    fn extended_traits_add_build_finish_accessory_axes() {
-        // 서로 다른 정체성에서 체형/마감/부착물 축이 실제로 갈리는지 표본 확인
-        let mut builds = std::collections::HashSet::new();
-        let mut finishes = std::collections::HashSet::new();
-        for i in 0..40 {
-            let id = format!("HOST-{i}|user{i}");
-            let (b, f, _a) = extended_traits(&id);
-            builds.insert(b);
-            finishes.insert(f);
-        }
-        assert!(builds.len() >= 3, "체형 3종 모두 등장");
-        assert!(finishes.len() >= 3, "마감 다양성");
     }
 
     #[test]
@@ -510,5 +608,42 @@ mod tests {
             "choices": [{"message": {"role": "assistant", "content": "sorry, I can't draw that"}}]
         });
         assert!(extract_image_bytes(&resp).is_err(), "이미지 없으면 에러여야 함");
+    }
+
+    #[test]
+    fn classify_models_body_ok_when_model_listed() {
+        let body = serde_json::json!({"data":[
+            {"id":"gpt-4o"},
+            {"id":"gemini/gemini-2.5-flash-image"}
+        ]});
+        assert_eq!(
+            classify_models_body(&body, "gemini/gemini-2.5-flash-image"),
+            ProbeVerdict::Ok
+        );
+    }
+
+    #[test]
+    fn classify_models_body_missing_when_model_absent() {
+        let body = serde_json::json!({"data":[{"id":"gpt-4o"},{"id":"gpt-4o-mini"}]});
+        match classify_models_body(&body, "gemini/gemini-2.5-flash-image") {
+            ProbeVerdict::ModelMissing(ids) => {
+                assert!(ids.contains(&"gpt-4o".to_string()), "샘플 id 포함: {ids:?}");
+                assert!(ids.len() <= 5, "샘플은 최대 5개");
+            }
+            v => panic!("ModelMissing 기대, got {v:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_models_body_not_openai_when_no_data_array() {
+        // data[] 배열이 없으면(예: 에러 오브젝트/HTML) OpenAI 호환이 아니다.
+        let body = serde_json::json!({"error":"not found"});
+        assert_eq!(classify_models_body(&body, "x"), ProbeVerdict::NotOpenAiCompat);
+    }
+
+    #[test]
+    fn classify_models_body_trims_model_before_compare() {
+        let body = serde_json::json!({"data":[{"id":"some/model"}]});
+        assert_eq!(classify_models_body(&body, "  some/model  "), ProbeVerdict::Ok);
     }
 }

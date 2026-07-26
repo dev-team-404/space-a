@@ -377,7 +377,10 @@ mod runtime {
             // ① 락 획득 → assemble_brief + session_count 체크 → 즉시 해제
             let (brief, cfg, days_idle, memories) = match store_mutex.lock() {
                 Ok(store) => {
-                    let cfg = DiaryConfig { vault_dir: vault.clone(), ..DiaryConfig::default() };
+                    let honorific = crate::commands::owner_title(&store);
+                    let mbti = store.get_setting("user_mbti").ok().flatten()
+                        .and_then(|m| agent_mentor::mascot::normalize_mbti(&m));
+                    let cfg = DiaryConfig { vault_dir: vault.clone(), honorific, mbti, ..DiaryConfig::default() };
                     match assemble_brief(&store, "Windows", &date, &cfg) {
                         Ok(brief) => {
                             let days_idle = store.days_since_last_active(&date).ok().flatten();
@@ -765,7 +768,7 @@ mod runtime {
         };
         let Some(cfg) = cfg else { return };
         let spec = agent_mentor::mascot::robot_spec_from_profile(&uuid, mbti.as_deref());
-        let desc = sprite::character_description(&spec, &uuid);
+        let desc = sprite::character_description(&spec, mbti.as_deref(), &uuid);
         match sprite::generate(&cfg, &desc) {
             Ok(png) => {
                 let _ = std::fs::create_dir_all(&dir);

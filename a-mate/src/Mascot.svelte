@@ -20,6 +20,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   let bubble = $state<Bubble | null>(null);
   let chatterLevel = $state('low');
   let realtimeAdvice = $state(false);
+  let honorific = $state('주인'); // 주인을 부르는 호칭(owner_title) — 정적 대사에도 반영
   let lastAdviceKey: string | null = null;
   let recentChatter: string[] = []; // 최근 표시 잡담 3개 (세션-로컬, 영속화 안 함)
 
@@ -47,6 +48,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
     const s = await getSettings().catch(() => ({}) as Record<string, string>);
     chatterLevel = s['chatter_level'] ?? 'low';
     realtimeAdvice = s['realtime_advice'] === 'on';
+    honorific = s['owner_title']?.trim() || '주인';
     // 재시작 후에도 같은 조언을 반복하지 않도록 영속화된 키 복원 (집계 카드는 계속 1위로 상주함)
     lastAdviceKey = s['last_advice_key'] ?? lastAdviceKey;
   }
@@ -64,7 +66,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   // 트리거 배선 (스펙 §6: 새/악화 advice·다이어리·occasion·잡담만 — 스캔 요약 대사 없음)
   $effect(() => {
     const subs = [
-      onNewFindings((rows) => rows.length && showBubble(findingBubble(rows))),
+      onNewFindings((rows) => rows.length && showBubble(findingBubble(rows, honorific))),
       onDiaryReady((date) => showBubble(diaryBubble(date))),
       onScanDone(async () => {
         pullOccasions(); // 자정 넘김 대비 — 게이트 덕에 하루 1회만 유효
@@ -74,7 +76,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
         if (top && top.dedup_key !== lastAdviceKey) {
           lastAdviceKey = top.dedup_key;
           setSetting('last_advice_key', top.dedup_key).catch(() => {});
-          showBubble(adviceBubble(top));
+          showBubble(adviceBubble(top, honorific));
         }
       }),
       onSettingsChanged(() => loadSettings()),
@@ -98,7 +100,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
             getSummary().catch(() => null),
             getChatterPool().catch(() => [] as string[]),
           ]);
-          const b = pickChatter(pool, summary, recentChatter, Math.random);
+          const b = pickChatter(pool, summary, recentChatter, Math.random, honorific);
           recentChatter = [...recentChatter.slice(-2), b.text];
           showBubble(b);
         }

@@ -1,6 +1,6 @@
 <script lang="ts">
   import {
-    getWeekSummary, listFindings, listContent, onContentReady,
+    getSettings, getWeekSummary, listFindings, listContent, onContentReady,
     onScanDone, onScanProgress, onSettingsChanged, runScanNow,
     type CoachFinding, type ContentItem, type DayStat, type ScanProgress, type Summary,
   } from '../api';
@@ -28,6 +28,7 @@
   let findings = $state<CoachFinding[]>([]);
   let notices = $state<Notice[]>([]);
   let tips = $state<ContentItem[]>([]);
+  let honorific = $state('주인'); // owner_title — MiniLife 정적 대사에 반영
   const topAdvice = $derived(findings.length > 0 ? findings[0].suggested_action : null);
   // 방 서버 연결 시 격자 방(LifeView), 미연결 시 기존 장식 방(MiniLife) — 원기능 보존
   // 설정 창에서 연결하는 순간 바뀌도록 settings:changed와 창 포커스에 반응한다
@@ -37,11 +38,14 @@
   checkHub();
 
   async function load() {
-    [days, findings, tips] = await Promise.all([
+    const [d, f, t, settings] = await Promise.all([
       getWeekSummary().catch(() => [] as DayStat[]),
       listFindings(false).catch(() => [] as CoachFinding[]),
       listContent(false).catch(() => [] as ContentItem[]),
+      getSettings().catch(() => ({}) as Record<string, string>),
     ]);
+    days = d; findings = f; tips = t;
+    honorific = settings['owner_title']?.trim() || '주인';
     notices = loadNotices();
   }
   load();
@@ -79,7 +83,7 @@
   {#if hubConnected || interiorPreview}
     <LifeView />
   {:else}
-    <MiniLife advice={topAdvice} />
+    <MiniLife advice={topAdvice} {honorific} />
   {/if}
 
   <!-- 아래는 전부 내 로컬 데이터 — 남의 방을 보는 동안엔 숨긴다 (남의 것으로 오독 방지) -->

@@ -54,11 +54,11 @@ fn with_api_key(req: ureq::Request, api_key: Option<&str>) -> ureq::Request {
 /// (어느 방에서든 내 데스크톱 마스코트와 같은 모습으로 보이게).
 /// api_key는 관문이 켜진 서버용 — 비우면 미첨부.
 pub fn register(base_url: &str, api_key: Option<&str>, name: &str, mascot_seed: &str) -> Result<Value> {
-    register_profile(base_url, api_key, name, mascot_seed, "", "")
+    register_profile(base_url, api_key, name, mascot_seed, "", "", "")
 }
 
-/// 프로필 포함 등록 — org·agent_uuid를 함께 보낸다. 현재 서버는 모르는 필드를 무시하므로
-/// 하위호환이며, 서버가 프로필을 저장하도록 확장되면 그대로 쓰인다. 빈 값은 생략한다.
+/// 프로필 포함 등록 — org·agent_uuid·owner_os_user를 함께 보낸다. 현재 서버는 모르는 필드를
+/// 무시하므로 하위호환이며, 서버가 프로필을 저장하도록 확장되면 그대로 쓰인다. 빈 값은 생략한다.
 pub fn register_profile(
     base_url: &str,
     api_key: Option<&str>,
@@ -66,6 +66,7 @@ pub fn register_profile(
     mascot_seed: &str,
     org: &str,
     agent_uuid: &str,
+    owner_os_user: &str,
 ) -> Result<Value> {
     let mut body = json!({ "name": name, "mascot_seed": mascot_seed });
     if !org.trim().is_empty() {
@@ -73,6 +74,9 @@ pub fn register_profile(
     }
     if !agent_uuid.trim().is_empty() {
         body["agent_uuid"] = json!(agent_uuid);
+    }
+    if !owner_os_user.trim().is_empty() {
+        body["owner_os_user"] = json!(owner_os_user);
     }
     let req = ureq::post(&format!("{}/life/register", base(base_url)))
         .timeout(std::time::Duration::from_secs(10));
@@ -106,9 +110,16 @@ impl LifeClient {
         self.req("GET", "/life/me").call().map_err(err_of)?.into_json().map_err(Into::into)
     }
 
-    pub fn rename(&self, name: &str) -> Result<Value> {
+    /// 이름 변경(에이전트 + 내 방 주인 이름). 주인 OS 계정(owner_os_user)도 함께 실어
+    /// 기존 연결도 §F 주인 식별자를 갱신한다 — register_profile과 같은 규약(빈 값은 생략,
+    /// 서버는 모르는 필드를 무시하므로 하위호환. register·PATCH가 동일 body 모델).
+    pub fn rename(&self, name: &str, owner_os_user: &str) -> Result<Value> {
+        let mut body = json!({ "name": name });
+        if !owner_os_user.trim().is_empty() {
+            body["owner_os_user"] = json!(owner_os_user);
+        }
         self.req("PATCH", "/life/me")
-            .send_json(json!({ "name": name }))
+            .send_json(body)
             .map_err(err_of)?
             .into_json()
             .map_err(Into::into)

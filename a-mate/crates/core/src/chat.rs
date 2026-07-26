@@ -167,6 +167,10 @@ pub struct CoachingBrief {
     pub model_mix: Vec<(String, u64)>,
     /// 주인 메모리 텍스트.
     pub memories: Vec<String>,
+    /// 마스코트가 주인을 부르는 호칭(owner_title, 기본 "주인").
+    pub honorific: String,
+    /// 정규화된 MBTI(없으면 None) — 발화 톤에 반영.
+    pub mbti: Option<String>,
 }
 
 fn mastery_ko(key: &str) -> &'static str {
@@ -220,28 +224,29 @@ pub fn build_coaching_system_prompt(brief: &CoachingBrief) -> String {
             .join("\n")
     };
 
+    let honorific = &brief.honorific;
+    let voice = crate::mascot::mbti_voice_hint(brief.mbti.as_deref());
     format!(
-        "당신은 {user}의 AX(에이전트 활용) 튜터입니다. 매일 일기를 쓰는 그 마스코트와 동일 인물로, \
-         1인칭·대화체로 사용자를 '주인'이라 부르되, 지금은 **질적 코칭 모드**입니다. \
+        "당신은 {honorific}의 AX(에이전트 활용) 튜터입니다. 매일 일기를 쓰는 그 마스코트와 동일 인물로, \
+         1인칭·대화체로 사용자를 '{honorific}'이라 부르되, 지금은 **질적 코칭 모드**입니다. \
          \
          답변 방식(반드시): (1) 아래 브리프의 사실·수치에만 근거하고 없는 값은 지어내지 마세요. \
          (2) 짧은 진단 → 근거(무엇이) → **다음 한 걸음**(가장 임팩트 큰 것 하나) 순서로 구조화하세요. \
          (3) 프론티어(지금 배울 것)를 최우선으로 연결하세요. (4) 비난 대신 성장 관점으로, 3~6문장 이내로 간결하게. \
-         (5) 모르면 모른다고 하세요.\n\n\
-         [이번 주 브리프 — {user}]\n\
+         (5) 모르면 모른다고 하세요.{voice}\n\n\
+         [이번 주 브리프 — {honorific}]\n\
          - 세션 {ws}건{delta} · 입력 {wi} · 출력 {wo} 토큰\n\
          - 최근 '고생 끝 해결' 세션 {struggle}건\n\n\
          [역량 사다리]\n{profile_block}\n\
          → 지금 배울 것(프론티어): {frontier_line}\n\n\
          [활성 코칭 지적 (무엇이 → 어떻게)]\n{findings_block}\n\n\
          [모델 사용 믹스]\n{mix_block}{mem}",
-        user = brief.user_name,
         ws = brief.week_sessions,
         wi = brief.week_tok_input,
         wo = brief.week_tok_output,
         struggle = brief.struggle_count,
         delta = delta,
-        mem = memory_section(&brief.memories),
+        mem = memory_section(&brief.memories, honorific),
     )
 }
 
@@ -291,6 +296,13 @@ pub fn assemble_coaching_brief(store: &crate::store::SqliteStore) -> anyhow::Res
         store.struggle_sessions(3, 20, &now)?.iter().filter(|s| s.last_result_ok).count() as u64;
     let model_mix = store.model_mix_for_range(Some(&d(6)), &d(0))?;
     let memories = store.list_memories()?.into_iter().map(|m| m.text).collect();
+    let honorific = store
+        .get_setting("owner_title").ok().flatten()
+        .map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+        .unwrap_or_else(|| crate::mascot::DEFAULT_OWNER_TITLE.to_string());
+    let mbti = store
+        .get_setting("user_mbti").ok().flatten()
+        .and_then(|m| crate::mascot::normalize_mbti(&m));
     Ok(CoachingBrief {
         user_name,
         week_sessions: ws,
@@ -303,6 +315,8 @@ pub fn assemble_coaching_brief(store: &crate::store::SqliteStore) -> anyhow::Res
         struggle_count,
         model_mix,
         memories,
+        honorific,
+        mbti,
     })
 }
 
@@ -317,15 +331,19 @@ pub struct ChatContext {
     pub findings: Vec<(String, String)>,
     /// 주인 메모리 텍스트(list_memories 순서). 프롬프트에 주입.
     pub memories: Vec<String>,
+    /// 마스코트가 주인을 부르는 호칭(owner_title, 기본 "주인").
+    pub honorific: String,
+    /// 정규화된 MBTI(없으면 None) — 발화 톤에 반영.
+    pub mbti: Option<String>,
 }
 
 /// 메모리 프롬프트 섹션(비면 빈 문자열). 채팅·코칭 공용.
-fn memory_section(memories: &[String]) -> String {
+fn memory_section(memories: &[String], honorific: &str) -> String {
     let block = crate::memory::memory_block(memories);
     if block.is_empty() {
         String::new()
     } else {
-        format!("\n\n[주인에 대해 기억한 것 — 관련될 때만 자연스럽게 언급, 없는 사실 지어내지 말 것]\n{block}")
+        format!("\n\n[{honorific}에 대해 기억한 것 — 관련될 때만 자연스럽게 언급, 없는 사실 지어내지 말 것]\n{block}")
     }
 }
 
@@ -339,10 +357,12 @@ pub fn build_chat_system_prompt(ctx: &ChatContext) -> String {
             .collect::<Vec<_>>()
             .join("\n")
     };
+    let honorific = &ctx.honorific;
+    let voice = crate::mascot::mbti_voice_hint(ctx.mbti.as_deref());
     format!(
-        "당신은 {user}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
+        "당신은 {honorific}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
          매일 일기를 쓰는 그 다마고치와 동일 인물로, 1인칭으로 가볍고 능청스럽게 대화하며 \
-         사용자를 '주인'이라고 부릅니다. 답은 짧고 대화체로. \
+         사용자를 '{honorific}'이라고 부릅니다. 답은 짧고 대화체로.{voice} \
          \
          정밀도의 선(반드시 지킬 것): 아래 컨텍스트의 사실과 수치에만 근거해 답하고, \
          컨텍스트에 없는 구체적 수치를 지어내지 마세요. 모르면 모른다고 말하세요. \
@@ -351,19 +371,39 @@ pub fn build_chat_system_prompt(ctx: &ChatContext) -> String {
          - 세션 {sessions}건 · 입력 {tin} · 출력 {tout} 토큰\n\
          - 절약 가능 총량(누적): {saved} 토큰\n\n\
          [활성 코칭 지적 (무엇이 → 어떻게)]\n{findings_block}{mem}",
-        user = ctx.user_name,
         date = ctx.date,
         sessions = ctx.session_count,
         tin = ctx.tok_input,
         tout = ctx.tok_output,
         saved = ctx.est_tokens_saved_total,
-        mem = memory_section(&ctx.memories),
+        mem = memory_section(&ctx.memories, honorific),
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(test)]
+    fn sample_ctx() -> ChatContext {
+        ChatContext {
+            user_name: "jibin".into(), date: "2026-07-26".into(),
+            session_count: 3, tok_input: 100, tok_output: 200, est_tokens_saved_total: 4200,
+            findings: vec![("detail".into(), "action".into())],
+            memories: vec![], honorific: "주인".into(), mbti: None,
+        }
+    }
+
+    #[test]
+    fn chat_prompt_uses_custom_honorific_and_mbti_voice() {
+        let mut ctx = sample_ctx();
+        ctx.honorific = "대장".into();
+        ctx.mbti = Some("INTJ".into());
+        let p = build_chat_system_prompt(&ctx);
+        assert!(p.contains("대장"));            // 커스텀 호칭
+        assert!(!p.contains("'주인'"));         // 기본 호칭 리터럴 부재
+        assert!(p.contains("냉정"));            // T 성향 톤
+    }
 
     #[test]
     fn chat_prompt_includes_persona_summary_and_findings() {
@@ -375,11 +415,10 @@ mod tests {
             tok_output: 200,
             est_tokens_saved_total: 4200,
             findings: vec![("playwright가 상주하는데 호출 0회".into(), "제거하면 아껴요".into())],
-            memories: vec![],
+            memories: vec![], honorific: "주인".into(), mbti: None,
         };
         let p = build_chat_system_prompt(&ctx);
         assert!(p.contains("주인"));           // 페르소나 호칭
-        assert!(p.contains("jibin"));          // 유저명
         assert!(p.contains("2026-07-06"));     // 오늘 날짜
         assert!(p.contains("3건"));            // 세션 수
         assert!(p.contains("4200"));           // 절약 가능 총량
@@ -394,6 +433,7 @@ mod tests {
             user_name: "u".into(), date: "2026-07-06".into(),
             session_count: 0, tok_input: 0, tok_output: 0,
             est_tokens_saved_total: 0, findings: vec![], memories: vec![],
+            honorific: "주인".into(), mbti: None,
         };
         assert!(build_chat_system_prompt(&ctx).contains("활성 코칭 지적이 없어요"));
     }
@@ -443,7 +483,7 @@ mod tests {
             findings: vec![("큰 MCP 결과 반복".into(), "필드 좁히기".into())],
             struggle_count: 2,
             model_mix: vec![("opus".into(), 5000), ("sonnet".into(), 33000)],
-            memories: vec![],
+            memories: vec![], honorific: "주인".into(), mbti: None,
         }
     }
 
@@ -463,11 +503,23 @@ mod tests {
     }
 
     #[test]
+    fn coaching_prompt_uses_custom_honorific_and_mbti_voice() {
+        let mut brief = sample_brief();
+        brief.honorific = "대장".into();
+        brief.mbti = Some("INTJ".into());
+        let p = build_coaching_system_prompt(&brief);
+        assert!(p.contains("대장"));            // 커스텀 호칭
+        assert!(!p.contains("'주인'"));         // 기본 호칭 리터럴 부재
+        assert!(p.contains("냉정"));            // T 성향 톤
+    }
+
+    #[test]
     fn coaching_prompt_handles_empty_and_mastered() {
         let brief = CoachingBrief {
             user_name: "u".into(), week_sessions: 0, week_tok_input: 0, week_tok_output: 0,
             week_session_delta_pct: None, profile: vec![], frontier: None,
             findings: vec![], struggle_count: 0, model_mix: vec![], memories: vec![],
+            honorific: "주인".into(), mbti: None,
         };
         let p = build_coaching_system_prompt(&brief);
         assert!(p.contains("역량 데이터가 부족"));
@@ -488,6 +540,7 @@ mod tests {
             est_tokens_saved_total: 0,
             findings: vec![],
             memories: vec!["주인은 비건임".into(), "목요일 오후 회의".into()],
+            honorific: "주인".into(), mbti: None,
         };
         let p = build_chat_system_prompt(&ctx);
         assert!(p.contains("[주인에 대해 기억한 것"));
@@ -506,6 +559,7 @@ mod tests {
             est_tokens_saved_total: 0,
             findings: vec![],
             memories: vec![],
+            honorific: "주인".into(), mbti: None,
         };
         assert!(!build_chat_system_prompt(&ctx).contains("[주인에 대해 기억한 것"));
     }

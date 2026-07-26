@@ -297,16 +297,24 @@ export async function imageSettingsSet(url: string, key: string, model: string):
   await invoke('image_settings_set', { url, key, model });
 }
 
-/** 내 캐릭터를 이미지 모델로 다시 생성 (수십 초 걸릴 수 있음). 완료 시 sprite:ready 이벤트. */
-export async function regenerateSprite(): Promise<void> {
-  await invoke('regenerate_sprite');
+/** 마스코트 후보를 새로 그려 미리보기 base64를 돌려준다(수십 초). 저장 전까지 실사용본 미변경. */
+export async function mascotPreview(): Promise<string> {
+  return await invoke<string>('mascot_preview');
+}
+/** 미리보기 후보를 실제 마스코트로 저장(전체 반영). 완료 시 sprite:ready. */
+export async function mascotCommit(): Promise<void> {
+  await invoke('mascot_commit');
 }
 
+/** 이미지 엔드포인트 검증 (무과금 — GET /models). 성공/실패 모두 사람이 읽는 메시지. 실패는 reject. */
+export const imageTest = (url: string, key: string, model: string) =>
+  invoke<string>('image_test', { url, key, model });
+
 /** 개인정보 — 이름·조직·아이디(UUID 자동)·MBTI. a-hub 연결·마스코트 시드에 쓰인다. */
-export interface Profile { name: string; org: string; uuid: string; mbti: string }
+export interface Profile { name: string; org: string; uuid: string; mbti: string; owner_title: string }
 export const profileGet = () => invoke<Profile>('profile_get');
-export const profileSet = (name: string, org: string, mbti: string) =>
-  invoke<Profile>('profile_set', { name, org, mbti });
+export const profileSet = (name: string, org: string, mbti: string, ownerTitle: string) =>
+  invoke<Profile>('profile_set', { name, org, mbti, ownerTitle });
 
 /** 주인 메모리 — 마스코트가 기억하는 나에 대한 자유 텍스트 사실. */
 export interface Memory {
