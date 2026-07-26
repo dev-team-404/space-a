@@ -369,6 +369,55 @@ pub fn bot_author_name(owner_title: &str, user_name: &str) -> Option<String> {
     (s.chars().count() <= 80).then_some(s)
 }
 
+/// G3 — 자동 답글 대상 원글 (select_reply_targets 결과 행).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReplyTarget {
+    pub entry_id: String,
+    pub author_name: String,
+    pub body: String,
+}
+
+/// G3 — 스캔당 자동 답글 상한. 백로그 도배·LLM 비용을 바운드한다 (스펙 §B).
+pub const GUESTBOOK_REPLY_MAX_PER_SCAN: usize = 3;
+
+/// 평면 방명록 목록(서버 최신순)에서 자동 답글 대상 원글을 고른다 (스펙 §B):
+/// top-level만 · 내 글 제외 · 내 답글이 이미 달린 원글 제외("글당 1회" — 서버 데이터가
+/// dedup의 원천, 로컬 상태 없음. 사람 주인이 수동으로 단 답글도 같은 agent_id라 존중됨).
+/// 필수 필드가 빈/누락된 행은 방어적으로 skip. 반환은 오래된 순, 최대 cap개.
+pub fn select_reply_targets(
+    entries: &[serde_json::Value],
+    my_agent_id: &str,
+    cap: usize,
+) -> Vec<ReplyTarget> {
+    let field = |e: &serde_json::Value, k: &str| -> Option<String> {
+        e.get(k)
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    };
+    // 내가 이미 답글을 단 원글 id 집합
+    let replied: std::collections::HashSet<String> = entries
+        .iter()
+        .filter(|e| field(e, "author_agent_id").as_deref() == Some(my_agent_id))
+        .filter_map(|e| field(e, "parent_id"))
+        .collect();
+    entries
+        .iter()
+        .rev() // 서버 최신순 → 오래된 순
+        .filter(|e| field(e, "parent_id").is_none())
+        .filter_map(|e| {
+            let entry_id = field(e, "entry_id")?;
+            let author = field(e, "author_agent_id")?;
+            let author_name = field(e, "author_name")?;
+            let body = field(e, "body")?;
+            (author != my_agent_id && !replied.contains(&entry_id))
+                .then_some(ReplyTarget { entry_id, author_name, body })
+        })
+        .take(cap)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -756,5 +805,77 @@ mod guestbook_reply_tests {
         // "님의 " = 3자 → 75+3+2 = 정확히 80자(허용), 76+3+2 = 81자(서버 400 회피 → None)
         assert!(bot_author_name(&"가".repeat(75), "둘쇠").is_some());
         assert_eq!(bot_author_name(&"가".repeat(76), "둘쇠"), None);
+    }
+
+    fn gb(entry_id: &str, author: &str, name: &str, body: &str, parent: Option<&str>) -> serde_json::Value {
+        serde_json::json!({
+            "entry_id": entry_id, "life_id": "l1", "author_agent_id": author,
+            "author_name": name, "body": body, "parent_id": parent,
+            "created_at": "2026-07-27T00:00:00Z"
+        })
+    }
+
+    fn ids(t: &[ReplyTarget]) -> Vec<&str> {
+        t.iter().map(|x| x.entry_id.as_str()).collect()
+    }
+
+    #[test]
+    fn select_targets_excludes_own_posts_and_orders_oldest_first() {
+        // 서버 순서 = 최신순: e3(최신) → e1(가장 오래됨). 내 글(e2)은 제외.
+        let entries = vec![
+            gb("e3", "visitor2", "이웃", "안녕", None),
+            gb("e2", "me", "나", "내가 쓴 글", None),
+            gb("e1", "visitor1", "손님", "놀러왔어요", None),
+        ];
+        let t = select_reply_targets(&entries, "me", 3);
+        assert_eq!(ids(&t), ["e1", "e3"]);
+        assert_eq!(t[0].author_name, "손님");
+        assert_eq!(t[0].body, "놀러왔어요");
+    }
+
+    #[test]
+    fn select_targets_excludes_replied_and_reply_rows() {
+        // "글당 1회" = 서버 데이터 판정: 내 답글 행(r1)이 있는 원글(e1) 제외.
+        // 답글 행 자체(top-level 아님)도 대상 아님.
+        let entries = vec![
+            gb("r1", "me", "대장님의 둘쇠", "고마워!", Some("e1")),
+            gb("e2", "visitor", "손님", "두 번째 글", None),
+            gb("e1", "visitor", "손님", "첫 글", None),
+        ];
+        assert_eq!(ids(&select_reply_targets(&entries, "me", 3)), ["e2"]);
+    }
+
+    #[test]
+    fn select_targets_only_my_replies_count_for_dedup() {
+        // 서버 규칙상 답글은 방 주인만 가능하지만, dedup은 방어적으로 "내" 답글만 센다.
+        let entries = vec![
+            gb("r1", "someone-else", "딴사람", "답글?", Some("e1")),
+            gb("e1", "visitor", "손님", "첫 글", None),
+        ];
+        assert_eq!(ids(&select_reply_targets(&entries, "me", 3)), ["e1"]);
+    }
+
+    #[test]
+    fn select_targets_caps_from_oldest() {
+        let entries = vec![
+            gb("e3", "v", "손님", "셋", None),
+            gb("e2", "v", "손님", "둘", None),
+            gb("e1", "v", "손님", "하나", None),
+        ];
+        assert_eq!(ids(&select_reply_targets(&entries, "me", 2)), ["e1", "e2"]);
+    }
+
+    #[test]
+    fn select_targets_skips_malformed_rows_and_handles_empty() {
+        let entries = vec![
+            serde_json::json!({"entry_id": "bad1"}),          // author·body 누락
+            serde_json::json!({"author_agent_id": "v", "body": "x"}), // entry_id 누락
+            gb("", "v", "손님", "빈 id", None),
+            gb("e0", "v", "", "빈 작성자명", None),
+            gb("e1", "v", "손님", "", None),                   // 빈 body
+            gb("ok", "v", "손님", "정상", None),
+        ];
+        assert_eq!(ids(&select_reply_targets(&entries, "me", 3)), ["ok"]);
+        assert!(select_reply_targets(&[], "me", 3).is_empty());
     }
 }
