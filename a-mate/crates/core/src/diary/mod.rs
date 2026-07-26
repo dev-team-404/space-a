@@ -1094,7 +1094,8 @@ fn idle_palette_spotlight(date: &str, honorific: &str) -> String {
 /// 무활동일 일기 시스템 프롬프트 — 작업 사실 없이 마스코트의 자유 시간을 능청스러운 상상 일기로.
 pub fn build_idle_prompt(cfg: &DiaryConfig, idle: &IdleContext, memories: &[String]) -> String {
     let spotlight = idle_palette_spotlight(&idle.date, &cfg.honorific);
-    let mbti_voice = crate::mascot::mbti_voice_hint(cfg.mbti.as_deref());
+    // idle은 사실 없이 자유롭게 지어내는 채널 — T 성향의 '사실·수치 근거' 조항은 여기서 모순이므로 톤 전용 변형.
+    let mbti_voice = crate::mascot::mbti_voice_hint_style_only(cfg.mbti.as_deref());
     // 공휴일이면 '주인이 안 온 날'로 열지 않는다 — '다 같이 쉬는 날'로 연다(평일 idle 프레이밍 방지).
     let opening = if idle.is_holiday {
         format!("오늘은 다들 쉬는 공휴일 — {honorific}도 안 보이고, 나(마스코트)의 느긋한 자유 시간입니다.", honorific = cfg.honorific)

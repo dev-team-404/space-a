@@ -66,13 +66,26 @@ pub const DEFAULT_OWNER_TITLE: &str = "주인";
 /// MBTI 4축 → 마스코트 발화 톤 지침. 유효 MBTI가 아니면 빈 문자열(기존 페르소나 유지).
 /// 기본 페르소나(1인칭·능청) 위에 성향 색을 얹는 용도 — 일기·한마디·잡담·채팅·코칭 공용.
 pub fn mbti_voice_hint(mbti: Option<&str>) -> String {
+    mbti_voice_hint_impl(mbti, true)
+}
+
+/// idle(상상 일기)처럼 사실 근거가 오히려 방해되는 채널용 — T 성향의 '사실·수치 근거' 조항을
+/// 뺀 톤 전용 변형. idle 프롬프트는 사실 없이 자유롭게 지어내라 지시하므로 그 조항과 충돌한다.
+pub fn mbti_voice_hint_style_only(mbti: Option<&str>) -> String {
+    mbti_voice_hint_impl(mbti, false)
+}
+
+fn mbti_voice_hint_impl(mbti: Option<&str>, t_fact_grounding: bool) -> String {
     let Some(m) = mbti.and_then(normalize_mbti) else {
         return String::new();
     };
     let b = m.as_bytes();
     let ei = if b[0] == b'E' { "말은 활기차게, 감탄사·리액션을 곁들여" } else { "말은 차분하고 사색적으로, 담백하게 절제해" };
     let sn = if b[1] == b'S' { "구체적인 사실과 디테일 위주로" } else { "비유와 큰 그림, 아이디어를 곁들여" };
-    let tf = if b[2] == b'T' { "감정 완충은 최소로 사실·수치에 근거해 냉정하고 직설적으로" } else { "공감과 따뜻함을 담아 관계 중심으로" };
+    let tf = if b[2] == b'T' {
+        if t_fact_grounding { "감정 완충은 최소로 사실·수치에 근거해 냉정하고 직설적으로" }
+        else { "감정 완충은 최소로 냉정하고 직설적으로" }
+    } else { "공감과 따뜻함을 담아 관계 중심으로" };
     let jp = if b[3] == b'J' { "정돈된 결론 중심으로" } else { "유연하고 개방적으로 여지를 남기며" };
     format!(
         " 성향({m}) 반영: {tf} 말하되, {ei}, {sn}, {jp} 표현하세요. \
@@ -123,13 +136,17 @@ pub fn static_daily_line() -> &'static str {
 }
 
 /// 사실 지문 — 이 값이 바뀌었거나 캐시가 없을 때만 한마디를 재생성한다 (스펙 §2·§3).
+/// 사실(세션·토큰·findings)뿐 아니라 페르소나(호칭·MBTI)도 포함한다 — 프롬프트가 이 둘을
+/// 소비하므로, 활동이 그대로여도 호칭/MBTI가 바뀌면 재생성되어야 stale 대사를 막는다.
 pub fn facts_fingerprint(ctx: &crate::chat::ChatContext) -> String {
     format!(
-        "{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}",
         ctx.session_count,
         ctx.tok_input,
         ctx.tok_output,
-        ctx.findings.len()
+        ctx.findings.len(),
+        ctx.honorific,
+        ctx.mbti.as_deref().unwrap_or("")
     )
 }
 
@@ -421,6 +438,17 @@ mod tests {
         assert!(f.contains("공감") || f.contains("따뜻"));  // F
         assert!(f.contains("활기") || f.contains("감탄"));  // E
     }
+
+    #[test]
+    fn style_only_hint_drops_t_fact_grounding_keeps_tone() {
+        assert_eq!(mbti_voice_hint_style_only(None), "");
+        // fact 채널용(기본)은 T 성향의 사실·수치 근거 조항을 유지
+        assert!(mbti_voice_hint(Some("INTJ")).contains("사실·수치"));
+        // idle용 style-only는 T 톤(냉정·직설)은 유지하되 사실 근거 조항은 뺀다
+        let style = mbti_voice_hint_style_only(Some("INTJ"));
+        assert!(style.contains("냉정") && style.contains("직설"));
+        assert!(!style.contains("사실·수치"));
+    }
 }
 
 #[cfg(test)]
@@ -452,12 +480,19 @@ mod daily_line_tests {
 
     #[test]
     fn fingerprint_reflects_facts_and_is_stable() {
-        assert_eq!(facts_fingerprint(&ctx(3, 100, 200, 1)), "3|100|200|1");
+        assert_eq!(facts_fingerprint(&ctx(3, 100, 200, 1)), "3|100|200|1|주인|");
         // 같은 사실 → 같은 fp
         assert_eq!(facts_fingerprint(&ctx(3, 100, 200, 1)), facts_fingerprint(&ctx(3, 100, 200, 1)));
         // 세션 수 / findings 수가 바뀌면 fp 달라짐
         assert_ne!(facts_fingerprint(&ctx(3, 100, 200, 1)), facts_fingerprint(&ctx(4, 100, 200, 1)));
         assert_ne!(facts_fingerprint(&ctx(3, 100, 200, 1)), facts_fingerprint(&ctx(3, 100, 200, 2)));
+        // 페르소나(호칭·MBTI)가 바뀌면 활동 불변이어도 fp 달라짐 — stale 대사 방지
+        let mut h = ctx(3, 100, 200, 1);
+        h.honorific = "대장".into();
+        assert_ne!(facts_fingerprint(&ctx(3, 100, 200, 1)), facts_fingerprint(&h));
+        let mut m = ctx(3, 100, 200, 1);
+        m.mbti = Some("INTJ".into());
+        assert_ne!(facts_fingerprint(&ctx(3, 100, 200, 1)), facts_fingerprint(&m));
     }
 
     #[test]
@@ -490,7 +525,7 @@ mod daily_line_tests {
         let out = compute_daily_line(&eng, &ctx(3, 100, 200, 1), None).unwrap();
         assert_eq!(
             out,
-            Some(("오늘 주인이 나를 꽤 굴렸다".to_string(), "3|100|200|1".to_string()))
+            Some(("오늘 주인이 나를 꽤 굴렸다".to_string(), "3|100|200|1|주인|".to_string()))
         );
     }
 
@@ -508,7 +543,7 @@ mod daily_line_tests {
         // (idle-fp로 저장된 text는 항상 정적 문구이므로 skip해도 캐시 상태 동일)
         let eng = MockEngine { canned: "안 나와야 함".into() };
         let c = ctx(0, 0, 0, 2);
-        let fp = facts_fingerprint(&c); // "0|0|0|2"
+        let fp = facts_fingerprint(&c); // "0|0|0|2|주인|"
         assert_eq!(compute_daily_line(&eng, &c, Some(&fp)).unwrap(), None);
     }
 
@@ -517,7 +552,7 @@ mod daily_line_tests {
         // LLM이 앞뒤 공백·감싼 따옴표를 붙여 반환해도 정제 — UI 이중 따옴표 방지.
         let eng = MockEngine { canned: "  \"오늘 좀 굴렀다\"  ".into() };
         let out = compute_daily_line(&eng, &ctx(3, 100, 200, 1), None).unwrap();
-        assert_eq!(out, Some(("오늘 좀 굴렀다".to_string(), "3|100|200|1".to_string())));
+        assert_eq!(out, Some(("오늘 좀 굴렀다".to_string(), "3|100|200|1|주인|".to_string())));
     }
 
     #[test]
@@ -527,7 +562,7 @@ mod daily_line_tests {
         let out = compute_daily_line(&eng, &ctx(0, 0, 0, 2), None).unwrap();
         assert_eq!(
             out,
-            Some(("오늘은 널널하네. 근데 좀 심심;;;".to_string(), "0|0|0|2".to_string()))
+            Some(("오늘은 널널하네. 근데 좀 심심;;;".to_string(), "0|0|0|2|주인|".to_string()))
         );
     }
 }
@@ -655,7 +690,7 @@ mod chatter_tests {
                     "커밋은 자주".to_string(),
                     "토큰 아낀 날".to_string(),
                 ],
-                "3|100|200|1".to_string()
+                "3|100|200|1|주인|".to_string()
             ))
         );
     }
@@ -673,7 +708,7 @@ mod chatter_tests {
         // 활동 0건 → 엔진 미호출·빈 풀 캐시 (canned가 파싱돼 나오면 엔진이 불렸다는 뜻이라 실패)
         let eng = MockEngine { canned: "엔진이 불렸다면 이게 나온다".into() };
         let out = compute_chatter_pool(&eng, &ctx(0, 0, 0, 2), &Default::default(), None).unwrap();
-        assert_eq!(out, Some((Vec::new(), "0|0|0|2".to_string())));
+        assert_eq!(out, Some((Vec::new(), "0|0|0|2|주인|".to_string())));
     }
 
     #[test]
@@ -681,6 +716,6 @@ mod chatter_tests {
         // 전부 파싱 실패 → 빈 풀 + fp 캐시 (다음 스캔까지 재시도 안 함, 프론트는 정적 폴백)
         let eng = MockEngine { canned: "  \n\n".into() };
         let out = compute_chatter_pool(&eng, &ctx(3, 100, 200, 1), &Default::default(), None).unwrap();
-        assert_eq!(out, Some((Vec::new(), "3|100|200|1".to_string())));
+        assert_eq!(out, Some((Vec::new(), "3|100|200|1|주인|".to_string())));
     }
 }
