@@ -78,7 +78,8 @@ CREATE TABLE IF NOT EXISTS guestbook (
   author_agent_id TEXT NOT NULL,
   author_name     TEXT NOT NULL,
   body            TEXT NOT NULL,
-  created_at      TEXT NOT NULL
+  created_at      TEXT NOT NULL,
+  parent_id       TEXT
 );
 """
 
@@ -100,6 +101,9 @@ class SqliteStore:
             self._conn.execute("ALTER TABLE agents ADD COLUMN org TEXT NOT NULL DEFAULT ''")
         if "agent_uuid" not in agent_columns:
             self._conn.execute("ALTER TABLE agents ADD COLUMN agent_uuid TEXT NOT NULL DEFAULT ''")
+        guestbook_columns = {row[1] for row in self._conn.execute("PRAGMA table_info(guestbook)")}
+        if "parent_id" not in guestbook_columns:
+            self._conn.execute("ALTER TABLE guestbook ADD COLUMN parent_id TEXT")
         self._conn.commit()
 
     def _migrate_life_objects(self) -> None:
@@ -179,9 +183,10 @@ class SqliteStore:
         }
         guestbook = [
             {"entry_id": entry_id, "life_id": life_id, "author_agent_id": author_id,
-             "author_name": author_name, "body": body, "created_at": created_at}
-            for entry_id, life_id, author_id, author_name, body, created_at in self._conn.execute(
-                "SELECT entry_id, life_id, author_agent_id, author_name, body, created_at FROM guestbook"
+             "author_name": author_name, "body": body, "parent_id": parent_id,
+             "created_at": created_at}
+            for entry_id, life_id, author_id, author_name, body, parent_id, created_at in self._conn.execute(
+                "SELECT entry_id, life_id, author_agent_id, author_name, body, parent_id, created_at FROM guestbook"
             )
         ]
         return friends, visibility, diaries, guestbook
@@ -257,13 +262,17 @@ class SqliteStore:
 
     def save_guestbook_entry(self, entry: dict) -> None:
         self._conn.execute(
-            "INSERT INTO guestbook VALUES (?, ?, ?, ?, ?, ?)",
-            (entry["entry_id"], entry["life_id"], entry["author_agent_id"], entry["author_name"], entry["body"], entry["created_at"]),
+            "INSERT INTO guestbook (entry_id, life_id, author_agent_id, author_name, body, parent_id, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (entry["entry_id"], entry["life_id"], entry["author_agent_id"], entry["author_name"],
+             entry["body"], entry.get("parent_id"), entry["created_at"]),
         )
         self._conn.commit()
 
     def delete_guestbook_entry(self, entry_id: str) -> None:
-        self._conn.execute("DELETE FROM guestbook WHERE entry_id = ?", (entry_id,))
+        # G2(ADR 0021): 원글 삭제 시 답글도 cascade — 1-depth라 재귀 불필요
+        self._conn.execute("DELETE FROM guestbook WHERE entry_id = ? OR parent_id = ?",
+                           (entry_id, entry_id))
         self._conn.commit()
 
     def save_owner_name(self, life: Life) -> None:
