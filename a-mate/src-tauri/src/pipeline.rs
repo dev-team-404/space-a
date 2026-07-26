@@ -881,6 +881,23 @@ mod runtime {
                     continue;
                 }
             };
+            // 생성(수 초~수십 초) 동안 주인이 수동 답글을 달았거나 원글이 지워졌을 수 있다 —
+            // 게시 직전 재조회로 재확인 (Codex 리뷰: TOCTOU 중복 답글. 서버는 ADR 0021대로
+            // 원글당 답글 무제한이라 "글당 1회"는 여기서 지킨다). 재확인 실패 시 보수적으로 skip.
+            let still_target = match client.guestbook(&life_id) {
+                Ok(v) => {
+                    let fresh = v.get("entries").and_then(|e| e.as_array()).cloned().unwrap_or_default();
+                    agent_mentor::mascot::select_reply_targets(&fresh, &agent_id, usize::MAX)
+                        .iter().any(|x| x.entry_id == t.entry_id)
+                }
+                Err(e) => {
+                    log::warn!("방명록 자동 답글: 게시 전 재확인 실패(entry {}): {e}", t.entry_id);
+                    false
+                }
+            };
+            if !still_target {
+                continue;
+            }
             match client.add_guestbook(&life_id, &reply, author.as_deref(), Some(&t.entry_id)) {
                 Ok(resp) => {
                     let echoed = resp.get("parent_id").and_then(|p| p.as_str())
