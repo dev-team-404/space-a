@@ -958,13 +958,13 @@ fn diary_length(commit_count: usize) -> (usize, &'static str) {
 }
 
 /// 일기용 메모리 섹션(비면 빈 문자열).
-fn memory_section(memories: &[String]) -> String {
+fn memory_section(memories: &[String], honorific: &str) -> String {
     let block = crate::memory::memory_block(memories);
     if block.is_empty() {
         String::new()
     } else {
         format!(
-            "\n\n[주인에 대해 기억한 것 — 관련되면 자연스럽게 녹이되, 억지로 넣거나 없는 사실을 지어내지 말 것]\n{block}"
+            "\n\n[{honorific}에 대해 기억한 것 — 관련되면 자연스럽게 녹이되, 억지로 넣거나 없는 사실을 지어내지 말 것]\n{block}"
         )
     }
 }
@@ -1030,7 +1030,7 @@ pub fn build_system_prompt(cfg: &DiaryConfig, commit_count: usize, memories: &[S
         mbti_voice = mbti_voice,
         target = target,
         paras = paras,
-        mem = memory_section(memories),
+        mem = memory_section(memories, &cfg.honorific),
     )
 }
 
@@ -1108,14 +1108,14 @@ pub fn build_idle_prompt(cfg: &DiaryConfig, idle: &IdleContext, memories: &[Stri
          (예시일 뿐 — 매번 똑같이 쓰지 말고 오늘만의 장면을 하나 골라 구체적으로.) \
          `recent_diaries`는 최근 조용한 날들에 내가 쓴 일기입니다. 거기서 이미 쓴 소재·장면·표현은 되풀이하지 말고 오늘은 다른 이야기로 쓰세요. \
          `occasions`에 명절·기념일·공휴일이 있으면 각 `mood`에 맞춰(‘solemn’이면 조용·담백하게 추모하듯, ‘family’면 이웃 에이전트와 명절 정취, ‘festive’면 즐겁게) 분위기를 살리세요. \
-         `days_idle`(며칠째 조용한지)·`is_weekend`도 살려 {honorific}의 안부를 슬쩍 궁금해하세요('그나저나 주인 잘 노나?'). \
+         `days_idle`(며칠째 조용한지)·`is_weekend`도 살려 {honorific}의 안부를 슬쩍 궁금해하세요('그나저나 {honorific} 잘 노나?'). \
          짧게 — 1~2문장(특별한 날은 2~3문장까지), 한 문단. 이모지는 0~1개. 그날 컨텍스트로 매번 다르게.{mem}",
         honorific = cfg.honorific,
         opening = opening,
         voice = voice_guidance(),
         mbti_voice = mbti_voice,
         spotlight = spotlight,
-        mem = memory_section(memories),
+        mem = memory_section(memories, &cfg.honorific),
     )
 }
 
@@ -2427,5 +2427,22 @@ mod tests {
         };
         let p = build_idle_prompt(&cfg, &idle, &[]);
         assert!(p.contains("냉정")); // T 성향 톤이 idle 프롬프트에도
+    }
+
+    #[test]
+    fn diary_system_prompt_memory_header_uses_custom_honorific() {
+        let cfg = DiaryConfig { honorific: "대장".into(), ..DiaryConfig::default() };
+        let mems = vec!["주인은 비건임".to_string()];
+        let p = build_system_prompt(&cfg, 5, &mems);
+        assert!(p.contains("[대장에 대해"));
+        assert!(!p.contains("[주인에 대해"));
+    }
+
+    #[test]
+    fn diary_system_prompt_injects_mbti_voice() {
+        let mut cfg = DiaryConfig::default();
+        cfg.mbti = Some("INTJ".into());
+        let p = build_system_prompt(&cfg, 5, &[]);
+        assert!(p.contains("냉정")); // T 성향 톤이 일기 본문 프롬프트에도
     }
 }

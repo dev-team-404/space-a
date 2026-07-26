@@ -503,6 +503,17 @@ mod tests {
     }
 
     #[test]
+    fn coaching_prompt_uses_custom_honorific_and_mbti_voice() {
+        let mut brief = sample_brief();
+        brief.honorific = "대장".into();
+        brief.mbti = Some("INTJ".into());
+        let p = build_coaching_system_prompt(&brief);
+        assert!(p.contains("대장"));            // 커스텀 호칭
+        assert!(!p.contains("'주인'"));         // 기본 호칭 리터럴 부재
+        assert!(p.contains("냉정"));            // T 성향 톤
+    }
+
+    #[test]
     fn coaching_prompt_handles_empty_and_mastered() {
         let brief = CoachingBrief {
             user_name: "u".into(), week_sessions: 0, week_tok_input: 0, week_tok_output: 0,

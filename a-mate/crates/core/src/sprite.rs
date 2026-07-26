@@ -472,6 +472,11 @@ mod tests {
         for human in ["skin", "hair", "pants", "sneakers", "hoodie"] {
             assert!(!d1.contains(human), "인물 어휘 '{human}'가 남아있음: {d1}");
         }
+        // MBTI가 있어도 인물 어휘가 섞이면 안 된다.
+        let d3 = character_description(&spec, Some("INTJ"), id);
+        for human in ["skin", "hair", "pants", "sneakers", "hoodie"] {
+            assert!(!d3.contains(human), "MBTI 묘사에 인물 어휘 '{human}'가 남아있음: {d3}");
+        }
     }
 
     #[test]
