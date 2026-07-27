@@ -934,7 +934,8 @@ mod runtime {
         for t in &targets {
             let reply = match agent_mentor::mascot::compute_guestbook_reply(
                 &engine, &title, mbti.as_deref(), vibe,
-                agent_mentor::mascot::should_ask_about_bot(&t.entry_id), t)
+                // P3: 봇이 쓴 원글(author_kind=bot)엔 "방문자의 봇 안부" 질문이 어색 — 억제
+                agent_mentor::mascot::should_ask_about_bot(&t.entry_id) && !t.author_is_bot, t)
             {
                 Ok(r) => r,
                 Err(e) => {
