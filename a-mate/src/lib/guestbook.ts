@@ -22,3 +22,8 @@ export function groupGuestbook(entries: GuestbookEntry[]): GuestbookThread[] {
 export function showOwnerAvatar(entry: GuestbookEntry, meId: string, isOwner: boolean): boolean {
   return isOwner && entry.author_agent_id === meId;
 }
+
+/** P3 — 방문 시 봇 방명록 토글. 기본 on: 'false'로 저장된 경우에만 off (Rust 글루와 동일 규칙). */
+export function visitGuestbookEnabled(settings: Record<string, string>): boolean {
+  return settings['visit_guestbook_enabled'] !== 'false';
+}

@@ -1,9 +1,10 @@
 <script lang="ts">
   import {
-    getDiary, lifeContentAccess, lifePeople, lifeSetContentVisibility,
-    lifeSetDiaryVisibility, lifeSetFriend, lifeView, listDiaryDates,
+    getDiary, getSettings, lifeContentAccess, lifePeople, lifeSetContentVisibility,
+    lifeSetDiaryVisibility, lifeSetFriend, lifeView, listDiaryDates, setSetting,
     type ContentVisibility, type LifePerson,
   } from '../../api';
+  import { visitGuestbookEnabled } from '../../guestbook';
   import { IDLE, err, type Status } from './status';
   import StatusLine from './StatusLine.svelte';
 
@@ -25,6 +26,15 @@
   load();
 
   async function toggle(person: LifePerson){ await lifeSetFriend(person.agent_id, !person.is_friend); await load(); }
+
+  // P3 — 방문 시 봇 방명록 토글 (기본 on, 판정 규칙은 guestbook.ts visitGuestbookEnabled)
+  let visitGuestbook = $state(true);
+  getSettings().then((s) => { visitGuestbook = visitGuestbookEnabled(s); });
+  async function toggleVisitGuestbook(){
+    visitGuestbook = !visitGuestbook;
+    try { await setSetting('visit_guestbook_enabled', visitGuestbook ? 'true' : 'false'); }
+    catch(e){ status = err(e); }
+  }
 
   async function setVisibility(next: ContentVisibility){
     sharing = true; status = IDLE;
@@ -64,9 +74,16 @@
   <StatusLine {status}/>
 </section>
 
+<section>
+  <h2>방문 방명록</h2>
+  <p class="hint">다른 사람 방에 놀러가면 마스코트가 방명록에 인사를 남깁니다. 같은 방엔 하루 한 번, 재방문은 이유(주말·한가함·오랜만)가 있을 때만 남겨요.</p>
+  <label class="vg"><span>방문 시 봇이 방명록 남기기</span><input type="checkbox" checked={visitGuestbook} onchange={toggleVisitGuestbook}/></label>
+</section>
+
 <style>
   .people{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:14px}
   .people label{display:flex;justify-content:space-between;padding:10px 12px;background:var(--cream);color:var(--cream-ink);border-radius:9px}
+  .vg{display:flex;justify-content:space-between;padding:10px 12px;background:var(--cream);color:var(--cream-ink);border-radius:9px;margin-top:14px}
   .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-top:10px}
   .seg button{border:0;border-right:1px solid var(--line);border-radius:0;background:transparent;color:var(--text);padding:7px 16px;cursor:pointer;font:inherit}
   .seg button:last-child{border-right:0}
