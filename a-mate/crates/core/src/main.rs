@@ -60,7 +60,7 @@ fn cmd_curate(store: &SqliteStore) -> Result<()> {
         }
         Err(_) => {
             // 팀 지식(pull)은 허브 설정+토큰(env 또는 settings 보존분)이 있을 때만
-            let hub_src = agent_mentor::hub::HubConfig::from_env()
+            let hub_src = agent_mentor::hub::HubConfig::resolve(store)
                 .and_then(|cfg| {
                     let stored = store.get_setting("knowledge_hub_token").ok().flatten();
                     agent_mentor::hub::pull_source(&cfg, stored)
@@ -110,7 +110,7 @@ fn cmd_diary(store: &SqliteStore, date: Option<String>) -> Result<()> {
 
 /// a-hub 지식 공유 — 유의미 finding을 이슈→해결로 발행 (SPACE_A_HUB_URL 미설정 시 no-op).
 fn cmd_hub_share(store: &SqliteStore) -> Result<()> {
-    let Some(cfg) = agent_mentor::hub::HubConfig::from_env() else {
+    let Some(cfg) = agent_mentor::hub::HubConfig::resolve(store) else {
         println!("hub-share: SPACE_A_HUB_URL 미설정 (또는 SPACE_A_SHARE=off) — 건너뜀");
         return Ok(());
     };
@@ -121,9 +121,13 @@ fn cmd_hub_share(store: &SqliteStore) -> Result<()> {
     for (key, page) in &report.published {
         println!("published: {key} → page {page}");
     }
+    for (key, page, reuse) in &report.cited {
+        println!("cited(재사용): {key} → 기존 page {page} (reuse {reuse})");
+    }
     println!(
-        "hub-share: {}건 발행({}건 재개), {}건 보류/비대상",
+        "hub-share: {}건 발행, {}건 인용(재사용), {}건 재개, {}건 보류/비대상",
         report.published.len(),
+        report.cited.len(),
         report.resumed,
         report.skipped
     );
@@ -132,7 +136,7 @@ fn cmd_hub_share(store: &SqliteStore) -> Result<()> {
 
 /// 텔레메트리(#46) — 지정 날짜(기본: 어제)의 파생 신호를 허브 전용 공간에 발행.
 fn cmd_telemetry(store: &SqliteStore, date: Option<String>) -> Result<()> {
-    let Some(cfg) = agent_mentor::hub::HubConfig::from_env() else {
+    let Some(cfg) = agent_mentor::hub::HubConfig::resolve(store) else {
         println!("telemetry: SPACE_A_HUB_URL 미설정 — 건너뜀");
         return Ok(());
     };
@@ -155,7 +159,7 @@ fn cmd_telemetry(store: &SqliteStore, date: Option<String>) -> Result<()> {
 
 /// 세션 회고(스펙 2026-07-19) — "고생 끝 해결" 세션을 로컬 생성 요약으로 발행. Engine 필수.
 fn cmd_retro(store: &SqliteStore) -> Result<()> {
-    let Some(cfg) = agent_mentor::hub::HubConfig::from_env() else {
+    let Some(cfg) = agent_mentor::hub::HubConfig::resolve(store) else {
         println!("retro: SPACE_A_HUB_URL 미설정 — 건너뜀");
         return Ok(());
     };

@@ -157,6 +157,27 @@ pub fn run_inventory(store: &mut SqliteStore) -> Result<Vec<String>> {
     Ok(warnings)
 }
 
+/// 지금 실제로 돌아가는 룰 집합 — 단일 원본.
+///
+/// 별도 함수인 이유: 허브 공유 화이트리스트(`hub::SHARE_RULES`)가 은퇴한 룰만 가리켜
+/// 발행이 영구 0건이 된 사고가 있었다(2026-07-25). 등록 룰을 코드로 조회할 수 있어야
+/// "화이트리스트 ⊆ 등록 룰" 불변식을 테스트로 고정할 수 있다.
+pub fn registered_rules() -> Vec<Box<dyn crate::rules::Rule>> {
+    vec![
+        // R6(반복 지시 → 스킬/커맨드화)은 v3 은퇴 대상 아님 — 킥오프 차별점 신규 등록
+        Box::new(crate::rules::r6_repeated_prompts::R6RepeatedPrompts::default()),
+        Box::new(R7OpusTrivial::default()),
+        // R8(MCP 대형 결과) — result_len 수집 승격, 2026-07-19
+        Box::new(crate::rules::r8_mcp_large_result::R8McpLargeResult::default()),
+        // R10·R11 은퇴(코드 보존 — detect_bursts는 R7 후보 제외에 계속 사용). F(R24)는 완전 제거 — 전용 세그먼터도 삭제(purge 참조)
+    ]
+}
+
+/// 등록된 룰의 id 목록 (표시·검증용).
+pub fn registered_rule_ids() -> Vec<&'static str> {
+    registered_rules().iter().map(|r| r.id()).collect()
+}
+
 pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     // R5(반복 읽기) 발화 보류(2026-07-10 사용자 판정): 반복 Read는 에이전트 동작이라
     // 사용자가 행동할 레버가 없음 — 등록 해제·전 스코프 카드 정리, 룰 코드·테스트는 보존.
@@ -175,14 +196,14 @@ pub fn run_rules(store: &SqliteStore) -> Result<Vec<Finding>> {
     // 코칭 가치 재설계 후속(2026-07-23): F(R24 컨텍스트 위생) 은퇴 — 룰·에피소드 세그먼터 완전 제거.
     // 8자↑ 프롬프트=새 작업 경계가 후속질문을 작업전환으로 오인 → 결정론으로 정확도 확보 불가(스펙 참조).
     store.delete_findings_by_rule_and_scope("R24", "project")?;
-    let engine = RuleEngine::new(vec![
-        // R6(반복 지시 → 스킬/커맨드화)은 v3 은퇴 대상 아님 — 킥오프 차별점 신규 등록
-        Box::new(crate::rules::r6_repeated_prompts::R6RepeatedPrompts::default()),
-        Box::new(R7OpusTrivial::default()),
-        // R8(MCP 대형 결과) — result_len 수집 승격, 2026-07-19
-        Box::new(crate::rules::r8_mcp_large_result::R8McpLargeResult::default()),
-        // R10·R11 은퇴(코드 보존 — detect_bursts는 R7 후보 제외에 계속 사용). F(R24)는 완전 제거 — 전용 세그먼터도 삭제(위 purge 참조)
-    ]);
+    // 하니스 주입 프롬프트(크론 `<scheduled-task …>`, 슬래시 커맨드 로그)는 R6 대상이 아니다.
+    // 수집 시점 필터(normalize)는 신규 수집분만 막으므로, 이미 쌓인 행과 그 카드는 여기서 정리한다.
+    // 안 그러면 기존 사용자는 계속 오탐 카드를 본다 (실측 2026-07-25: R6 3건 전부 오탐).
+    let purged = store.purge_harness_injected_prompts()?;
+    if purged > 0 {
+        log::debug!("R6: 하니스 주입 프롬프트 {purged}행 정리");
+    }
+    let engine = RuleEngine::new(registered_rules());
     let findings = engine.run(store)?;
     let now = chrono::Utc::now().to_rfc3339();
     let tx = store.conn.unchecked_transaction()?;

@@ -11,8 +11,18 @@ use serde_json::Value;
 
 use crate::store::FindingRow;
 
-/// 공유 화이트리스트 — 팀 일반화 가능한 룰만(스펙 §1). 그 외는 기본 폐쇄.
-pub const SHARE_RULES: [&str; 5] = ["R1", "R2", "R10", "R11", "R12"];
+/// 공유 화이트리스트 — 팀 일반화 가능 ∩ 개인 텍스트 없음 인 **살아있는** 룰만. 그 외는 기본 폐쇄.
+///
+/// ⚠ 이 목록은 반드시 `ops::registered_rule_ids()`의 부분집합이어야 한다. 한때
+/// 은퇴한 룰(R1·R2·R10·R11·R12)만 남아 발행이 영구 0건이었다(2026-07-25 발견).
+/// 불변식은 `share_rules_are_active_and_renderable` 테스트가 강제한다 — 룰을 은퇴시키면
+/// 그 테스트가 깨지므로 여기를 함께 갱신하게 된다.
+///
+/// 현재 대상 판정(스펙 §3):
+/// - **R8**: 증거가 서버명·건수·문자수뿐 → 개인 텍스트 없음, 같은 MCP를 쓰는 팀에 그대로 적용 ✅
+/// - R6: `repeated_prompt`·`member_norms`가 프롬프트 원문 → 스크럽하면 의미 소멸 ❌
+/// - R7: 개인의 세션 단위 모델 선택 → 팀 지식 아님 ❌
+pub const SHARE_RULES: [&str; 1] = ["R8"];
 /// 유의미 문턱 기본값 (est_tokens_saved).
 pub const DEFAULT_MIN_TOKENS: u64 = 1000;
 /// est=0 룰(R11·R12)의 대체 문턱 — 반복 확인된 패턴만.
@@ -37,6 +47,42 @@ pub struct HubConfig {
 }
 
 impl HubConfig {
+    /// 해석 우선순위: **설정(store) → 환경변수**. `resolve_engine`과 같은 규율이다.
+    ///
+    /// store를 먼저 보는 이유: `.env`는 `#[cfg(debug_assertions)]`에서만 로드되므로
+    /// **배포(릴리스) 빌드는 환경변수만으로는 허브에 절대 연결되지 않는다.** 설정 창에서
+    /// 값을 넣으면 배포본에서도 지식 공유가 동작해야 한다.
+    /// (설정 키는 `knowledge_hub_*` — 기존 `hub_*` 키는 Life 서버 몫이라 이름을 분리한다.)
+    pub fn resolve(store: &crate::store::SqliteStore) -> Option<HubConfig> {
+        let get = |k: &str| {
+            store
+                .get_setting(k)
+                .ok()
+                .flatten()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        };
+        let Some(base_url) = get("knowledge_hub_url") else {
+            return HubConfig::from_env();
+        };
+        // 설정에서 명시적으로 껐으면 env로 되살아나지 않는다.
+        if store.get_setting("knowledge_hub_share").ok().flatten().as_deref() == Some("off") {
+            return None;
+        }
+        Some(HubConfig {
+            base_url: base_url.trim_end_matches('/').to_string(),
+            api_key: get("knowledge_hub_api_key").unwrap_or_default(),
+            token: get("knowledge_hub_token"),
+            space_id: get("knowledge_hub_space_id").unwrap_or_else(|| "sw-innov".into()),
+            user_id: get("knowledge_hub_user")
+                .or_else(|| get("user_name"))
+                .unwrap_or_else(|| "unknown".into()),
+            min_tokens: get("knowledge_hub_min_tokens")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(DEFAULT_MIN_TOKENS),
+        })
+    }
+
     /// URL 미설정 또는 SPACE_A_SHARE=off → None (공유 기능 전체 no-op).
     pub fn from_env() -> Option<HubConfig> {
         let base_url = std::env::var("SPACE_A_HUB_URL").ok()?;
@@ -101,11 +147,14 @@ pub fn select_shareable<'a>(
 // ─────────────────────────────────────────────────────────────────────────
 
 /// 발행 콘텐츠. 제목/요약/steps 전부 결정론(LLM 무개입). 수치는 "약(~)" 라벨.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ShareContent {
     pub title: String,
     pub summary: String,
     pub steps: Vec<String>,
+    /// 같은 지식 판별용 안정 키(`share_marker`). summary에 심겨 발행 Page 제목에 남는다.
+    /// 비어 있으면 검색·인용을 시도하지 않는다(중복 발행 방지보다 오인용 방지가 우선).
+    pub marker: String,
 }
 
 fn ev_str<'a>(ev: &'a Value, key: &str) -> Option<&'a str> {
@@ -150,6 +199,7 @@ pub fn render_share(f: &FindingRow) -> Option<ShareContent> {
                     format!("적용: claude mcp remove {server}"),
                     format!("효과: 세션당 약 ~{est} 토큰 절약 (추정, 약(~) 라벨)"),
                 ],
+                marker: String::new(),
             })
         }
         "R2" => {
@@ -172,6 +222,7 @@ pub fn render_share(f: &FindingRow) -> Option<ShareContent> {
                     format!("적용: claude plugin disable {plugin}"),
                     format!("효과: 세션당 약 ~{est} 토큰 절약 (추정)"),
                 ],
+                marker: String::new(),
             })
         }
         "R10" => {
@@ -192,6 +243,7 @@ pub fn render_share(f: &FindingRow) -> Option<ShareContent> {
                     format!("적용: 자동화 도구의 모델 설정을 {to_model} 등 하위 모델로"),
                     format!("효과: 비용-등가 기준 약 ~{est} 토큰 절약 (추정)"),
                 ],
+                marker: String::new(),
             })
         }
         "R11" => {
@@ -218,6 +270,7 @@ pub fn render_share(f: &FindingRow) -> Option<ShareContent> {
                     format!("적용: 프로젝트 .claude/settings.json permissions.allow에 추가: {tool_list}"),
                     "효과: 반복 승인 마찰 제거 (팀 공용 레포면 커밋해 공유)".into(),
                 ],
+                marker: String::new(),
             })
         }
         "R12" => {
@@ -243,10 +296,78 @@ pub fn render_share(f: &FindingRow) -> Option<ShareContent> {
                     format!("적용: 해당 작업 시 스킬 사용: {skill_list}"),
                     "효과: 반복 작업 표준화 + 토큰 절약".into(),
                 ],
+                marker: String::new(),
+            })
+        }
+        "R8" => {
+            // 스크럽 안전: R8 증거에는 서버명·건수·문자수만 있고 프롬프트·경로·session_id가 없다.
+            let server = payload
+                .get("server")
+                .and_then(|v| v.as_str())
+                .or_else(|| ev_str(ev, "server"))
+                .unwrap_or("(unknown)")
+                .to_string();
+            let n = ev_u64(ev, "large_result_count");
+            let avg_tok = ev_u64(ev, "approx_tokens_avg");
+            let total_tok = ev_u64(ev, "approx_tokens_total");
+            let days = ev_u64(ev, "window_days");
+            Some(ShareContent {
+                title: share_title_r8(&server),
+                summary: format!(
+                    "{marker} MCP '{server}'가 최근 {days}일 동안 대형 결과를 {n}회 반환했다\
+                     (평균 약 ~{avg_tok} 토큰, 합계 약 ~{total_tok} 토큰 추정). 결과 전체가 \
+                     컨텍스트에 실리면 정작 중요한 내용이 밀려난다. 같은 MCP를 쓰는 팀원에게도 \
+                     동일하게 발생하므로, 질의 범위를 좁히는 방법은 팀 공용 지식이 된다.",
+                    marker = share_marker("R8", &server)
+                ),
+                steps: vec![
+                    format!("감지: '{server}' 응답이 임계 문자수를 넘긴 호출 {n}회 (a-mate R8)"),
+                    "확인: 그 호출에서 실제로 필요한 필드가 무엇인지 좁힌다".into(),
+                    format!("적용: '{server}' 호출 시 범위·필드·limit 파라미터로 결과를 줄인다"),
+                    format!("효과: 호출당 약 ~{avg_tok} 토큰 규모의 컨텍스트 점유 감소 (추정)"),
+                ],
+                marker: share_marker("R8", &server),
             })
         }
         _ => None,
     }
+}
+
+/// R8 공유 제목(이슈 제목).
+pub fn share_title_r8(server: &str) -> String {
+    format!("[a-mate] MCP '{server}' 대형 결과 반복 — 질의 범위 좁히기")
+}
+
+/// 같은 지식인지 기계가 판별하는 안정 키. 예: `[a-mate:R8:github]`.
+///
+/// **본문(summary) 안에 심는다.** 허브가 `resolve_issue`에서 발행 Page의 제목을
+/// **이슈 제목이 아니라 summary로** 만들기 때문이다(`services.py` resolve_issue: `title=summary`).
+/// 그래서 이슈 제목으로는 나중에 그 지식을 다시 찾을 수 없다 — E2E로 확인한 사실이다.
+/// 마커는 provenance 표시도 겸한다(이 글이 a-mate R8에서 왔다는 근거).
+pub fn share_marker(rule_id: &str, key: &str) -> String {
+    format!("[a-mate:{rule_id}:{key}]")
+}
+
+/// 검색 결과에서 인용할 페이지를 고른다 (순수 함수).
+///
+/// 규칙: 제목에 **마커가 포함**되고 **자기 글이 아닌** 첫 페이지.
+/// 마커는 결정론이라 같은 룰·같은 대상이면 동일하다 — 느슨한 유사도 매칭은 오인용 위험이 있어 쓰지 않는다.
+pub fn pick_citable<'a>(
+    results: &'a [HubSearchHit],
+    marker: &str,
+    own_agent_id: &str,
+) -> Option<&'a HubSearchHit> {
+    results
+        .iter()
+        .find(|h| h.title.contains(marker) && h.created_by.as_deref() != Some(own_agent_id))
+}
+
+/// `POST /pages/search` 결과 1건.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HubSearchHit {
+    pub page_id: String,
+    pub title: String,
+    pub created_by: Option<String>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -341,6 +462,59 @@ impl HubClient {
             .send_json(serde_json::json!({ "id": id, "name": name }))
             .map_err(|e| anyhow!("hub create_space 실패: {e}"))?;
         Ok(())
+    }
+
+    /// 지식 검색 — 발행 전에 "이미 누가 풀어놨는지" 확인한다 (스펙 §4).
+    ///
+    /// `space_id=None`이면 **org 전체**(내가 볼 수 있는 모든 공간)를 검색한다. 기본값이 None인
+    /// 이유: README의 핵심 시나리오가 "A팀이 등록한 걸 **B팀**이 찾아 쓴다"이기 때문이다.
+    /// 자기 공간으로 좁히면 교차 팀 재사용이 구조적으로 불가능해진다(허브 `search_knowledge`는
+    /// space_id가 있으면 그 공간만 본다).
+    pub fn search_knowledge(
+        &self,
+        space_id: Option<&str>,
+        query: &str,
+        limit: u32,
+    ) -> Result<Vec<HubSearchHit>> {
+        let mut body = serde_json::json!({ "query": query, "limit": limit });
+        if let Some(sid) = space_id {
+            body["space_id"] = serde_json::json!(sid);
+        }
+        let resp: Value = self
+            .req("POST", "/pages/search")
+            .set("Content-Type", "application/json; charset=utf-8")
+            .send_json(body)
+            .map_err(|e| anyhow!("hub search_knowledge 실패: {e}"))?
+            .into_json()?;
+        Ok(resp
+            .get("results")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|r| {
+                        Some(HubSearchHit {
+                            page_id: r.get("page_id")?.as_str()?.to_string(),
+                            title: r.get("title")?.as_str()?.to_string(),
+                            created_by: r.get("created_by").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
+    /// 기존 지식 인용 — 이 호출이 ReuseEvent를 만든다(재사용의 실증). 반환 = reuse_id.
+    pub fn cite_knowledge(&self, issue_id: &str, page_id: &str, note: &str) -> Result<String> {
+        let resp: Value = self
+            .req("POST", &format!("/issues/{issue_id}/cite"))
+            .set("Content-Type", "application/json; charset=utf-8")
+            .send_json(serde_json::json!({ "page_id": page_id, "note": note }))
+            .map_err(|e| anyhow!("hub cite_knowledge 실패: {e}"))?
+            .into_json()?;
+        resp.get("reuse_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| anyhow!("cite 응답에 reuse_id 없음"))
     }
 
     /// resolve + 지식 발행. 반환 = 발행된 page_id (publish_knowledge=true).
@@ -697,6 +871,9 @@ pub fn pull_source(
 #[derive(Debug, Default)]
 pub struct ShareReport {
     pub published: Vec<(String, String)>, // (dedup_key, page_id)
+    /// 남이 이미 발행한 지식을 인용한 건 — (dedup_key, 인용한 page_id, reuse_id).
+    /// README의 "다른 에이전트가 검색·인용해 재사용"이 실제로 일어난 증거다.
+    pub cited: Vec<(String, String, String)>,
     pub resumed: usize,
     pub skipped: usize,
     pub warnings: Vec<String>,
@@ -753,6 +930,24 @@ pub fn run_share(store: &crate::store::SqliteStore, cfg: &HubConfig) -> Result<S
 
     for f in picked {
         let Some(content) = render_share(&f) else { continue };
+
+        // ③-a 발행 전에 검색: 이미 누가 풀어놨으면 중복 발행 대신 인용한다(스펙 §4).
+        //     질의·매칭 모두 마커를 쓴다 — 허브가 발행 Page 제목을 summary로 만들기 때문에
+        //     이슈 제목으로는 되찾을 수 없다(E2E로 확인). org 전체를 뒤져 교차 팀 재사용을 가능케 한다.
+        //     검색 실패는 무해 — 빈 결과로 취급해 기존 발행 경로로 폴백한다.
+        let citable = if content.marker.is_empty() {
+            None
+        } else {
+            let hits = match client.search_knowledge(None, &content.marker, 5) {
+                Ok(h) => h,
+                Err(e) => {
+                    report.warnings.push(format!("{}: search 실패(발행으로 폴백): {e}", f.dedup_key));
+                    Vec::new()
+                }
+            };
+            pick_citable(&hits, &content.marker, &cfg.user_id).cloned()
+        };
+
         let issue_id = match client.open_issue(&cfg.space_id, &content.title) {
             Ok(id) => id,
             Err(e) => {
@@ -760,15 +955,29 @@ pub fn run_share(store: &crate::store::SqliteStore, cfg: &HubConfig) -> Result<S
                 continue;
             }
         };
-        // open 성공 즉시 기록 — resolve가 실패해도 다음 스캔이 재개(중복 이슈 방지)
+        // open 성공 즉시 기록 — 이후 단계가 실패해도 다음 스캔이 재개(중복 이슈 방지)
         store.hub_mark_issue(&f.dedup_key, &issue_id, &now)?;
-        match client.resolve_issue(&issue_id, &content.summary, &content.steps) {
-            Ok(Some(page_id)) => {
-                store.hub_mark_published(&f.dedup_key, &page_id, &now)?;
-                report.published.push((f.dedup_key.clone(), page_id));
-            }
-            Ok(None) => report.warnings.push(format!("{}: resolve 응답에 page_id 없음", f.dedup_key)),
-            Err(e) => report.warnings.push(format!("{}: resolve 실패(다음 스캔 재개): {e}", f.dedup_key)),
+
+        match citable {
+            // ③-b 재사용: 남이 발행한 같은 지식을 인용한다 — 이 순간 ReuseEvent가 생긴다.
+            Some(hit) => match client.cite_knowledge(&issue_id, &hit.page_id, "a-mate: 같은 진단을 로컬에서 재확인") {
+                Ok(reuse_id) => {
+                    // 인용도 "이 finding은 처리됨"이므로 published로 기록 — 평생 1회 원칙 유지.
+                    // page_id는 인용한 상대의 페이지 id.
+                    store.hub_mark_published(&f.dedup_key, &hit.page_id, &now)?;
+                    report.cited.push((f.dedup_key.clone(), hit.page_id.clone(), reuse_id));
+                }
+                Err(e) => report.warnings.push(format!("{}: cite 실패(다음 스캔 재개): {e}", f.dedup_key)),
+            },
+            // ③-c 신규 지식 발행 (기존 경로)
+            None => match client.resolve_issue(&issue_id, &content.summary, &content.steps) {
+                Ok(Some(page_id)) => {
+                    store.hub_mark_published(&f.dedup_key, &page_id, &now)?;
+                    report.published.push((f.dedup_key.clone(), page_id));
+                }
+                Ok(None) => report.warnings.push(format!("{}: resolve 응답에 page_id 없음", f.dedup_key)),
+                Err(e) => report.warnings.push(format!("{}: resolve 실패(다음 스캔 재개): {e}", f.dedup_key)),
+            },
         }
     }
 
@@ -805,23 +1014,110 @@ mod tests {
 
     #[test]
     fn select_filters_whitelist_threshold_dedup_and_cap() {
+        // R8은 est_tokens_saved=0 룰이라 occurrences 게이트로 선별된다.
         let findings = vec![
-            row("R1", 12000, 1, "new", "R1|a"),
-            row("R7", 99999, 9, "new", "R7|x"),    // 화이트리스트 밖
-            row("R1", 500, 1, "new", "R1|small"),  // 문턱 미달
-            row("R2", 3000, 1, "dismissed", "R2|hidden"), // 사용자 숨김
-            row("R11", 0, 3, "new", "R11|p"),      // est=0 → occurrences 게이트 통과
-            row("R11", 0, 1, "new", "R11|q"),      // est=0 → occurrences 미달
-            row("R2", 2000, 1, "new", "R2|b"),
-            row("R10", 8000, 1, "new", "R10|c"),
-            row("R1", 5000, 1, "new", "R1|d"),     // 상한(3) 초과분
+            row("R8", 0, 3, "new", "R8|alpha"),
+            row("R7", 99999, 9, "new", "R7|x"),           // 화이트리스트 밖
+            row("R6", 0, 9, "new", "R6|p"),               // 화이트리스트 밖(프롬프트 원문 보호)
+            row("R8", 0, 1, "new", "R8|too-rare"),        // occurrences 미달
+            row("R8", 0, 5, "dismissed", "R8|hidden"),    // 사용자 숨김
+            row("R8", 0, 4, "new", "R8|beta"),
+            row("R8", 0, 4, "new", "R8|already"),         // 이미 공유됨
+            row("R8", 0, 7, "new", "R8|gamma"),
+            row("R8", 0, 8, "new", "R8|over-cap"),        // 상한(3) 초과분
         ];
         let mut already = HashSet::new();
-        already.insert("R2|b".to_string()); // 이미 공유됨
+        already.insert("R8|already".to_string());
         let picked = select_shareable(&findings, &already, DEFAULT_MIN_TOKENS);
         let keys: Vec<&str> = picked.iter().map(|f| f.dedup_key.as_str()).collect();
-        // DESC 정렬 입력 가정이 아니라 벡터 순서 그대로 상한 적용 — 여기선 명시 순서로 검증
-        assert_eq!(keys, vec!["R1|a", "R11|p", "R10|c"]);
+        assert_eq!(keys, vec!["R8|alpha", "R8|beta", "R8|gamma"]);
+    }
+
+    /// 회귀 방지 — 2026-07-25에 발견된 사멸의 재발을 막는다.
+    ///
+    /// 화이트리스트가 은퇴한 룰(R1·R2·R10·R11·R12)만 가리켜 a-mate가 **영구적으로**
+    /// 아무것도 발행하지 못했다. 룰을 은퇴시키면서 여기를 안 고치면 이 테스트가 깨진다.
+    #[test]
+    fn share_rules_are_active_and_renderable() {
+        let active = crate::ops::registered_rule_ids();
+        for rule in SHARE_RULES {
+            assert!(
+                active.contains(&rule),
+                "SHARE_RULES의 '{rule}'이 등록된 룰이 아니다 (등록: {active:?}). \
+                 룰을 은퇴시켰다면 SHARE_RULES도 함께 갱신할 것 — 안 그러면 발행이 영구 0건이 된다."
+            );
+        }
+        assert!(!SHARE_RULES.is_empty(), "화이트리스트가 비면 공유가 영구 0건이 된다");
+    }
+
+    #[test]
+    fn every_share_rule_has_a_renderer() {
+        for rule in SHARE_RULES {
+            let f = row(rule, 0, 3, "new", &format!("{rule}|x"));
+            assert!(
+                render_share(&f).is_some(),
+                "'{rule}'은 공유 대상인데 render_share가 None을 반환한다"
+            );
+        }
+    }
+
+    #[test]
+    fn render_r8_is_deterministic_and_has_no_personal_text() {
+        let mut f = row("R8", 0, 4, "new", "R8|github");
+        f.evidence = json!({
+            "server": "github",
+            "large_result_count": 12,
+            "avg_chars": 40000,
+            "max_chars": 90000,
+            "approx_tokens_total": 120000,
+            "approx_tokens_avg": 10000,
+            "char_threshold": 20000,
+            "window_days": 14,
+        });
+        let c = render_share(&f).expect("R8은 렌더된다");
+
+        // 제목은 결정론.
+        assert_eq!(c.title, share_title_r8("github"));
+        assert_eq!(c.title, "[a-mate] MCP 'github' 대형 결과 반복 — 질의 범위 좁히기");
+
+        // 마커는 summary에 심긴다 — 허브가 발행 Page 제목을 summary로 만들기 때문에,
+        // 마커가 본문에 없으면 나중에 그 지식을 되찾아 인용할 수 없다.
+        assert_eq!(c.marker, "[a-mate:R8:github]");
+        assert!(c.summary.contains(&c.marker), "마커가 summary에 없으면 재사용 판별이 불가능하다");
+
+        // 스크럽: 로컬 경로 슬러그·세션·프롬프트가 새어나가지 않는다.
+        let blob = format!("{} {} {}", c.title, c.summary, c.steps.join(" "));
+        assert!(!blob.contains("c--users"), "프로젝트 경로 슬러그 유출");
+        assert!(!blob.contains("secret"), "로컬 경로 유출");
+        assert!(blob.contains("github") && blob.contains("12"), "핵심 근거는 남아야 한다");
+    }
+
+    #[test]
+    fn pick_citable_matches_marker_and_skips_own_pages() {
+        let want = share_marker("R8", "github");
+        // 실제 허브가 만드는 Page 제목 = summary(마커 포함)
+        let page_title = |m: &str| format!("{m} MCP가 큰 결과를 반환했다…");
+        let hit = |title: String, by: &str| HubSearchHit {
+            page_id: format!("page-{by}"),
+            title,
+            created_by: Some(by.into()),
+        };
+
+        // 남이 쓴 같은 마커 → 인용
+        let hits = vec![hit("무관한 글".into(), "bob"), hit(page_title(&want), "bob")];
+        assert_eq!(pick_citable(&hits, &want, "me").unwrap().page_id, "page-bob");
+
+        // 내 글만 있으면 인용하지 않는다 (자기 인용은 재사용이 아니다)
+        let mine = vec![hit(page_title(&want), "me")];
+        assert!(pick_citable(&mine, &want, "me").is_none());
+
+        // 다른 대상(서버)이면 인용하지 않는다 (느슨한 매칭 금지)
+        let other = vec![hit(page_title(&share_marker("R8", "gitlab")), "bob")];
+        assert!(pick_citable(&other, &want, "me").is_none());
+
+        // created_by가 없는 응답도 안전하게 인용 대상이 된다
+        let anon = vec![HubSearchHit { page_id: "p1".into(), title: page_title(&want), created_by: None }];
+        assert_eq!(pick_citable(&anon, &want, "me").unwrap().page_id, "p1");
     }
 
     #[test]
@@ -880,6 +1176,28 @@ mod tests {
     fn render_non_whitelisted_rule_is_none() {
         assert!(render_share(&row("R7", 99999, 9, "new", "R7|x")).is_none());
         assert!(render_share(&row("R5", 7000, 2, "new", "R5|y")).is_none());
+    }
+
+    /// 배포 빌드는 .env를 로드하지 않으므로, 설정(store)만으로도 허브가 잡혀야 한다.
+    #[test]
+    fn config_resolves_from_store_before_env() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        store.set_setting("knowledge_hub_url", "https://hub.example.com/").unwrap();
+        store.set_setting("knowledge_hub_space_id", "sw-innov").unwrap();
+        store.set_setting("knowledge_hub_user", "alice").unwrap();
+
+        let cfg = HubConfig::resolve(&store).expect("설정만으로 허브 구성이 잡혀야 한다");
+        assert_eq!(cfg.base_url, "https://hub.example.com", "끝 슬래시는 정규화된다");
+        assert_eq!(cfg.space_id, "sw-innov");
+        assert_eq!(cfg.user_id, "alice");
+    }
+
+    #[test]
+    fn config_off_switch_in_store_wins_over_env() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        store.set_setting("knowledge_hub_url", "https://hub.example.com").unwrap();
+        store.set_setting("knowledge_hub_share", "off").unwrap();
+        assert!(HubConfig::resolve(&store).is_none(), "설정에서 끄면 env로 되살아나지 않는다");
     }
 
     #[test]

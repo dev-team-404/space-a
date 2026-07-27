@@ -61,3 +61,8 @@ class Store(ABC):
     # reuse events
     @abstractmethod
     def add_reuse_event(self, event: ReuseEvent) -> None: ...
+    @abstractmethod
+    def all_reuse_events(self) -> list[ReuseEvent]:
+        """인용 이력 전체 (최신 우선). 북극성 지표를 읽는 유일한 경로 —
+        이게 없으면 a-lens가 재사용 건수를 0으로 하드코딩할 수밖에 없다."""
+        ...

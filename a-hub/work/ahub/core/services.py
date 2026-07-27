@@ -191,6 +191,7 @@ class SpaceAService:
             page_id=page.id,
             agent_id=agent.id,
             cross_team=page.space_id != issue.space_id,
+            created_at=self._now(),
         )
         self.store.add_reuse_event(event)
         issue.status = "knowledge_linked"
@@ -232,6 +233,35 @@ class SpaceAService:
         if space is None:
             raise errors.NotFound(f"space '{space_id}' not found")
         return space
+
+    def list_reuse_events(
+        self, token: str, space_id: str | None = None, limit: int = 50
+    ) -> list[ReuseEvent]:
+        """인용(재사용) 이력 조회 — 북극성 지표를 읽는 경로.
+
+        권한은 list_issues와 같은 규칙: 내가 속한 space의 이슈에 달린 인용만 보인다.
+        space 귀속은 ReuseEvent가 아니라 그 이슈에서 파생한다(모델에 space_id가 없음).
+        """
+        agent = self._authed_agent(token)
+        if space_id is not None and space_id not in agent.spaces:
+            raise errors.Forbidden(f"not a member of space '{space_id}'")
+        issue_space = {i.id: i.space_id for i in self.store.all_issues()}
+        out: list[ReuseEvent] = []
+        for e in self.store.all_reuse_events():
+            sid = issue_space.get(e.issue_id)
+            if sid is None or sid not in agent.spaces:
+                continue
+            if space_id is not None and sid != space_id:
+                continue
+            out.append(e)
+            if len(out) >= max(1, limit):
+                break
+        return out
+
+    def issue_space_ids(self, issue_ids: list[str]) -> dict[str, str]:
+        """issue_id → space_id (응답 조립용 헬퍼)."""
+        wanted = set(issue_ids)
+        return {i.id: i.space_id for i in self.store.all_issues() if i.id in wanted}
 
     def list_issues(
         self,

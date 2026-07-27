@@ -1698,6 +1698,23 @@ impl SqliteStore {
         Ok(out)
     }
 
+    /// 하니스/스케줄러가 주입한 프롬프트 행을 지운다. 반환 = 지운 행 수.
+    ///
+    /// 수집 시점 필터(`r6_repeated_prompts::normalize`)는 **신규 수집분만** 막으므로,
+    /// 필터 도입 전에 쌓인 행은 계속 R6 오탐 카드를 만든다. 매 스캔 idempotent하게 정리한다.
+    /// 판정 기준은 `normalize`의 마커와 같아야 한다 — 양쪽이 어긋나면 카드가 되살아난다.
+    pub fn purge_harness_injected_prompts(&self) -> Result<usize> {
+        let n = self.conn.execute(
+            "DELETE FROM prompt_events
+             WHERE preview LIKE '%<scheduled-task%'
+                OR preview LIKE '%<command-name>%'
+                OR preview LIKE '%<local-command-stdout>%'
+                OR preview LIKE '%<local-command-caveat>%'",
+            [],
+        )?;
+        Ok(n)
+    }
+
     /// R6 채굴(A) — 관찰창 내 (host, norm60, session)별 등장수 + 대표 preview.
     /// 미더가 Rust에서 norm 단위 집계 + 느슨한 군집화에 쓴다. ts NULL 행은 제외(기존 R6 SQL 동치).
     pub fn prompt_occurrence_rows(&self, cutoff: &str) -> Result<Vec<PromptOccRow>> {

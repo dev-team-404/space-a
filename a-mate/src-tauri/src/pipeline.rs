@@ -146,13 +146,16 @@ mod runtime {
     /// 네트워크 실패는 조용히(빈 피드로 진행 — 내장 팁만으로도 코칭 성립).
     fn maybe_curate_content(app: &AppHandle, store_mutex: &std::sync::Mutex<SqliteStore>) {
         // ⓪ 짧은 락: 팀 지식(pull) 소스 구성에 필요한 저장 토큰만 읽고 즉시 해제
-        let hub_src = agent_mentor::hub::HubConfig::from_env().and_then(|cfg| {
-            let stored = match store_mutex.lock() {
-                Ok(store) => store.get_setting("knowledge_hub_token").ok().flatten(),
-                Err(_) => None,
+        let hub_src = {
+            let (cfg, stored) = match store_mutex.lock() {
+                Ok(store) => (
+                    agent_mentor::hub::HubConfig::resolve(&store),
+                    store.get_setting("knowledge_hub_token").ok().flatten(),
+                ),
+                Err(_) => (None, None),
             };
-            agent_mentor::hub::pull_source(&cfg, stored)
-        });
+            cfg.and_then(|cfg| agent_mentor::hub::pull_source(&cfg, stored))
+        };
         // ① 락 밖: 피드 소스 + E 마켓플레이스 카탈로그 네트워크 fetch (실패해도 빈 벡터)
         let feed = agent_mentor::ops::fetch_feed_items(hub_src);
         let catalog = agent_mentor::ops::fetch_marketplace_catalog();
@@ -489,7 +492,11 @@ mod runtime {
     /// 스펙: docs/design/overview-mentor/specs/2026-07-18-hub-knowledge-sharing-design.md
     fn maybe_share_findings(store_mutex: &std::sync::Mutex<SqliteStore>) {
         use agent_mentor::hub::{self, HubClient, HubConfig};
-        let Some(cfg) = HubConfig::from_env() else { return };
+        // 설정(store) → env 순으로 해석. 짧은 락만 잡고 즉시 해제(네트워크 전 해제 규율).
+        let Some(cfg) = (match store_mutex.lock() {
+            Ok(store) => HubConfig::resolve(&store),
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        }) else { return };
         let now = chrono::Utc::now().to_rfc3339();
 
         // ① 락: 토큰·재개 목록·신규 후보 조회 → 즉시 해제
@@ -556,9 +563,28 @@ mod runtime {
             }
         }
 
-        // ④ 신규: open_issue → 마크 → resolve(발행) → 마크
+        // ④ 신규: 검색 → (있으면) 인용 / (없으면) open_issue → resolve(발행)
+        //    검색은 "팀이 이미 풀어놨는지" 확인이다. 있으면 중복 발행 대신 인용해
+        //    ReuseEvent를 남긴다 — README의 "다른 에이전트가 검색·인용해 재사용".
+        let mut cited = 0usize;
         for f in picked {
             let Some(content) = hub::render_share(&f) else { continue };
+
+            // 질의·매칭 모두 마커를 쓴다 — 허브가 발행 Page 제목을 summary로 만들어서
+            // 이슈 제목으로는 되찾을 수 없다. org 전체 검색이라 다른 팀 지식도 인용 대상이다.
+            // 검색 실패는 무해 — 빈 결과로 보고 기존 발행 경로로 폴백한다.
+            let citable = if content.marker.is_empty() {
+                None
+            } else {
+                let hits = client
+                    .search_knowledge(None, &content.marker, 5)
+                    .unwrap_or_else(|e| {
+                        log::warn!("hub {}: search 실패(발행으로 폴백): {e}", f.dedup_key);
+                        Vec::new()
+                    });
+                hub::pick_citable(&hits, &content.marker, &cfg.user_id).cloned()
+            };
+
             let issue_id = match client.open_issue(&cfg.space_id, &content.title) {
                 Ok(id) => id,
                 Err(e) => { log::warn!("hub {}: open_issue 실패: {e}", f.dedup_key); continue; }
@@ -566,20 +592,38 @@ mod runtime {
             if let Ok(store) = store_mutex.lock() {
                 let _ = store.hub_mark_issue(&f.dedup_key, &issue_id, &now);
             }
-            match client.resolve_issue(&issue_id, &content.summary, &content.steps) {
-                Ok(Some(page_id)) => {
-                    if let Ok(store) = store_mutex.lock() {
-                        let _ = store.hub_mark_published(&f.dedup_key, &page_id, &now);
+
+            match citable {
+                Some(hit) => {
+                    match client.cite_knowledge(&issue_id, &hit.page_id, "a-mate: 같은 진단을 로컬에서 재확인") {
+                        Ok(_) => {
+                            // 인용도 처리 완료 — 평생 1회 원칙 유지 (page_id는 인용한 상대 페이지)
+                            if let Ok(store) = store_mutex.lock() {
+                                let _ = store.hub_mark_published(&f.dedup_key, &hit.page_id, &now);
+                            }
+                            cited += 1;
+                        }
+                        Err(e) => log::warn!("hub {}: cite 실패(다음 스캔 재개): {e}", f.dedup_key),
                     }
-                    published += 1;
                 }
-                Ok(None) => log::warn!("hub {}: resolve 응답에 page_id 없음", f.dedup_key),
-                Err(e) => log::warn!("hub {}: resolve 실패(다음 스캔 재개): {e}", f.dedup_key),
+                None => match client.resolve_issue(&issue_id, &content.summary, &content.steps) {
+                    Ok(Some(page_id)) => {
+                        if let Ok(store) = store_mutex.lock() {
+                            let _ = store.hub_mark_published(&f.dedup_key, &page_id, &now);
+                        }
+                        published += 1;
+                    }
+                    Ok(None) => log::warn!("hub {}: resolve 응답에 page_id 없음", f.dedup_key),
+                    Err(e) => log::warn!("hub {}: resolve 실패(다음 스캔 재개): {e}", f.dedup_key),
+                },
             }
         }
 
-        if published > 0 {
-            log::info!("hub 지식 공유: {published}건 발행 (space {})", cfg.space_id);
+        if published > 0 || cited > 0 {
+            log::info!(
+                "hub 지식 공유: {published}건 발행, {cited}건 인용(재사용) (space {})",
+                cfg.space_id
+            );
         }
     }
 
@@ -587,7 +631,11 @@ mod runtime {
     /// 락 규율: 브리프 조립(store 읽기)은 짧은 락, 네트워크는 락 밖, 마크는 짧은 락.
     fn maybe_push_telemetry(store_mutex: &std::sync::Mutex<SqliteStore>) {
         use agent_mentor::hub::{self, HubClient, HubConfig};
-        let Some(cfg) = HubConfig::from_env() else { return };
+        // 설정(store) → env 순으로 해석. 짧은 락만 잡고 즉시 해제(네트워크 전 해제 규율).
+        let Some(cfg) = (match store_mutex.lock() {
+            Ok(store) => HubConfig::resolve(&store),
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        }) else { return };
         let yesterday = (chrono::Local::now() - chrono::Duration::days(1))
             .format("%Y-%m-%d")
             .to_string();
@@ -667,7 +715,11 @@ mod runtime {
         use agent_mentor::diary::engine::Engine as _;
         use agent_mentor::hub::{self, HubClient, HubConfig};
         if !hub::retro_enabled() { return; }
-        let Some(cfg) = HubConfig::from_env() else { return };
+        // 설정(store) → env 순으로 해석. 짧은 락만 잡고 즉시 해제(네트워크 전 해제 규율).
+        let Some(cfg) = (match store_mutex.lock() {
+            Ok(store) => HubConfig::resolve(&store),
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        }) else { return };
 
         // ① 짧은 락: 후보·토큰·엔진 해석
         let (candidates, token_opt, engine) = match store_mutex.lock() {

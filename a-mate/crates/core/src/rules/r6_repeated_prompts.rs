@@ -28,9 +28,31 @@ impl Default for R6RepeatedPrompts {
     }
 }
 
+/// 사람이 친 지시가 아니라 **하니스/스케줄러가 주입한** 프롬프트인지.
+///
+/// 크론이 넣은 `<scheduled-task …>`는 매번 똑같이 반복되므로 R6에 완벽한 반복 패턴으로
+/// 보이지만, 스킬로 묶어봐야 의미가 없다 — 이미 자동화돼 있고 사람이 반복하는 일이 아니다.
+/// (실측 2026-07-25: 한 사용자의 R6 3건이 전부 `<scheduled-task>` 오탐이었다.)
+/// 슬래시 커맨드 실행 로그(`<command-name>`)와 그 출력도 같은 이유로 제외한다.
+fn is_harness_injected(p: &str) -> bool {
+    const MARKERS: [&str; 4] = [
+        "<scheduled-task",
+        "<command-name>",
+        "<local-command-stdout>",
+        "<local-command-caveat>",
+    ];
+    let head: String = p.trim_start().chars().take(200).collect::<String>().to_lowercase();
+    MARKERS.iter().any(|m| head.contains(m))
+}
+
 /// 프롬프트 정규화 — 공백 붕괴 + 소문자 + 60자 컷. 너무 짧으면(일반어) 제외.
 /// R6 후속(skill_draft)이 세션 매칭에 같은 기준을 쓰도록 crate 공개.
 pub(crate) fn normalize(p: &str) -> Option<String> {
+    // 하니스 주입 프롬프트는 마이닝 대상이 아니다. 60자 컷 전에 원문에서 판정한다
+    // (마커가 앞부분에 있으나 컷 이후로 밀릴 수 있어 truncate 전에 본다).
+    if is_harness_injected(p) {
+        return None;
+    }
     let collapsed = p.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
     if collapsed.chars().count() < 8 {
         return None;
@@ -133,6 +155,27 @@ impl Rule for R6RepeatedPrompts {
 mod tests {
     use super::*;
     use crate::model::{EventKind, NormalizedEvent};
+
+    /// 실측 오탐(2026-07-25): 크론이 주입한 프롬프트가 "9세션 반복"으로 잡혀
+    /// 스킬화 후보로 제안됐다. 사람이 반복하는 일이 아니므로 마이닝 대상이 아니다.
+    #[test]
+    fn scheduled_task_prompts_are_not_mined() {
+        let cron = "<scheduled-task name=\"ai-history-book-daily-chapter\" \
+                    file=\"/Users/someone/.claude/tasks/x.md\">오늘의 챕터를 써줘</scheduled-task>";
+        assert_eq!(normalize(cron), None, "크론 주입 프롬프트는 제외돼야 한다");
+
+        // 슬래시 커맨드 실행 로그와 그 출력도 사람이 친 지시가 아니다
+        assert_eq!(normalize("<command-name>/model</command-name> 어쩌고"), None);
+        assert_eq!(normalize("<local-command-stdout>Set model to opus</local-command-stdout>"), None);
+
+        // 사람이 실제로 반복하는 지시는 그대로 남는다 (과도 차단 방지)
+        assert!(
+            normalize("이 프로젝트 테스트 돌리고 실패한 것만 정리해줘").is_some(),
+            "일반 지시까지 막으면 R6의 존재 이유가 사라진다"
+        );
+        // 'scheduled'라는 단어가 본문에 들어간 정상 지시는 막지 않는다 (태그 형태만 차단)
+        assert!(normalize("scheduled 배포 일정 정리해서 표로 만들어줘").is_some());
+    }
 
     fn seed_prompt_at(store: &SqliteStore, sess: &str, prompt: &str, ts: &str, offset: u64) {
         store

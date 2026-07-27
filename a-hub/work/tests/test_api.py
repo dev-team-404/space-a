@@ -95,6 +95,28 @@ def test_cite_over_http_creates_reuse_and_links(client):
     assert body["issue_status"] == "knowledge_linked"
 
 
+def test_reuse_events_over_http_lists_what_was_cited(client):
+    """GET /reuse-events — a-lens가 재사용 지표를 읽는 경로."""
+    auth = _register(client)
+    iss1 = client.post("/issues", json={"title": "seed", "space_id": "sw-innov"}, headers=auth).json()["issue_id"]
+    page_id = client.post(f"/issues/{iss1}/resolve", json={"summary": "DS 인증서 갱신"}, headers=auth).json()["page_id"]
+    iss2 = client.post("/issues", json={"title": "again", "space_id": "sw-innov"}, headers=auth).json()["issue_id"]
+    reuse_id = client.post(f"/issues/{iss2}/cite", json={"page_id": page_id}, headers=auth).json()["reuse_id"]
+
+    r = client.get("/reuse-events", headers=auth)
+    assert r.status_code == 200
+    events = r.json()["reuse_events"]
+    assert [e["reuse_id"] for e in events] == [reuse_id]
+    assert events[0]["page_id"] == page_id
+    assert events[0]["space_id"] == "sw-innov"
+    assert events[0]["cited_by"] == "bot"
+    assert events[0]["created_at"]
+
+
+def test_reuse_events_require_auth(client):
+    assert client.get("/reuse-events").status_code == 401
+
+
 def test_cite_unknown_page_over_http_is_404(client):
     auth = _register(client)
     iss = client.post("/issues", json={"title": "t", "space_id": "sw-innov"}, headers=auth).json()["issue_id"]

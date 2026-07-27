@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS pages (
     created_at TEXT, updated_at TEXT
 );
 CREATE TABLE IF NOT EXISTS reuse_events (
-    id TEXT PRIMARY KEY, issue_id TEXT, page_id TEXT, agent_id TEXT, cross_team INTEGER
+    id TEXT PRIMARY KEY, issue_id TEXT, page_id TEXT, agent_id TEXT, cross_team INTEGER,
+    created_at TEXT
 );
 """
 
@@ -55,6 +56,7 @@ class SqliteStore(Store):
         added = {
             "pages": [("created_by", "TEXT"), ("created_at", "TEXT"), ("updated_at", "TEXT")],
             "issues": [("created_at", "TEXT"), ("updated_at", "TEXT")],
+            "reuse_events": [("created_at", "TEXT")],
         }
         for table, columns in added.items():
             existing = {r["name"] for r in self._conn.execute(f"PRAGMA table_info({table})")}
@@ -187,10 +189,27 @@ class SqliteStore(Store):
 
     def add_reuse_event(self, event: ReuseEvent) -> None:
         self._write(
-            "INSERT OR REPLACE INTO reuse_events(id,issue_id,page_id,agent_id,cross_team)"
-            " VALUES(?,?,?,?,?)",
-            (event.id, event.issue_id, event.page_id, event.agent_id, int(event.cross_team)),
+            "INSERT OR REPLACE INTO reuse_events(id,issue_id,page_id,agent_id,cross_team,created_at)"
+            " VALUES(?,?,?,?,?,?)",
+            (
+                event.id, event.issue_id, event.page_id, event.agent_id,
+                int(event.cross_team), event.created_at,
+            ),
         )
+
+    def all_reuse_events(self) -> list[ReuseEvent]:
+        # created_at이 없던 시절 행(NULL)은 뒤로 — rowid로 안정 정렬해 최신 우선을 유지한다.
+        rows = self._execute(
+            "SELECT * FROM reuse_events ORDER BY created_at DESC NULLS LAST, rowid DESC"
+        )
+        return [
+            ReuseEvent(
+                id=r["id"], issue_id=r["issue_id"], page_id=r["page_id"],
+                agent_id=r["agent_id"], cross_team=bool(r["cross_team"]),
+                created_at=r["created_at"],
+            )
+            for r in rows
+        ]
 
     # --- row → model ---
 

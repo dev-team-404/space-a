@@ -85,3 +85,6 @@ class InMemoryStore(Store):
 
     def add_reuse_event(self, event: ReuseEvent) -> None:
         self._reuse.append(event)
+
+    def all_reuse_events(self) -> list[ReuseEvent]:
+        return list(reversed(self._reuse))  # 최신 우선

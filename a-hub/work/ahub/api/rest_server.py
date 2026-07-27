@@ -380,6 +380,35 @@ def create_app(
             raise errors.NotFound(f"space '{space_id}' has no guide")
         return {"page_id": page.id, "title": page.title, "body": page.body}
 
+    @app.get("/reuse-events")
+    def list_reuse_events(
+        space_id: str | None = None,
+        limit: int = 50,
+        authorization: str | None = Header(default=None),
+    ):
+        """인용(재사용) 이력 — "지식이 실제로 재사용됐다"의 유일한 조회 경로.
+
+        a-lens가 재사용 건수를 0으로 하드코딩하지 않으려면 이 엔드포인트가 필요하다.
+        """
+        events = service.list_reuse_events(_bearer(authorization), space_id=space_id, limit=limit)
+        spaces = service.issue_space_ids([e.issue_id for e in events])
+        names = service.agent_names([e.agent_id for e in events])
+        return {
+            "reuse_events": [
+                {
+                    "reuse_id": e.id,
+                    "issue_id": e.issue_id,
+                    "page_id": e.page_id,
+                    "space_id": spaces.get(e.issue_id),
+                    "cited_by": e.agent_id,
+                    "cited_by_name": names.get(e.agent_id),
+                    "cross_team": e.cross_team,
+                    "created_at": e.created_at,
+                }
+                for e in events
+            ]
+        }
+
     @app.get("/issues")
     def list_issues(
         space_id: str | None = None,
