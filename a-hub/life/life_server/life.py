@@ -23,8 +23,8 @@ GRID_W = 20
 GRID_H = 20
 FLOOR_Y = 0
 # 자율 입장(셀 미지정) 스폰 지점 — 구석이 아니라 방의 가로 3/7, 세로 4/5 지점 근처
-SPAWN_X = GRID_W * 3 // 7  # 12
-SPAWN_Y = GRID_H * 4 // 5  # 12
+SPAWN_X = GRID_W * 3 // 7  # 8
+SPAWN_Y = GRID_H * 4 // 5  # 16
 WINDOW_ROTATION_BY_WALL = {"west": 90, "north": 180}
 
 Cell = tuple[int, int]
@@ -82,6 +82,15 @@ class Life:
     owner_agent_id: str
     owner_name: str
     design: LifeDesign = field(default_factory=LifeDesign)
+
+
+def _spawn_hash(agent_id: str, cell: Cell) -> int:
+    """등거리 스폰 후보 타이브레이크 — 에이전트마다 다르고 프로세스 재시작에도 같은 순서.
+
+    내장 hash()는 프로세스별 솔트 때문에 재시작 간 비결정이라 sha256을 쓴다.
+    """
+    digest = hashlib.sha256(f"{agent_id}:{cell[0]}:{cell[1]}".encode()).digest()
+    return int.from_bytes(digest[:8], "big")
 
 
 def _validate_cell(cell: Cell) -> None:
@@ -460,7 +469,7 @@ class LifeService:
         with self._lock:
             if life_id not in self._life:
                 raise errors.NotFound(f"life '{life_id}' not found")
-            target = cell if cell is not None else self._free_cell_locked(life_id)
+            target = cell if cell is not None else self._free_cell_locked(life_id, for_agent=agent.agent_id)
             if self._occupied_locked(life_id, target, except_agent=agent.agent_id):
                 raise CellTaken(f"셀 ({target[0]},{target[1]}) 이미 점유됨")
             # 이전 방 자동 퇴장 = at_life/cell 원자 교체
@@ -576,13 +585,32 @@ class LifeService:
             return True
         return False
 
-    def _free_cell_locked(self, life_id: str) -> Cell:
-        """자율 입장용 빈 셀 배정 — 스폰 지점(SPAWN_X, SPAWN_Y)에서 가까운 순으로 첫 빈 셀."""
-        cells = sorted(
-            ((x, y) for y in range(FLOOR_Y, GRID_H) for x in range(GRID_W)),
-            key=lambda c: max(abs(c[0] - SPAWN_X), abs(c[1] - SPAWN_Y)),
-        )
-        for cell in cells:
-            if not self._occupied_locked(life_id, cell, except_agent=""):
-                return cell
+    def _free_cell_locked(self, life_id: str, for_agent: str = "") -> Cell:
+        """자율 입장용 빈 셀 배정 — 앵커에서 가까운 순, 다른 에이전트와 거리 버퍼 우선.
+
+        후보는 (앵커 체비셰프 거리, 해시(for_agent, cell)) 순 — 같은 링 위에서는
+        에이전트마다 다른 칸을 골라 흩어진다(결정적). 버퍼를 만족하는 칸이 없으면
+        버퍼 없이 현행대로 가장 가까운 빈 칸.
+        """
+        life = self._life.get(life_id)
+        agent_cells = {a.cell for a in self._agents.values()
+                       if a.agent_id != for_agent and a.at_life == life_id}
+        object_cells: set[Cell] = set()
+        if life:
+            for o in life.design.objects:
+                if o.category != "window":
+                    object_cells |= o.occupied_cells()
+        free = [
+            c for c in sorted(
+                ((x, y) for y in range(FLOOR_Y, GRID_H) for x in range(GRID_W)),
+                key=lambda c: (max(abs(c[0] - SPAWN_X), abs(c[1] - SPAWN_Y)), _spawn_hash(for_agent, c)),
+            )
+            if c not in agent_cells and c not in object_cells
+        ]
+        for buffer in (3, 2):
+            for cell in free:
+                if all(max(abs(cell[0] - ax), abs(cell[1] - ay)) >= buffer for ax, ay in agent_cells):
+                    return cell
+        if free:
+            return free[0]
         raise CellTaken("방이 가득 참")

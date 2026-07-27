@@ -45,15 +45,15 @@ def test_register_same_normalized_name_reuses_life(life):
     assert len(life.list_life()) == 1
 
 
-def test_auto_spawn_at_spawn_point_then_nearby(life):
+def test_auto_spawn_at_spawn_point_then_buffered(life):
     _, token, created_life = life.register("A")
-    # 빈 방의 첫 스폰 = 스폰 지점 (구석 아님)
+    # 빈 방의 첫 스폰 = 스폰 지점 (구석 아님) — 회귀 가드
     assert life.me(token)["cell"] == [SPAWN_X, SPAWN_Y]
-    # 스폰 지점이 차 있으면 그 근처(체비셰프 거리 1 이내)에 배정
+    # 스폰 지점에 주인이 있으면 방문자는 버퍼(체비셰프 거리 3)만큼 떨어져 배정
     _, token_b, _ = life.register("B")
     life.enter(token_b, created_life.id, cell=None)
     bx, by = life.me(token_b)["cell"]
-    assert max(abs(bx - SPAWN_X), abs(by - SPAWN_Y)) == 1
+    assert max(abs(bx - SPAWN_X), abs(by - SPAWN_Y)) == 3
 
 
 def test_life_state_exposes_owner_seed_even_when_owner_away(life):
@@ -294,3 +294,118 @@ def test_guestbook_reply_deletes_alone_without_touching_parent():
     reply = service.add_guestbook(owner_token, owner_life.id, "답글", parent_id=entry["entry_id"])
     service.delete_guestbook(owner_token, reply["entry_id"])
     assert [r["entry_id"] for r in service.guestbook(owner_life.id)] == [entry["entry_id"]]
+
+
+def test_visit_spawn_keeps_buffer_between_agents(life):
+    _, _, owner_life = life.register("owner")
+    _, token_b, _ = life.register("B")
+    _, token_c, _ = life.register("C")
+    life.enter(token_b, owner_life.id, cell=None)
+    life.enter(token_c, owner_life.id, cell=None)
+    cells = [tuple(o["cell"]) for o in life.life_state(owner_life.id)["occupants"]]
+    assert len(cells) == 3  # 주인 + 방문자 2
+    for i in range(len(cells)):
+        for j in range(i + 1, len(cells)):
+            (x1, y1), (x2, y2) = cells[i], cells[j]
+            assert max(abs(x1 - x2), abs(y1 - y2)) >= 3
+
+
+def test_visit_spawn_is_deterministic_for_same_agent(life):
+    _, _, owner_life = life.register("owner")
+    _, token_b, b_life = life.register("B")
+    life.enter(token_b, owner_life.id, cell=None)
+    first = life.me(token_b)["cell"]
+    life.enter(token_b, b_life.id, cell=None)      # 집으로 돌아감
+    life.enter(token_b, owner_life.id, cell=None)  # 같은 방 상태에서 재방문
+    assert life.me(token_b)["cell"] == first
+
+
+def test_visit_spawn_scatters_across_agents(life):
+    _, _, owner_life = life.register("owner")
+    cells = set()
+    for i in range(5):
+        _, token, guest_life = life.register(f"G{i}")
+        life.enter(token, owner_life.id, cell=None)
+        cells.add(tuple(life.me(token)["cell"]))
+        life.enter(token, guest_life.id, cell=None)  # 다음 프로브를 위해 집으로
+    # 매번 '주인만 있는 방'이라는 같은 조건 — 에이전트별 해시로 자리가 전부 같지는 않다
+    assert len(cells) >= 2
+
+
+def test_visit_spawn_avoids_furniture_footprint(life):
+    _, owner_token, owner_life = life.register("owner")
+    # 앵커 위쪽 거리 3 링 일부를 소파(7x2)로 덮어도 가구 위에는 스폰되지 않는다
+    life.set_design(owner_token, owner_life.id, {"objects": [
+        {"asset_id": "sofa.big", "category": "sofa", "cell": [SPAWN_X - 3, SPAWN_Y - 3],
+         "size": [7, 2], "rotation": 0},
+    ]})
+    _, token_b, _ = life.register("B")
+    life.enter(token_b, owner_life.id, cell=None)
+    bx, by = life.me(token_b)["cell"]
+    blocked = {(SPAWN_X - 3 + dx, SPAWN_Y - 3 + dy) for dx in range(7) for dy in range(2)}
+    assert (bx, by) not in blocked
+
+
+def _fill_grid_agents(life, owner_life_id):
+    """{1,5,9,13,17}² 격자점 25곳에 에이전트 배치.
+
+    좌표 0~19 어디서든 최근접 격자 좌표까지 거리 ≤ 2 (0→1, 3→2, 19→2 …) —
+    가장자리 포함 방 전체에서 거리 3짜리 빈 칸이 존재하지 않게 한다.
+    """
+    for gx in (1, 5, 9, 13, 17):
+        for gy in (1, 5, 9, 13, 17):
+            _, token, _ = life.register(f"grid-{gx}-{gy}")
+            life.enter(token, owner_life_id, cell=(gx, gy))
+
+
+def _cover_floor_except(life, owner_token, life_id, holes):
+    """바닥 전체를 가구 footprint로 덮되 holes만 비운다. 주인이 선 칸은 holes에 포함해야 한다."""
+    objects = []
+    for bx in (0, 8, 16):
+        for by in (0, 8, 16):
+            w, h = min(8, GRID_W - bx), min(8, GRID_H - by)
+            cells = [[x, y] for y in range(h) for x in range(w) if (bx + x, by + y) not in holes]
+            if cells:
+                objects.append({"asset_id": f"block-{bx}-{by}", "category": "block",
+                                "cell": [bx, by], "size": [w, h], "footprint": cells, "rotation": 0})
+    life.set_design(owner_token, life_id, {"objects": objects})
+
+
+def test_spawn_buffer_relaxes_to_two_when_three_impossible(life):
+    _, _, owner_life = life.register("owner")  # 주인 스폰 = 앵커 (8,16)
+    _fill_grid_agents(life, owner_life.id)
+    _, token_v, _ = life.register("visitor")
+    life.enter(token_v, owner_life.id, cell=None)
+    vx, vy = life.me(token_v)["cell"]
+    dists = [max(abs(vx - o["cell"][0]), abs(vy - o["cell"][1]))
+             for o in life.life_state(owner_life.id)["occupants"] if o["name"] != "visitor"]
+    # 격자 간격 4라 어떤 칸도 거리 3 불가·2는 가능 — 사다리가 2로 완화한 자리여야 한다
+    assert min(dists) == 2
+
+
+def test_spawn_buffer_fully_relaxes_before_full(life):
+    _, owner_token, owner_life = life.register("owner")  # 주인 = (8,16)
+    _cover_floor_except(life, owner_token, owner_life.id,
+                        holes={(SPAWN_X, SPAWN_Y), (SPAWN_X, SPAWN_Y + 1)})
+    _, token_v, _ = life.register("visitor")
+    life.enter(token_v, owner_life.id, cell=None)
+    # 남은 빈 칸이 주인 옆칸뿐 — 409가 아니라 버퍼 없이 배정된다
+    assert life.me(token_v)["cell"] == [SPAWN_X, SPAWN_Y + 1]
+
+
+def test_spawn_full_room_still_rejects(life):
+    _, owner_token, owner_life = life.register("owner")
+    _cover_floor_except(life, owner_token, owner_life.id, holes={(SPAWN_X, SPAWN_Y)})
+    _, token_v, _ = life.register("visitor")
+    with pytest.raises(CellTaken):
+        life.enter(token_v, owner_life.id, cell=None)
+
+
+def test_reenter_same_room_keeps_own_cell(life):
+    _, _, owner_life = life.register("owner")
+    _, token_b, _ = life.register("B")
+    life.enter(token_b, owner_life.id, cell=None)
+    first = life.me(token_b)["cell"]
+    # 같은 방 자동 재입장(재연결 경로) — 자기 옛 자리가 점유·버퍼로 잡히면 자리가 튄다
+    life.enter(token_b, owner_life.id, cell=None)
+    assert life.me(token_b)["cell"] == first
