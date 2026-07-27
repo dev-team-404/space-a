@@ -200,11 +200,15 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ```python
 def _fill_grid_agents(life, owner_life_id):
-    """{0,4,8,12,16}² 격자점 25곳에 에이전트 배치 — 어떤 빈 칸도 최근접 에이전트가 거리 2 이하."""
-    for gx in (0, 4, 8, 12, 16):
-        for gy in (0, 4, 8, 12, 16):
-            if (gx, gy) == (SPAWN_X, SPAWN_Y):
-                continue  # 주인이 이미 앵커 (8,16)에 서 있다
+    """{1,5,9,13,17}² 격자점 25곳에 에이전트 배치.
+
+    좌표 0~19 어디서든 최근접 격자 좌표까지 거리 ≤ 2 (0→1, 3→2, 19→2 …) —
+    가장자리 포함 방 전체에서 거리 3짜리 빈 칸이 존재하지 않게 한다.
+    (주의: {0,4,…,16} 격자는 우측·하단 가장자리 17~19를 못 덮어 거리 3 칸이 생긴다 —
+    실행 중 RED 단계에서 발견해 교정한 셋업.)
+    """
+    for gx in (1, 5, 9, 13, 17):
+        for gy in (1, 5, 9, 13, 17):
             _, token, _ = life.register(f"grid-{gx}-{gy}")
             life.enter(token, owner_life_id, cell=(gx, gy))
 
