@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-27
+---
+
 # 홈·말풍선 소품 일괄 (묶음 ①: P5 + H1 + H3) 구현 플랜
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

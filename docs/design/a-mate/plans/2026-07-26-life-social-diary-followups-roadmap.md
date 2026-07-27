@@ -42,7 +42,7 @@
 - 예상 수정: 말풍선 렌더러에 `word-break: keep-all`(어절 단위) + 사용자 입력 개행 존중(`white-space: pre-wrap`) + 적절한 max-width. 실제 원인·컴포넌트는 착수 시 확인.
 - **터치**: 말풍선 렌더링(`bubble.ts` + 표시 컴포넌트 `RobotPortrait.svelte`/`MiniLife.svelte`/`Mascot.svelte` 중 해당). diary/프롬프트 미접촉.
 - **세션**: 소규모·독립. 현재 세션과 파일 충돌 없음 → **완전 병렬(언제든 단독 처리 가능)**.
-- **구현 결과(2026-07-27, 묶음 ①)**: `word-break:keep-all`(+비상 `overflow-wrap:anywhere`)을 LifeView `.agent-bubble`(=lifeSetBubble, `pre-wrap` 기존 유지)·MiniLife·데스크톱 Mascot 말풍선 + 홈 `.daily-line`에 적용. max-width·line-clamp 불변(어색하면 후속). 조사 보정: MiniLife 말풍선은 lifeSetBubble이 아니라 자체 정적 잡담 — lifeSetBubble 렌더는 LifeView 한 곳. 실화면 확인은 PR 체크리스트로 사용자 진행.
+- **구현 결과(2026-07-27, 묶음 ①)**: `word-break:keep-all`(+비상 `overflow-wrap:anywhere`)을 LifeView `.agent-bubble`(=lifeSetBubble, `pre-wrap` 기존 유지)·MiniLife·데스크톱 Mascot 말풍선 + 홈 `.daily-line`에 적용. max-width·line-clamp 불변(어색하면 후속). 조사 보정: MiniLife 말풍선은 lifeSetBubble이 아니라 자체 정적 잡담 — lifeSetBubble 렌더는 LifeView 한 곳. 실화면 확인은 PR 체크리스트로 사용자 진행. 설계: [아카이브 스펙](../../../archive/design/a-mate/specs/2026-07-27-home-bubble-polish-design.md).
 
 ## 병렬 가능 요약
 

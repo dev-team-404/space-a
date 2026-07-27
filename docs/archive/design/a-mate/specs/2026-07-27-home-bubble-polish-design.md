@@ -1,8 +1,13 @@
+---
+status: done
+archived: 2026-07-27
+---
+
 # 홈·말풍선 소품 일괄 (묶음 ①: P5 + H1 + H3) 설계
 
 - **날짜**: 2026-07-27
 - **컴포넌트**: a-mate (프론트 + `crates/core`)
-- **관계**: [로드맵](../plans/2026-07-26-life-social-diary-followups-roadmap.md) "묶음 실행 계획" ① — P5(말풍선 한국어 줄바꿈) + H1(오늘의 일기 박스 vs mood 정리) + H3(CHATTER 자유 생성). P5·H3가 `bubble.ts`를 공유해 한 브랜치·한 PR로 묶고, **항목당 커밋을 분리**한다.
+- **관계**: [로드맵](../../../../design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md) "묶음 실행 계획" ① — P5(말풍선 한국어 줄바꿈) + H1(오늘의 일기 박스 vs mood 정리) + H3(CHATTER 자유 생성). P5·H3가 `bubble.ts`를 공유해 한 브랜치·한 PR로 묶고, **항목당 커밋을 분리**한다.
 - **베이스**: main 54b0982 (V1 스폰 분산 PR #114 머지 이후)
 
 ## 확정된 결정 (브레인스토밍 결과)
