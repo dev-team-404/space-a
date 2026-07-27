@@ -593,7 +593,8 @@ class LifeService:
         버퍼 없이 현행대로 가장 가까운 빈 칸.
         """
         life = self._life.get(life_id)
-        agent_cells = {a.cell for a in self._agents.values() if a.at_life == life_id}
+        agent_cells = {a.cell for a in self._agents.values()
+                       if a.agent_id != for_agent and a.at_life == life_id}
         object_cells: set[Cell] = set()
         if life:
             for o in life.design.objects:

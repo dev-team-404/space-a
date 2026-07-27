@@ -399,3 +399,13 @@ def test_spawn_full_room_still_rejects(life):
     _, token_v, _ = life.register("visitor")
     with pytest.raises(CellTaken):
         life.enter(token_v, owner_life.id, cell=None)
+
+
+def test_reenter_same_room_keeps_own_cell(life):
+    _, _, owner_life = life.register("owner")
+    _, token_b, _ = life.register("B")
+    life.enter(token_b, owner_life.id, cell=None)
+    first = life.me(token_b)["cell"]
+    # 같은 방 자동 재입장(재연결 경로) — 자기 옛 자리가 점유·버퍼로 잡히면 자리가 튄다
+    life.enter(token_b, owner_life.id, cell=None)
+    assert life.me(token_b)["cell"] == first
