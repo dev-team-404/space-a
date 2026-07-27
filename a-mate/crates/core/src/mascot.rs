@@ -175,9 +175,83 @@ fn facts_block(ctx: &crate::chat::ChatContext) -> String {
     )
 }
 
+/// 오늘의 한마디 무드 윈도우 크기 — 그제·어제·오늘 (조정 가능).
+pub const DAILY_LINE_WINDOW_DAYS: i64 = 3;
+
+/// 하루치 무드 신호 — 수치 없이 vibe만 (G5 `OwnerVibe` 재사용, 스펙 §C 취지 일관).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DayMood {
+    pub vibe: OwnerVibe,
+    pub is_weekend: bool,
+    pub long_work: bool,
+}
+
+/// 최근 N일 무드 수집 (오래된 날 → 오늘 순). 호출자가 락 안에서 부르고 결과를
+/// `compute_daily_line`에 넘긴다 (compute는 store 미접촉 유지). 집계 실패한 날은 활동 0 취급.
+pub fn collect_recent_moods(
+    store: &crate::store::SqliteStore,
+    today: chrono::NaiveDate,
+) -> Vec<DayMood> {
+    (0..DAILY_LINE_WINDOW_DAYS)
+        .rev()
+        .map(|offset| {
+            let day = today - chrono::Duration::days(offset);
+            let date = day.format("%Y-%m-%d").to_string();
+            let (sessions, tokens) = store
+                .summary_for_date(&date)
+                .map(|s| (s.session_count, s.tok_input + s.tok_output))
+                .unwrap_or((0, 0));
+            let work = crate::diary::collect_work_context(store, &date, day);
+            DayMood {
+                vibe: owner_vibe(sessions, tokens, &work),
+                is_weekend: work.is_weekend,
+                long_work: work.long_work,
+            }
+        })
+        .collect()
+}
+
+fn mood_label(v: OwnerVibe) -> &'static str {
+    match v {
+        OwnerVibe::Busy => "바쁨",
+        OwnerVibe::Normal => "보통",
+        OwnerVibe::Idle => "한가함",
+    }
+}
+
+/// 최근 무드 블록 — 날짜·수치 없이 상대 라벨(그제→어제→오늘)과 vibe만 렌더.
+/// 활동 없는 날의 주말 힌트는 생략(쉰 주말은 소재가 아님).
+fn mood_block(moods: &[DayMood]) -> String {
+    let lines: Vec<String> = moods
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            let label = match moods.len() - 1 - i {
+                0 => "오늘".to_string(),
+                1 => "어제".to_string(),
+                2 => "그제".to_string(),
+                n => format!("{n}일 전"),
+            };
+            let mut hints = Vec::new();
+            if m.is_weekend && m.vibe != OwnerVibe::Idle {
+                hints.push("주말에도 작업");
+            }
+            if m.long_work {
+                hints.push("장시간 몰입");
+            }
+            let hint =
+                if hints.is_empty() { String::new() } else { format!(" ({})", hints.join(" · ")) };
+            format!("- {label}: {}{hint}", mood_label(m.vibe))
+        })
+        .collect();
+    format!("[최근 며칠 활동 흐름]\n{}", lines.join("\n"))
+}
+
 /// 오늘의 한마디 생성 시스템 프롬프트 — 채팅과 동일 인물(1인칭·주인·능청) +
-/// 오늘 요약(chat과 같은 사실 블록) + voice_guidance + "짧은 한 문장" 지시 (스펙 §5).
-pub fn build_daily_line_prompt(ctx: &crate::chat::ChatContext) -> String {
+/// 최근 며칠 무드 흐름(수치 없음) + voice_guidance + "짧은 한 문장" 지시 (스펙 §5).
+/// 코칭 지적·절약 수치는 재료에서 제외 — 조언은 코칭 채널 몫, 한마디는 무드 전용
+/// (잡담 프롬프트의 역할 분리 지시와 일관).
+pub fn build_daily_line_prompt(ctx: &crate::chat::ChatContext, moods: &[DayMood]) -> String {
     format!(
         "당신은 {honorific}의 AI 코딩 여정을 함께하는 마스코트 에이전트입니다. \
          매일 일기를 쓰는 그 다마고치와 동일 인물로, 1인칭으로 가볍고 능청스럽게 \
@@ -185,20 +259,21 @@ pub fn build_daily_line_prompt(ctx: &crate::chat::ChatContext) -> String {
          \
          {voice_guidance} \
          \
-         정밀도의 선(반드시 지킬 것): 아래 오늘 요약의 사실과 수치에만 근거하고, \
-         요약에 없는 구체적 수치를 지어내지 마세요.\n\n\
-         {facts}\n\n\
-         오늘 하루의 기분이나 재치를 담아 짧은 한 문장(40자 이내)으로 표현하세요. \
-         대화가 아니라 오늘을 한마디로 요약하는 혼잣말입니다. 딱 한 문장만 출력하세요.",
+         아래는 {honorific}의 최근 며칠 활동 흐름입니다. 여기에 없는 사실이나 수치를 지어내지 마세요.\n\n\
+         {moods}\n\n\
+         이 흐름에서 느껴지는 오늘의 기분이나 재치를 담아 짧은 한 문장(40자 이내)으로 표현하세요. \
+         코칭 조언이나 보고처럼 굴지 마세요(조언은 다른 채널이 합니다). \
+         수치를 나열하지 말고, 대화가 아니라 오늘을 한마디로 요약하는 혼잣말로. 딱 한 문장만 출력하세요.",
         honorific = ctx.honorific,
         voice = mbti_voice_hint(ctx.mbti.as_deref()),
         voice_guidance = crate::diary::voice_guidance(),
-        facts = facts_block(ctx),
+        moods = mood_block(moods),
     )
 }
 
 /// 잡담 풀 크기 — 스캔당 LLM 1회 호출로 배치 생성하는 잡담 개수 (스펙 §2).
-pub const CHATTER_POOL_SIZE: usize = 5;
+/// 묶음 ① H3: 프론트가 풀 우선(정적은 폴백 전용)이 되면서 체감 다양성 확보를 위해 5→12.
+pub const CHATTER_POOL_SIZE: usize = 12;
 
 /// 오늘 세션이 이 이상이면 "그만 좀 하고 쉬어라" 코믹 지시를 넣는다 (스펙 묶음 B, 조정 가능).
 pub const CHATTER_REST_SESSIONS: u64 = 5;
@@ -255,6 +330,9 @@ pub fn build_chatter_prompt(
          요약에 없는 구체적 수치를 지어내지 마세요.\n\n\
          {facts}{comic}\n\n\
          위 요약을 재료로, 상주 마스코트가 가끔 툭 던질 가벼운 잡담·혼잣말을 {n}개 만드세요. \
+         {n}개끼리 주제와 결이 겹치지 않게 — 오늘 작업에 대한 관찰, 엉뚱한 궁금증, \
+         자기(마스코트) 셀프 개그, 응원, 오늘 작업 강도에 대한 능청 등 서로 다른 각도로 만들되, \
+         위 성향(문체)은 모든 잡담에 일관되게 유지하세요. \
          코칭 조언이나 보고처럼 굴지 마세요(조언은 다른 채널이 합니다). \
          한 줄에 하나씩, 각 40자 이내로, 번호·불릿·따옴표 없이 출력하세요.",
         honorific = ctx.honorific,
@@ -308,15 +386,16 @@ fn strip_wrapping_quotes(s: &str) -> &str {
     s
 }
 
-/// 오늘의 한마디 계산 — store 접근 없음, 네트워크만. 호출자가 락 밖에서 부른다
-/// (diary::render_diary 선례). 반환: None=재생성 불필요(fp 동일, skip) /
-/// Some((text, fp))=이 값으로 캐시하라.
+/// 오늘의 한마디 계산 — store 접근 없음, 네트워크만. 호출자가 락 안에서 무드 윈도우
+/// (`collect_recent_moods`)를 수집해 넘기고, 락 밖에서 부른다 (diary::render_diary 선례).
+/// 반환: None=재생성 불필요(fp 동일, skip) / Some((text, fp))=이 값으로 캐시하라.
 /// - fp가 캐시와 동일: None(skip). idle 상태의 불필요한 재-upsert도 여기서 걸러진다.
 /// - 오늘 활동 0건(session_count==0): 엔진 호출 없이 정적 문구.
 /// - 그 외: 엔진으로 오늘 한 문장 생성(앞뒤 공백·감싼 따옴표 제거).
 pub fn compute_daily_line(
     engine: &dyn crate::diary::engine::Engine,
     ctx: &crate::chat::ChatContext,
+    moods: &[DayMood],
     cached_fp: Option<&str>,
 ) -> anyhow::Result<Option<(String, String)>> {
     let fp = facts_fingerprint(ctx);
@@ -326,7 +405,7 @@ pub fn compute_daily_line(
     if ctx.session_count == 0 {
         return Ok(Some((static_daily_line().to_string(), fp)));
     }
-    let system = build_daily_line_prompt(ctx);
+    let system = build_daily_line_prompt(ctx, moods);
     let raw = engine.generate(&system, "")?.text;
     let text = strip_wrapping_quotes(raw.trim()).to_string();
     Ok(Some((text, fp)))
@@ -673,15 +752,44 @@ mod daily_line_tests {
         assert_ne!(facts_fingerprint(&ctx(3, 100, 200, 1)), facts_fingerprint(&m));
     }
 
+    fn moods(v: [OwnerVibe; 3]) -> Vec<DayMood> {
+        v.into_iter()
+            .map(|vibe| DayMood { vibe, is_weekend: false, long_work: false })
+            .collect()
+    }
+
     #[test]
-    fn prompt_carries_persona_facts_voice_and_one_line_directive() {
-        let p = build_daily_line_prompt(&ctx(3, 100, 200, 1));
+    fn prompt_carries_persona_mood_flow_and_one_line_directive() {
+        let p = build_daily_line_prompt(
+            &ctx(3, 100, 200, 1),
+            &moods([OwnerVibe::Idle, OwnerVibe::Normal, OwnerVibe::Busy]),
+        );
         assert!(p.contains("주인"));                         // 페르소나 호칭
-        assert!(p.contains("3건"));                          // 오늘 세션 수(사실)
         assert!(p.contains(crate::diary::voice_guidance())); // voice_guidance 그대로 주입
         assert!(p.contains("한 문장"));                      // 한 문장 지시
         assert!(p.contains("40자"));                         // 길이 상한
         assert!(p.contains("지어내지 마세요"));              // 정밀도의 선
+        // 최근 3일 무드 흐름 (오래된 날 → 오늘, 수치 없이 vibe만)
+        assert!(p.contains("그제: 한가함"));
+        assert!(p.contains("어제: 보통"));
+        assert!(p.contains("오늘: 바쁨"));
+        // 역할 분리 + 수치 나열 금지 — "코칭의 연장" 방지
+        assert!(p.contains("조언은 다른 채널"));
+        assert!(p.contains("수치를 나열하지"));
+        // 코칭 재료 제외 — 지적 상세·절약 수치가 더는 재료에 없다
+        assert!(!p.contains("detail 0"));
+        assert!(!p.contains("절약"));
+        assert!(!p.contains("3건"));
+    }
+
+    #[test]
+    fn prompt_mood_hints_weekend_and_long_work() {
+        let mut m = moods([OwnerVibe::Normal, OwnerVibe::Normal, OwnerVibe::Busy]);
+        m[2].is_weekend = true;
+        m[2].long_work = true;
+        let p = build_daily_line_prompt(&ctx(3, 100, 200, 1), &m);
+        assert!(p.contains("주말에도 작업"));
+        assert!(p.contains("장시간 몰입"));
     }
 
     #[test]
@@ -689,10 +797,20 @@ mod daily_line_tests {
         let mut c = ctx(3, 100, 200, 1);
         c.honorific = "대장".into();
         c.mbti = Some("INTJ".into());
-        let p = build_daily_line_prompt(&c);
+        let p = build_daily_line_prompt(&c, &moods([OwnerVibe::Idle, OwnerVibe::Idle, OwnerVibe::Normal]));
         assert!(p.contains("대장"));
         assert!(!p.contains("'주인'"));
         assert!(p.contains("냉정")); // T 성향
+    }
+
+    #[test]
+    fn collect_recent_moods_empty_store_is_idle_window() {
+        // 빈 store(집계 없음) → 3일 전부 활동 0 = 한가함. 오래된 날 → 오늘 순서 보장.
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 7, 27).unwrap();
+        let m = collect_recent_moods(&store, today);
+        assert_eq!(m.len(), 3);
+        assert!(m.iter().all(|d| d.vibe == OwnerVibe::Idle));
     }
 
     use crate::diary::engine::MockEngine;
@@ -700,7 +818,8 @@ mod daily_line_tests {
     #[test]
     fn compute_generates_when_active_and_uncached() {
         let eng = MockEngine { canned: "오늘 주인이 나를 꽤 굴렸다".into() };
-        let out = compute_daily_line(&eng, &ctx(3, 100, 200, 1), None).unwrap();
+        let m = moods([OwnerVibe::Idle, OwnerVibe::Normal, OwnerVibe::Busy]);
+        let out = compute_daily_line(&eng, &ctx(3, 100, 200, 1), &m, None).unwrap();
         assert_eq!(
             out,
             Some(("오늘 주인이 나를 꽤 굴렸다".to_string(), "3|100|200|1|주인|".to_string()))
@@ -712,7 +831,8 @@ mod daily_line_tests {
         let eng = MockEngine { canned: "안 나와야 함".into() };
         let c = ctx(3, 100, 200, 1);
         let fp = facts_fingerprint(&c);
-        assert_eq!(compute_daily_line(&eng, &c, Some(&fp)).unwrap(), None);
+        let m = moods([OwnerVibe::Idle, OwnerVibe::Normal, OwnerVibe::Busy]);
+        assert_eq!(compute_daily_line(&eng, &c, &m, Some(&fp)).unwrap(), None);
     }
 
     #[test]
@@ -722,14 +842,16 @@ mod daily_line_tests {
         let eng = MockEngine { canned: "안 나와야 함".into() };
         let c = ctx(0, 0, 0, 2);
         let fp = facts_fingerprint(&c); // "0|0|0|2|주인|"
-        assert_eq!(compute_daily_line(&eng, &c, Some(&fp)).unwrap(), None);
+        let m = moods([OwnerVibe::Idle, OwnerVibe::Idle, OwnerVibe::Idle]);
+        assert_eq!(compute_daily_line(&eng, &c, &m, Some(&fp)).unwrap(), None);
     }
 
     #[test]
     fn compute_trims_and_strips_wrapping_quotes() {
         // LLM이 앞뒤 공백·감싼 따옴표를 붙여 반환해도 정제 — UI 이중 따옴표 방지.
         let eng = MockEngine { canned: "  \"오늘 좀 굴렀다\"  ".into() };
-        let out = compute_daily_line(&eng, &ctx(3, 100, 200, 1), None).unwrap();
+        let m = moods([OwnerVibe::Idle, OwnerVibe::Normal, OwnerVibe::Busy]);
+        let out = compute_daily_line(&eng, &ctx(3, 100, 200, 1), &m, None).unwrap();
         assert_eq!(out, Some(("오늘 좀 굴렀다".to_string(), "3|100|200|1|주인|".to_string())));
     }
 
@@ -737,7 +859,8 @@ mod daily_line_tests {
     fn compute_uses_static_line_without_engine_when_idle() {
         // 활동 0건 → 엔진을 부르지 않고 정적 문구. canned(≠정적)가 나오면 엔진이 호출됐다는 뜻이라 실패.
         let eng = MockEngine { canned: "엔진이 불렸다면 이게 나온다".into() };
-        let out = compute_daily_line(&eng, &ctx(0, 0, 0, 2), None).unwrap();
+        let m = moods([OwnerVibe::Idle, OwnerVibe::Idle, OwnerVibe::Idle]);
+        let out = compute_daily_line(&eng, &ctx(0, 0, 0, 2), &m, None).unwrap();
         assert_eq!(
             out,
             Some(("오늘은 널널하네. 근데 좀 심심;;;".to_string(), "0|0|0|2|주인|".to_string()))
@@ -816,6 +939,15 @@ mod chatter_tests {
         // 무신호(평일·세션 적음·짧은 몰입) → 코믹 블록 자체가 없어 기존 프롬프트와 동일 골격
         let p = build_chatter_prompt(&ctx(3, 100, 200, 1), &work(false, 2.0, false), 5);
         assert!(!p.contains("근무 맥락"));
+    }
+
+    #[test]
+    fn chatter_prompt_requests_topic_diversity() {
+        // H3: 잡담끼리 결이 겹치지 않게 + 성향(문체)·작업 강도 축 명시 참조
+        let p = build_chatter_prompt(&ctx(3, 100, 200, 1), &Default::default(), 5);
+        assert!(p.contains("겹치지 않게"));
+        assert!(p.contains("셀프 개그"));
+        assert!(p.contains("작업 강도"));
     }
 
     #[test]

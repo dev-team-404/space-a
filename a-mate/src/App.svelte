@@ -147,10 +147,6 @@
     if (dest.tab === 'coach') gotoCoach(dest.target);
     else gotoDiary(dest.target);
   }
-
-  const mood = $derived(
-    summary && summary.est_tokens_saved_total > 0 ? '절약할 게 보여요…' : '평화로워요'
-  );
 </script>
 
 <div class="wall">
@@ -171,15 +167,10 @@
         <!-- 프로필 = 지금 보는 미니홈피의 주인. 방문 중이면 그 방 주인의 로봇 -->
         <RobotPortrait seed={visiting ? ownerSeed : null} agentId={visiting ? ownerAgentId : null} imageVersion={visiting ? ownerImageVersion : null} />
         {#if dailyLine && !visiting}
-          <button class="diary" onclick={() => (tab = 'diary')} title="오늘의 일기 전체 보기">
-            <span class="cap">📔 오늘의 일기</span>
+          <div class="daily">
+            <span class="cap">💬 오늘의 한마디</span>
             <span class="daily-line">{dailyLine}</span>
-            <span class="more">더 보기 →</span>
-          </button>
-        {/if}
-        <!-- mood는 내 로컬 데이터 — 남의 미니홈피에서 보이면 주인 것으로 오독된다 -->
-        {#if !visiting}
-          <p class="mood">“{mood}”</p>
+          </div>
         {/if}
       </aside>
       <main class="content">
@@ -240,21 +231,18 @@
     border-right: 1px solid var(--pastel-lav);
     display: flex; flex-direction: column; gap: 12px;
   }
-  .mood { margin: 0; font-size: 12px; color: var(--ink-soft); text-align: center; }
-  /* 일기 카드 — 긴 일기를 4줄로 접고(…) 클릭 시 다이어리 탭으로. 좁은 프로필 칸 가독성 */
-  .diary {
-    width: 100%; display: flex; flex-direction: column; gap: 5px; text-align: left;
+  /* 한마디 카드 — LLM 오늘의 한마디를 4줄로 접는(…) 표시 전용. 좁은 프로필 칸 가독성 */
+  .daily {
+    display: flex; flex-direction: column; gap: 5px;
     background: var(--panel2); border: 1px solid var(--line); border-left: 2px solid var(--accent);
-    border-radius: var(--radius-s); padding: 8px 10px; cursor: pointer; font: inherit; color: inherit;
+    border-radius: var(--radius-s); padding: 8px 10px;
   }
-  .diary:hover { border-color: var(--accent); }
-  .diary .cap { font-size: 10px; color: var(--ink-soft); letter-spacing: 0.3px; }
+  .daily .cap { font-size: 10px; color: var(--ink-soft); letter-spacing: 0.3px; }
   .daily-line {
     margin: 0; font-size: 12px; color: var(--ink); line-height: 1.55;
-    overflow-wrap: break-word; word-break: break-word;
+    overflow-wrap: break-word; word-break: keep-all;
     display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
   }
-  .diary .more { font-size: 10px; color: var(--accent-strong); }
   /* margin-right: 스크롤바를 프레임 가장자리(우측 세로 탭이 걸치는 곳)에서 안쪽으로 밀어냄 */
   .content { flex: 1; min-width: 0; overflow-y: auto; display: flex; flex-direction: column; margin-right: 10px; }
   .tabs {
