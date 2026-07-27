@@ -409,3 +409,27 @@ def test_reenter_same_room_keeps_own_cell(life):
     # 같은 방 자동 재입장(재연결 경로) — 자기 옛 자리가 점유·버퍼로 잡히면 자리가 튄다
     life.enter(token_b, owner_life.id, cell=None)
     assert life.me(token_b)["cell"] == first
+
+
+def test_guestbook_author_kind_roundtrip_and_default():
+    service = LifeService()
+    _, _, owner_life = service.register("owner-bot")
+    _, visitor_token, _ = service.register("visitor-bot")
+
+    # P3: 봇 작성 글은 author_kind="bot"으로 저장·에코
+    entry = service.add_guestbook(visitor_token, owner_life.id, "봇이 왔다감", author_kind="bot")
+    assert entry["author_kind"] == "bot"
+    assert service.guestbook(owner_life.id)[0]["author_kind"] == "bot"
+
+    # 미제공/공백 → None (human 간주는 소비자 몫 — 구클라 하위호환)
+    assert service.add_guestbook(visitor_token, owner_life.id, "기본")["author_kind"] is None
+    assert service.add_guestbook(visitor_token, owner_life.id, "공백", author_kind="  ")["author_kind"] is None
+    assert service.add_guestbook(visitor_token, owner_life.id, "사람", author_kind="human")["author_kind"] == "human"
+
+
+def test_guestbook_author_kind_rejects_unknown_value():
+    service = LifeService()
+    _, _, owner_life = service.register("owner-bot")
+    _, visitor_token, _ = service.register("visitor-bot")
+    with pytest.raises(errors.InvalidRequest):
+        service.add_guestbook(visitor_token, owner_life.id, "이상값", author_kind="alien")

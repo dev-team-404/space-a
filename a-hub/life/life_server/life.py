@@ -390,7 +390,8 @@ class LifeService:
             return [dict(row) for row in reversed(self._guestbook) if row["life_id"] == life_id]
 
     def add_guestbook(self, token: str | None, life_id: str, body: str,
-                      author_name: str | None = None, parent_id: str | None = None) -> dict:
+                      author_name: str | None = None, parent_id: str | None = None,
+                      author_kind: str | None = None) -> dict:
         author = self._authed(token)
         body = body.strip()
         if not body or len(body) > 500:
@@ -402,6 +403,10 @@ class LifeService:
             raise errors.InvalidRequest("작성자 이름은 80자 이하여야 함")
         if not name:
             name = author.name
+        # P3: 봇 자동 작성 판별 플래그 — 미제공(None)=human 간주는 소비자 몫 (구클라 하위호환)
+        kind = (author_kind or "").strip() or None
+        if kind not in (None, "human", "bot"):
+            raise errors.InvalidRequest("author_kind는 human 또는 bot이어야 함")
         parent_id = (parent_id or "").strip() or None
         with self._lock:
             life = self._life.get(life_id)
@@ -418,7 +423,7 @@ class LifeService:
                     raise errors.Forbidden("방 주인만 답글을 달 수 있음")
             row = {"entry_id": f"gb_{uuid.uuid4().hex[:12]}", "life_id": life_id,
                    "author_agent_id": author.agent_id, "author_name": name, "body": body,
-                   "parent_id": parent_id,
+                   "parent_id": parent_id, "author_kind": kind,
                    "created_at": datetime.now(timezone.utc).isoformat()}
             self._guestbook.append(row)
             if self._store:

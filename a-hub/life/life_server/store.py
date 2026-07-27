@@ -79,7 +79,8 @@ CREATE TABLE IF NOT EXISTS guestbook (
   author_name     TEXT NOT NULL,
   body            TEXT NOT NULL,
   created_at      TEXT NOT NULL,
-  parent_id       TEXT
+  parent_id       TEXT,
+  author_kind     TEXT
 );
 """
 
@@ -104,6 +105,8 @@ class SqliteStore:
         guestbook_columns = {row[1] for row in self._conn.execute("PRAGMA table_info(guestbook)")}
         if "parent_id" not in guestbook_columns:
             self._conn.execute("ALTER TABLE guestbook ADD COLUMN parent_id TEXT")
+        if "author_kind" not in guestbook_columns:
+            self._conn.execute("ALTER TABLE guestbook ADD COLUMN author_kind TEXT")
         self._conn.commit()
 
     def _migrate_life_objects(self) -> None:
@@ -184,9 +187,9 @@ class SqliteStore:
         guestbook = [
             {"entry_id": entry_id, "life_id": life_id, "author_agent_id": author_id,
              "author_name": author_name, "body": body, "parent_id": parent_id,
-             "created_at": created_at}
-            for entry_id, life_id, author_id, author_name, body, parent_id, created_at in self._conn.execute(
-                "SELECT entry_id, life_id, author_agent_id, author_name, body, parent_id, created_at FROM guestbook"
+             "author_kind": author_kind, "created_at": created_at}
+            for entry_id, life_id, author_id, author_name, body, parent_id, author_kind, created_at in self._conn.execute(
+                "SELECT entry_id, life_id, author_agent_id, author_name, body, parent_id, author_kind, created_at FROM guestbook"
             )
         ]
         return friends, visibility, diaries, guestbook
@@ -262,10 +265,10 @@ class SqliteStore:
 
     def save_guestbook_entry(self, entry: dict) -> None:
         self._conn.execute(
-            "INSERT INTO guestbook (entry_id, life_id, author_agent_id, author_name, body, parent_id, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO guestbook (entry_id, life_id, author_agent_id, author_name, body, parent_id, author_kind, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (entry["entry_id"], entry["life_id"], entry["author_agent_id"], entry["author_name"],
-             entry["body"], entry.get("parent_id"), entry["created_at"]),
+             entry["body"], entry.get("parent_id"), entry.get("author_kind"), entry["created_at"]),
         )
         self._conn.commit()
 

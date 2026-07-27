@@ -85,6 +85,7 @@ class GuestbookAddBody(BaseModel):
     body: str = ""
     author_name: str | None = None
     parent_id: str | None = None
+    author_kind: str | None = None  # P3: "human"|"bot" — 생략=human 간주(소비자 몫)
 
 
 def _bearer(authorization: str | None) -> str:
@@ -206,7 +207,8 @@ def create_app(life: LifeService | None = None) -> FastAPI:
 
     @app.post("/life/{life_id}/guestbook", status_code=201)
     def life_guestbook_add(life_id: str, body: GuestbookAddBody, authorization: str | None = Header(default=None)):
-        return life.add_guestbook(_bearer(authorization), life_id, body.body, body.author_name, body.parent_id)
+        return life.add_guestbook(_bearer(authorization), life_id, body.body, body.author_name,
+                                  body.parent_id, body.author_kind)
 
     @app.delete("/life/guestbook/{entry_id}")
     def life_guestbook_delete(entry_id: str, authorization: str | None = Header(default=None)):
