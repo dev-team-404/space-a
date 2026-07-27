@@ -364,12 +364,22 @@ pub enum OwnerVibe {
     Idle,
 }
 
-/// 오늘 세션 수 + 근무 맥락 → 거친 상태. `comic_directives`와 동일 임계값·재료 재사용.
-/// 활동 0건이면 Idle(주말이어도), 세션 임계·장시간·주말이면 Busy, 그 외 Normal.
-pub fn owner_vibe(session_count: u64, work: &crate::diary::WorkContext) -> OwnerVibe {
+/// 오늘 토큰 총량이 이 이상이면 세션 수가 적어도 Busy — 소수의 무거운 세션(대량 토큰)이
+/// 세션 카운트에 안 잡히는 문제 보정 (조정 가능).
+pub const OWNER_BUSY_TOKENS: u64 = 50_000;
+
+/// 오늘 세션 수 + 토큰량 + 근무 맥락 → 거친 상태. `comic_directives`와 동일 임계값·재료 재사용.
+/// 활동 0건이면 Idle(주말이어도); 세션 임계·**토큰 대량**·장시간·주말이면 Busy; 그 외 Normal.
+/// 토큰을 함께 보는 이유: 소수의 무거운 세션(예: 1세션 21만 토큰)이 세션 수만으론 Normal로
+/// 오분류되던 문제를 바로잡기 위함.
+pub fn owner_vibe(session_count: u64, tokens_today: u64, work: &crate::diary::WorkContext) -> OwnerVibe {
     if session_count == 0 {
         OwnerVibe::Idle
-    } else if session_count >= CHATTER_REST_SESSIONS || work.long_work || work.is_weekend {
+    } else if session_count >= CHATTER_REST_SESSIONS
+        || tokens_today >= OWNER_BUSY_TOKENS
+        || work.long_work
+        || work.is_weekend
+    {
         OwnerVibe::Busy
     } else {
         OwnerVibe::Normal
@@ -893,11 +903,12 @@ mod guestbook_reply_tests {
 
     #[test]
     fn owner_vibe_covers_branches() {
-        assert_eq!(owner_vibe(0, &wc(false, false)), OwnerVibe::Idle);   // 활동 0 → 한가
-        assert_eq!(owner_vibe(5, &wc(false, false)), OwnerVibe::Busy);   // 세션 임계(5)
-        assert_eq!(owner_vibe(1, &wc(false, true)), OwnerVibe::Busy);    // long_work
-        assert_eq!(owner_vibe(1, &wc(true, false)), OwnerVibe::Busy);    // 주말 작업
-        assert_eq!(owner_vibe(2, &wc(false, false)), OwnerVibe::Normal); // 그 외
+        assert_eq!(owner_vibe(0, 0, &wc(false, false)), OwnerVibe::Idle);   // 활동 0 → 한가
+        assert_eq!(owner_vibe(5, 0, &wc(false, false)), OwnerVibe::Busy);   // 세션 임계(5)
+        assert_eq!(owner_vibe(1, OWNER_BUSY_TOKENS, &wc(false, false)), OwnerVibe::Busy); // 토큰 대량
+        assert_eq!(owner_vibe(1, 0, &wc(false, true)), OwnerVibe::Busy);    // long_work
+        assert_eq!(owner_vibe(1, 0, &wc(true, false)), OwnerVibe::Busy);    // 주말 작업
+        assert_eq!(owner_vibe(2, 1000, &wc(false, false)), OwnerVibe::Normal); // 그 외
     }
 
     #[test]

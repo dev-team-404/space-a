@@ -897,10 +897,10 @@ mod runtime {
                     // G5: 답글에 녹일 거친 근황(수치 없이 vibe만) — 잡담 선례와 동일 재료.
                     let now = chrono::Local::now();
                     let today = now.format("%Y-%m-%d").to_string();
-                    let session_count = crate::commands::chat_context_inner(&store)
-                        .map(|c| c.session_count).unwrap_or(0);
+                    let (session_count, tokens_today) = crate::commands::chat_context_inner(&store)
+                        .map(|c| (c.session_count, c.tok_input + c.tok_output)).unwrap_or((0, 0));
                     let work = agent_mentor::diary::collect_work_context(&store, &today, now.date_naive());
-                    let vibe = agent_mentor::mascot::owner_vibe(session_count, &work);
+                    let vibe = agent_mentor::mascot::owner_vibe(session_count, tokens_today, &work);
                     (
                         crate::resolve_engine(&store),
                         get("hub_url"), get("hub_token"), get("hub_api_key"),
