@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { resolveVisitTarget, type VisitCtx } from './people';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { getPeople, resetPeopleCache, resolveVisitTarget, type VisitCtx } from './people';
 import type { LifePerson } from './api';
 
 const P = (agent_id: string, life_id: string): LifePerson => ({ agent_id, name: 'x', life_id, is_friend: false });
@@ -30,5 +30,37 @@ describe('resolveVisitTarget', () => {
     expect(resolveVisitTarget('a1', '김민지', ctx({ myLifeId: '' }))).toBeNull();
     expect(resolveVisitTarget('a1', '김민지', ctx({ currentLifeId: '' }))).toBeNull();
     expect(resolveVisitTarget('', '김민지', ctx())).toBeNull();
+  });
+});
+
+describe('getPeople', () => {
+  beforeEach(() => { resetPeopleCache(); vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('TTL 내 재호출은 fetch 1회', async () => {
+    const fetcher = vi.fn().mockResolvedValue({ people: [P('a', 'l')] });
+    await getPeople(fetcher);
+    await getPeople(fetcher);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('TTL(10초) 경과 후 재fetch', async () => {
+    const fetcher = vi.fn().mockResolvedValue({ people: [] });
+    await getPeople(fetcher);
+    vi.advanceTimersByTime(10_001);
+    await getPeople(fetcher);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+  it('동시 호출은 in-flight 공유', async () => {
+    let resolve!: (v: { people: LifePerson[] }) => void;
+    const fetcher = vi.fn(() => new Promise<{ people: LifePerson[] }>((r) => { resolve = r; }));
+    const p1 = getPeople(fetcher);
+    const p2 = getPeople(fetcher);
+    resolve({ people: [P('a', 'l')] });
+    expect(await p1).toEqual(await p2);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it('실패 시 빈 배열 (기능만 조용히 비활성)', async () => {
+    const fetcher = vi.fn().mockRejectedValue(new Error('down'));
+    await expect(getPeople(fetcher)).resolves.toEqual([]);
   });
 });
