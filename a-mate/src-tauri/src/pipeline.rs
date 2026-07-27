@@ -890,15 +890,23 @@ mod runtime {
         if INCOMPATIBLE.load(Ordering::SeqCst) { return; }
 
         // ① 락: 엔진·hub 설정·페르소나 읽기 → 즉시 해제 (maybe_generate_chatter_pool 선례)
-        let (engine, url, token, api_key, life_id, agent_id, title, user_name, mbti) =
+        let (engine, url, token, api_key, life_id, agent_id, title, user_name, mbti, vibe) =
             match store_mutex.lock() {
                 Ok(store) => {
                     let get = |k: &str| store.get_setting(k).ok().flatten().unwrap_or_default();
+                    // G5: 답글에 녹일 거친 근황(수치 없이 vibe만) — 잡담 선례와 동일 재료.
+                    let now = chrono::Local::now();
+                    let today = now.format("%Y-%m-%d").to_string();
+                    let session_count = crate::commands::chat_context_inner(&store)
+                        .map(|c| c.session_count).unwrap_or(0);
+                    let work = agent_mentor::diary::collect_work_context(&store, &today, now.date_naive());
+                    let vibe = agent_mentor::mascot::owner_vibe(session_count, &work);
                     (
                         crate::resolve_engine(&store),
                         get("hub_url"), get("hub_token"), get("hub_api_key"),
                         get("hub_life_id"), get("hub_agent_id"),
                         crate::commands::owner_title(&store), get("user_name"), get("user_mbti"),
+                        vibe,
                     )
                 }
                 Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
@@ -925,7 +933,8 @@ mod runtime {
         let mbti = agent_mentor::mascot::normalize_mbti(&mbti);
         for t in &targets {
             let reply = match agent_mentor::mascot::compute_guestbook_reply(
-                &engine, &title, mbti.as_deref(), t)
+                &engine, &title, mbti.as_deref(), vibe,
+                agent_mentor::mascot::should_ask_about_bot(&t.entry_id), t)
             {
                 Ok(r) => r,
                 Err(e) => {
