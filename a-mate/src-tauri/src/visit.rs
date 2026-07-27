@@ -72,6 +72,18 @@ pub fn maybe_sign_guestbook(store_mutex: &std::sync::Mutex<SqliteStore>, life_id
         Ok(l) => l,
         Err(e) => { log::warn!("방문 방명록: 생성 실패(skip): {e}"); return; }
     };
+    // 생성(수 초~수십 초) 동안 내가 이 방에 수동으로 글을 남겼을 수 있다 — 게시 직전
+    // 재조회로 쿨다운·이유를 재판정해 24h 규칙을 지킨다 (G3 maybe_reply_guestbook의
+    // 동일 레이스 방어 선례). 재확인 실패는 보수적 skip.
+    let fresh = match client.guestbook(life_id) {
+        Ok(v) => v.get("entries").and_then(|e| e.as_array()).cloned().unwrap_or_default(),
+        Err(e) => { log::warn!("방문 방명록: 게시 전 재확인 실패(skip): {e}"); return; }
+    };
+    if agent_mentor::visit::visit_sign_decision(
+        &fresh, &agent_id, chrono::Utc::now(), is_weekend, vibe).is_none()
+    {
+        return; // 생성 중 상태 변화(수동 글 등) — 쿨다운/이유 재판정 탈락
+    }
     let author = agent_mentor::mascot::bot_author_name(&user_name);
     if let Err(e) = client.add_guestbook(life_id, &line, author.as_deref(), None, Some("bot")) {
         log::warn!("방문 방명록: 게시 실패(skip): {e}");
