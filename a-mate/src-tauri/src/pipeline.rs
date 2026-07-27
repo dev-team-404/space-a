@@ -921,7 +921,7 @@ mod runtime {
         let targets = agent_mentor::mascot::select_reply_targets(
             &entries, &agent_id, agent_mentor::mascot::GUESTBOOK_REPLY_MAX_PER_SCAN);
         if targets.is_empty() { return; }
-        let author = agent_mentor::mascot::bot_author_name(&title, &user_name);
+        let author = agent_mentor::mascot::bot_author_name(&user_name);
         let mbti = agent_mentor::mascot::normalize_mbti(&mbti);
         for t in &targets {
             let reply = match agent_mentor::mascot::compute_guestbook_reply(

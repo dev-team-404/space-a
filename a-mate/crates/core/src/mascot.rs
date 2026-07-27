@@ -381,17 +381,15 @@ pub fn should_ask_about_bot(entry_id: &str) -> bool {
     Sha256::digest(entry_id.as_bytes())[0] % 3 == 0
 }
 
-/// G3 — 봇 답글 작성자 표기 "{owner_title}님의 {user_name}" (ADR 0020 규범 구현).
-/// 어느 쪽이든 비어 있거나 조립 결과가 서버 상한(80자)을 넘으면 None —
-/// 호출자는 author_name 미전달로 서버 fallback(등록된 agent name)에 위임한다.
-pub fn bot_author_name(owner_title: &str, user_name: &str) -> Option<String> {
-    let title = owner_title.trim();
+/// G5 — 봇 답글 작성자 표기 = 봇 이름만 (ADR 0022, ADR 0020 봇-라벨 조항 대체).
+/// 답글은 주인 본인 방에 달려 소유가 맥락상 자명하고, 주인 본인 봇은 아바타가 시각 보강한다.
+/// 빈/공백이면 None(서버 등록명 fallback), 서버 상한(80자) 초과도 None.
+pub fn bot_author_name(user_name: &str) -> Option<String> {
     let name = user_name.trim();
-    if title.is_empty() || name.is_empty() {
+    if name.is_empty() {
         return None;
     }
-    let s = format!("{title}님의 {name}");
-    (s.chars().count() <= 80).then_some(s)
+    (name.chars().count() <= 80).then(|| name.to_string())
 }
 
 /// G3 — 자동 답글 대상 원글 (select_reply_targets 결과 행).
@@ -883,24 +881,22 @@ mod guestbook_reply_tests {
     }
 
     #[test]
-    fn bot_author_name_joins_title_and_name() {
-        // ADR 0020 규범: "{owner_title}님의 {user_name}"
-        assert_eq!(bot_author_name("대장", "둘쇠").as_deref(), Some("대장님의 둘쇠"));
+    fn bot_author_name_is_bot_name_only() {
+        // G5(ADR 0022): 봇 답글 라벨 = 봇 이름만
+        assert_eq!(bot_author_name("둘쇠").as_deref(), Some("둘쇠"));
+        assert_eq!(bot_author_name("  둘쇠  ").as_deref(), Some("둘쇠")); // trim
     }
 
     #[test]
-    fn bot_author_name_trims_and_requires_both_parts() {
-        assert_eq!(bot_author_name(" 대장 ", " 둘쇠 ").as_deref(), Some("대장님의 둘쇠"));
-        assert_eq!(bot_author_name("대장", ""), None);    // user_name 미설정 → 서버 fallback
-        assert_eq!(bot_author_name("대장", "   "), None); // 공백만
-        assert_eq!(bot_author_name("", "둘쇠"), None);
+    fn bot_author_name_none_when_blank() {
+        assert_eq!(bot_author_name(""), None);
+        assert_eq!(bot_author_name("   "), None);
     }
 
     #[test]
     fn bot_author_name_none_when_over_80_chars() {
-        // "님의 " = 3자 → 75+3+2 = 정확히 80자(허용), 76+3+2 = 81자(서버 400 회피 → None)
-        assert!(bot_author_name(&"가".repeat(75), "둘쇠").is_some());
-        assert_eq!(bot_author_name(&"가".repeat(76), "둘쇠"), None);
+        assert!(bot_author_name(&"가".repeat(80)).is_some());
+        assert_eq!(bot_author_name(&"가".repeat(81)), None); // 서버 400 회피
     }
 
     fn gb(entry_id: &str, author: &str, name: &str, body: &str, parent: Option<&str>) -> serde_json::Value {
