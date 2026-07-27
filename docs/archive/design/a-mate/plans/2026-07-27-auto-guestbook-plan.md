@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-27
+---
+
 # 자동 방명록 (P3) + author_kind 판별 구현 계획
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -35,7 +40,7 @@
 **Interfaces:**
 - Produces: `LifeService.add_guestbook(token, life_id, body, author_name=None, parent_id=None, author_kind=None)` — `author_kind`는 `"human"`/`"bot"`/None(공백=None), 그 외 `errors.InvalidRequest`. 반환 row와 `guestbook()` 항목에 `author_kind` 키 포함(구 데이터는 None). REST: POST body `author_kind` 선택 필드, GET 에코.
 
-- [ ] **Step 1: venv 준비(없으면) 후 기존 테스트 그린 확인**
+- [x] **Step 1: venv 준비(없으면) 후 기존 테스트 그린 확인**
 
 ```powershell
 cd a-hub\life
@@ -44,7 +49,7 @@ if (-not (Test-Path .venv)) { python -m venv .venv; .venv\Scripts\pip install -e
 ```
 Expected: 전부 PASS (V1 시점 55개+).
 
-- [ ] **Step 2: 실패 테스트 작성 — `test_life.py` 끝에 추가**
+- [x] **Step 2: 실패 테스트 작성 — `test_life.py` 끝에 추가**
 
 ```python
 def test_guestbook_author_kind_roundtrip_and_default():
@@ -95,14 +100,14 @@ def test_guestbook_author_kind_survives_restart(tmp_path):
                           "created_at": "2026-01-01T00:00:00+00:00"}]
 ```
 
-- [ ] **Step 3: 실패 확인**
+- [x] **Step 3: 실패 확인**
 
 ```powershell
 .venv\Scripts\python -m pytest tests/test_life.py -k author_kind -x
 ```
 Expected: FAIL — `add_guestbook() got an unexpected keyword argument 'author_kind'`
 
-- [ ] **Step 4: 구현**
+- [x] **Step 4: 구현**
 
 `life.py` `add_guestbook`(392행) — 시그니처와 검증·row 확장:
 
@@ -192,14 +197,14 @@ class GuestbookAddBody(BaseModel):
 
 참고: 신규 DB의 `CREATE TABLE guestbook`(75행) 정의에도 `author_kind TEXT` 컬럼을 추가한다 (마이그레이션은 구 DB용).
 
-- [ ] **Step 5: 전체 통과 확인**
+- [x] **Step 5: 전체 통과 확인**
 
 ```powershell
 .venv\Scripts\python -m pytest
 ```
 Expected: 전부 PASS (신규 3개 포함, 기존 legacy 테스트도 갱신된 기대값으로 PASS).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add a-hub/life
@@ -218,7 +223,7 @@ git commit -m "feat(backend): add author_kind flag to life guestbook"
 - Consumes: Task 1의 서버 필드 (구서버는 모르는 필드 무시 — 하위호환).
 - Produces: `LifeClient::add_guestbook(&self, life_id: &str, body: &str, author_name: Option<&str>, parent_id: Option<&str>, author_kind: Option<&str>) -> Result<Value>` — Task 6 글루가 `Some("bot")`으로 호출.
 
-- [ ] **Step 1: 실패 테스트 — `life_client.rs` 테스트 모듈에 추가**
+- [x] **Step 1: 실패 테스트 — `life_client.rs` 테스트 모듈에 추가**
 
 ```rust
     #[test]
@@ -236,7 +241,7 @@ git commit -m "feat(backend): add author_kind flag to life guestbook"
 
 기존 `guestbook_body_*` 테스트 4개(332-354행)의 호출에 4번째 인자 `None`을 추가한다.
 
-- [ ] **Step 2: 컴파일 실패 확인**
+- [x] **Step 2: 컴파일 실패 확인**
 
 ```powershell
 cd a-mate
@@ -244,7 +249,7 @@ cargo test -p agent_mentor guestbook_body
 ```
 Expected: FAIL — `this function takes 3 arguments but 4 arguments were supplied`
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ```rust
 /// 방명록 작성 body. author_name/parent_id/author_kind는 빈/공백이면 생략 —
@@ -283,14 +288,14 @@ fn guestbook_body(body: &str, author_name: Option<&str>, parent_id: Option<&str>
             match client.add_guestbook(&life_id, &reply, author.as_deref(), Some(&t.entry_id), Some("bot")) {
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 ```powershell
 cargo test -p agent_mentor guestbook_body; cargo build
 ```
 Expected: 테스트 6개 PASS, 워크스페이스 컴파일 성공.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add a-mate/crates/core/src/life_client.rs a-mate/src-tauri/src/commands.rs a-mate/src-tauri/src/pipeline.rs
@@ -309,7 +314,7 @@ git commit -m "feat(agent): send author_kind on guestbook writes"
 - Consumes: Task 1의 GET `author_kind` 에코.
 - Produces: `ReplyTarget { entry_id, author_name, body, author_is_bot: bool }` — `select_reply_targets`가 `author_kind == "bot"`일 때만 true(누락/human/기타 = false).
 
-- [ ] **Step 1: 실패 테스트 — `mascot.rs` 테스트 모듈에 추가**
+- [x] **Step 1: 실패 테스트 — `mascot.rs` 테스트 모듈에 추가**
 
 ```rust
     #[test]
@@ -324,14 +329,14 @@ git commit -m "feat(agent): send author_kind on guestbook writes"
     }
 ```
 
-- [ ] **Step 2: 컴파일 실패 확인**
+- [x] **Step 2: 컴파일 실패 확인**
 
 ```powershell
 cargo test -p agent_mentor select_reply_targets
 ```
 Expected: FAIL — `no field author_is_bot on type ReplyTarget`
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 `ReplyTarget`(406행)에 필드 추가:
 
@@ -371,14 +376,14 @@ pub struct ReplyTarget {
                 agent_mentor::mascot::should_ask_about_bot(&t.entry_id) && !t.author_is_bot, t)
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 ```powershell
 cargo test -p agent_mentor mascot; cargo build
 ```
 Expected: mascot 테스트 전부 PASS(신규 1개 포함), 컴파일 성공.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add a-mate/crates/core/src/mascot.rs a-mate/src-tauri/src/pipeline.rs
@@ -400,7 +405,7 @@ git commit -m "feat(agent): gate bot-question by guestbook author_kind"
   - `pub const VISIT_COOLDOWN_HOURS: i64 = 24;` `pub const VISIT_LONG_TIME_DAYS: i64 = 7;`
 - Consumes: `crate::mascot::OwnerVibe` (기존 pub enum).
 
-- [ ] **Step 1: 모듈 뼈대 + 실패 테스트 작성 — `visit.rs` 신규 생성**
+- [x] **Step 1: 모듈 뼈대 + 실패 테스트 작성 — `visit.rs` 신규 생성**
 
 ```rust
 //! P3 — 방문 시 자동 방명록: 판정(쿨다운·이유 게이트)과 문구 생성의 순수 로직.
@@ -508,14 +513,14 @@ mod tests {
 pub mod visit;
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 ```powershell
 cargo test -p agent_mentor visit
 ```
 Expected: FAIL — `cannot find function visit_sign_decision`
 
-- [ ] **Step 3: 구현 — `visit.rs`의 tests 모듈 위에**
+- [x] **Step 3: 구현 — `visit.rs`의 tests 모듈 위에**
 
 ```rust
 /// 이 방에 방명록을 남길지와 그 이유 (스펙 §3). None = 조용히 skip.
@@ -562,14 +567,14 @@ pub fn visit_sign_decision(
 }
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 ```powershell
 cargo test -p agent_mentor visit
 ```
 Expected: 7개 전부 PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add a-mate/crates/core/src/visit.rs a-mate/crates/core/src/lib.rs
@@ -590,7 +595,7 @@ git commit -m "feat(agent): add visit guestbook sign decision"
   - `pub fn build_visit_user_msg(room_owner_name: Option<&str>) -> String`
   - `pub fn compute_visit_guestbook(engine: &dyn crate::diary::engine::Engine, honorific: &str, mbti: Option<&str>, reason: SignReason, room_owner_name: Option<&str>) -> anyhow::Result<String>` — Task 6 글루가 호출.
 
-- [ ] **Step 1: 실패 테스트 — `visit.rs` tests 모듈에 추가**
+- [x] **Step 1: 실패 테스트 — `visit.rs` tests 모듈에 추가**
 
 ```rust
     use crate::diary::engine::MockEngine;
@@ -646,14 +651,14 @@ git commit -m "feat(agent): add visit guestbook sign decision"
     }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 ```powershell
 cargo test -p agent_mentor visit
 ```
 Expected: FAIL — `cannot find function build_visit_guestbook_prompt`
 
-- [ ] **Step 3: 구현 — `visit_sign_decision` 아래에**
+- [x] **Step 3: 구현 — `visit_sign_decision` 아래에**
 
 ```rust
 /// 이유 → 프롬프트에 넣을 방문 사유 어구 (이 사실만 쓰게 한다 — fabrication 억제).
@@ -722,7 +727,7 @@ pub fn compute_visit_guestbook(
 }
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 ```powershell
 cargo test -p agent_mentor visit
@@ -731,7 +736,7 @@ Expected: Task 4의 7개 + 신규 6개 = 13개 PASS.
 
 주의: `mbti_voice_hint(INTJ)`의 "사실·수치" 앵커가 실제 문구와 안 맞으면 `mascot.rs:620` 테스트(`mbti_voice_hint_covers_axes_and_empty`)가 쓰는 앵커를 그대로 따른다.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add a-mate/crates/core/src/visit.rs
@@ -750,7 +755,7 @@ git commit -m "feat(agent): add visit guestbook prompt and generation"
 - Consumes: Task 2 `add_guestbook(.., Some("bot"))`, Task 4·5의 `visit_sign_decision`/`compute_visit_guestbook`, 기존 `crate::resolve_engine`(lib.rs:139), `crate::commands::{chat_context_inner, owner_title}`(pub/pub(crate)), `agent_mentor::mascot::{owner_vibe, normalize_mbti, bot_author_name}`, `agent_mentor::diary::collect_work_context`.
 - Produces: `pub fn maybe_sign_guestbook(store_mutex: &std::sync::Mutex<SqliteStore>, life_id: &str)` — 미래 자율 방문 기능의 재사용 진입점 (스펙 §8).
 
-- [ ] **Step 1: 글루 작성 — `src-tauri/src/visit.rs` 신규**
+- [x] **Step 1: 글루 작성 — `src-tauri/src/visit.rs` 신규**
 
 글루는 I/O 오케스트레이션이라 단위 테스트 없음(G3 `maybe_reply_guestbook` 선례 — 로직은 전부 core에서 검증됨). 컴파일과 기존 테스트 그린이 게이트.
 
@@ -843,7 +848,7 @@ pub fn maybe_sign_guestbook(store_mutex: &std::sync::Mutex<SqliteStore>, life_id
 mod visit;
 ```
 
-- [ ] **Step 2: `life_goto` 훅 — `commands.rs:915-922` 교체**
+- [x] **Step 2: `life_goto` 훅 — `commands.rs:915-922` 교체**
 
 ```rust
 /// 방 이동(우클릭 메뉴). cell 없이 입장 — 서버가 빈 셀 배정.
@@ -866,14 +871,14 @@ pub async fn life_goto(app: tauri::AppHandle, state: State<'_, AppState>, life_i
 }
 ```
 
-- [ ] **Step 3: 컴파일·전체 테스트**
+- [x] **Step 3: 컴파일·전체 테스트**
 
 ```powershell
 cargo test
 ```
 Expected: 워크스페이스 전부 PASS (베이스라인 553 + Task 4·5의 13 + Task 2·3 신규분).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add a-mate/src-tauri/src/visit.rs a-mate/src-tauri/src/lib.rs a-mate/src-tauri/src/commands.rs
@@ -893,7 +898,7 @@ git commit -m "feat(agent): auto guestbook on room visit"
 **Interfaces:**
 - Produces: `visitGuestbookEnabled(settings: Record<string, string>): boolean` — 기본 on, `'false'`만 off (Rust 글루와 동일 규칙). `GuestbookEntry.author_kind?: 'human' | 'bot' | null`.
 
-- [ ] **Step 1: 실패 테스트 — `guestbook.test.ts`에 추가**
+- [x] **Step 1: 실패 테스트 — `guestbook.test.ts`에 추가**
 
 ```ts
 import { groupGuestbook, showOwnerAvatar, visitGuestbookEnabled } from './guestbook';
@@ -910,7 +915,7 @@ describe('visitGuestbookEnabled', () => {
 });
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 ```powershell
 cd a-mate
@@ -918,7 +923,7 @@ npm test -- --run
 ```
 Expected: FAIL — `visitGuestbookEnabled is not exported`
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 `guestbook.ts` 끝에:
 
@@ -966,14 +971,14 @@ export interface GuestbookEntry { entry_id: string; life_id: string; author_agen
   .vg{display:flex;justify-content:space-between;padding:10px 12px;background:var(--cream);color:var(--cream-ink);border-radius:9px;margin-top:14px}
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 ```powershell
 npm test -- --run
 ```
 Expected: 전부 PASS (기존 166 + 신규 1). `no-hardcoded-colors` 계열 검사도 그린(의미 토큰만 사용).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add a-mate/src/lib/api.ts a-mate/src/lib/guestbook.ts a-mate/src/lib/guestbook.test.ts a-mate/src/lib/ui/settings/PrivacyGroup.svelte
@@ -988,7 +993,7 @@ git commit -m "feat(frontend): visit guestbook setting toggle"
 - Modify: `docs/design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md` (P3 완료 기록 + 묶음 ② 편입 메모)
 - 아카이브: 본 스펙·플랜 → `docs/archive/` 미러 (docs-archive 스킬, ADR 0013)
 
-- [ ] **Step 1: 전체 테스트 3종 최종 확인**
+- [x] **Step 1: 전체 테스트 3종 최종 확인**
 
 ```powershell
 cd a-mate; cargo test; npm test -- --run
@@ -996,7 +1001,7 @@ cd ..\a-hub\life; .venv\Scripts\python -m pytest
 ```
 Expected: 전부 PASS.
 
-- [ ] **Step 2: main 최신 반영 후 로드맵 갱신** (로드맵은 병렬 세션과 공유 — 충돌 회피)
+- [x] **Step 2: main 최신 반영 후 로드맵 갱신** (로드맵은 병렬 세션과 공유 — 충돌 회피)
 
 ```powershell
 git fetch origin; git merge origin/main
@@ -1012,9 +1017,9 @@ git add docs/design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.
 git commit -m "docs(plan): record P3 auto guestbook completion in roadmap"
 ```
 
-- [ ] **Step 3: docs-archive 스킬 실행 (DoD, ADR 0013)** — 본 스펙(`2026-07-27-auto-guestbook-design.md`)과 본 플랜을 `docs/archive/` 미러로 이동, 같은 PR에 포함.
+- [x] **Step 3: docs-archive 스킬 실행 (DoD, ADR 0013)** — 본 스펙(`2026-07-27-auto-guestbook-design.md`)과 본 플랜을 `docs/archive/` 미러로 이동, 같은 PR에 포함.
 
-- [ ] **Step 4: push + PR 생성**
+- [x] **Step 4: push + PR 생성**
 
 PR 본문 체크리스트에 반드시 포함 (사용자 몫 실환경 스모크):
 - [ ] on-prem life 서버에 a-hub `author_kind` 변경 배포 (구서버여도 기능은 무해 동작 — 판별만 미작동)

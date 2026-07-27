@@ -1,5 +1,5 @@
 //! P3 — 방문 시 자동 방명록: 판정(쿨다운·이유 게이트)과 문구 생성의 순수 로직.
-//! 스펙: docs/design/a-mate/specs/2026-07-27-auto-guestbook-design.md
+//! 스펙: docs/archive/design/a-mate/specs/2026-07-27-auto-guestbook-design.md
 //! 글루(src-tauri/src/visit.rs)가 서버 GET 결과를 넘겨 호출한다 — 여기엔 I/O 없음.
 
 use crate::mascot::OwnerVibe;
