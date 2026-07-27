@@ -63,13 +63,14 @@ export function adviceBubble(f: { dedup_key: string; detail: string }, honorific
   return { kind: 'finding', tab: 'coach', text: `${honorific}, ${f.detail}`, target: f.dedup_key };
 }
 
-/** 잡담 후보 전체 — LLM 풀(사용기록 연계) + 정적 큐레이션(잡담/응원, summary 렌더). */
+/** 잡담 후보 — LLM 풀(사용기록 연계)이 있으면 풀에서만 pick, 비면 정적 큐레이션 폴백
+ *  (오프라인/엔진 미설정/오늘 활동 0건 → 백엔드가 빈 풀 캐시). */
 export function chatterCandidates(
   pool: string[],
   summary: { session_count: number } | null,
   honorific: string,
 ): string[] {
-  return [...pool, ...CHATTER.map((f) => f(summary?.session_count ?? null, honorific))];
+  return pool.length ? [...pool] : CHATTER.map((f) => f(summary?.session_count ?? null, honorific));
 }
 
 /** 잡담 pick — 후보에서 최근 표시분(recent)을 제외하고 균등 랜덤.

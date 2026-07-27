@@ -57,4 +57,7 @@ describe('pickChatter', () => {
     const b = pickChatter(['풀A'], null, all, () => 0, '주인');
     expect(all).toContain(b.text);
   });
+  it('풀이 있으면 정적 문구는 후보에서 빠진다 (LLM 우선, 정적은 폴백 전용)', () => {
+    expect(chatterCandidates(['풀A', '풀B'], { session_count: 3 }, '주인')).toEqual(['풀A', '풀B']);
+  });
 });

@@ -198,7 +198,8 @@ pub fn build_daily_line_prompt(ctx: &crate::chat::ChatContext) -> String {
 }
 
 /// 잡담 풀 크기 — 스캔당 LLM 1회 호출로 배치 생성하는 잡담 개수 (스펙 §2).
-pub const CHATTER_POOL_SIZE: usize = 5;
+/// 묶음 ① H3: 프론트가 풀 우선(정적은 폴백 전용)이 되면서 체감 다양성 확보를 위해 5→12.
+pub const CHATTER_POOL_SIZE: usize = 12;
 
 /// 오늘 세션이 이 이상이면 "그만 좀 하고 쉬어라" 코믹 지시를 넣는다 (스펙 묶음 B, 조정 가능).
 pub const CHATTER_REST_SESSIONS: u64 = 5;
@@ -255,6 +256,9 @@ pub fn build_chatter_prompt(
          요약에 없는 구체적 수치를 지어내지 마세요.\n\n\
          {facts}{comic}\n\n\
          위 요약을 재료로, 상주 마스코트가 가끔 툭 던질 가벼운 잡담·혼잣말을 {n}개 만드세요. \
+         {n}개끼리 주제와 결이 겹치지 않게 — 오늘 작업에 대한 관찰, 엉뚱한 궁금증, \
+         자기(마스코트) 셀프 개그, 응원, 오늘 작업 강도에 대한 능청 등 서로 다른 각도로 만들되, \
+         위 성향(문체)은 모든 잡담에 일관되게 유지하세요. \
          코칭 조언이나 보고처럼 굴지 마세요(조언은 다른 채널이 합니다). \
          한 줄에 하나씩, 각 40자 이내로, 번호·불릿·따옴표 없이 출력하세요.",
         honorific = ctx.honorific,
@@ -812,6 +816,15 @@ mod chatter_tests {
         // 무신호(평일·세션 적음·짧은 몰입) → 코믹 블록 자체가 없어 기존 프롬프트와 동일 골격
         let p = build_chatter_prompt(&ctx(3, 100, 200, 1), &work(false, 2.0, false), 5);
         assert!(!p.contains("근무 맥락"));
+    }
+
+    #[test]
+    fn chatter_prompt_requests_topic_diversity() {
+        // H3: 잡담끼리 결이 겹치지 않게 + 성향(문체)·작업 강도 축 명시 참조
+        let p = build_chatter_prompt(&ctx(3, 100, 200, 1), &Default::default(), 5);
+        assert!(p.contains("겹치지 않게"));
+        assert!(p.contains("셀프 개그"));
+        assert!(p.contains("작업 강도"));
     }
 
     #[test]
