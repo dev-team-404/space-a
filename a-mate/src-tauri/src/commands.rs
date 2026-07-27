@@ -1025,7 +1025,7 @@ pub async fn life_add_guestbook(state: State<'_, AppState>, life_id: String, bod
     let full_name = { let guard = lock(&state)?; owner_full_name(&guard) };
     run_life_http("life_add_guestbook", move || {
         let author = (!full_name.is_empty()).then_some(full_name.as_str());
-        client.add_guestbook(&life_id, &body, author, parent_id.as_deref()).map_err(|e| e.to_string())
+        client.add_guestbook(&life_id, &body, author, parent_id.as_deref(), Some("human")).map_err(|e| e.to_string())
     })
     .await
 }

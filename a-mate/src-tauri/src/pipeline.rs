@@ -959,7 +959,7 @@ mod runtime {
             if !still_target {
                 continue;
             }
-            match client.add_guestbook(&life_id, &reply, author.as_deref(), Some(&t.entry_id)) {
+            match client.add_guestbook(&life_id, &reply, author.as_deref(), Some(&t.entry_id), Some("bot")) {
                 Ok(resp) => {
                     let echoed = resp.get("parent_id").and_then(|p| p.as_str())
                         == Some(t.entry_id.as_str());

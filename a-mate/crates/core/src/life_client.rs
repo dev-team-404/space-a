@@ -110,13 +110,17 @@ fn rename_body(name: &str, owner_os_user: &str, owner_full_name: &str) -> Value 
 
 /// 방명록 body — author_name은 있고 비어있지 않을 때만 실린다(G1: 사람 작성 = 풀네임 서명).
 /// parent_id는 답글일 때만 실린다(G2/ADR 0021: 방 주인 전용 1단계 답글, 빈값 생략 규약).
-fn guestbook_body(body: &str, author_name: Option<&str>, parent_id: Option<&str>) -> Value {
+fn guestbook_body(body: &str, author_name: Option<&str>, parent_id: Option<&str>, author_kind: Option<&str>) -> Value {
     let mut v = json!({ "body": body });
     if let Some(name) = author_name.map(str::trim).filter(|n| !n.is_empty()) {
         v["author_name"] = json!(name);
     }
     if let Some(parent) = parent_id.map(str::trim).filter(|p| !p.is_empty()) {
         v["parent_id"] = json!(parent);
+    }
+    // P3 사람/봇 판별 플래그 — 구서버는 모르는 필드를 무시하므로 하위호환
+    if let Some(kind) = author_kind.map(str::trim).filter(|k| !k.is_empty()) {
+        v["author_kind"] = json!(kind);
     }
     v
 }
@@ -234,9 +238,9 @@ impl LifeClient {
             .call().map_err(err_of)?.into_json().map_err(Into::into)
     }
 
-    pub fn add_guestbook(&self, life_id: &str, body: &str, author_name: Option<&str>, parent_id: Option<&str>) -> Result<Value> {
+    pub fn add_guestbook(&self, life_id: &str, body: &str, author_name: Option<&str>, parent_id: Option<&str>, author_kind: Option<&str>) -> Result<Value> {
         self.req("POST", &format!("/life/{life_id}/guestbook"))
-            .send_json(guestbook_body(body, author_name, parent_id)).map_err(err_of)?.into_json().map_err(Into::into)
+            .send_json(guestbook_body(body, author_name, parent_id, author_kind)).map_err(err_of)?.into_json().map_err(Into::into)
     }
 
     pub fn delete_guestbook(&self, entry_id: &str) -> Result<Value> {
@@ -330,26 +334,38 @@ mod tests {
 
     #[test]
     fn guestbook_body_includes_author_name_when_some() {
-        let b = guestbook_body("왔다감", Some("홍길동"), None);
+        let b = guestbook_body("왔다감", Some("홍길동"), None, None);
         assert_eq!(b["body"], serde_json::json!("왔다감"));
         assert_eq!(b["author_name"], serde_json::json!("홍길동"));
     }
 
     #[test]
     fn guestbook_body_omits_author_name_when_none_or_blank() {
-        assert!(guestbook_body("왔다감", None, None).get("author_name").is_none());
-        assert!(guestbook_body("왔다감", Some("  "), None).get("author_name").is_none());
+        assert!(guestbook_body("왔다감", None, None, None).get("author_name").is_none());
+        assert!(guestbook_body("왔다감", Some("  "), None, None).get("author_name").is_none());
     }
 
     #[test]
     fn guestbook_body_includes_parent_id_when_some() {
-        let b = guestbook_body("고마워요", Some("홍길동"), Some("gb_abc123"));
+        let b = guestbook_body("고마워요", Some("홍길동"), Some("gb_abc123"), None);
         assert_eq!(b["parent_id"], serde_json::json!("gb_abc123"));
     }
 
     #[test]
     fn guestbook_body_omits_parent_id_when_none_or_blank() {
-        assert!(guestbook_body("왔다감", None, None).get("parent_id").is_none());
-        assert!(guestbook_body("왔다감", None, Some("  ")).get("parent_id").is_none());
+        assert!(guestbook_body("왔다감", None, None, None).get("parent_id").is_none());
+        assert!(guestbook_body("왔다감", None, Some("  "), None).get("parent_id").is_none());
+    }
+
+    #[test]
+    fn guestbook_body_includes_author_kind_when_some() {
+        let b = guestbook_body("왔다감", None, None, Some("bot"));
+        assert_eq!(b["author_kind"], serde_json::json!("bot"));
+    }
+
+    #[test]
+    fn guestbook_body_omits_author_kind_when_none_or_blank() {
+        assert!(guestbook_body("왔다감", None, None, None).get("author_kind").is_none());
+        assert!(guestbook_body("왔다감", None, None, Some("  ")).get("author_kind").is_none());
     }
 }
