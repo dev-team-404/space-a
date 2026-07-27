@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-27
+---
+
 # 방문 스폰 위치 분산 (V1) 구현 계획
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -33,7 +38,7 @@
 - Consumes: 기존 `LifeService` 공개 API (`register`, `enter`, `me`, `life_state`, `set_design`), 상수 `SPAWN_X=8`, `SPAWN_Y=16`, `GRID_W=GRID_H=20`, `FLOOR_Y=0`.
 - Produces: `_free_cell_locked(self, life_id: str, for_agent: str = "") -> Cell` — for_agent는 이 태스크에서는 **해시 시드로만** 사용(자기 제외는 Task 3). 모듈 함수 `_spawn_hash(agent_id: str, cell: Cell) -> int`. Task 2·3이 이 시그니처를 그대로 확장한다.
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 `a-hub/life/tests/test_life.py`의 `test_auto_spawn_at_spawn_point_then_nearby`(48-56행)를 아래로 **교체**:
 
@@ -102,12 +107,12 @@ def test_visit_spawn_avoids_furniture_footprint(life):
     assert (bx, by) not in blocked
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `a-hub\life\.venv\Scripts\python -m pytest a-hub\life\tests\test_life.py -q`
 Expected: FAIL 3개 — `test_auto_spawn_at_spawn_point_then_buffered`(현행은 거리 1 배정), `test_visit_spawn_keeps_buffer_between_agents`(거리 1 < 3), `test_visit_spawn_scatters_across_agents`(현행은 모두 같은 최근접 셀 → `len(cells) == 1`). `deterministic`(현행도 안정 정렬이라 결정적)·`avoids_furniture`(현행도 가구 회피)는 통과함 — 행동 고정용이니 그대로 진행.
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 `a-hub/life/life_server/life.py` 25-27행 상수 주석 정정:
 
@@ -168,12 +173,12 @@ def _spawn_hash(agent_id: str, cell: Cell) -> int:
             target = cell if cell is not None else self._free_cell_locked(life_id, for_agent=agent.agent_id)
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `a-hub\life\.venv\Scripts\python -m pytest a-hub\life\tests\test_life.py -q`
 Expected: 전부 PASS (기존 테스트 포함 — `test_auto_cell_assignment_no_overlap`은 셀 중복 없음만 단언하므로 계속 통과해야 한다)
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```powershell
 git add a-hub/life/life_server/life.py a-hub/life/tests/test_life.py
@@ -194,7 +199,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes: Task 1의 `_free_cell_locked(life_id, for_agent="")` — `for buffer in (3,):` 사다리.
 - Produces: 사다리 `for buffer in (3, 2):`로 확장된 동일 시그니처. 테스트 헬퍼 `_fill_grid_agents(life, owner_life_id)`, `_cover_floor_except(life, owner_token, life_id, holes)` (Task 3은 이 헬퍼를 쓰지 않음).
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 `a-hub/life/tests/test_life.py` 끝에 헬퍼 2개와 테스트 3개 추가:
 
@@ -256,12 +261,12 @@ def test_spawn_full_room_still_rejects(life):
         life.enter(token_v, owner_life.id, cell=None)
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `a-hub\life\.venv\Scripts\python -m pytest a-hub\life\tests\test_life.py -q -k spawn`
 Expected: `test_spawn_buffer_relaxes_to_two_when_three_impossible` **FAIL** (현행 Task 1 사다리 `(3,)`은 3 실패 시 곧장 버퍼 없이 배정 → 거리 1 자리 선택, `min(dists) == 1`). 나머지 2개는 Task 1 구현에서도 통과할 수 있음(행동 고정용 — 통과해도 그대로 진행).
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 `a-hub/life/life_server/life.py`의 `_free_cell_locked`에서 버퍼 사다리 한 줄 변경:
 
@@ -269,12 +274,12 @@ Expected: `test_spawn_buffer_relaxes_to_two_when_three_impossible` **FAIL** (현
         for buffer in (3, 2):
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `a-hub\life\.venv\Scripts\python -m pytest a-hub\life\tests\test_life.py -q`
 Expected: 전부 PASS
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```powershell
 git add a-hub/life/life_server/life.py a-hub/life/tests/test_life.py
@@ -295,7 +300,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes: Task 1·2의 `_free_cell_locked(life_id, for_agent="")` — for_agent는 현재 해시 시드로만 쓰임. `enter`는 이미 `for_agent=agent.agent_id`를 넘긴다.
 - Produces: for_agent가 **점유·버퍼 계산에서도 자기 자신을 제외**하는 완성형 `_free_cell_locked`. 이후 태스크 없음.
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 `a-hub/life/tests/test_life.py` 끝에 추가:
 
@@ -310,12 +315,12 @@ def test_reenter_same_room_keeps_own_cell(life):
     assert life.me(token_b)["cell"] == first
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `a-hub\life\.venv\Scripts\python -m pytest a-hub\life\tests\test_life.py -q -k reenter`
 Expected: FAIL — 자기 옛 셀이 agent_cells에 들어가 다른 셀로 밀려남 (`first`와 다른 값)
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 `_free_cell_locked`의 agent_cells 한 줄 변경:
 
@@ -324,12 +329,12 @@ Expected: FAIL — 자기 옛 셀이 agent_cells에 들어가 다른 셀로 밀�
                        if a.agent_id != for_agent and a.at_life == life_id}
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `a-hub\life\.venv\Scripts\python -m pytest a-hub\life\tests\test_life.py -q`
 Expected: 전부 PASS
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```powershell
 git add a-hub/life/life_server/life.py a-hub/life/tests/test_life.py
@@ -349,12 +354,12 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes: Task 1~3 완료 상태.
 - Produces: life 전체 스위트(단위+API+store) 녹색 확인.
 
-- [ ] **Step 1: life 전체 테스트**
+- [x] **Step 1: life 전체 테스트**
 
 Run: `a-hub\life\.venv\Scripts\python -m pytest a-hub\life\tests -q`
 Expected: **55 passed** (베이스라인 47 + 신규 8), 0 failed
 
-- [ ] **Step 2: 변경 파일 범위 확인**
+- [x] **Step 2: 변경 파일 범위 확인**
 
 Run: `git diff --stat origin/main...HEAD -- a-hub`
 Expected: `a-hub/life/life_server/life.py`와 `a-hub/life/tests/test_life.py` 두 파일만
