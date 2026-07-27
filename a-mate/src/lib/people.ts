@@ -28,13 +28,13 @@ const TTL_MS = 10_000; // 등록자 목록은 저빈도 변경 — lifeViewCache
 let cache: { at: number; value: LifePerson[] } | null = null;
 let inFlight: Promise<LifePerson[]> | null = null;
 
-/** lifePeople 래퍼 — TTL 캐시 + in-flight 공유. 실패 시 [] (모든 이름이 일반 텍스트로 강등). */
+/** lifePeople 래퍼 — TTL 캐시 + in-flight 공유. 실패 시 직전 성공값(없으면 []) — 순단에 기능이 꺼지지 않게. */
 export function getPeople(fetcher: PeopleFetcher): Promise<LifePerson[]> {
   if (cache && Date.now() - cache.at < TTL_MS) return Promise.resolve(cache.value);
   if (inFlight) return inFlight;
   inFlight = fetcher()
     .then((r) => { cache = { at: Date.now(), value: r.people }; return r.people; })
-    .catch(() => [] as LifePerson[])
+    .catch(() => cache?.value ?? ([] as LifePerson[]))
     .finally(() => { inFlight = null; });
   return inFlight;
 }

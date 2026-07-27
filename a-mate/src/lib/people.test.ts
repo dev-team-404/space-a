@@ -63,4 +63,12 @@ describe('getPeople', () => {
     const fetcher = vi.fn().mockRejectedValue(new Error('down'));
     await expect(getPeople(fetcher)).resolves.toEqual([]);
   });
+  it('TTL 경과 후 순단이면 직전 성공값 유지 (스테일 허용)', async () => {
+    const ok = vi.fn().mockResolvedValue({ people: [P('a', 'l')] });
+    await getPeople(ok);
+    vi.advanceTimersByTime(10_001);
+    const bad = vi.fn().mockRejectedValue(new Error('down'));
+    await expect(getPeople(bad)).resolves.toEqual([P('a', 'l')]);
+    expect(bad).toHaveBeenCalledTimes(1);
+  });
 });

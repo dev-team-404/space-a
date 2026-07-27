@@ -5,7 +5,15 @@
     agentId: string; name: string; meId: string; myLifeId: string; currentLifeId: string;
   } = $props();
   let people = $state<LifePerson[]>([]);
-  $effect(() => { let alive = true; getPeople(lifePeople).then((p) => { if (alive) people = p; }); return () => { alive = false; }; });
+  // 주기 갱신 — 1회 조회면 초기 순단·스테일 캐시에 언마운트까지 비활성으로 굳는다.
+  // 칩이 여럿이어도 getPeople의 TTL 캐시+in-flight 공유로 실제 fetch는 TTL당 1회.
+  $effect(() => {
+    let alive = true;
+    const refresh = () => getPeople(lifePeople).then((p) => { if (alive) people = p; });
+    refresh();
+    const t = setInterval(refresh, 10_000);
+    return () => { alive = false; clearInterval(t); };
+  });
   const target = $derived(resolveVisitTarget(agentId, name, { meId, myLifeId, currentLifeId, people }));
   let open = $state(false), busy = $state(false);
   let root = $state<HTMLElement | null>(null);
