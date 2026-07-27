@@ -67,7 +67,7 @@ export function resolveVisitTarget(agentId: string, displayName: string, ctx: Vi
 
 - `lifePeople()` 래퍼. **모듈 레벨 TTL 캐시(10초) + in-flight 공유** (`api.ts` `lifeViewCache` 500ms 선례를 완화한 값 — 등록자 목록은 저빈도 변경).
 - 실패(허브 순단·미연결) 시 `[]` 반환 → 모든 이름이 일반 텍스트로 강등. **기능만 조용히 꺼지고 화면은 깨지지 않는다.**
-- 테스트를 위해 **fetcher 주입**으로 확정: `getPeople(fetcher = lifePeople)`. 테스트는 가짜 fetcher를 주입하고 실코드는 기본값을 쓴다 — 순수 모듈 테스트 선례와 정합, `vi.mock` 불필요.
+- 테스트를 위해 **fetcher 주입**으로 확정: `getPeople(fetcher)` — fetcher는 필수 인자. `people.ts`는 `guestbook.ts`처럼 type-only import만 갖는 순수 모듈로 유지하고(런타임에 `api.ts`를 끌지 않음), 실코드는 NameChip이 `lifePeople`을 넘긴다. 테스트는 가짜 fetcher 주입 — `vi.mock` 불필요.
 
 ## 5. UI — 신규 공용 컴포넌트 `src/lib/ui/NameChip.svelte`
 
