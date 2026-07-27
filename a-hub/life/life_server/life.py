@@ -606,7 +606,7 @@ class LifeService:
             )
             if c not in agent_cells and c not in object_cells
         ]
-        for buffer in (3,):
+        for buffer in (3, 2):
             for cell in free:
                 if all(max(abs(cell[0] - ax), abs(cell[1] - ay)) >= buffer for ax, ay in agent_cells):
                     return cell

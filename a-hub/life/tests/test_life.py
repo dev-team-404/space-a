@@ -344,3 +344,58 @@ def test_visit_spawn_avoids_furniture_footprint(life):
     bx, by = life.me(token_b)["cell"]
     blocked = {(SPAWN_X - 3 + dx, SPAWN_Y - 3 + dy) for dx in range(7) for dy in range(2)}
     assert (bx, by) not in blocked
+
+
+def _fill_grid_agents(life, owner_life_id):
+    """{1,5,9,13,17}² 격자점 25곳에 에이전트 배치.
+
+    좌표 0~19 어디서든 최근접 격자 좌표까지 거리 ≤ 2 (0→1, 3→2, 19→2 …) —
+    가장자리 포함 방 전체에서 거리 3짜리 빈 칸이 존재하지 않게 한다.
+    """
+    for gx in (1, 5, 9, 13, 17):
+        for gy in (1, 5, 9, 13, 17):
+            _, token, _ = life.register(f"grid-{gx}-{gy}")
+            life.enter(token, owner_life_id, cell=(gx, gy))
+
+
+def _cover_floor_except(life, owner_token, life_id, holes):
+    """바닥 전체를 가구 footprint로 덮되 holes만 비운다. 주인이 선 칸은 holes에 포함해야 한다."""
+    objects = []
+    for bx in (0, 8, 16):
+        for by in (0, 8, 16):
+            w, h = min(8, GRID_W - bx), min(8, GRID_H - by)
+            cells = [[x, y] for y in range(h) for x in range(w) if (bx + x, by + y) not in holes]
+            if cells:
+                objects.append({"asset_id": f"block-{bx}-{by}", "category": "block",
+                                "cell": [bx, by], "size": [w, h], "footprint": cells, "rotation": 0})
+    life.set_design(owner_token, life_id, {"objects": objects})
+
+
+def test_spawn_buffer_relaxes_to_two_when_three_impossible(life):
+    _, _, owner_life = life.register("owner")  # 주인 스폰 = 앵커 (8,16)
+    _fill_grid_agents(life, owner_life.id)
+    _, token_v, _ = life.register("visitor")
+    life.enter(token_v, owner_life.id, cell=None)
+    vx, vy = life.me(token_v)["cell"]
+    dists = [max(abs(vx - o["cell"][0]), abs(vy - o["cell"][1]))
+             for o in life.life_state(owner_life.id)["occupants"] if o["name"] != "visitor"]
+    # 격자 간격 4라 어떤 칸도 거리 3 불가·2는 가능 — 사다리가 2로 완화한 자리여야 한다
+    assert min(dists) == 2
+
+
+def test_spawn_buffer_fully_relaxes_before_full(life):
+    _, owner_token, owner_life = life.register("owner")  # 주인 = (8,16)
+    _cover_floor_except(life, owner_token, owner_life.id,
+                        holes={(SPAWN_X, SPAWN_Y), (SPAWN_X, SPAWN_Y + 1)})
+    _, token_v, _ = life.register("visitor")
+    life.enter(token_v, owner_life.id, cell=None)
+    # 남은 빈 칸이 주인 옆칸뿐 — 409가 아니라 버퍼 없이 배정된다
+    assert life.me(token_v)["cell"] == [SPAWN_X, SPAWN_Y + 1]
+
+
+def test_spawn_full_room_still_rejects(life):
+    _, owner_token, owner_life = life.register("owner")
+    _cover_floor_except(life, owner_token, owner_life.id, holes={(SPAWN_X, SPAWN_Y)})
+    _, token_v, _ = life.register("visitor")
+    with pytest.raises(CellTaken):
+        life.enter(token_v, owner_life.id, cell=None)
