@@ -356,6 +356,31 @@ pub fn compute_chatter_pool(
     Ok(Some((parse_chatter_lines(&raw, CHATTER_POOL_SIZE), fp)))
 }
 
+/// G5 — 답글에 녹일 주인 근황의 거친 상태(수치 없이 vibe만, 스펙 §C 취지 유지).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OwnerVibe {
+    Busy,
+    Normal,
+    Idle,
+}
+
+/// 오늘 세션 수 + 근무 맥락 → 거친 상태. `comic_directives`와 동일 임계값·재료 재사용.
+/// 활동 0건이면 Idle(주말이어도), 세션 임계·장시간·주말이면 Busy, 그 외 Normal.
+pub fn owner_vibe(session_count: u64, work: &crate::diary::WorkContext) -> OwnerVibe {
+    if session_count == 0 {
+        OwnerVibe::Idle
+    } else if session_count >= CHATTER_REST_SESSIONS || work.long_work || work.is_weekend {
+        OwnerVibe::Busy
+    } else {
+        OwnerVibe::Normal
+    }
+}
+
+/// G5 — 이 방문자에게 "봇 안부"를 물을지(가끔 = entry_id 해시 1/3, 결정론적·재현 가능).
+pub fn should_ask_about_bot(entry_id: &str) -> bool {
+    Sha256::digest(entry_id.as_bytes())[0] % 3 == 0
+}
+
 /// G3 — 봇 답글 작성자 표기 "{owner_title}님의 {user_name}" (ADR 0020 규범 구현).
 /// 어느 쪽이든 비어 있거나 조립 결과가 서버 상한(80자)을 넘으면 None —
 /// 호출자는 author_name 미전달로 서버 fallback(등록된 agent name)에 위임한다.
@@ -836,6 +861,26 @@ mod chatter_tests {
 mod guestbook_reply_tests {
     use super::*;
     use crate::diary::engine::MockEngine;
+
+    fn wc(is_weekend: bool, long_work: bool) -> crate::diary::WorkContext {
+        crate::diary::WorkContext { is_weekend, is_holiday: false, active_hours: 0.0, long_work }
+    }
+
+    #[test]
+    fn owner_vibe_covers_branches() {
+        assert_eq!(owner_vibe(0, &wc(false, false)), OwnerVibe::Idle);   // 활동 0 → 한가
+        assert_eq!(owner_vibe(5, &wc(false, false)), OwnerVibe::Busy);   // 세션 임계(5)
+        assert_eq!(owner_vibe(1, &wc(false, true)), OwnerVibe::Busy);    // long_work
+        assert_eq!(owner_vibe(1, &wc(true, false)), OwnerVibe::Busy);    // 주말 작업
+        assert_eq!(owner_vibe(2, &wc(false, false)), OwnerVibe::Normal); // 그 외
+    }
+
+    #[test]
+    fn should_ask_about_bot_is_deterministic_and_partial() {
+        assert_eq!(should_ask_about_bot("entry-x"), should_ask_about_bot("entry-x")); // 안정
+        let n = (0..30).filter(|i| should_ask_about_bot(&format!("e{i}"))).count();
+        assert!(n > 0 && n < 30, "일부만 true여야 함 (n={n})"); // 전부 같지 않음
+    }
 
     #[test]
     fn bot_author_name_joins_title_and_name() {
