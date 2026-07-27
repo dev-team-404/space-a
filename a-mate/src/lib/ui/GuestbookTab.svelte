@@ -1,10 +1,12 @@
 <script lang="ts">
   import { lifeAddGuestbook, lifeDeleteGuestbook, lifeGuestbook, getSprite, type GuestbookEntry } from '../api';
   import { groupGuestbook, showOwnerAvatar } from '../guestbook';
+  import { listen } from '@tauri-apps/api/event';
   let { lifeId, meId, isOwner=false }: {lifeId:string;meId:string;isOwner?:boolean}=$props();
   let entries=$state<GuestbookEntry[]>([]),text=$state(''),busy=$state(false);
   let replyTo=$state<string|null>(null),replyText=$state('');
-  let ownSprite=$state<string|null>(null); getSprite().then(s=>ownSprite=s);
+  let ownSprite=$state<string|null>(null);
+  $effect(()=>{let un:(()=>void)|null=null;getSprite().then(s=>ownSprite=s);listen('sprite:ready',()=>getSprite().then(s=>ownSprite=s)).then(u=>un=u);return()=>un?.()});
   let threads=$derived(groupGuestbook(entries));
   async function load(){entries=(await lifeGuestbook(lifeId)).entries}load();
   async function add(){if(!text.trim()||busy)return;busy=true;try{await lifeAddGuestbook(lifeId,text);text='';await load()}finally{busy=false}}
