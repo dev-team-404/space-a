@@ -7,7 +7,7 @@ archived: 2026-07-27
 
 - **날짜**: 2026-07-27
 - **컴포넌트**: a-mate (프론트엔드 단독 소품)
-- **출처**: [로드맵 4차 배치 G7](../plans/2026-07-26-life-social-diary-followups-roadmap.md) — G4(PR #112) 검증 중 사용자 피드백
+- **출처**: [로드맵 4차 배치 G7](../../../../design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md) — G4(PR #112) 검증 중 사용자 피드백
 - **선행**: G4 머지 완료(PR #112, 2026-07-27) — 같은 파일(`GuestbookTab.svelte`)을 건드리므로 그 뒤 착수
 
 ## 배경
