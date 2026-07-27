@@ -357,6 +357,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   .bubble .text {
     border: none; background: none; font: inherit; color: inherit;
     cursor: pointer; text-align: left; padding: 0;
+    word-break: keep-all; overflow-wrap: anywhere;
     display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
   }
   .bubble .x {
