@@ -449,24 +449,28 @@ mod runtime {
         let Some(engine) = engine else { return; };
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
 
-        // ① 락: 오늘 컨텍스트 + 캐시된 fingerprint 읽기 → 즉시 해제
-        let (ctx, cached_fp) = match store_mutex.lock() {
+        // ① 락: 오늘 컨텍스트 + 최근 무드 윈도우 + 캐시된 fingerprint 읽기 → 즉시 해제
+        let (ctx, moods, cached_fp) = match store_mutex.lock() {
             Ok(store) => {
                 let ctx = match crate::commands::chat_context_inner(&store) {
                     Ok(c) => c,
                     Err(e) => { log::warn!("daily-line chat_context 실패: {e}"); return; }
                 };
+                let moods = agent_mentor::mascot::collect_recent_moods(
+                    &store,
+                    chrono::Local::now().date_naive(),
+                );
                 let cached_fp = match store.get_daily_line(&today) {
                     Ok(v) => v.map(|(_, fp)| fp),
                     Err(e) => { log::warn!("get_daily_line 실패: {e}"); return; }
                 };
-                (ctx, cached_fp)
+                (ctx, moods, cached_fp)
             }
             Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
         }; // guard drops here — 네트워크 전에 락 해제
 
         // ② 락 없이 compute (0건 정적 or 네트워크 생성). None이면 skip.
-        let outcome = match agent_mentor::mascot::compute_daily_line(&engine, &ctx, cached_fp.as_deref()) {
+        let outcome = match agent_mentor::mascot::compute_daily_line(&engine, &ctx, &moods, cached_fp.as_deref()) {
             Ok(o) => o,
             Err(e) => { log::warn!("compute_daily_line 실패: {e}"); return; }
         };
