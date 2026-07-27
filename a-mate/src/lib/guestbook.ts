@@ -17,3 +17,8 @@ export function groupGuestbook(entries: GuestbookEntry[]): GuestbookThread[] {
     .filter((e) => !e.parent_id || !ids.has(e.parent_id))
     .map((entry) => ({ entry, replies: [...(byParent.get(entry.entry_id) ?? [])].reverse() }));
 }
+
+/** G5 — 이 항목에 주인 마스코트 아바타를 보일지: 주인이 자기 홈에서 보는 자기 봇/자기 작성 항목만. */
+export function showOwnerAvatar(entry: GuestbookEntry, meId: string, isOwner: boolean): boolean {
+  return isOwner && entry.author_agent_id === meId;
+}
