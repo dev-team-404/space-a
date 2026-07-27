@@ -63,8 +63,8 @@ export function adviceBubble(f: { dedup_key: string; detail: string }, honorific
   return { kind: 'finding', tab: 'coach', text: `${honorific}, ${f.detail}`, target: f.dedup_key };
 }
 
-/** 잡담 후보 — LLM 풀(사용기록 연계)이 있으면 풀에서만 pick, 비면 정적 큐레이션 폴백
- *  (오프라인/엔진 미설정/오늘 활동 0건 → 백엔드가 빈 풀 캐시). */
+/** 잡담 후보 — LLM 풀(사용기록 연계)이 있으면 풀에서만 pick, 비면 정적 큐레이션 폴백.
+ *  빈 풀 판정은 백엔드 몫 — 오프라인/엔진 미설정/활동 0건/캐시 지문 불일치(당일 중단·실패). */
 export function chatterCandidates(
   pool: string[],
   summary: { session_count: number } | null,

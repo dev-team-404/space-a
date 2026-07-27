@@ -48,8 +48,14 @@ pub fn daily_line_inner(store: &SqliteStore, date: &str) -> anyhow::Result<Optio
     Ok(store.get_daily_line(date)?.map(|(text, _fp)| text))
 }
 
+/// H3 풀-전용 선택의 안전선 — 캐시 지문이 현재 사실과 다르면(당일 엔진 중단·재생성 실패로
+/// 사실이 흘러간 풀) 빈 풀을 반환해, 프론트가 낡은 수치 잡담 대신 정적 폴백으로 내려가게 한다.
 pub fn chatter_pool_inner(store: &SqliteStore, date: &str) -> anyhow::Result<Vec<String>> {
-    Ok(store.get_chatter_pool(date)?.map(|(lines, _fp)| lines).unwrap_or_default())
+    let Some((lines, fp)) = store.get_chatter_pool(date)? else {
+        return Ok(Vec::new());
+    };
+    let current = agent_mentor::mascot::facts_fingerprint(&chat_context_inner(store)?);
+    Ok(if fp == current { lines } else { Vec::new() })
 }
 
 /// 큐레이션 콘텐츠(팁·뉴스) 노출 목록 — 쿨다운 적용은 store가 담당(now 주입).
@@ -1192,8 +1198,10 @@ mod tests {
         let store = SqliteStore::open_in_memory().unwrap();
         // 캐시 없음 → 빈 벡터 (에러 아님)
         assert_eq!(chatter_pool_inner(&store, "2026-07-10").unwrap(), Vec::<String>::new());
+        // 지문이 현재 사실과 일치하는 풀만 반환한다 (H3 풀-전용 선택의 안전선)
+        let fp = agent_mentor::mascot::facts_fingerprint(&chat_context_inner(&store).unwrap());
         store
-            .upsert_chatter_pool("2026-07-10", &["잡담 하나".to_string(), "잡담 둘".to_string()], "3|1|2|0")
+            .upsert_chatter_pool("2026-07-10", &["잡담 하나".to_string(), "잡담 둘".to_string()], &fp)
             .unwrap();
         assert_eq!(
             chatter_pool_inner(&store, "2026-07-10").unwrap(),
@@ -1201,6 +1209,11 @@ mod tests {
         );
         // 다른 날짜 → 빈 벡터
         assert_eq!(chatter_pool_inner(&store, "2099-01-01").unwrap(), Vec::<String>::new());
+        // 낡은 지문(당일 엔진 중단·재생성 실패로 사실이 흘러간 풀) → 빈 벡터 = 프론트 정적 폴백
+        store
+            .upsert_chatter_pool("2026-07-10", &["옛 잡담".to_string()], "3|1|2|0|주인|")
+            .unwrap();
+        assert_eq!(chatter_pool_inner(&store, "2026-07-10").unwrap(), Vec::<String>::new());
     }
 
     #[test]
