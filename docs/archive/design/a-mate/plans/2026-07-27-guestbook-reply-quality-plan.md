@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-27
+---
+
 # G5 방명록 봇 자동 답글 품질·표기 개선 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
