@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupGuestbook } from './guestbook';
+import { groupGuestbook, showOwnerAvatar } from './guestbook';
 import type { GuestbookEntry } from './api';
 
 const e = (entry_id: string, parent_id: string | null = null): GuestbookEntry => ({
@@ -27,5 +27,21 @@ describe('groupGuestbook', () => {
     const threads = groupGuestbook([e('gb_orphan', 'gb_gone')]);
     expect(threads.map((t) => t.entry.entry_id)).toEqual(['gb_orphan']);
     expect(threads[0].replies).toEqual([]);
+  });
+});
+
+describe('showOwnerAvatar', () => {
+  const mk = (author: string): GuestbookEntry => ({
+    entry_id: 'x', life_id: 'l1', author_agent_id: author, author_name: 'n',
+    body: 'b', created_at: '2026-07-27T00:00:00Z',
+  });
+  it('주인이 자기 홈에서 보는 자기 항목만 true', () => {
+    expect(showOwnerAvatar(mk('me'), 'me', true)).toBe(true);
+  });
+  it('다른 작성자 항목은 false', () => {
+    expect(showOwnerAvatar(mk('kimmy'), 'me', true)).toBe(false);
+  });
+  it('내 홈이 아니면(방문 중) false', () => {
+    expect(showOwnerAvatar(mk('me'), 'me', false)).toBe(false);
   });
 });

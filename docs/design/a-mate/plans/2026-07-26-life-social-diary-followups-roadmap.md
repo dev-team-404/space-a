@@ -156,10 +156,20 @@
   - "**가끔**"의 트리거(확률/로테이션 — comic_directives 조건부 선례).
 - **터치**: `crates/core/src/mascot.rs`(`build_guestbook_reply_prompt`·`build_guestbook_reply_user_msg`·`bot_author_name`·`compute_guestbook_reply`), `src-tauri/src/pipeline.rs`(`maybe_reply_guestbook` — 활동 신호·방문자 판별 배선), 표기 변경 시 **신규 ADR**.
 - **의존·세션**: G3(PR #108) 완료 위 **독립 후속**. 기존 함수 개편 위주. **별도 세션 권장**(표기=ADR 결정 + 프롬프트 재설계 + 활동 신호 배선).
+- **구현 결과(2026-07-27, `feat/guestbook-reply-quality`)**: 표기=옵션 A(봇 이름만, **ADR 0022**로 0020 대체) · 존댓말/3인칭/거친 vibe(바쁨·보통·한가함, **토큰 신호 포함**)/봇안부(entry_id 해시 ~1/3) 구현 · MBTI 유지 · **주인 본인 봇 아바타** 추가(자기 홈). 사람/봇 판별은 P3 전이라 방문자=사람 가정으로 이월.
+
+**G6 — 마스코트 얼굴 아이콘을 생성 시점에 저장·재사용 (G5 아바타 후속)** (백로그 — 2026-07-27)
+
+- **배경**: G5 아바타는 매 표시마다 전체 `sprite.png`를 로드해 CSS(background-zoom)로 얼굴을 크롭한다. 작동하지만 작은 아이콘에 큰 이미지 로드는 낭비.
+- **요구**: **sprite 생성 시점**(`maybe_generate_sprite`)에 얼굴(머리) 영역을 잘라 작은 `face.png`로 저장하고, 프론트는 그 아이콘을 로드(전체 sprite 로드·CSS 줌 제거).
+- **터치**: `crates/core/src/sprite.rs`(head 영역 크롭·다운스케일 — 기존 `png` decode→RGBA 버퍼→encode 패턴 재사용, **새 의존성 불필요**), `src-tauri`(sprite 생성 시 `face.png` 저장 + 신규 `get_face_icon` 커맨드, sprite 재생성 시 갱신), `GuestbookTab.svelte`(`getFaceIcon` 사용).
+- **크롭 기준**: 현재 CSS 크롭(`background-size:180%`, `position 50% 14%`)이 시각적으로 OK로 확인됨 → Rust 크롭을 이 비율로 환산(가로 중앙 ~55%, 세로 상단 근처). **실환경 재검증 1회 필요**.
+- **의존·세션**: G5 아바타 위 **독립 후속**. sprite 서브시스템 변경이라 G5와 분리. 얼굴 아이콘은 방 점유자·다른 UI에도 재사용 가능.
 
 | 아이템 | 병렬성 | 선행 |
 |---|---|---|
 | G5 봇 답글 품질·표기 | 기존 함수 개편 위주, 독립 | G3(PR #108, 완료) · 표기 변경 시 신규 ADR |
+| G6 얼굴 아이콘 생성·저장 | sprite 서브시스템, 독립 | G5(아바타) · png 크레이트만(새 의존성 없음) |
 
 ---
 
