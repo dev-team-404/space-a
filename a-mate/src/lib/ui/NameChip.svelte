@@ -45,8 +45,9 @@
   }
   .nm:hover { color: var(--accent-strong); }
   .plain { font-weight: inherit; }
+  /* left:0 — 가운데 정렬은 좌측 끝 이름에서 스크롤 컨테이너 밖으로 잘림(방명록) → 이름 왼쪽 기준으로 안쪽 전개 */
   .pop {
-    position: absolute; left: 50%; bottom: calc(100% + 5px); transform: translateX(-50%);
+    position: absolute; left: 0; bottom: calc(100% + 5px);
     z-index: 1001; white-space: nowrap;
     background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
     box-shadow: var(--shadow-soft); padding: 4px;
