@@ -2,7 +2,8 @@
   import { lifeAddGuestbook, lifeDeleteGuestbook, lifeGuestbook, getSprite, type GuestbookEntry } from '../api';
   import { groupGuestbook, showOwnerAvatar } from '../guestbook';
   import { listen } from '@tauri-apps/api/event';
-  let { lifeId, meId, isOwner=false }: {lifeId:string;meId:string;isOwner?:boolean}=$props();
+  import NameChip from './NameChip.svelte';
+  let { lifeId, meId, myLifeId, isOwner=false }: {lifeId:string;meId:string;myLifeId:string;isOwner?:boolean}=$props();
   let entries=$state<GuestbookEntry[]>([]),text=$state(''),busy=$state(false);
   let replyTo=$state<string|null>(null),replyText=$state('');
   let ownSprite=$state<string|null>(null);
@@ -19,7 +20,7 @@
 <div class="list">
 {#each threads as t (t.entry.entry_id)}
   <article>
-    <header>{#if showOwnerAvatar(t.entry,meId,isOwner)}{#if ownSprite}<span class="ava" style="background-image:url('data:image/png;base64,{ownSprite}')"></span>{:else}<span class="ava ava-fb">🤖</span>{/if}{/if}<b>{t.entry.author_name}</b><time>{new Date(t.entry.created_at).toLocaleString()}</time>
+    <header>{#if showOwnerAvatar(t.entry,meId,isOwner)}{#if ownSprite}<span class="ava" style="background-image:url('data:image/png;base64,{ownSprite}')"></span>{:else}<span class="ava ava-fb">🤖</span>{/if}{/if}<b><NameChip agentId={t.entry.author_agent_id} name={t.entry.author_name} {meId} {myLifeId} currentLifeId={lifeId}/></b><time>{new Date(t.entry.created_at).toLocaleString()}</time>
       <span class="acts">
         {#if isOwner}<button onclick={()=>toggleReply(t.entry.entry_id)}>답글</button>{/if}
         {#if isOwner||t.entry.author_agent_id===meId}<button onclick={()=>remove(t.entry.entry_id)}>삭제</button>{/if}
@@ -30,7 +31,7 @@
     <div class="replies">
       {#each t.replies as reply (reply.entry_id)}
         <article class="reply">
-          <header>{#if showOwnerAvatar(reply,meId,isOwner)}{#if ownSprite}<span class="ava" style="background-image:url('data:image/png;base64,{ownSprite}')"></span>{:else}<span class="ava ava-fb">🤖</span>{/if}{/if}<b>{reply.author_name}</b><time>{new Date(reply.created_at).toLocaleString()}</time>
+          <header>{#if showOwnerAvatar(reply,meId,isOwner)}{#if ownSprite}<span class="ava" style="background-image:url('data:image/png;base64,{ownSprite}')"></span>{:else}<span class="ava ava-fb">🤖</span>{/if}{/if}<b><NameChip agentId={reply.author_agent_id} name={reply.author_name} {meId} {myLifeId} currentLifeId={lifeId}/></b><time>{new Date(reply.created_at).toLocaleString()}</time>
             <span class="acts">{#if isOwner||reply.author_agent_id===meId}<button onclick={()=>remove(reply.entry_id)}>삭제</button>{/if}</span>
           </header>
           <p>{reply.body}</p>

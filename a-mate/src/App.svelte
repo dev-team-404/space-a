@@ -192,7 +192,7 @@
         {:else if tab === 'chat'}
           <ChatTab />
         {:else if tab === 'guestbook'}
-          <GuestbookTab lifeId={currentLifeId} {meId} isOwner={currentLifeId===myLifeId}/>
+          <GuestbookTab lifeId={currentLifeId} {meId} {myLifeId} isOwner={currentLifeId===myLifeId}/>
         {:else}
           <SettingsTab group={settingsGroup} />
         {/if}
