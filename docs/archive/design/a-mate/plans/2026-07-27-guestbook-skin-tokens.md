@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-27
+---
+
 # G7 방명록 스킨 토큰 + 원글/답글 시인성 구현 계획
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
