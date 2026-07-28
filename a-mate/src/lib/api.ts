@@ -283,6 +283,12 @@ export async function getFaceIcon(): Promise<string | null> {
   try { return await invoke<string | null>('get_face_icon'); } catch { return null; }
 }
 
+/** H2 — 오늘의 컷 (png base64 + 하단 캡션 + 일기 날짜). 없으면 null (sprite 폴백). */
+export interface DailyCut { png: string; caption: string; date: string }
+export async function getDailyCut(): Promise<DailyCut | null> {
+  try { return await invoke<DailyCut | null>('get_daily_cut'); } catch { return null; }
+}
+
 /** 방 점유자 AI 스프라이트(캐시) base64 — 없으면 null. */
 export async function getOccupantSprite(seed: string): Promise<string | null> {
   try { return await invoke<string | null>('get_occupant_sprite', { seed }); } catch { return null; }

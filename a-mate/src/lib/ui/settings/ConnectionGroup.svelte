@@ -1,11 +1,12 @@
 <script lang="ts">
   import {
     engineSettingsGet, engineSettingsSet, engineTest,
-    hubConnect, hubDisconnect, hubSettingsGet,
+    getSettings, hubConnect, hubDisconnect, hubSettingsGet,
     imageSettingsGet, imageSettingsSet, imageTest,
-    knowledgeHubSettingsGet, knowledgeHubSettingsSet, knowledgeHubShareSet,
+    knowledgeHubSettingsGet, knowledgeHubSettingsSet, knowledgeHubShareSet, setSetting,
     type EngineSettings, type HubSettings, type ImageSettings, type KnowledgeHubSettings,
   } from '../../api';
+  import { dailyCutEnabled } from '../../daily-cut';
   import { IDLE, busy, err, ok, type Status } from './status';
   import StatusLine from './StatusLine.svelte';
 
@@ -72,6 +73,15 @@
     : img.source === 'env' ? '.env 값 사용 중'
     : '미설정 — 캐릭터가 기본 그림으로 표시됩니다',
   );
+
+  // --- H2 매일 컷 (옵트인 — 하루 1장 이미지 과금 + 일기 파생 추상 장면 전송: ADR 0024) ---
+  let dailyCut = $state(false);
+  getSettings().then((s) => { dailyCut = dailyCutEnabled(s); });
+  async function toggleDailyCut(){
+    dailyCut = !dailyCut;
+    try { await setSetting('daily_cut_enabled', dailyCut ? 'true' : 'false'); }
+    catch { dailyCut = !dailyCut; } // 저장 실패 시 원복 (PrivacyGroup 선례)
+  }
 
   // --- 팀 지식 허브 (a-hub work) — Life Server와 다른 서버다 ---
   // 팀 기본값. 입력을 비우고 저장하면 이 값들이 다시 채워진다(사내 배포 공용 주소).
@@ -212,6 +222,8 @@
     <button onclick={testImage} disabled={imgStatus.kind==='busy'}>연결 테스트</button>
   </div>
   <StatusLine status={imgStatus}/>
+  <label class="cut-toggle"><input type="checkbox" checked={dailyCut} onchange={toggleDailyCut}/>
+    <span>매일 일기 컷 생성 — 하루 1장 이미지를 생성(과금)하고, 일기에서 뽑은 <b>추상 장면 묘사</b>가 위 이미지 모델로 전송됩니다</span></label>
 </section>
 
 <style>
@@ -228,4 +240,6 @@
   .actions button.primary{background:var(--accent);color:var(--accent-ink);font-weight:700}
   .actions button:disabled{opacity:.55;cursor:default}
   .hint2{color:var(--text-soft);font-size:11px;margin:8px 0 0}
+  .cut-toggle{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:12px;color:var(--text-soft)}
+  .cut-toggle input{margin-top:2px}
 </style>
