@@ -278,6 +278,11 @@ export async function getSprite(): Promise<string | null> {
   try { return await invoke<string | null>('get_sprite'); } catch { return null; }
 }
 
+/** G6 — 얼굴 아이콘(128×128 캐시) base64 — sprite 없으면 null (이모지 폴백). */
+export async function getFaceIcon(): Promise<string | null> {
+  try { return await invoke<string | null>('get_face_icon'); } catch { return null; }
+}
+
 /** 방 점유자 AI 스프라이트(캐시) base64 — 없으면 null. */
 export async function getOccupantSprite(seed: string): Promise<string | null> {
   try { return await invoke<string | null>('get_occupant_sprite', { seed }); } catch { return null; }
