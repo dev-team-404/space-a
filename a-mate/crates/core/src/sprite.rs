@@ -292,6 +292,53 @@ pub fn make_background_transparent(png_bytes: &[u8]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+/// G6 — 스프라이트에서 얼굴(머리) 영역을 잘라 128×128 아이콘 PNG로 만든다.
+/// 크롭 기준은 시각 검증된 CSS(background-size:180%, position 50% 14%)의 환산:
+/// 윈도우 한 변 = min(W,H)/1.8, 가로 중앙, 세로 top = 0.14 × (H − 윈도우).
+/// 다운스케일은 nearest-neighbor — 치비 픽셀아트의 또렷한 픽셀 경계 보존.
+pub fn crop_face(png_bytes: &[u8]) -> Result<Vec<u8>> {
+    const FACE_ICON_SIZE: usize = 128;
+    let mut decoder = png::Decoder::new(png_bytes);
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info()?;
+    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf)?;
+    let (w, h) = (info.width as usize, info.height as usize);
+    if w == 0 || h == 0 {
+        return Err(anyhow!("빈 이미지"));
+    }
+    let ch = match info.color_type {
+        png::ColorType::Rgb => 3,
+        png::ColorType::Rgba => 4,
+        other => return Err(anyhow!("지원하지 않는 PNG 색 형식: {other:?}")),
+    };
+    let side = ((w.min(h) as f32 / 1.8).round() as usize).clamp(1, w.min(h));
+    let x0 = (w - side) / 2;
+    let y0 = (((h - side) as f32) * 0.14).round() as usize;
+    let mut out_rgba = vec![0u8; FACE_ICON_SIZE * FACE_ICON_SIZE * 4];
+    for oy in 0..FACE_ICON_SIZE {
+        let sy = y0 + oy * side / FACE_ICON_SIZE;
+        for ox in 0..FACE_ICON_SIZE {
+            let sx = x0 + ox * side / FACE_ICON_SIZE;
+            let si = sy * w + sx;
+            let oi = (oy * FACE_ICON_SIZE + ox) * 4;
+            out_rgba[oi] = buf[si * ch];
+            out_rgba[oi + 1] = buf[si * ch + 1];
+            out_rgba[oi + 2] = buf[si * ch + 2];
+            out_rgba[oi + 3] = if ch == 4 { buf[si * ch + 3] } else { 255 };
+        }
+    }
+    let mut out = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut out, FACE_ICON_SIZE as u32, FACE_ICON_SIZE as u32);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut writer = enc.write_header()?;
+        writer.write_image_data(&out_rgba)?;
+    }
+    Ok(out)
+}
+
 /// 이미지 생성 응답에서 PNG 바이트를 추출한다. 게이트웨이마다 이미지를 담는 위치가 달라서
 /// (같은 "OpenAI 호환"이라도) 알려진 형태를 순서대로 시도하는 **관용적 파서**다:
 /// - OpenRouter: `choices[0].message.images[0].image_url.url` = data URL
@@ -645,5 +692,64 @@ mod tests {
     fn classify_models_body_trims_model_before_compare() {
         let body = serde_json::json!({"data":[{"id":"some/model"}]});
         assert_eq!(classify_models_body(&body, "  some/model  "), ProbeVerdict::Ok);
+    }
+
+    /// 테스트용 RGBA PNG 인코더 (crop_face 검증 전용).
+    fn encode_rgba_png(w: u32, h: u32, px: impl Fn(u32, u32) -> [u8; 4]) -> Vec<u8> {
+        let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+        for y in 0..h {
+            for x in 0..w {
+                rgba.extend_from_slice(&px(x, y));
+            }
+        }
+        let mut out = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut out, w, h);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            let mut writer = enc.write_header().unwrap();
+            writer.write_image_data(&rgba).unwrap();
+        }
+        out
+    }
+
+    fn decode_rgba_png(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
+        let mut decoder = png::Decoder::new(bytes);
+        decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+        let mut reader = decoder.read_info().unwrap();
+        let mut buf = vec![0u8; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        assert_eq!(info.color_type, png::ColorType::Rgba);
+        buf.truncate((info.width * info.height * 4) as usize);
+        (info.width, info.height, buf)
+    }
+
+    #[test]
+    fn crop_face_extracts_upper_center_window_at_128() {
+        // 360×360: 윈도우 side = round(360/1.8) = 200, x0 = (360-200)/2 = 80,
+        // y0 = round((360-200)×0.14) = 22 — CSS(background-size:180%, position 50% 14%) 환산.
+        // 윈도우 안 = 초록, 밖 = 빨강. 크롭 결과는 전부 초록이어야 한다.
+        let png = encode_rgba_png(360, 360, |x, y| {
+            if (80..280).contains(&x) && (22..222).contains(&y) {
+                [10, 200, 30, 255]
+            } else {
+                [200, 10, 30, 255]
+            }
+        });
+        let out = crop_face(&png).unwrap();
+        let (w, h, rgba) = decode_rgba_png(&out);
+        assert_eq!((w, h), (128, 128));
+        for (x, y) in [(0u32, 0u32), (64, 64), (127, 127)] {
+            let i = ((y * 128 + x) * 4) as usize;
+            assert_eq!(&rgba[i..i + 3], &[10, 200, 30], "픽셀 ({x},{y})는 크롭 윈도우 안이어야 함");
+        }
+    }
+
+    #[test]
+    fn crop_face_handles_tiny_image_by_clamping() {
+        // 4×4 초소형: side = round(4/1.8) = 2 → 클램프·업스케일 경로도 에러 없이 128×128.
+        let png = encode_rgba_png(4, 4, |_, _| [1, 2, 3, 255]);
+        let (w, h, _) = decode_rgba_png(&crop_face(&png).unwrap());
+        assert_eq!((w, h), (128, 128));
     }
 }
