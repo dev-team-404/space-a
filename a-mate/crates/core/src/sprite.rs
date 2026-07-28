@@ -569,6 +569,58 @@ pub fn register_success(s: &mut CutState, date: &str, caption: &str, shot: CutSh
     s.shot = shot.as_str().to_string();
 }
 
+/// H2 — 일기 → {scene_en, caption_ko} 텍스트 엔진 시스템 프롬프트.
+/// 전송 수위(ADR 0024): scene_en은 이미지 엔진으로 넘어가므로 **추상 장면만** —
+/// 고유명사·프로젝트/회사명·코드 식별자·수치 금지를 여기서 지시한다.
+pub fn build_cut_scene_prompt(diary: &str, shot: CutShot, mbti: Option<&str>) -> String {
+    let framing = match shot {
+        CutShot::Full => "a full-body shot of the robot mascot doing today's activity",
+        CutShot::Bust => "a waist-up (bust) shot of the robot mascot mid-activity",
+        CutShot::CloseUp => "a close-up of the robot mascot's face showing today's mood",
+        CutShot::Scene => {
+            "a cozy scene WITHOUT any character — desk, objects and lighting that hint at today's activity"
+        }
+    };
+    let mood = crate::mascot::mbti_voice_hint_style_only(mbti);
+    format!(
+        "너는 픽셀아트 일러스트 연출가다. 아래 '오늘의 일기'를 읽고, 오늘 하루를 은유하는 \
+         그림 한 컷을 기획하라.\n\
+         구도: {framing}.\n{mood}\n\
+         규칙:\n\
+         - scene_en: 영어 1~2문장 장면 묘사. 반드시 **추상적으로** — 고유명사(사람·회사·프로젝트 \
+           이름), 코드 식별자, 파일명, 숫자 수치를 절대 쓰지 마라. 분위기·행동·소품·조명 위주로.\n\
+         - caption_ko: 그림 아래 붙일 한국어 감성 한 줄(40자 이내, 싸이월드 미니홈피 갬성, \
+           마스코트 1인칭, 따옴표 없이).\n\
+         - 그림 속에 글자는 넣을 수 없다 — 텍스트가 필요한 장면을 만들지 마라.\n\
+         출력은 JSON 하나만: {{\"scene_en\": \"...\", \"caption_ko\": \"...\"}}\n\n\
+         오늘의 일기:\n{diary}"
+    )
+}
+
+/// 응답 JSON 관용 파싱 — 코드펜스·잡담을 걷어내고 첫 '{'…마지막 '}'만 취한다
+/// (extract_image_bytes의 관용 파서와 같은 철학). 빈 필드는 실패로 본다.
+pub fn parse_cut_scene(raw: &str) -> Option<(String, String)> {
+    let start = raw.find('{')?;
+    let end = raw.rfind('}')?;
+    let v: serde_json::Value = serde_json::from_str(&raw[start..=end]).ok()?;
+    let scene = v.get("scene_en")?.as_str()?.trim().to_string();
+    let caption = v.get("caption_ko")?.as_str()?.trim().to_string();
+    (!scene.is_empty() && !caption.is_empty()).then_some((scene, caption))
+}
+
+/// H2 — 장면+캡션 계산 (store 접근 없음, 네트워크만 — mascot::compute_daily_line 선례).
+/// Ok(None) = 응답 파싱 실패 (호출자는 시도 카운트만 남기고 skip).
+pub fn compute_cut_scene(
+    engine: &dyn crate::diary::engine::Engine,
+    diary: &str,
+    shot: CutShot,
+    mbti: Option<&str>,
+) -> Result<Option<(String, String)>> {
+    let system = build_cut_scene_prompt(diary, shot, mbti);
+    let raw = engine.generate(&system, "")?.text;
+    Ok(parse_cut_scene(&raw))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -901,5 +953,31 @@ mod tests {
         // 손상 대비 직렬화 왕복 (daily_cut.json 포맷)
         let json = serde_json::to_string(&s).unwrap();
         assert_eq!(serde_json::from_str::<CutState>(&json).unwrap(), s);
+    }
+
+    #[test]
+    fn cut_scene_prompt_embeds_diary_framing_and_privacy_rules() {
+        let p = build_cut_scene_prompt("오늘은 리팩토링을 했다", CutShot::Full, Some("INTJ"));
+        assert!(p.contains("오늘은 리팩토링을 했다"), "일기 본문 포함");
+        assert!(p.contains("full-body"), "샷 프레이밍 포함");
+        assert!(p.contains("고유명사"), "전송 수위 금지 지시(ADR 0024) 포함");
+        assert!(p.contains("scene_en") && p.contains("caption_ko"), "JSON 출력 계약 포함");
+        // 정경 샷은 캐릭터 없는 프레이밍
+        let scene = build_cut_scene_prompt("일기", CutShot::Scene, None);
+        assert!(scene.contains("WITHOUT any character"));
+    }
+
+    #[test]
+    fn parse_cut_scene_accepts_clean_and_fenced_json_rejects_garbage() {
+        let ok = r#"{"scene_en": "a robot at a desk", "caption_ko": "오늘도 무사히"}"#;
+        assert_eq!(
+            parse_cut_scene(ok),
+            Some(("a robot at a desk".into(), "오늘도 무사히".into()))
+        );
+        let fenced = "```json\n{\"scene_en\": \"night sky\", \"caption_ko\": \"별 헤는 밤\"}\n```";
+        assert_eq!(parse_cut_scene(fenced), Some(("night sky".into(), "별 헤는 밤".into())));
+        assert_eq!(parse_cut_scene("그림 그려드릴게요!"), None);
+        assert_eq!(parse_cut_scene(r#"{"scene_en": "", "caption_ko": "x"}"#), None);
+        assert_eq!(parse_cut_scene(r#"{"scene_en": "x"}"#), None);
     }
 }
