@@ -210,7 +210,7 @@ export const lifeSaveDesign = (lifeId: string, design: LifeState['design']) =>
   invoke<LifeState>('life_save_design', { lifeId, design }).then((value) => { invalidateLifeView(); return value; });
 export interface LifePerson { agent_id: string; name: string; life_id: string; is_friend: boolean }
 export interface SharedDiary { date: string; body: string; visibility: 'friends' | 'public' }
-export interface GuestbookEntry { entry_id: string; life_id: string; author_agent_id: string; author_name: string; body: string; parent_id?: string | null; created_at: string }
+export interface GuestbookEntry { entry_id: string; life_id: string; author_agent_id: string; author_name: string; body: string; parent_id?: string | null; author_kind?: 'human' | 'bot' | null; created_at: string }
 export const lifePeople = () => invoke<{people: LifePerson[]}>('life_people');
 export const lifeSetFriend = (agentId: string, enabled: boolean) => invoke('life_set_friend', { agentId, enabled });
 export type ContentVisibility = 'private'|'friends'|'public';

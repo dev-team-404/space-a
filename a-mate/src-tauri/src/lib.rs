@@ -6,6 +6,8 @@ mod geometry;
 mod pipeline;
 #[cfg_attr(test, allow(dead_code, unused_imports))]
 mod tray;
+#[cfg_attr(test, allow(dead_code, unused_imports))]
+mod visit;
 
 use agent_mentor::diary::engine::OpenAiCompatEngine;
 use agent_mentor::store::SqliteStore;

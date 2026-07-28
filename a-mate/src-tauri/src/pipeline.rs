@@ -938,7 +938,8 @@ mod runtime {
         for t in &targets {
             let reply = match agent_mentor::mascot::compute_guestbook_reply(
                 &engine, &title, mbti.as_deref(), vibe,
-                agent_mentor::mascot::should_ask_about_bot(&t.entry_id), t)
+                // P3: 봇이 쓴 원글(author_kind=bot)엔 "방문자의 봇 안부" 질문이 어색 — 억제
+                agent_mentor::mascot::should_ask_about_bot(&t.entry_id) && !t.author_is_bot, t)
             {
                 Ok(r) => r,
                 Err(e) => {
@@ -963,7 +964,7 @@ mod runtime {
             if !still_target {
                 continue;
             }
-            match client.add_guestbook(&life_id, &reply, author.as_deref(), Some(&t.entry_id)) {
+            match client.add_guestbook(&life_id, &reply, author.as_deref(), Some(&t.entry_id), Some("bot")) {
                 Ok(resp) => {
                     let echoed = resp.get("parent_id").and_then(|p| p.as_str())
                         == Some(t.entry_id.as_str());

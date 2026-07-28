@@ -445,7 +445,7 @@ pub fn get_settings(state: State<AppState>) -> Result<HashMap<String, String>, S
 
 #[tauri::command(async)]
 pub fn set_setting(app: tauri::AppHandle, state: State<AppState>, key: String, value: String) -> Result<(), String> {
-    const ALLOWED: &[&str] = &["mascot_visible", "chatter_level", "content_protected", "mascot_pos", "realtime_advice", "last_advice_key"];
+    const ALLOWED: &[&str] = &["mascot_visible", "chatter_level", "content_protected", "mascot_pos", "realtime_advice", "last_advice_key", "visit_guestbook_enabled"];
     if !ALLOWED.contains(&key.as_str()) {
         return Err(format!("허용되지 않은 설정 키: {key}"));
     }
@@ -919,12 +919,22 @@ pub async fn life_list(state: State<'_, AppState>) -> Result<serde_json::Value, 
 }
 
 /// 방 이동(우클릭 메뉴). cell 없이 입장 — 서버가 빈 셀 배정.
+/// 입장 성공 시 P3 자동 방명록을 백그라운드로 시도 — 커맨드 반환(방 이동 UX)을 막지 않는다.
 #[tauri::command]
-pub async fn life_goto(state: State<'_, AppState>, life_id: String) -> Result<serde_json::Value, String> {
+pub async fn life_goto(app: tauri::AppHandle, state: State<'_, AppState>, life_id: String) -> Result<serde_json::Value, String> {
     let Some(client) = hub_client(&state)? else {
         return Err("hub_not_connected".into());
     };
-    run_life_http("life_goto", move || client.enter(&life_id, None).map_err(|e| e.to_string())).await
+    let goto_id = life_id.clone();
+    let result = run_life_http("life_goto", move || client.enter(&goto_id, None).map_err(|e| e.to_string())).await;
+    if result.is_ok() {
+        std::thread::spawn(move || {
+            use tauri::Manager;
+            let state = app.state::<AppState>();
+            crate::visit::maybe_sign_guestbook(&state.store, &life_id);
+        });
+    }
+    result
 }
 
 /// 방 안 셀 이동(좌클릭). 점유 셀이면 서버가 409 → cell_taken 에러 문자열.
@@ -1031,7 +1041,7 @@ pub async fn life_add_guestbook(state: State<'_, AppState>, life_id: String, bod
     let full_name = { let guard = lock(&state)?; owner_full_name(&guard) };
     run_life_http("life_add_guestbook", move || {
         let author = (!full_name.is_empty()).then_some(full_name.as_str());
-        client.add_guestbook(&life_id, &body, author, parent_id.as_deref()).map_err(|e| e.to_string())
+        client.add_guestbook(&life_id, &body, author, parent_id.as_deref(), Some("human")).map_err(|e| e.to_string())
     })
     .await
 }

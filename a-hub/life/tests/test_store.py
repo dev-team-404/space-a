@@ -175,4 +175,16 @@ def test_legacy_guestbook_db_gains_parent_id_column(tmp_path):
     _, _, _, guestbook = SqliteStore(db).load_social()
     assert guestbook == [{"entry_id": "gb_legacy", "life_id": "l1", "author_agent_id": "a1",
                           "author_name": "옛손님", "body": "옛글", "parent_id": None,
+                          "author_kind": None,
                           "created_at": "2026-01-01T00:00:00+00:00"}]
+
+
+def test_guestbook_author_kind_survives_restart(tmp_path):
+    db = str(tmp_path / "life-kind.db")
+    s1 = LifeService(store=SqliteStore(db))
+    _, _, owner_life = s1.register("owner-bot")
+    _, visitor_token, _ = s1.register("visitor-bot")
+    s1.add_guestbook(visitor_token, owner_life.id, "봇글", author_kind="bot")
+
+    s2 = LifeService(store=SqliteStore(db))
+    assert s2.guestbook(owner_life.id)[0]["author_kind"] == "bot"

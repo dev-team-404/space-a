@@ -487,6 +487,9 @@ pub struct ReplyTarget {
     pub entry_id: String,
     pub author_name: String,
     pub body: String,
+    /// P3 — 원글 작성자가 봇인가(`author_kind == "bot"`). 누락(구 데이터)=사람 간주.
+    /// 봇 원글엔 "방문자의 봇 안부" 질문을 하지 않는다 (호출자가 게이트).
+    pub author_is_bot: bool,
 }
 
 /// G3 — 스캔당 자동 답글 상한. 백로그 도배·LLM 비용을 바운드한다 (스펙 §B).
@@ -523,8 +526,9 @@ pub fn select_reply_targets(
             let author = field(e, "author_agent_id")?;
             let author_name = field(e, "author_name")?;
             let body = field(e, "body")?;
+            let author_is_bot = field(e, "author_kind").as_deref() == Some("bot");
             (author != my_agent_id && !replied.contains(&entry_id))
-                .then_some(ReplyTarget { entry_id, author_name, body })
+                .then_some(ReplyTarget { entry_id, author_name, body, author_is_bot })
         })
         .take(cap)
         .collect()
@@ -1144,6 +1148,18 @@ mod guestbook_reply_tests {
     }
 
     #[test]
+    fn select_reply_targets_parses_author_kind() {
+        let entries = vec![
+            serde_json::json!({"entry_id":"e1","author_agent_id":"a1","author_name":"돌쇠","body":"놀러왔어요","author_kind":"bot"}),
+            serde_json::json!({"entry_id":"e2","author_agent_id":"a2","author_name":"홍길동","body":"안녕","author_kind":"human"}),
+            serde_json::json!({"entry_id":"e3","author_agent_id":"a3","author_name":"옛손님","body":"옛글"}), // 플래그 없는 구 데이터
+        ];
+        let t = select_reply_targets(&entries, "me", 10);
+        // 반환은 오래된 순(입력 역순): e3(구 데이터=사람 간주), e2(human), e1(bot)
+        assert_eq!(t.iter().map(|x| x.author_is_bot).collect::<Vec<_>>(), vec![false, false, true]);
+    }
+
+    #[test]
     fn reply_prompt_is_formal_and_third_person() {
         let p = build_guestbook_reply_prompt("주인", None, OwnerVibe::Normal, false);
         assert!(p.contains("존댓말"));                       // 방문자에게 존댓말
@@ -1183,7 +1199,7 @@ mod guestbook_reply_tests {
     }
 
     fn target() -> ReplyTarget {
-        ReplyTarget { entry_id: "e1".into(), author_name: "손님".into(), body: "놀러왔어요".into() }
+        ReplyTarget { entry_id: "e1".into(), author_name: "손님".into(), body: "놀러왔어요".into(), author_is_bot: false }
     }
 
     #[test]

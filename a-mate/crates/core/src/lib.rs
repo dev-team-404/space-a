@@ -22,6 +22,7 @@ pub mod rules;
 pub mod skill_draft;
 pub mod store;
 pub mod transcript;
+pub mod visit;
 
 #[cfg(test)]
 mod smoke {
