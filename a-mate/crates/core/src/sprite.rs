@@ -386,16 +386,9 @@ fn with_bearer(req: ureq::Request, api_key: &str) -> ureq::Request {
     }
 }
 
-/// 이미지 생성 — 스타일 앵커 + 인물 묘사. 반환 = PNG 바이트.
-pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
+/// 스타일 앵커(레퍼런스 이미지)를 첨부해 이미지 1장을 요청한다 — generate/generate_cut 공용 배관.
+fn request_image(cfg: &SpriteConfig, prompt: &str) -> Result<Vec<u8>> {
     let ref_b64 = base64::engine::general_purpose::STANDARD.encode(STYLE_REF_JPG);
-    let prompt = format!(
-        "Using the EXACT same art style as the attached reference image (16-bit pixel art sprite, \
-         chibi proportions with large head, clean dark pixel outline, soft cel shading, \
-         front-facing full body, centered, plain white background), draw a DIFFERENT character: \
-         {description}. Match the reference's pixel density, outline thickness, shading style and \
-         proportions exactly. Single character only, no text, no watermark, plain white background."
-    );
     let body = serde_json::json!({
         "model": cfg.model,
         "messages": [{
@@ -414,7 +407,19 @@ pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
         .send_json(body)
         .map_err(|e| anyhow!("sprite 생성 요청 실패: {e}"))?
         .into_json()?;
-    let png = extract_image_bytes(&resp)?;
+    extract_image_bytes(&resp)
+}
+
+/// 이미지 생성 — 스타일 앵커 + 인물 묘사. 반환 = PNG 바이트.
+pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
+    let prompt = format!(
+        "Using the EXACT same art style as the attached reference image (16-bit pixel art sprite, \
+         chibi proportions with large head, clean dark pixel outline, soft cel shading, \
+         front-facing full body, centered, plain white background), draw a DIFFERENT character: \
+         {description}. Match the reference's pixel density, outline thickness, shading style and \
+         proportions exactly. Single character only, no text, no watermark, plain white background."
+    );
+    let png = request_image(cfg, &prompt)?;
     // 흰 배경 → 투명. 실패해도 캐릭터는 보여야 하므로 원본으로 폴백(무해).
     match make_background_transparent(&png) {
         Ok(t) => Ok(t),
@@ -619,6 +624,31 @@ pub fn compute_cut_scene(
     let system = build_cut_scene_prompt(diary, shot, mbti);
     let raw = engine.generate(&system, "")?.text;
     Ok(parse_cut_scene(&raw))
+}
+
+/// H2 — 컷 이미지 프롬프트 조립 (로컬, 네트워크 없음). 캐릭터 묘사는 마스코트 샷에만 붙는다
+/// (Scene 컷은 캐릭터 없는 정경 — 스펙 데이터 흐름 ⑤).
+pub fn build_cut_image_prompt(shot: CutShot, character_desc: Option<&str>, scene_en: &str) -> String {
+    let composition = match shot {
+        CutShot::Full => "full-body composition, character centered",
+        CutShot::Bust => "waist-up bust composition",
+        CutShot::CloseUp => "face close-up composition",
+        CutShot::Scene => "environment-only composition, NO characters at all",
+    };
+    let character = character_desc
+        .map(|d| format!(" The character is {d}."))
+        .unwrap_or_default();
+    format!(
+        "Using the EXACT same art style as the attached reference image (16-bit pixel art, \
+         chibi proportions, clean dark pixel outline, soft cel shading), draw one scene: \
+         {scene_en}.{character} {composition}. \
+         No text, no letters, no words, no watermark."
+    )
+}
+
+/// H2 — 장면 컷 생성. sprite와 달리 배경 투명화를 하지 않는다 — 장면 전체가 그림이다.
+pub fn generate_cut(cfg: &SpriteConfig, image_prompt: &str) -> Result<Vec<u8>> {
+    request_image(cfg, image_prompt)
 }
 
 #[cfg(test)]
@@ -979,5 +1009,19 @@ mod tests {
         assert_eq!(parse_cut_scene("그림 그려드릴게요!"), None);
         assert_eq!(parse_cut_scene(r#"{"scene_en": "", "caption_ko": "x"}"#), None);
         assert_eq!(parse_cut_scene(r#"{"scene_en": "x"}"#), None);
+    }
+
+    #[test]
+    fn cut_image_prompt_composes_style_scene_and_notext() {
+        let p = build_cut_image_prompt(CutShot::Bust, Some("a navy robot"), "coding at night");
+        assert!(p.contains("coding at night"), "장면 포함");
+        assert!(p.contains("a navy robot"), "마스코트 샷은 캐릭터 묘사 포함");
+        assert!(p.contains("waist-up"), "샷별 구도 포함");
+        assert!(p.contains("No text"), "그림 안 텍스트 금지");
+        assert!(p.contains("same art style"), "스타일 앵커 문구 포함");
+        // 정경 샷: 캐릭터 묘사 없음 + 캐릭터 배제 구도
+        let s = build_cut_image_prompt(CutShot::Scene, None, "a quiet desk");
+        assert!(!s.contains("The character is"));
+        assert!(s.contains("NO characters"));
     }
 }
