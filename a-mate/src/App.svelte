@@ -7,6 +7,7 @@
   import GuestbookTab from './lib/ui/GuestbookTab.svelte';
   import SettingsTab from './lib/ui/settings/SettingsTab.svelte';
   import RobotPortrait from './lib/ui/RobotPortrait.svelte';
+  import LifeNavigator from './lib/ui/LifeNavigator.svelte';
   import UpdateBanner from './lib/ui/UpdateBanner.svelte';
   import { runCheck } from './lib/ui/update-store.svelte';
   import {
@@ -172,6 +173,7 @@
             <span class="daily-line">{dailyLine}</span>
           </div>
         {/if}
+        <LifeNavigator {myLifeId} currentLifeId={currentLifeId} />
       </aside>
       <main class="content">
         {#if tab === 'home'}
