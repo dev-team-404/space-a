@@ -304,6 +304,35 @@ export async function imageSettingsSet(url: string, key: string, model: string):
   await invoke('image_settings_set', { url, key, model });
 }
 
+/** 팀 지식 허브(a-hub work) 설정 — 지식 발행·검색·인용용. Life Server와 별개 서버다. */
+export interface KnowledgeHubSettings {
+  url: string;
+  api_key: string;
+  space_id: string;
+  user: string;
+  /** 'none'이어도 팀 기본값으로 동작한다 — 꺼짐 여부는 share_off로 판단할 것. */
+  source: 'store' | 'env' | 'none';
+  share_off: boolean;
+}
+
+/** 팀 지식 공유 on/off. 끄면 설정·env·기본값 어느 경로로도 공유하지 않는다. */
+export async function knowledgeHubShareSet(enabled: boolean): Promise<void> {
+  await invoke('knowledge_hub_share_set', { enabled });
+}
+
+export async function knowledgeHubSettingsGet(): Promise<KnowledgeHubSettings> {
+  return await invoke<KnowledgeHubSettings>('knowledge_hub_settings_get');
+}
+
+export async function knowledgeHubSettingsSet(
+  url: string,
+  apiKey: string,
+  spaceId: string,
+  user: string,
+): Promise<void> {
+  await invoke('knowledge_hub_settings_set', { url, apiKey, spaceId, user });
+}
+
 /** 마스코트 후보를 새로 그려 미리보기 base64를 돌려준다(수십 초). 저장 전까지 실사용본 미변경. */
 export async function mascotPreview(): Promise<string> {
   return await invoke<string>('mascot_preview');

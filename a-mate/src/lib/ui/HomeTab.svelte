@@ -1,15 +1,14 @@
 <script lang="ts">
   import {
-    getSettings, getWeekSummary, listFindings, listContent, onContentReady,
+    getSettings, getWeekSummary, listFindings,
     onScanDone, onScanProgress, onSettingsChanged, runScanNow,
-    type CoachFinding, type ContentItem, type DayStat, type ScanProgress, type Summary,
+    type CoachFinding, type DayStat, type ScanProgress, type Summary,
   } from '../api';
   import { loadNotices, type Notice, type NoticeDest } from '../notices';
   import WeekTrend from './home/WeekTrend.svelte';
   import ModelMix from './home/ModelMix.svelte';
   import SaveTop3 from './home/SaveTop3.svelte';
   import NoticeLog from './home/NoticeLog.svelte';
-  import TipCard from './home/TipCard.svelte';
   import MiniLife from './MiniLife.svelte';
   import LifeView from './LifeView.svelte';
   import { hubSettingsGet } from '../api';
@@ -27,7 +26,6 @@
   let days = $state<DayStat[]>([]);
   let findings = $state<CoachFinding[]>([]);
   let notices = $state<Notice[]>([]);
-  let tips = $state<ContentItem[]>([]);
   let honorific = $state('주인'); // owner_title — MiniLife 정적 대사에 반영
   const topAdvice = $derived(findings.length > 0 ? findings[0].suggested_action : null);
   // 방 서버 연결 시 격자 방(LifeView), 미연결 시 기존 장식 방(MiniLife) — 원기능 보존
@@ -38,13 +36,12 @@
   checkHub();
 
   async function load() {
-    const [d, f, t, settings] = await Promise.all([
+    const [d, f, settings] = await Promise.all([
       getWeekSummary().catch(() => [] as DayStat[]),
       listFindings(false).catch(() => [] as CoachFinding[]),
-      listContent(false).catch(() => [] as ContentItem[]),
       getSettings().catch(() => ({}) as Record<string, string>),
     ]);
-    days = d; findings = f; tips = t;
+    days = d; findings = f;
     honorific = settings['owner_title']?.trim() || '주인';
     notices = loadNotices();
   }
@@ -54,7 +51,6 @@
     const subs = [
       onScanProgress((p) => { scanning = true; progress = p; }),
       onScanDone(() => { scanning = false; progress = null; load(); }),
-      onContentReady((rows) => { tips = rows; }),
       onSettingsChanged(() => checkHub()),
     ];
     window.addEventListener('focus', checkHub);
@@ -63,11 +59,6 @@
       window.removeEventListener('focus', checkHub);
     };
   });
-
-  // 팁 하나 닫으면 목록에서 즉시 제거(백엔드는 다음 스캔에 쿨다운 반영)
-  function onTipDismissed(id: string) {
-    tips = tips.filter((t) => t.id !== id);
-  }
 
   async function scan() {
     scanning = true;
@@ -96,8 +87,6 @@
       <span class="save">절약 가능 <b>{fmt(summary?.est_tokens_saved_total)}</b> tok</span>
     {/if}
   </div>
-
-  <TipCard items={tips} onDismissed={onTipDismissed} />
 
   <div class="grid">
     <WeekTrend {days} />

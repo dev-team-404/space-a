@@ -3,7 +3,8 @@
     engineSettingsGet, engineSettingsSet, engineTest,
     hubConnect, hubDisconnect, hubSettingsGet,
     imageSettingsGet, imageSettingsSet, imageTest,
-    type EngineSettings, type HubSettings, type ImageSettings,
+    knowledgeHubSettingsGet, knowledgeHubSettingsSet, knowledgeHubShareSet,
+    type EngineSettings, type HubSettings, type ImageSettings, type KnowledgeHubSettings,
   } from '../../api';
   import { IDLE, busy, err, ok, type Status } from './status';
   import StatusLine from './StatusLine.svelte';
@@ -71,6 +72,56 @@
     : img.source === 'env' ? '.env 값 사용 중'
     : '미설정 — 캐릭터가 기본 그림으로 표시됩니다',
   );
+
+  // --- 팀 지식 허브 (a-hub work) — Life Server와 다른 서버다 ---
+  // 팀 기본값. 입력을 비우고 저장하면 이 값들이 다시 채워진다(사내 배포 공용 주소).
+  const KHUB_DEFAULTS = {
+    url: 'https://spacea.msalt.net',
+    space_id: 'sw-innov',
+  } as const;
+  let khub = $state<KnowledgeHubSettings>({ url:'', api_key:'', space_id:'', user:'', source:'none', share_off:false });
+  let khubStatus = $state<Status>(IDLE);
+  async function loadKhub(){
+    try {
+      khub = await knowledgeHubSettingsGet();
+      // 빈 칸으로 두면 "뭘 넣어야 하지?"가 되므로 팀 기본값을 실제 값으로 채워 보여준다.
+      // (백엔드도 같은 값으로 폴백하므로 저장하지 않아도 이 값으로 동작한다)
+      if (!khub.url.trim()) khub.url = KHUB_DEFAULTS.url;
+      if (!khub.space_id.trim()) khub.space_id = KHUB_DEFAULTS.space_id;
+    }
+    catch(e){ khubStatus = err(`지식 허브 설정을 불러오지 못했어요: ${e}`); }
+  }
+  loadKhub();
+  async function saveKhub(){
+    khubStatus = busy('저장 중…');
+    // 빈 칸은 팀 기본값으로 채운다 — 주소를 외우지 않아도 되게.
+    const url = khub.url.trim() || KHUB_DEFAULTS.url;
+    const spaceId = khub.space_id.trim() || KHUB_DEFAULTS.space_id;
+    try {
+      await knowledgeHubSettingsSet(url, khub.api_key, spaceId, khub.user);
+      await knowledgeHubShareSet(true); // 저장 = 켬 (껐다가 다시 설정하는 경우 복구)
+      await loadKhub();
+      khubStatus = ok('저장했어요. 다음 스캔부터 팀 지식을 주고받습니다.');
+    } catch(e){ khubStatus = err(e); }
+  }
+  async function toggleKhubShare(){
+    const turningOn = khub.share_off;
+    khubStatus = busy(turningOn ? '켜는 중…' : '끄는 중…');
+    try {
+      await knowledgeHubShareSet(turningOn);
+      await loadKhub();
+      khubStatus = ok(turningOn
+        ? '팀 지식 공유를 다시 켰어요.'
+        : '팀 지식 공유를 껐어요. 발행·인용을 더 이상 하지 않습니다.');
+    } catch(e){ khubStatus = err(e); }
+  }
+  const khubSourceLabel = $derived(
+    khub.share_off ? '공유 꺼짐 — 팀에 아무것도 보내지 않습니다'
+    : khub.source === 'store' ? `연결됨 — ${khub.space_id || '공간 미지정'} 공간에 기록합니다`
+    : khub.source === 'env' ? '.env 값 사용 중 (설치본에서는 로드되지 않으니 아래에 저장해 두세요)'
+    // 기본값으로도 붙지만, 관문이 켜진 팀 서버는 API 키가 있어야 실제로 오간다.
+    : '팀 기본값으로 연결됨 — API 키를 넣어야 실제로 주고받습니다',
+  );
 </script>
 
 <section>
@@ -92,6 +143,36 @@
     {#if hub?.connected}<button onclick={disconnectHub} disabled={hubStatus.kind==='busy'}>연결 종료</button>{/if}
   </div>
   <StatusLine status={hubStatus}/>
+</section>
+
+<section>
+  <h2>팀 지식 허브</h2>
+  <p class="hint">
+    내 에이전트가 찾아낸 해결책을 팀에 발행하고, 남이 이미 올린 지식이 있으면 대신 인용합니다 (Space A).
+    위 Life Server와는 <em>다른 서버</em>입니다. 프롬프트 원문·파일 경로·세션 ID는 보내지 않습니다.
+  </p>
+  <p class="source" data-kind={khub.share_off ? 'none' : khub.source === 'none' ? 'store' : khub.source}>{khubSourceLabel}</p>
+  <div class="fields">
+    <label class="field"><span>허브 URL</span>
+      <input type="text" bind:value={khub.url} placeholder={KHUB_DEFAULTS.url} spellcheck="false"/></label>
+    <label class="field"><span>API 키 <em>(관문 켜진 서버만)</em></span>
+      <input type="password" bind:value={khub.api_key} placeholder="비워두면 인증 없이" spellcheck="false"/></label>
+    <label class="field"><span>기록할 공간</span>
+      <input type="text" bind:value={khub.space_id} placeholder={KHUB_DEFAULTS.space_id} spellcheck="false"/></label>
+    <label class="field"><span>내 이름 <em>(허브 계정)</em></span>
+      <input type="text" bind:value={khub.user} placeholder="예: palendy" spellcheck="false"/></label>
+  </div>
+  <div class="actions">
+    <button class="primary" onclick={saveKhub} disabled={khubStatus.kind==='busy'}>저장</button>
+    <button onclick={toggleKhubShare} disabled={khubStatus.kind==='busy'}>
+      {khub.share_off ? '공유 켜기' : '공유 끄기'}
+    </button>
+  </div>
+  <StatusLine status={khubStatus}/>
+  <p class="hint2">
+    설정하지 않아도 팀 기본값({KHUB_DEFAULTS.url} · {KHUB_DEFAULTS.space_id})으로 붙습니다.
+    공유를 원치 않으면 '공유 끄기'를 누르세요.
+  </p>
 </section>
 
 <section>
