@@ -1,6 +1,6 @@
 <script lang="ts">
   import { listen } from '@tauri-apps/api/event';
-  import { getMascotSeed, getSprite, lifeMascotImage, robotSpecForSeed } from '../api';
+  import { getDailyCut, getMascotSeed, getSprite, lifeMascotImage, robotSpecForSeed, type DailyCut } from '../api';
   import { drawRobot, type RobotSpec } from '../robot/render';
   import { frameAt } from '../robot/anim';
 
@@ -9,6 +9,16 @@
   let canvas = $state<HTMLCanvasElement | null>(null);
   // AI 스프라이트(내 캐릭터 전용 캐시) — 있으면 이미지, 없으면 절차 생성 폴백
   let sprite = $state<string | null>(null);
+  // H2 — 오늘의 컷 (내 화면 전용). 있으면 sprite/canvas 대신 컷+캡션 프레임.
+  let cut = $state<DailyCut | null>(null);
+
+  $effect(() => {
+    if (seed) return; // 남의 초상엔 매일 컷 없음
+    let un: (() => void) | null = null;
+    getDailyCut().then((c) => (cut = c));
+    listen('daily_cut:ready', () => getDailyCut().then((c) => (cut = c))).then((u) => (un = u));
+    return () => un?.();
+  });
 
   $effect(() => {
     const id = agentId, version = imageVersion;
@@ -35,7 +45,12 @@
 </script>
 
 <div class="portrait">
-  {#if sprite}
+  {#if cut}
+    <figure class="cut">
+      <img src={'data:image/png;base64,' + cut.png} alt="오늘의 컷" />
+      <figcaption>{cut.caption}</figcaption>
+    </figure>
+  {:else if sprite}
     <img class="sprite" src={'data:image/png;base64,' + sprite} alt="내 캐릭터" />
   {:else}
     <canvas bind:this={canvas} width="128" height="128"></canvas>
@@ -53,4 +68,8 @@
   }
   canvas { width: 96px; height: 96px; image-rendering: pixelated; }
   .sprite { width: 96px; height: 96px; object-fit: contain; }
+  /* H2 — 미니홈피 대문사진 결: 이미지 위, 감성 캡션 아래 (폴라로이드 프레임) */
+  .cut { margin: 0; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .cut img { width: 116px; height: 116px; object-fit: cover; border-radius: var(--radius-s); image-rendering: pixelated; }
+  .cut figcaption { font-size: 11px; color: var(--ink-soft); text-align: center; line-height: 1.35; max-width: 124px; word-break: keep-all; }
 </style>
