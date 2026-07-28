@@ -1577,6 +1577,25 @@ mod tests {
         let refreshed = std::fs::metadata(dir.path().join("face.png")).unwrap().modified().unwrap();
         assert!(refreshed > old, "stale face.png는 재크롭으로 갱신돼야 함");
     }
+
+    #[test]
+    fn daily_cut_inner_requires_png_and_cut_date() {
+        let dir = tempfile::tempdir().unwrap();
+        // 아무것도 없음 → None
+        assert!(daily_cut_inner(dir.path()).unwrap().is_none());
+        // png만 있고 상태 없음(cut_date 없음) → None (캡션·날짜 없는 컷은 표시하지 않음)
+        std::fs::write(dir.path().join("daily_cut.png"), b"png-bytes").unwrap();
+        assert!(daily_cut_inner(dir.path()).unwrap().is_none());
+        // png + 성공 상태 → Some
+        let mut st = agent_mentor::sprite::CutState::default();
+        agent_mentor::sprite::register_attempt(&mut st, "2026-07-28");
+        agent_mentor::sprite::register_success(&mut st, "2026-07-28", "오늘도 무사히", agent_mentor::sprite::CutShot::Bust);
+        std::fs::write(dir.path().join("daily_cut.json"), serde_json::to_string(&st).unwrap()).unwrap();
+        let cut = daily_cut_inner(dir.path()).unwrap().unwrap();
+        assert_eq!(cut.date, "2026-07-28");
+        assert_eq!(cut.caption, "오늘도 무사히");
+        assert!(!cut.png.is_empty());
+    }
 }
 
 /// G6 — 얼굴 아이콘 lazy 재료화: face.png가 없거나 sprite.png보다 오래되면 그 자리에서
@@ -1610,6 +1629,37 @@ pub fn get_face_icon(app: tauri::AppHandle) -> Result<Option<String>, String> {
     use tauri::Manager as _;
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     face_icon_inner(&dir).map_err(|e| e.to_string())
+}
+
+/// H2 — 홈 컷 조회 payload. 생성은 파이프라인만 한다 (읽기 전용 — 과금 가드).
+#[derive(Debug, Clone, Serialize)]
+pub struct DailyCut {
+    pub png: String,
+    pub caption: String,
+    pub date: String,
+}
+
+pub fn daily_cut_inner(dir: &std::path::Path) -> anyhow::Result<Option<DailyCut>> {
+    use base64::Engine as _;
+    let Ok(bytes) = std::fs::read(dir.join("daily_cut.png")) else { return Ok(None) };
+    let state: agent_mentor::sprite::CutState = std::fs::read_to_string(dir.join("daily_cut.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    let Some(date) = state.cut_date else { return Ok(None) };
+    Ok(Some(DailyCut {
+        png: base64::engine::general_purpose::STANDARD.encode(bytes),
+        caption: state.caption,
+        date,
+    }))
+}
+
+/// H2 — 오늘의 컷 (png base64 + 캡션 + 일기 날짜). 없으면 None(sprite 폴백).
+#[tauri::command]
+pub fn get_daily_cut(app: tauri::AppHandle) -> Result<Option<DailyCut>, String> {
+    use tauri::Manager as _;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    daily_cut_inner(&dir).map_err(|e| e.to_string())
 }
 
 /// AI 스프라이트(캐시) — app_data/sprite.png를 base64로. 없으면 None(프론트는 절차 생성 폴백).
