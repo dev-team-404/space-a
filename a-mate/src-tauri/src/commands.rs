@@ -580,13 +580,17 @@ pub struct KnowledgeHubSettings {
     pub api_key: String,
     pub space_id: String,
     pub user: String,
+    /// "store"(설정 탭) | "env"(.env — dev 빌드 전용) | "none"(저장·env 없음 → 팀 기본값으로 동작)
     pub source: String,
+    /// 사용자가 공유를 명시적으로 껐는지. 켜져 있으면 기본값만으로도 공유가 돈다.
+    pub share_off: bool,
 }
 
 #[tauri::command(async)]
 pub fn knowledge_hub_settings_get(state: State<AppState>) -> Result<KnowledgeHubSettings, String> {
     let guard = lock(&state)?;
     let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
+    let share_off = get("knowledge_hub_share").trim() == "off";
     let stored = get("knowledge_hub_url").trim().to_string();
     if !stored.is_empty() {
         return Ok(KnowledgeHubSettings {
@@ -595,6 +599,7 @@ pub fn knowledge_hub_settings_get(state: State<AppState>) -> Result<KnowledgeHub
             space_id: get("knowledge_hub_space_id"),
             user: get("knowledge_hub_user"),
             source: "store".into(),
+            share_off,
         });
     }
     Ok(match agent_mentor::hub::HubConfig::from_env() {
@@ -604,15 +609,27 @@ pub fn knowledge_hub_settings_get(state: State<AppState>) -> Result<KnowledgeHub
             space_id: c.space_id,
             user: c.user_id,
             source: "env".into(),
+            share_off,
         },
+        // 저장·env가 없어도 팀 기본값으로 동작한다(hub::HubConfig::resolve) — 그 값을 그대로 보여준다.
         None => KnowledgeHubSettings {
             url: String::new(),
             api_key: String::new(),
             space_id: String::new(),
             user: String::new(),
             source: "none".into(),
+            share_off,
         },
     })
+}
+
+/// 팀 지식 공유를 끄거나(off) 다시 켠다. 끄면 설정·env·기본값 어느 경로로도 공유하지 않는다.
+#[tauri::command(async)]
+pub fn knowledge_hub_share_set(state: State<AppState>, enabled: bool) -> Result<(), String> {
+    let guard = lock(&state)?;
+    guard
+        .set_setting("knowledge_hub_share", if enabled { "" } else { "off" })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]

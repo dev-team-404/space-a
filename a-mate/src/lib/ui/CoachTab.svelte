@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { listFindings, onNewFindings, setFindingStatus, sessionsCtx, generateSkillDraft, saveSkillDraft, type CoachFinding, type SessionCtxItem, type SkillDraft } from '../api';
+  import { listFindings, listContent, onContentReady, onNewFindings, setFindingStatus, sessionsCtx, generateSkillDraft, saveSkillDraft, type CoachFinding, type ContentItem, type SessionCtxItem, type SkillDraft } from '../api';
   import SessionModal from './SessionModal.svelte';
+  import TipCard from './home/TipCard.svelte';
   import { coachTitle, ctxLine, isHiddenFinding, sessionIdsOf, totalSessionsOf } from './coach-helpers';
 
   let { focusKey = null, onChanged }: { focusKey?: string | null; onChanged?: () => void } = $props();
@@ -27,13 +28,21 @@
   const active = $derived(all.filter((f) => f.status === 'new'));
   const hidden = $derived(all.filter((f) => isHiddenFinding(f.status)));
 
+  // 오늘의 배움 — 내 로그에 맞춘 큐레이션 팁. 홈에서 코칭 탭으로 옮겼다(홈이 너무 길어져서).
+  let tips = $state<ContentItem[]>([]);
+  const onTipDismissed = (id: string) => { tips = tips.filter((t) => t.id !== id); };
+
   async function refresh() {
     all = await listFindings(true).catch(() => []);
   }
+  async function refreshTips() {
+    tips = await listContent(false).catch(() => []);
+  }
   refresh();
+  refreshTips();
   $effect(() => {
-    const p = onNewFindings(() => refresh());
-    return () => { p.then((u) => u()); };
+    const subs = [onNewFindings(() => refresh()), onContentReady((rows) => { tips = rows; })];
+    return () => { subs.forEach((s) => s.then((u) => u())); };
   });
 
   // 홈 '절약 top3'에서 진입 시 해당 카드로 스크롤 (스펙 §2)
@@ -131,6 +140,8 @@
 <svelte:window onkeydown={(e) => { if (e.key === 'Escape' && draft) draft = null; }} />
 
 <section class="coach">
+  <TipCard items={tips} onDismissed={onTipDismissed} />
+
   {#if active.length === 0}
     <p class="empty">지적할 게 없어요, 주인. 완벽해요!</p>
   {:else}
