@@ -19,8 +19,9 @@ def _register(client, name):
 
 def test_capabilities_expose_orientation_contract(client):
     assert client.get("/capabilities").json() == {
-        "life_protocol": 3,
+        "life_protocol": 4,
         "grid": {"w": 20, "h": 20},
+        "floor": {"shape": "half-depth", "max_xy_exclusive": 20},
         "floor_min_y": 0,
         "footprint_mask": True,
         "wall_objects": True,

@@ -180,7 +180,14 @@ export interface LifeListEntry {
   owner_name: string;
   occupants: number;
 }
-export interface LifeCapabilities { life_protocol: number; grid: { w: number; h: number }; floor_min_y: number; footprint_mask: boolean; wall_objects: boolean }
+export interface LifeCapabilities {
+  life_protocol: number;
+  grid: { w: number; h: number };
+  floor?: { shape: string; max_xy_exclusive: number };
+  floor_min_y: number;
+  footprint_mask: boolean;
+  wall_objects: boolean;
+}
 
 export const hubSettingsGet = () => invoke<HubSettings>('hub_settings_get');
 export const hubConnect = (url: string, apiKey = '') =>
