@@ -127,6 +127,8 @@ mod runtime {
                 maybe_post_retros(&state.store);
                 // AI 스프라이트 — 캐시 없으면 1회 생성 (실패 무해, 절차 생성 폴백)
                 maybe_generate_sprite(app);
+                // H2 매일 마스코트 컷 — 옵트인(기본 off)·일기 파생·일일 3회 상한 (실패는 조용히)
+                maybe_generate_daily_cut(app);
                 // 외부 문서 도달성 — 내부망이면 배움 카드의 외부 링크를 숨긴다 (동료 이슈)
                 maybe_probe_docs(&state.store);
             }
@@ -839,6 +841,84 @@ mod runtime {
         }
     }
 
+    /// H2 — 매일 마스코트 컷. 스캔 리컨실리에이션: 최신 일기 날짜 vs daily_cut.json을 비교해
+    /// 필요할 때만 생성한다 (재실행 멱등 · 일일 3회 상한 · 옵트인 daily_cut_enabled 기본 off).
+    /// 네트워크는 텍스트 → 이미지 순서(텍스트 실패 시 이미지 과금 없음), 모두 store 락 밖.
+    /// 스펙: docs/design/a-mate/specs/2026-07-28-sprite-face-daily-cut-design.md
+    fn maybe_generate_daily_cut(app: &AppHandle) {
+        use agent_mentor::sprite;
+        let Ok(dir) = app.path().app_data_dir() else { return };
+        let state = app.state::<crate::AppState>();
+
+        // ① 짧은 락: 게이트 + 재료 읽기 → 즉시 해제 (네트워크 전 해제 규율)
+        let (engine, cfg, uuid, mbti, date, diary) = match state.store.lock() {
+            Ok(store) => {
+                let enabled = store
+                    .get_setting("daily_cut_enabled")
+                    .ok()
+                    .flatten()
+                    .map(|v| v == "true")
+                    .unwrap_or(false);
+                if !enabled { return; }
+                let Some(engine) = crate::resolve_engine(&store) else { return };
+                let Some(cfg) = crate::resolve_sprite_cfg(&store) else { return };
+                let (uuid, mbti) = match crate::commands::sprite_identity(&store) {
+                    Ok(v) => v,
+                    Err(e) => { log::warn!("daily-cut 프로필 해석 실패: {e}"); return; }
+                };
+                // diary_dates()는 date ASC 정렬 — 마지막이 최신 일기
+                let Some(date) = store.diary_dates().ok().and_then(|v| v.last().cloned()) else { return };
+                let diary = match crate::commands::diary_inner(&store, &date) {
+                    Ok(Some(d)) => d,
+                    Ok(None) => return,
+                    Err(e) => { log::warn!("daily-cut 일기 읽기 실패: {e}"); return; }
+                };
+                (engine, cfg, uuid, mbti, date, diary)
+            }
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        }; // guard drops here
+
+        // ② 리컨실리에이션 (파일 IO만) — skip이면 조용히
+        let mut cut = cut_state_load(&dir);
+        if !sprite::decide_cut(&date, &cut) { return; }
+        // 시도는 네트워크 **전에** persist — 실패·크래시에도 일일 상한 보장
+        sprite::register_attempt(&mut cut, &date);
+        cut_state_save(&dir, &cut);
+
+        // ③ 텍스트 엔진: 일기 → 추상 장면 + 캡션 (실패 시 이미지 호출 안 감)
+        let shot = sprite::pick_cut_shot(&date, &uuid);
+        let (scene_en, caption) = match sprite::compute_cut_scene(&engine, &diary, shot, mbti.as_deref()) {
+            Ok(Some(v)) => v,
+            Ok(None) => {
+                log::warn!("daily-cut 장면 JSON 파싱 실패({}/{})", cut.attempts, sprite::MAX_CUT_ATTEMPTS_PER_DAY);
+                return;
+            }
+            Err(e) => {
+                log::warn!("daily-cut 장면 생성 실패({}/{}): {e}", cut.attempts, sprite::MAX_CUT_ATTEMPTS_PER_DAY);
+                return;
+            }
+        };
+
+        // ④ 이미지 엔진: 화풍 앵커 + (마스코트 샷이면 현재 정체성 묘사) + 추상 장면
+        let desc = shot.has_mascot().then(|| {
+            let spec = agent_mentor::mascot::robot_spec_from_profile(&uuid, mbti.as_deref());
+            sprite::character_description(&spec, mbti.as_deref(), &uuid)
+        });
+        let prompt = sprite::build_cut_image_prompt(shot, desc.as_deref(), &scene_en);
+        match sprite::generate_cut(&cfg, &prompt) {
+            Ok(png) => {
+                let _ = std::fs::create_dir_all(&dir);
+                if std::fs::write(dir.join("daily_cut.png"), png).is_ok() {
+                    sprite::register_success(&mut cut, &date, &caption, shot);
+                    cut_state_save(&dir, &cut);
+                    log::info!("매일 컷 생성 완료({date}, {})", shot.as_str());
+                    let _ = app.emit("daily_cut:ready", &date);
+                }
+            }
+            Err(e) => log::warn!("daily-cut 이미지 생성 실패({}/{}): {e}", cut.attempts, sprite::MAX_CUT_ATTEMPTS_PER_DAY),
+        }
+    }
+
     fn maybe_generate_chatter_pool(store_mutex: &std::sync::Mutex<SqliteStore>) {
         let engine = match store_mutex.lock() {
             Ok(store) => crate::resolve_engine(&store),
@@ -983,5 +1063,45 @@ mod runtime {
     }
 }
 
+// H2 daily_cut.json 상태 파일 헬퍼 — runtime 모듈이 #[cfg(not(test))]라 테스트 가능하도록
+// 파일 루트에 둔다 (순수 fs 로직, Tauri 비의존).
+
+/// daily_cut.json 로드 — 없거나 손상이면 Default (다음 판단이 안전하게 재시작).
+pub(crate) fn cut_state_load(dir: &std::path::Path) -> agent_mentor::sprite::CutState {
+    std::fs::read_to_string(dir.join("daily_cut.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+pub(crate) fn cut_state_save(dir: &std::path::Path, s: &agent_mentor::sprite::CutState) {
+    let _ = std::fs::create_dir_all(dir);
+    if let Ok(json) = serde_json::to_string(s) {
+        let _ = std::fs::write(dir.join("daily_cut.json"), json);
+    }
+}
+
 #[cfg(not(test))]
 pub use runtime::start;
+
+#[cfg(test)]
+mod cut_state_tests {
+    #[test]
+    fn cut_state_roundtrips_and_survives_corruption() {
+        let dir = tempfile::tempdir().unwrap();
+        // 없으면 Default
+        let s = super::cut_state_load(dir.path());
+        assert_eq!(s, agent_mentor::sprite::CutState::default());
+        // 저장 → 로드 왕복
+        let mut st = agent_mentor::sprite::CutState::default();
+        agent_mentor::sprite::register_attempt(&mut st, "2026-07-28");
+        super::cut_state_save(dir.path(), &st);
+        assert_eq!(super::cut_state_load(dir.path()), st);
+        // 손상 → Default로 재초기화 (스펙 에러 처리)
+        std::fs::write(dir.path().join("daily_cut.json"), "{corrupt").unwrap();
+        assert_eq!(
+            super::cut_state_load(dir.path()),
+            agent_mentor::sprite::CutState::default()
+        );
+    }
+}
