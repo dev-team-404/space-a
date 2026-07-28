@@ -628,6 +628,50 @@ function hubIssuesHTML(data: SpaceView): string {
   return hubSection('이슈 흐름', 'Issue Flow', chips + personSel + content)
 }
 
+// ── 지식 문서 필터 (지식 재사용 '책장' · 문서함 공용) ──
+// 이슈 흐름과 같은 형태: 태그 칩 + 사람 드롭다운, 정렬은 각 탭 기준 그대로 고정.
+// 탭별로 상태를 따로 두는 이유 — 문서함에서 좁힌 조건이 책장까지 바꾸면 위치 감각을 잃는다.
+type DocScope = 'reuse' | 'pages'
+const docCatFilter: Record<DocScope, string> = { reuse: '', pages: '' } // '' = 전체
+const docPersonFilter: Record<DocScope, string> = { reuse: '', pages: '' }
+
+const docAuthor = (d: KnowledgeDoc) => d.author_agent || '작성자 미상'
+
+/** 칩·드롭다운 마크업. 옵션은 데이터에 실제로 있는 값만, 개수는 다른 축 필터를 반영한다. */
+function docFilterHTML(scope: DocScope, docs: KnowledgeDoc[]): string {
+  const cats = [...new Set(docs.map((d) => d.category).filter((c): c is string => !!c))].sort((a, b) =>
+    (CATEGORY_KO[a] ?? a).localeCompare(CATEGORY_KO[b] ?? b, 'ko'),
+  )
+  const people = [...new Set(docs.map(docAuthor))].sort((a, b) => a.localeCompare(b, 'ko'))
+  // 데이터가 바뀌어 사라진 선택은 '전체'로 되돌린다 (이슈 흐름 선례)
+  if (docCatFilter[scope] && !cats.includes(docCatFilter[scope])) docCatFilter[scope] = ''
+  if (docPersonFilter[scope] && !people.includes(docPersonFilter[scope])) docPersonFilter[scope] = ''
+
+  const byPerson = docs.filter((d) => !docPersonFilter[scope] || docAuthor(d) === docPersonFilter[scope])
+  const chipDefs = [{ id: '', label: '전체' }, ...cats.map((c) => ({ id: c, label: CATEGORY_KO[c] ?? c }))]
+  const chips = `<div class="issue-chips">${chipDefs
+    .map((c) => {
+      const n = c.id === '' ? byPerson.length : byPerson.filter((d) => d.category === c.id).length
+      return `<button class="issue-chip ${docCatFilter[scope] === c.id ? 'on' : ''}" data-dfilter="${esc(c.id)}" data-dscope="${scope}">${esc(c.label)} <b>${n}</b></button>`
+    })
+    .join('')}</div>`
+  const personSel = `<div class="issue-person-row"><label class="muted small">사람</label>
+    <select class="issue-person" data-dperson="${scope}">
+      <option value="">전체</option>
+      ${people
+        .map((p) => `<option value="${esc(p)}" ${p === docPersonFilter[scope] ? 'selected' : ''}>${esc(p)}</option>`)
+        .join('')}
+    </select></div>`
+  return chips + personSel
+}
+
+/** 목록에 필터 적용 — data.knowledge 인덱스(i)를 보존해야 클릭 시 원문 모달이 맞는 문서를 연다. */
+function docFilterApply<T extends { d: KnowledgeDoc }>(scope: DocScope, items: T[]): T[] {
+  const cat = docCatFilter[scope]
+  const person = docPersonFilter[scope]
+  return items.filter(({ d }) => (!cat || d.category === cat) && (!person || docAuthor(d) === person))
+}
+
 // ── 지식 재사용 탭 — 재사용 이벤트 피드 + 재사용하면 좋을 지식(책장) ──
 function hubReuseHTML(data: SpaceView): string {
   const events = [...(data.reuse_events ?? [])].sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''))
@@ -647,8 +691,11 @@ function hubReuseHTML(data: SpaceView): string {
     : '<p class="muted small">표시할 항목이 없어요</p>'
 
   // 책장 = "재사용하면 좋을 지식" — 재사용 많은 순, 조직 공개 우선. 클릭 시 원문 모달.
-  const docs = data.knowledge
-    .map((d, i) => ({ d, i }))
+  // 상한(20)은 필터를 적용한 뒤에 — 좁혀 놓고도 20개 밖의 문서가 안 보이면 필터가 무의미하다.
+  const docs = docFilterApply(
+    'reuse',
+    data.knowledge.map((d, i) => ({ d, i })),
+  )
     .sort(
       (a, b) =>
         (a.d.visibility === 'org' ? 0 : 1) - (b.d.visibility === 'org' ? 0 : 1) ||
@@ -670,7 +717,7 @@ function hubReuseHTML(data: SpaceView): string {
 
   return (
     hubSection('지식 재사용', 'Knowledge Reuse', eventItems) +
-    hubSection('책장 — 재사용하면 좋을 지식', 'Bookshelf', docItems)
+    hubSection('책장 — 재사용하면 좋을 지식', 'Bookshelf', docFilterHTML('reuse', data.knowledge) + docItems)
   )
 }
 
@@ -685,9 +732,10 @@ function docSeq(docId: string): number {
 // '지식 재사용' 탭의 책장은 재사용 많은 순 상위 20개만 추리지만, 여기는 필터 없이 전체를
 // 훑어보는 용도 — 허브에 남긴 작업 요약·새 사실이 어딘가엔 반드시 보이게 한다.
 function hubPagesHTML(data: SpaceView): string {
-  const docs = [...data.knowledge]
-    .map((d, i) => ({ d, i }))
-    .sort((a, b) => docSeq(b.d.doc_id) - docSeq(a.d.doc_id))
+  const docs = docFilterApply(
+    'pages',
+    data.knowledge.map((d, i) => ({ d, i })),
+  ).sort((a, b) => docSeq(b.d.doc_id) - docSeq(a.d.doc_id))
   const items = docs.length
     ? docs
         .map(
@@ -700,7 +748,7 @@ function hubPagesHTML(data: SpaceView): string {
         )
         .join('')
     : '<p class="muted small">표시할 항목이 없어요</p>'
-  return hubSection('문서함', 'All Pages', items)
+  return hubSection('문서함', 'All Pages', docFilterHTML('pages', data.knowledge) + items)
 }
 
 type ActivityTab = 'online' | 'offline'
@@ -841,6 +889,19 @@ function renderHub(data: SpaceView) {
     issuePersonFilter = (e.target as HTMLSelectElement).value
     renderHub(data)
   })
+  // 지식 문서 필터 — 태그 칩 + 사람 드롭다운 (책장·문서함 공용, 탭별 상태)
+  hubBody.querySelectorAll<HTMLElement>('[data-dfilter]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      docCatFilter[btn.dataset.dscope as DocScope] = btn.dataset.dfilter ?? ''
+      renderHub(data)
+    })
+  })
+  hubBody.querySelectorAll<HTMLSelectElement>('[data-dperson]').forEach((sel) => {
+    sel.addEventListener('change', () => {
+      docPersonFilter[sel.dataset.dperson as DocScope] = sel.value
+      renderHub(data)
+    })
+  })
   // 지식 재사용 탭의 책장 문서 → 원문 모달
   hubBody.querySelectorAll<HTMLElement>('.doc-item').forEach((el) => {
     el.addEventListener('click', () => {
@@ -934,11 +995,12 @@ async function renderLife(spaceId: string) {
     currentScene = null
   }
   app.stage.removeChildren()
-  // 씬 과밀 방지 — 캐릭터(책상)는 온라인 우선·최근 활동순 상위 N명만.
-  // Hub '팀 활동' 목록은 활동 기록이 있는 멤버 전원을 표시한다(hasSentAnything) —
-  // 여기서 잘리는 건 활동 순으로 하위이므로 목록 쪽에 남는다.
+  // 방 안 캐릭터도 '팀 활동' 목록과 같은 기준 — 허브에 아무것도 안 보낸 계정(테스트·프로브
+  // 등록만 남은 멤버)은 책상을 차지하지 않는다(hasSentAnything).
+  // 그 위에 과밀 방지 상한: 온라인 우선·최근 활동순 상위 N명만. 여기서 잘린 사람은 목록에 남는다.
   const SCENE_MAX_AGENTS = 24
-  const sceneAgents = [...data.agents]
+  const sceneAgents = data.agents
+    .filter(hasSentAnything)
     .sort(
       (a, b) =>
         (a.status === 'working' ? 0 : 1) - (b.status === 'working' ? 0 : 1) ||
