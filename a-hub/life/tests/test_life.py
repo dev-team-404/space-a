@@ -4,7 +4,7 @@ import pytest
 
 from life_server import errors
 from life_server.errors import CellTaken
-from life_server.life import FLOOR_Y, GRID_H, GRID_W, SPAWN_X, SPAWN_Y, LifeService
+from life_server.life import FLOOR_DEPTH, FLOOR_Y, GRID_H, GRID_W, SPAWN_X, SPAWN_Y, LifeService
 
 
 @pytest.fixture
@@ -93,6 +93,9 @@ def test_move_within_life_and_bounds(life):
         life.move(token, (GRID_W, 0))
     with pytest.raises(errors.InvalidRequest):
         life.move(token, (0, -1))
+    assert life.move(token, (10, 9))["cell"] == [10, 9]
+    with pytest.raises(errors.InvalidRequest):
+        life.move(token, (10, 10))
 
 
 def test_design_owner_only_and_furniture_blocks(life):
@@ -117,11 +120,11 @@ def test_wall_floor_and_rotation_footprint_rules(life):
     _, token, created_life = life.register("A")
     life.set_design(token, created_life.id, {"objects": [
         {"asset_id": "window.mint", "category": "window", "cell": [2, 0], "size": [3, 2], "rotation": 180, "wall": "north"},
-        {"asset_id": "sofa.mint", "category": "sofa", "cell": [10, 8], "size": [4, 2], "rotation": 90},
+        {"asset_id": "sofa.mint", "category": "sofa", "cell": [8, 5], "size": [4, 2], "rotation": 90},
     ]})
     # 4x2 소파를 90도 회전하면 2x4 footprint 전체가 막힌다.
     with pytest.raises(CellTaken):
-        life.move(token, (11, 11))
+        life.move(token, (9, 8))
     with pytest.raises(errors.InvalidRequest):
         life.move(token, (1, FLOOR_Y - 1))
     with pytest.raises(errors.InvalidRequest):
@@ -150,7 +153,7 @@ def test_unknown_token_rejected(life):
 
 def test_shape_footprint_allows_interlocking_empty_cells(life):
     _, token, created_life = life.register("A")
-    life.move(token, (19, 19))
+    life.move(token, (18, 0))
     l_mask = [[0, 0], [1, 0], [2, 0], [0, 1], [0, 2]]
     state = life.set_design(token, created_life.id, {"objects": [
         {"asset_id": "sofa.corner", "category": "sofa", "cell": [1, 1], "size": [3, 3], "footprint": l_mask, "rotation": 0},
@@ -161,6 +164,29 @@ def test_shape_footprint_allows_interlocking_empty_cells(life):
         life.move(token, (1, 2))
     with pytest.raises(CellTaken):
         life.move(token, (2, 2))
+
+
+def test_design_rejects_furniture_crossing_half_depth_boundary(life):
+    _, token, created_life = life.register("A")
+    life.move(token, (0, 0))
+    with pytest.raises(errors.InvalidRequest):
+        life.set_design(token, created_life.id, {"objects": [{
+            "asset_id": "sofa.edge", "category": "sofa", "cell": [17, 1],
+            "size": [2, 2], "rotation": 0,
+        }]})
+
+
+def test_all_auto_spawn_cells_stay_inside_half_depth_floor(life):
+    _, _, host = life.register("host")
+    tokens = [life.register(f"guest-{i}")[1] for i in range(20)]
+    for token in tokens:
+        life.enter(token, host.id, None)
+    assert all(
+        0 <= occupant["cell"][0] < GRID_W
+        and 0 <= occupant["cell"][1] < GRID_H
+        and sum(occupant["cell"]) < FLOOR_DEPTH
+        for occupant in life.life_state(host.id)["occupants"]
+    )
 
 
 def test_rename_updates_agent_and_life(life):
@@ -347,13 +373,16 @@ def test_visit_spawn_avoids_furniture_footprint(life):
 
 
 def _fill_grid_agents(life, owner_life_id):
-    """{1,5,9,13,17}² 격자점 25곳에 에이전트 배치.
+    """반깊이 바닥의 4셀 간격 격자점에 에이전트 배치.
 
-    좌표 0~19 어디서든 최근접 격자 좌표까지 거리 ≤ 2 (0→1, 3→2, 19→2 …) —
-    가장자리 포함 방 전체에서 거리 3짜리 빈 칸이 존재하지 않게 한다.
+    유효 삼각형 어디서든 거리 3짜리 빈 칸이 존재하지 않게 한다.
     """
     for gx in (1, 5, 9, 13, 17):
         for gy in (1, 5, 9, 13, 17):
+            if gx + gy >= FLOOR_DEPTH:
+                continue
+            if (gx, gy) == (SPAWN_X, SPAWN_Y):
+                continue
             _, token, _ = life.register(f"grid-{gx}-{gy}")
             life.enter(token, owner_life_id, cell=(gx, gy))
 
@@ -364,7 +393,10 @@ def _cover_floor_except(life, owner_token, life_id, holes):
     for bx in (0, 8, 16):
         for by in (0, 8, 16):
             w, h = min(8, GRID_W - bx), min(8, GRID_H - by)
-            cells = [[x, y] for y in range(h) for x in range(w) if (bx + x, by + y) not in holes]
+            cells = [
+                [x, y] for y in range(h) for x in range(w)
+                if bx + x + by + y < FLOOR_DEPTH and (bx + x, by + y) not in holes
+            ]
             if cells:
                 objects.append({"asset_id": f"block-{bx}-{by}", "category": "block",
                                 "cell": [bx, by], "size": [w, h], "footprint": cells, "rotation": 0})
@@ -372,7 +404,7 @@ def _cover_floor_except(life, owner_token, life_id, holes):
 
 
 def test_spawn_buffer_relaxes_to_two_when_three_impossible(life):
-    _, _, owner_life = life.register("owner")  # 주인 스폰 = 앵커 (8,16)
+    _, _, owner_life = life.register("owner")
     _fill_grid_agents(life, owner_life.id)
     _, token_v, _ = life.register("visitor")
     life.enter(token_v, owner_life.id, cell=None)
@@ -384,7 +416,7 @@ def test_spawn_buffer_relaxes_to_two_when_three_impossible(life):
 
 
 def test_spawn_buffer_fully_relaxes_before_full(life):
-    _, owner_token, owner_life = life.register("owner")  # 주인 = (8,16)
+    _, owner_token, owner_life = life.register("owner")
     _cover_floor_except(life, owner_token, owner_life.id,
                         holes={(SPAWN_X, SPAWN_Y), (SPAWN_X, SPAWN_Y + 1)})
     _, token_v, _ = life.register("visitor")

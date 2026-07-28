@@ -22,9 +22,10 @@ from .errors import CellTaken
 GRID_W = 20
 GRID_H = 20
 FLOOR_Y = 0
-# 자율 입장(셀 미지정) 스폰 지점 — 구석이 아니라 방의 가로 3/7, 세로 4/5 지점 근처
-SPAWN_X = GRID_W * 3 // 7  # 8
-SPAWN_Y = GRID_H * 4 // 5  # 16
+FLOOR_DEPTH = 20
+# 반깊이 바닥의 앞쪽 중앙에 가까운 자율 입장 스폰 지점.
+SPAWN_X = 9
+SPAWN_Y = 9
 WINDOW_ROTATION_BY_WALL = {"west": 90, "north": 180}
 
 Cell = tuple[int, int]
@@ -93,10 +94,17 @@ def _spawn_hash(agent_id: str, cell: Cell) -> int:
     return int.from_bytes(digest[:8], "big")
 
 
-def _validate_cell(cell: Cell) -> None:
+def _is_floor_cell(cell: Cell) -> bool:
     x, y = cell
-    if not (0 <= x < GRID_W and 0 <= y < GRID_H):
-        raise errors.InvalidRequest(f"셀 범위 밖: ({x},{y}) — 0~{GRID_W - 1} × 0~{GRID_H - 1}")
+    return 0 <= x < GRID_W and 0 <= y < GRID_H and x + y < FLOOR_DEPTH
+
+
+def _validate_cell(cell: Cell) -> None:
+    if not _is_floor_cell(cell):
+        x, y = cell
+        raise errors.InvalidRequest(
+            f"바닥 셀 범위 밖: ({x},{y}) — 0<=x,y<{GRID_W}, x+y<{FLOOR_DEPTH}"
+        )
 
 
 class LifeService:
@@ -122,6 +130,7 @@ class LifeService:
             self._friends, self._content_visibility, self._diaries, self._guestbook = store.load_social()
             self._mascot_image_hashes = store.load_mascot_image_hashes()
             # protocol v2에서는 창문 회전이 자유값이었다. v3부터 벽이 방향의 단일 원천이다.
+            # protocol v4에서는 앞쪽 절반을 버린다. 창문 회전 보정과 함께 한 번에 영속화한다.
             for life in self._life.values():
                 changed = False
                 for obj in life.design.objects:
@@ -129,8 +138,37 @@ class LifeService:
                     if expected is not None and obj.rotation != expected:
                         obj.rotation = expected
                         changed = True
+                kept = [
+                    obj for obj in life.design.objects
+                    if obj.category == "window" or all(_is_floor_cell(cell) for cell in obj.occupied_cells())
+                ]
+                if len(kept) != len(life.design.objects):
+                    life.design.objects = kept
+                    changed = True
                 if changed:
                     store.save_design(life)
+            self._relocate_invalid_agents()
+
+    def _relocate_invalid_agents(self) -> None:
+        """protocol v4 시작 마이그레이션 — 비활성·충돌 위치의 봇만 결정론적으로 이동."""
+        for life_id in sorted(self._life):
+            life = self._life[life_id]
+            furniture = set().union(*(
+                obj.occupied_cells() for obj in life.design.objects if obj.category != "window"
+            )) if life.design.objects else set()
+            used: set[Cell] = set()
+            agents = sorted(
+                (agent for agent in self._agents.values() if agent.at_life == life_id),
+                key=lambda agent: agent.agent_id,
+            )
+            for agent in agents:
+                if _is_floor_cell(agent.cell) and agent.cell not in furniture and agent.cell not in used:
+                    used.add(agent.cell)
+                    continue
+                agent.cell = self._free_cell_locked(life_id, for_agent=agent.agent_id)
+                used.add(agent.cell)
+                if self._store:
+                    self._store.save_agent(agent)
 
     # --- 신원 ---
 
@@ -558,10 +596,8 @@ class LifeService:
                     occupied.update(wall_cells)
                     objects.append(obj)
                     continue
-                if any(not (0 <= x < GRID_W and 0 <= y < GRID_H) for x, y in cells):
+                if any(not _is_floor_cell(cell) for cell in cells):
                     raise errors.InvalidRequest("가구가 방 범위를 벗어남")
-                if any(y < 0 for _, y in cells):
-                    raise errors.InvalidRequest("가구는 바닥 영역에만 배치할 수 있음")
                 if cells & occupied:
                     raise CellTaken("가구끼리 겹침")
                 # 에이전트가 서 있는 셀에는 가구를 못 놓는다
@@ -599,15 +635,15 @@ class LifeService:
         """
         life = self._life.get(life_id)
         agent_cells = {a.cell for a in self._agents.values()
-                       if a.agent_id != for_agent and a.at_life == life_id}
+                       if a.agent_id != for_agent and a.at_life == life_id and _is_floor_cell(a.cell)}
         object_cells: set[Cell] = set()
         if life:
             for o in life.design.objects:
                 if o.category != "window":
-                    object_cells |= o.occupied_cells()
+                    object_cells |= {cell for cell in o.occupied_cells() if _is_floor_cell(cell)}
         free = [
             c for c in sorted(
-                ((x, y) for y in range(FLOOR_Y, GRID_H) for x in range(GRID_W)),
+                ((x, y) for y in range(FLOOR_Y, GRID_H) for x in range(GRID_W) if _is_floor_cell((x, y))),
                 key=lambda c: (max(abs(c[0] - SPAWN_X), abs(c[1] - SPAWN_Y)), _spawn_hash(for_agent, c)),
             )
             if c not in agent_cells and c not in object_cells

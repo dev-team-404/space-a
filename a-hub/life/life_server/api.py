@@ -131,7 +131,14 @@ def create_app(life: LifeService | None = None) -> FastAPI:
 
     @app.get("/capabilities")
     def capabilities():
-        return {"life_protocol": 3, "grid": {"w": 20, "h": 20}, "floor_min_y": 0, "footprint_mask": True, "wall_objects": True}
+        return {
+            "life_protocol": 4,
+            "grid": {"w": 20, "h": 20},
+            "floor": {"shape": "half-depth", "max_xy_exclusive": 20},
+            "floor_min_y": 0,
+            "footprint_mask": True,
+            "wall_objects": True,
+        }
 
     @app.post("/life/register", status_code=201)
     def life_register(body: LifeRegisterBody):

@@ -2,7 +2,7 @@
 
 import sqlite3
 
-from life_server.life import LifeService
+from life_server.life import FLOOR_DEPTH, LifeService
 from life_server.store import SqliteStore
 
 
@@ -81,7 +81,7 @@ def test_custom_footprint_persists(tmp_path):
     db = str(tmp_path / "life-mask.db")
     s1 = LifeService(store=SqliteStore(db))
     _, token, life = s1.register("A")
-    s1.move(token, (19, 19))
+    s1.move(token, (18, 0))
     mask = [[0, 0], [1, 0], [2, 0], [0, 1], [0, 2]]
     s1.set_design(token, life.id, {"objects": [{
         "asset_id": "sofa.corner", "category": "sofa", "cell": [1, 1],
@@ -95,7 +95,7 @@ def test_retro_tv_six_cell_footprint_persists(tmp_path):
     db = str(tmp_path / "life-tv.db")
     s1 = LifeService(store=SqliteStore(db))
     _, token, life = s1.register("A")
-    s1.move(token, (19, 19))
+    s1.move(token, (18, 0))
     footprint = [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1]]
     s1.set_design(token, life.id, {"objects": [{
         "asset_id": "appliance.retro-tv", "category": "appliance", "cell": [1, 1],
@@ -124,11 +124,47 @@ def test_legacy_window_rotation_is_migrated_from_wall(tmp_path):
     assert state["design"]["objects"][0]["rotation"] == 180
 
 
+def test_half_depth_restart_drops_invalid_furniture_and_relocates_agent(tmp_path):
+    db = str(tmp_path / "life-half-depth-v3.db")
+    store = SqliteStore(db)
+    s1 = LifeService(store=store)
+    agent, token, life = s1.register("owner")
+    # protocol 3 DB에 존재할 수 있었던 앞쪽 좌표와 가구를 직접 재현한다.
+    store._conn.execute(
+        "UPDATE agents SET x=19, y=19 WHERE agent_id=?",
+        (agent.agent_id,),
+    )
+    store._conn.execute(
+        "INSERT INTO life_objects "
+        "(life_id,kind,x,y,category,w,h,rotation,wall,footprint) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (life.id, "sofa.legacy-front", 17, 17, "sofa", 2, 2, 0, None, None),
+    )
+    store._conn.execute(
+        "INSERT INTO life_objects "
+        "(life_id,kind,x,y,category,w,h,rotation,wall,footprint) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (life.id, "window.kept", 1, 0, "window", 3, 2, 180, "north", None),
+    )
+    store._conn.commit()
+
+    restarted = LifeService(store=SqliteStore(db))
+    state = restarted.life_state(life.id)
+    assert [obj["asset_id"] for obj in state["design"]["objects"]] == ["window.kept"]
+    assert sum(restarted.me(token)["cell"]) < FLOOR_DEPTH
+
+    # 정리 결과가 영속되고 재실행해도 더 바뀌지 않는다.
+    first_cell = restarted.me(token)["cell"]
+    again = LifeService(store=SqliteStore(db))
+    assert again.me(token)["cell"] == first_cell
+    assert [obj["asset_id"] for obj in again.life_state(life.id)["design"]["objects"]] == ["window.kept"]
+
+
 def test_legacy_combined_dining_assets_are_dropped(tmp_path):
     db = str(tmp_path / "life-dining-v1.db")
     s1 = LifeService(store=SqliteStore(db))
     _, token, life = s1.register("A")
-    s1.move(token, (19, 19))
+    s1.move(token, (18, 0))
     s1.set_design(token, life.id, {"objects": [{
         "asset_id": "dining.square-two", "category": "dining", "cell": [1, 1],
         "size": [3, 4], "rotation": 0,

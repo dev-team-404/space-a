@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { groundAnchor, occupiedWorldCells, placementOrigin, rotatedOffsets, rotatedOrigin, spriteGroundAnchor, wallOccupiedIndices, wallPlacementOrigin, wallSpanScreenWidth } from './geometry';
+import { groundAnchor, isFloorCell, isInsideLife, occupiedWorldCells, placementOrigin, rotatedOffsets, rotatedOrigin, spriteGroundAnchor, wallOccupiedIndices, wallPlacementOrigin, wallSpanScreenWidth } from './geometry';
 
-describe('placement geometry v2', () => {
+describe('placement geometry v4', () => {
   it.each([
-    [[0, 0], [0, 0]], [[19, 0], [16, 0]], [[0, 19], [0, 18]], [[19, 19], [16, 18]],
+    [[0, 0], [0, 0]], [[19, 0], [15, 0]], [[0, 19], [0, 15]], [[19, 19], [7, 8]],
   ] as const)('keeps a 4x2 sofa inside at target %j', (target, expected) => {
     expect(placementOrigin([...target], [4, 2], 0)).toEqual(expected);
+  });
+
+  it('accepts only cells and complete footprints inside the half-depth floor', () => {
+    expect(isFloorCell([10, 9])).toBe(true);
+    expect(isFloorCell([10, 10])).toBe(false);
+    expect(isInsideLife({ cell:[15,0], size:[4,2], rotation:0 })).toBe(true);
+    expect(isInsideLife({ cell:[16,0], size:[4,2], rotation:0 })).toBe(false);
   });
 
   it('rotates an L footprint with its bounding box', () => {
@@ -40,9 +47,9 @@ describe('placement geometry v2', () => {
   });
 
   it('preserves the anchor when possible and moves inward at an edge', () => {
-    const sofa = { cell:[0,18] as [number,number], size:[4,2] as [number,number], rotation:0 as const };
-    expect(rotatedOrigin(sofa, 90)).toEqual([1,16]);
-    expect(groundAnchor({ ...sofa, cell:rotatedOrigin(sofa, 90), rotation:90 })).toEqual([2,18]);
+    const sofa = { cell:[0,15] as [number,number], size:[4,2] as [number,number], rotation:0 as const };
+    expect(rotatedOrigin(sofa, 90)).toEqual([1,14]);
+    expect(groundAnchor({ ...sofa, cell:rotatedOrigin(sofa, 90), rotation:90 })).toEqual([2,16]);
   });
 
   it('uses the same clamped wall origin for preview and placement', () => {
