@@ -12,6 +12,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   import { frameAt, resolveState, type BubbleKind } from './lib/robot/anim';
   import { adviceBubble, diaryBubble, findingBubble, occasionBubble, pickChatter, type Bubble } from './lib/robot/bubble';
   import { isDrag } from './lib/robot/drag';
+  import { lifeDestinations } from './lib/life-navigation';
 
   const win = getCurrentWindow();
 
@@ -132,8 +133,8 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
   let lifeMenuRequest = 0;
   let lifeMenuPolling = false;
   let bubbleEditor=$state(false),roomBrowser=$state(false),persistentBubble=$state(''),savedBubble=$state(''),bubbleSaving=$state(false);
-  const visibleLifeEntries = $derived(lifeMenu?.filter((life) => life.life_id !== myLifeId && life.life_id !== curLifeId) ?? []);
-  const lifeMenuItemCount = $derived(visibleLifeEntries.length + (curLifeId !== myLifeId ? 1 : 0));
+  const lifeMenuDestinations = $derived(lifeDestinations(lifeMenu ?? [], myLifeId, curLifeId));
+  const lifeMenuItemCount = $derived(lifeMenuDestinations.length);
   async function toggleLifeMenu() {
     if (lifeMenu !== null) { lifeMenu = null; await expand(false); return; }
     const request = ++lifeMenuRequest;
@@ -301,13 +302,10 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
       {:else if roomBrowser}
         <div class="menu-head"><button aria-label="마스코트 메뉴로 뒤로" title="뒤로" onclick={()=>roomBrowser=false}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><b>방 이동</b></div>
         <div class="list" class:scrollable={lifeMenuItemCount >= 3}>
-          {#if curLifeId !== myLifeId}
-            <button class="item" onclick={() => gotoLife(myLifeId)}>🏠 내 방으로 돌아가기</button>
-          {/if}
-          <!-- 지금 있는 방은 이동 대상이 아님 — 내 방은 위의 "돌아가기"가 담당 -->
-          {#each visibleLifeEntries as r (r.life_id)}
-            <button class="item" onclick={() => gotoLife(r.life_id)}>
-              {r.owner_name}의 방 <span class="n">{r.occupants}</span>
+          {#each lifeMenuDestinations as destination (destination.lifeId)}
+            <button class="item" onclick={() => gotoLife(destination.lifeId)}>
+              {#if destination.kind==='home'}🏠 {/if}{destination.label}
+              {#if destination.occupants!==null}<span class="n">{destination.occupants}</span>{/if}
             </button>
           {/each}
         </div>
