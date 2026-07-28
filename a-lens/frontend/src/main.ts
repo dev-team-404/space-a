@@ -717,9 +717,16 @@ function agentRowHTML(a: SpaceAgent): string {
     </div>`
 }
 
+/** 활동 기록이 하나도 없는 멤버 — 페이지·이슈를 한 번도 쓰지 않아 백엔드가 last_write를
+ *  못 찾은 계정(collector `_agent`). 테스트·프로브용 등록만 남은 계정이라 목록에서 감춘다. */
+function hasSentAnything(a: SpaceAgent): boolean {
+  return a.last_active_at !== null || !!a.recent_activity
+}
+
 function hubActivityHTML(data: SpaceView): string {
-  const online = data.agents.filter((a) => a.status === 'working')
-  const offline = data.agents.filter((a) => a.status !== 'working')
+  const active = data.agents.filter(hasSentAnything)
+  const online = active.filter((a) => a.status === 'working')
+  const offline = active.filter((a) => a.status !== 'working')
   const list = activityTab === 'online' ? online : offline
   const items = list.length ? list.map(agentRowHTML).join('') : '<p class="muted small">표시할 항목이 없어요</p>'
   return `
@@ -928,7 +935,8 @@ async function renderLife(spaceId: string) {
   }
   app.stage.removeChildren()
   // 씬 과밀 방지 — 캐릭터(책상)는 온라인 우선·최근 활동순 상위 N명만.
-  // Hub '팀 활동' 목록(renderHubActivity)은 전원 표시하므로 정보 손실은 없다.
+  // Hub '팀 활동' 목록은 활동 기록이 있는 멤버 전원을 표시한다(hasSentAnything) —
+  // 여기서 잘리는 건 활동 순으로 하위이므로 목록 쪽에 남는다.
   const SCENE_MAX_AGENTS = 24
   const sceneAgents = [...data.agents]
     .sort(
