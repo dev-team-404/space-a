@@ -483,6 +483,92 @@ pub fn probe_endpoint(cfg: &SpriteConfig) -> ProbeVerdict {
     }
 }
 
+// ── H2 매일 마스코트 컷 (2026-07-28) ─────────────────────────────────────────
+// 스펙: docs/design/a-mate/specs/2026-07-28-sprite-face-daily-cut-design.md
+
+/// H2 — 컷의 샷 축. Full/Bust/CloseUp은 마스코트 등장, Scene은 캐릭터 없는 정경
+/// (균등 4변형 → 마스코트:정경 = 3:1 가중).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CutShot {
+    Full,
+    Bust,
+    CloseUp,
+    Scene,
+}
+
+impl CutShot {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CutShot::Full => "full",
+            CutShot::Bust => "bust",
+            CutShot::CloseUp => "closeup",
+            CutShot::Scene => "scene",
+        }
+    }
+    pub fn has_mascot(&self) -> bool {
+        !matches!(self, CutShot::Scene)
+    }
+}
+
+/// 날짜+정체성 시드 → 결정론적 샷 pick (재현·테스트 가능 — character_description 변주 시드 선례).
+pub fn pick_cut_shot(date: &str, seed: &str) -> CutShot {
+    use sha2::{Digest, Sha256};
+    let d = Sha256::digest(format!("{date}|{seed}").as_bytes());
+    match d[0] % 4 {
+        0 => CutShot::Full,
+        1 => CutShot::Bust,
+        2 => CutShot::CloseUp,
+        _ => CutShot::Scene,
+    }
+}
+
+/// H2 — 컷 상태(app_data/daily_cut.json). `cut_date`는 화면의 daily_cut.png가 어느 일기의
+/// 컷인지(재실행 멱등 키), `attempt_date`/`attempts`는 일일 과금 상한의 원장이다.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct CutState {
+    pub cut_date: Option<String>,
+    #[serde(default)]
+    pub caption: String,
+    #[serde(default)]
+    pub shot: String,
+    #[serde(default)]
+    pub attempt_date: String,
+    #[serde(default)]
+    pub attempts: u8,
+}
+
+/// 하루 최대 생성 시도 — 이미지 건당 과금 가드 (스펙 결정 2).
+pub const MAX_CUT_ATTEMPTS_PER_DAY: u8 = 3;
+
+/// 리컨실리에이션 판단 — true면 생성 시도. 최신 일기 컷이 이미 있거나(멱등)
+/// 그 날짜의 시도가 소진됐으면 skip.
+pub fn decide_cut(latest_diary_date: &str, s: &CutState) -> bool {
+    if s.cut_date.as_deref() == Some(latest_diary_date) {
+        return false;
+    }
+    if s.attempt_date == latest_diary_date && s.attempts >= MAX_CUT_ATTEMPTS_PER_DAY {
+        return false;
+    }
+    true
+}
+
+/// 시도 기록 — 대상 날짜가 바뀌면 카운터 리셋. 호출자는 네트워크 **전에** persist해
+/// 실패·크래시에도 상한을 보장한다.
+pub fn register_attempt(s: &mut CutState, date: &str) {
+    if s.attempt_date != date {
+        s.attempt_date = date.to_string();
+        s.attempts = 0;
+    }
+    s.attempts = s.attempts.saturating_add(1);
+}
+
+/// 성공 기록 — 화면 상태(cut_date·caption·shot)를 새 컷으로 갱신.
+pub fn register_success(s: &mut CutState, date: &str, caption: &str, shot: CutShot) {
+    s.cut_date = Some(date.to_string());
+    s.caption = caption.to_string();
+    s.shot = shot.as_str().to_string();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -751,5 +837,69 @@ mod tests {
         let png = encode_rgba_png(4, 4, |_, _| [1, 2, 3, 255]);
         let (w, h, _) = decode_rgba_png(&crop_face(&png).unwrap());
         assert_eq!((w, h), (128, 128));
+    }
+
+    #[test]
+    fn pick_cut_shot_is_deterministic_and_covers_all_variants() {
+        assert_eq!(pick_cut_shot("2026-07-28", "uuid-1"), pick_cut_shot("2026-07-28", "uuid-1"));
+        let mut seen = std::collections::HashSet::new();
+        for d in 1..=60 {
+            seen.insert(pick_cut_shot(&format!("2026-07-{d:02}"), "uuid-1").as_str());
+        }
+        // 60일 표본이면 4변형(마스코트 3 : 정경 1)이 모두 등장해야 한다
+        assert_eq!(seen.len(), 4, "샷 축 4변형이 모두 나와야 함: {seen:?}");
+    }
+
+    #[test]
+    fn cut_shot_scene_has_no_mascot() {
+        assert!(CutShot::Full.has_mascot());
+        assert!(CutShot::Bust.has_mascot());
+        assert!(CutShot::CloseUp.has_mascot());
+        assert!(!CutShot::Scene.has_mascot());
+    }
+
+    #[test]
+    fn decide_cut_reconciliation_table() {
+        let d = "2026-07-28";
+        // 초기 상태(첫 실행) → 생성
+        assert!(decide_cut(d, &CutState::default()));
+        // 최신 일기 컷 완료 → skip (재실행 멱등)
+        let mut done = CutState::default();
+        register_attempt(&mut done, d);
+        register_success(&mut done, d, "캡션", CutShot::Bust);
+        assert!(!decide_cut(d, &done));
+        // 오늘 3회 실패 소진 → skip (과금 상한)
+        let mut spent = CutState::default();
+        for _ in 0..MAX_CUT_ATTEMPTS_PER_DAY {
+            register_attempt(&mut spent, d);
+        }
+        assert!(!decide_cut(d, &spent));
+        // 어제 소진했어도 새 일기 날짜 → 생성 (카운터는 register_attempt가 리셋)
+        assert!(decide_cut("2026-07-29", &spent));
+        // 어제 성공 컷이 있고 오늘 일기가 새로 생김 → 생성
+        assert!(decide_cut("2026-07-29", &done));
+    }
+
+    #[test]
+    fn register_attempt_resets_counter_on_new_date() {
+        let mut s = CutState::default();
+        register_attempt(&mut s, "2026-07-28");
+        register_attempt(&mut s, "2026-07-28");
+        assert_eq!((s.attempt_date.as_str(), s.attempts), ("2026-07-28", 2));
+        register_attempt(&mut s, "2026-07-29");
+        assert_eq!((s.attempt_date.as_str(), s.attempts), ("2026-07-29", 1));
+    }
+
+    #[test]
+    fn register_success_updates_display_state_and_roundtrips_json() {
+        let mut s = CutState::default();
+        register_attempt(&mut s, "2026-07-28");
+        register_success(&mut s, "2026-07-28", "밤샘 끝, 뿌듯", CutShot::Scene);
+        assert_eq!(s.cut_date.as_deref(), Some("2026-07-28"));
+        assert_eq!(s.caption, "밤샘 끝, 뿌듯");
+        assert_eq!(s.shot, "scene");
+        // 손상 대비 직렬화 왕복 (daily_cut.json 포맷)
+        let json = serde_json::to_string(&s).unwrap();
+        assert_eq!(serde_json::from_str::<CutState>(&json).unwrap(), s);
     }
 }
