@@ -1548,6 +1548,68 @@ mod tests {
         store.set_setting("owner_full_name", "   ").unwrap(); // 공백 → 미설정과 동일
         assert_eq!(owner_full_name(&store), "");
     }
+
+    #[test]
+    fn face_icon_inner_lazy_materializes_and_caches() {
+        use base64::Engine as _;
+        let dir = tempfile::tempdir().unwrap();
+        // ① sprite.png 없음 → None (프론트 이모지 폴백)
+        assert_eq!(face_icon_inner(dir.path()).unwrap(), None);
+        // ② sprite.png 생성(1×1 투명 PNG) → face.png 재료화 + base64 반환
+        let sprite = base64::engine::general_purpose::STANDARD
+            .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+            .unwrap();
+        std::fs::write(dir.path().join("sprite.png"), &sprite).unwrap();
+        let b64 = face_icon_inner(dir.path()).unwrap().unwrap();
+        assert!(dir.path().join("face.png").exists());
+        // ③ 재호출 = 캐시 그대로 (내용 동일)
+        assert_eq!(face_icon_inner(dir.path()).unwrap().unwrap(), b64);
+        // ④ face.png를 sprite보다 과거로 백데이트(=리롤로 sprite가 더 새것) → 재크롭 경로
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+        std::fs::File::options()
+            .write(true)
+            .open(dir.path().join("face.png"))
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        assert_eq!(face_icon_inner(dir.path()).unwrap().unwrap(), b64); // 같은 sprite → 같은 결과
+        // 재크롭됐다면 mtime이 현재로 갱신됨
+        let refreshed = std::fs::metadata(dir.path().join("face.png")).unwrap().modified().unwrap();
+        assert!(refreshed > old, "stale face.png는 재크롭으로 갱신돼야 함");
+    }
+}
+
+/// G6 — 얼굴 아이콘 lazy 재료화: face.png가 없거나 sprite.png보다 오래되면 그 자리에서
+/// 크롭·저장한다. sprite 쓰기 경로(파이프라인 생성·리롤 승격)에 훅을 걸지 않는 이유:
+/// mtime 비교가 모든 갱신 경로를 자동 커버한다 (스펙 2026-07-28 결정 7).
+pub fn face_icon_inner(dir: &std::path::Path) -> anyhow::Result<Option<String>> {
+    use base64::Engine as _;
+    let sprite = dir.join("sprite.png");
+    let face = dir.join("face.png");
+    let Ok(sprite_meta) = std::fs::metadata(&sprite) else { return Ok(None) };
+    let fresh = match std::fs::metadata(&face) {
+        Ok(m) => match (m.modified(), sprite_meta.modified()) {
+            (Ok(f), Ok(s)) => f >= s,
+            _ => false, // mtime을 못 읽으면 보수적으로 재크롭
+        },
+        Err(_) => false,
+    };
+    let bytes = if fresh {
+        std::fs::read(&face)?
+    } else {
+        let png = agent_mentor::sprite::crop_face(&std::fs::read(&sprite)?)?;
+        std::fs::write(&face, &png)?;
+        png
+    };
+    Ok(Some(base64::engine::general_purpose::STANDARD.encode(bytes)))
+}
+
+/// G6 — 방명록 아바타 등 소형 UI용 얼굴 아이콘(128×128 캐시). 없으면 None(이모지 폴백).
+#[tauri::command]
+pub fn get_face_icon(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri::Manager as _;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    face_icon_inner(&dir).map_err(|e| e.to_string())
 }
 
 /// AI 스프라이트(캐시) — app_data/sprite.png를 base64로. 없으면 None(프론트는 절차 생성 폴백).
