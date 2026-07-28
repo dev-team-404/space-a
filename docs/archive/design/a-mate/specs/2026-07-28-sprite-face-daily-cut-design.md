@@ -1,7 +1,12 @@
+---
+status: done
+archived: 2026-07-28
+---
+
 # 스펙 — sprite 서브시스템: G6 얼굴 아이콘 + H2 매일 마스코트 컷
 
 - 날짜: 2026-07-28
-- 대상: a-mate `sprite.rs` 서브시스템 (묶음 ⑤ — [로드맵](../plans/2026-07-26-life-social-diary-followups-roadmap.md) G6·H2)
+- 대상: a-mate `sprite.rs` 서브시스템 (묶음 ⑤ — [로드맵](../../../../design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md) G6·H2)
 - 브랜치: `feat/sprite-face-daily-cut` (한 PR, G6/H2 커밋 분리)
 - 관련: ADR 0019(전송 경계), ADR 0013(문서 수명주기), 신규 **ADR 0024**(이미지 엔진 전송 소재 수위 — 본 작업에서 작성. 0023은 half-depth-life-floor에 선점됨)
 

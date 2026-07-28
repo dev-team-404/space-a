@@ -844,7 +844,7 @@ mod runtime {
     /// H2 — 매일 마스코트 컷. 스캔 리컨실리에이션: 최신 일기 날짜 vs daily_cut.json을 비교해
     /// 필요할 때만 생성한다 (재실행 멱등 · 일일 3회 상한 · 옵트인 daily_cut_enabled 기본 off).
     /// 네트워크는 텍스트 → 이미지 순서(텍스트 실패 시 이미지 과금 없음), 모두 store 락 밖.
-    /// 스펙: docs/design/a-mate/specs/2026-07-28-sprite-face-daily-cut-design.md
+    /// 스펙: docs/archive/design/a-mate/specs/2026-07-28-sprite-face-daily-cut-design.md
     fn maybe_generate_daily_cut(app: &AppHandle) {
         use agent_mentor::sprite;
         let Ok(dir) = app.path().app_data_dir() else { return };

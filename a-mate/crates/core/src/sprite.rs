@@ -489,7 +489,7 @@ pub fn probe_endpoint(cfg: &SpriteConfig) -> ProbeVerdict {
 }
 
 // ── H2 매일 마스코트 컷 (2026-07-28) ─────────────────────────────────────────
-// 스펙: docs/design/a-mate/specs/2026-07-28-sprite-face-daily-cut-design.md
+// 스펙: docs/archive/design/a-mate/specs/2026-07-28-sprite-face-daily-cut-design.md
 
 /// H2 — 컷의 샷 축. Full/Bust/CloseUp은 마스코트 등장, Scene은 캐릭터 없는 정경
 /// (균등 4변형 → 마스코트:정경 = 3:1 가중).
