@@ -45,7 +45,8 @@
   });
 </script>
 
-<div class="portrait">
+<!-- 컷 = 자체 배경을 가진 사진이라 풀블리드, 폴백 캐릭터(투명 배경)만 민트 여백 유지 -->
+<div class="portrait" class:full={!!cut}>
   {#if cut}
     <!-- 캡션은 App의 "오늘의 한마디" 카드가 표시 — 초상은 이미지만 (공간 절약) -->
     <img class="cut" src={'data:image/png;base64,' + cut.png} alt="오늘의 컷" />
@@ -67,6 +68,7 @@
   }
   canvas { width: 96px; height: 96px; image-rendering: pixelated; }
   .sprite { width: 96px; height: 96px; object-fit: contain; }
-  /* H2 — 미니홈피 대문사진: 이미지만 (감성 글귀는 아래 "오늘의 한마디" 카드가 담당) */
-  .cut { width: 116px; height: 116px; object-fit: cover; border-radius: var(--radius-s); image-rendering: pixelated; }
+  /* H2 — 미니홈피 대문사진: 박스를 꽉 채우는 풀블리드 (감성 글귀는 "오늘의 한마디" 카드가 담당) */
+  .portrait.full { padding: 0; overflow: hidden; }
+  .cut { display: block; width: 100%; aspect-ratio: 1 / 1; height: auto; object-fit: cover; image-rendering: pixelated; }
 </style>
