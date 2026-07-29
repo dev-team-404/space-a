@@ -13,11 +13,11 @@
   import {
     getSummary, getDailyLine, getDailyCut, listFindings, onScanDone, onGotoTab, onDailyCutReady,
     onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, onUpdateCheckRequested,
-    lifeContentAccess, lifeGoto, lifeView, type Summary,
+    onLifeVisit, lifeContentAccess, lifeGoto, lifeView, type Summary,
   } from './lib/api';
   import {
     diaryNotice, findingNotice, loadNotices, occasionNotice, pushNotice, saveNotices,
-    type Notice, type NoticeDest,
+    visitNotice, type Notice, type NoticeDest,
   } from './lib/notices';
   import { isTab, resolveTabAfterLifeChange, type Tab } from './lib/ui/tab-routing';
   import { normalizeGroup, type SettingsGroup } from './lib/ui/settings/groups';
@@ -142,6 +142,7 @@
         syncSharedDiary(date, currentDiaryVisibility()).catch(() => { diaryCatchUpStarted = false; });
       }),
       onOccasionToday((labels) => labels.length && record(occasionNotice(labels, new Date().toISOString()))),
+      onLifeVisit((rows) => rows.length && record(visitNotice(rows, new Date().toISOString()))),
       onDailyLine((text) => { dailyLine = text; }),
       onDailyCutReady(() => { getDailyCut().then((c) => (cutCaption = c?.caption || null)); }),
     ];

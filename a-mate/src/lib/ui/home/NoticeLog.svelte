@@ -1,7 +1,7 @@
 <script lang="ts">
   import { noticeDest, type Notice, type NoticeDest } from '../../notices';
   let { notices, onGoto }: { notices: Notice[]; onGoto: (dest: NoticeDest) => void } = $props();
-  const ICON: Record<Notice['kind'], string> = { finding: '💡', diary: '📓', occasion: '🎉' };
+  const ICON: Record<Notice['kind'], string> = { finding: '💡', diary: '📓', occasion: '🎉', visit: '👋' };
   const hhmm = (ts: string) => {
     const d = new Date(ts);
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;

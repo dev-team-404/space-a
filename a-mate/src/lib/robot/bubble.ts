@@ -1,4 +1,4 @@
-export type BubbleKind = 'finding' | 'diary' | 'occasion' | 'chatter';
+export type BubbleKind = 'finding' | 'diary' | 'occasion' | 'chatter' | 'visit';
 
 export interface Bubble {
   kind: BubbleKind;
@@ -37,6 +37,17 @@ export function diaryBubble(date: string): Bubble {
 
 export function occasionBubble(labels: string[]): Bubble {
   return { kind: 'occasion', tab: 'home', text: `오늘 ${labels[0]}이래요! 🎉` };
+}
+
+/** P4 방문 소식 — 정적 템플릿(LLM 불필요: 즉시성·실패 무해). visits는 last_at 내림차순
+ *  (백엔드가 서버 순서 유지) — [0]이 가장 최근 방문자. present면 현재형 (스펙 §5). */
+export function visitBubble(visits: { visitor_name: string; present: boolean }[]): Bubble {
+  const name = visits[0].visitor_name;
+  const more = visits.length > 1 ? ` 외 ${visits.length - 1}명` : '';
+  const text = visits.some((v) => v.present)
+    ? `${name}님${more}이 놀러왔어요!`
+    : `${name}님${more} 다녀갔어요`;
+  return { kind: 'visit', tab: 'home', text };
 }
 
 const CHATTER: ((n: number | null, h: string) => string)[] = [

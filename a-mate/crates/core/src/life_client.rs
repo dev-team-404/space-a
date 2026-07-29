@@ -158,6 +158,16 @@ impl LifeClient {
         self.req("GET", "/life/me").call().map_err(err_of)?.into_json().map_err(Into::into)
     }
 
+    /// 내 방 인바운드 방문 목록 (P4). since = 서버 발급 last_at 커서 — 초과분만 받는다.
+    /// 구서버(엔드포인트 미배포)는 404 — 호출자가 이번 실행 동안 폴링을 비활성한다.
+    pub fn visits(&self, since: Option<&str>, limit: u32) -> Result<Value> {
+        let mut req = self.req("GET", "/life/me/visits").query("limit", &limit.to_string());
+        if let Some(s) = since.map(str::trim).filter(|s| !s.is_empty()) {
+            req = req.query("since", s); // RFC3339의 '+'가 query 인코딩으로 보존된다
+        }
+        req.call().map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
     /// 이름 변경(에이전트 + 내 방 주인 이름). 주인 OS 계정(owner_os_user)·풀네임(owner_full_name)도
     /// 함께 실어 기존 연결도 §F 주인 식별자를 갱신한다 — register_profile과 같은 규약(빈 값은 생략,
     /// 서버는 모르는 필드를 무시하므로 하위호환. register·PATCH가 동일 body 모델).

@@ -1,6 +1,6 @@
 export interface Notice {
   ts: string;
-  kind: 'finding' | 'diary' | 'occasion';
+  kind: 'finding' | 'diary' | 'occasion' | 'visit';
   text: string;
   /** 딥링크 대상 — finding이면 dedup_key, diary면 YYYY-MM-DD. 없으면 클릭 불가. */
   target?: string;
@@ -46,6 +46,12 @@ export function diaryNotice(date: string, ts: string): Notice {
 
 export function occasionNotice(labels: string[], ts: string): Notice {
   return { ts, kind: 'occasion', text: `오늘은 ${labels[0]}!` };
+}
+
+/** P4 방문 알림 — target 없음(클릭 불가, occasion 선례). visits[0] = 가장 최근 방문자. */
+export function visitNotice(visits: { visitor_name: string }[], ts: string): Notice {
+  const more = visits.length > 1 ? ` 외 ${visits.length - 1}명` : '';
+  return { ts, kind: 'visit', text: `${visits[0].visitor_name}님${more}이 방에 다녀갔어요` };
 }
 
 export function noticeDest(n: Notice): NoticeDest | null {

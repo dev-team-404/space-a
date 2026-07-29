@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diaryNotice, findingNotice, noticeDest, occasionNotice, pushNotice, type Notice } from './notices';
+import { diaryNotice, findingNotice, noticeDest, occasionNotice, pushNotice, visitNotice, type Notice } from './notices';
 
 const n = (text: string): Notice => ({ ts: '2026-07-05T10:00:00Z', kind: 'finding', text });
 
@@ -44,6 +44,15 @@ describe('notice 팩토리', () => {
     expect(n.kind).toBe('occasion');
     expect(n.text).toBe('오늘은 크리스마스!');
     expect(n.target).toBeUndefined();
+  });
+  it('visit: 단수·복수 문구, target 없음(클릭 불가)', () => {
+    const one = visitNotice([{ visitor_name: '준녕' }], '2026-07-29T10:00:00Z');
+    expect(one.kind).toBe('visit');
+    expect(one.text).toBe('준녕님이 방에 다녀갔어요');
+    expect(one.target).toBeUndefined();
+    expect(noticeDest(one)).toBeNull();
+    const many = visitNotice([{ visitor_name: '가' }, { visitor_name: '나' }], '2026-07-29T10:00:00Z');
+    expect(many.text).toBe('가님 외 1명이 방에 다녀갔어요');
   });
 });
 

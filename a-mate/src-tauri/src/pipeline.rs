@@ -123,6 +123,8 @@ mod runtime {
                 crate::visit::prune_visit_history(&state.store);
                 // 묶음 ② 자율 방문 — 주말·공휴일 하루 1방(토글 off·hub 미연결·일촌 없으면 no-op)
                 crate::visit::maybe_auto_visit(&state.store);
+                // P4+N1 인바운드 소식 — 내 방 방문·방명록 diff를 emit (hub 미연결·구서버 no-op)
+                maybe_poll_inbound(app, &state.store);
                 // a-hub 지식 공유 — 유의미 finding을 이슈→해결로 발행 (env 미설정 시 no-op)
                 maybe_share_findings(&state.store);
                 // 텔레메트리(#46) — 전날 파생 신호 하루 1회 발행 (env 미설정 시 no-op)
@@ -1008,6 +1010,67 @@ mod runtime {
                     log::warn!("방명록 자동 답글: 게시 실패(entry {}): {e}", t.entry_id);
                     continue;
                 }
+            }
+        }
+    }
+
+    /// P4+N1 — 인바운드 소식 폴링 (스캔 편승, 스펙 §4). 내 방 방문을 settings 커서
+    /// 기준 diff 후 life:visit emit. hub 미연결이면 no-op, 모든 실패는 warn 후 다음
+    /// 스캔 재시도. 커서 저장은 emit 성공 후 — 실패 시 커서 미갱신으로 재-emit된다.
+    /// 구서버(visits 404)는 이번 실행 동안 방문 폴링만 비활성(maybe_reply_guestbook
+    /// INCOMPATIBLE 선례). 기존 maybe_reply_guestbook은 건드리지 않는다(묶음 ② 충돌 억제).
+    fn maybe_poll_inbound(app: &AppHandle, store_mutex: &std::sync::Mutex<SqliteStore>) {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static VISITS_UNSUPPORTED: AtomicBool = AtomicBool::new(false);
+
+        // ① 락: 설정·커서 스냅샷 → 즉시 해제 (maybe_reply_guestbook 선례)
+        let (url, token, api_key, life_id, agent_id, visits_cursor) = match store_mutex.lock() {
+            Ok(store) => {
+                let get = |k: &str| store.get_setting(k).ok().flatten().unwrap_or_default();
+                let cursor = store.get_setting("inbound_visits_cursor").ok().flatten()
+                    .filter(|v| !v.is_empty());
+                (get("hub_url"), get("hub_token"), get("hub_api_key"),
+                 get("hub_life_id"), get("hub_agent_id"), cursor)
+            }
+            Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+        };
+        if url.trim().is_empty() || token.is_empty() || life_id.is_empty() || agent_id.is_empty() {
+            return;
+        }
+        let client = agent_mentor::life_client::LifeClient {
+            base_url: url,
+            token,
+            api_key: { let k = api_key.trim(); (!k.is_empty()).then(|| k.to_string()) },
+        };
+        let save_cursor = |key: &str, val: &Option<String>| {
+            let Some(v) = val.as_deref() else { return };
+            match store_mutex.lock() {
+                Ok(store) => {
+                    if let Err(e) = store.set_setting(key, v) { log::warn!("{key} 저장 실패: {e}"); }
+                }
+                Err(e) => log::warn!("store lock poisoned: {e}"),
+            }
+        };
+
+        // ② 락 없이 네트워크: 방문 diff → life:visit
+        if !VISITS_UNSUPPORTED.load(Ordering::SeqCst) {
+            match client.visits(visits_cursor.as_deref(), 100) {
+                Ok(v) => {
+                    let rows = v.get("visits").and_then(|x| x.as_array()).cloned().unwrap_or_default();
+                    let (fresh, next) =
+                        agent_mentor::inbound::select_new_visits(&rows, visits_cursor.as_deref());
+                    if fresh.is_empty() || app.emit("life:visit", &fresh).is_ok() {
+                        save_cursor("inbound_visits_cursor", &next);
+                    } else {
+                        log::warn!("life:visit emit 실패 — 다음 스캔 재시도");
+                    }
+                }
+                // err_of가 "(HTTP 404)"를 접미한다 — 구서버 판별
+                Err(e) if e.to_string().contains("(HTTP 404)") => {
+                    log::warn!("방문 폴링: 서버가 visits 미지원(구서버) — 이번 실행 동안 비활성");
+                    VISITS_UNSUPPORTED.store(true, Ordering::SeqCst);
+                }
+                Err(e) => log::warn!("방문 폴링: 조회 실패(다음 스캔 재시도): {e}"),
             }
         }
     }

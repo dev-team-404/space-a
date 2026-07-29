@@ -7,6 +7,7 @@ pub mod diary;
 pub mod finding;
 pub mod hosts;
 pub mod hub;
+pub mod inbound;
 pub mod inventory;
 pub mod judge;
 pub mod mascot;
