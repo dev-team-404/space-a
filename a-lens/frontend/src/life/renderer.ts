@@ -2,7 +2,7 @@
 // 배경 이미지는 manifest cal(좌우 바닥 꼭짓점 + slope)로 2:1 격자 좌표계에 정규화된다.
 // 책상은 킷 스프라이트(desk.dN)가 있으면 Sprite, 없으면 Graphics 아이소 박스로 폴백.
 
-import { Container, Graphics, Sprite, Text, TextStyle } from 'pixi.js'
+import { Assets, Container, Graphics, Sprite, Text, Texture, TextStyle } from 'pixi.js'
 import type { SpaceAgent, SpaceIssue } from '../api'
 import { DESKS, characterForSeed, resolveDeskId, resolveLifeId } from './catalog'
 import { TILE_W, TILE_H, isoX, isoY, depth } from './iso'
@@ -51,6 +51,64 @@ export const PREVIEW_DATA: LifeSceneData = {
   ],
   knowledgeCount: 12,
   highlight: '『배포 자동화 체크리스트』 지식이 플랫폼팀에서 재사용됐어요 (누적 4회)',
+}
+
+// Life 마스코트 이미지를 캐릭터로 쓸 때의 목표 높이(px) — 원본은 1000px 급이라 축소한다.
+const MASCOT_H = 58
+
+/** 씬별 캐릭터 표시 요소 — 경량 폴링(이름·아이콘만 갱신)이 씬을 다시 그리지 않도록 잡아둔다. */
+type AgentView = { robot: Container; nameTag: Text; namePill: Graphics; mascotUrl: string }
+const agentViews = new WeakMap<Container, Map<string, AgentView>>()
+
+/** 이름표 텍스트·배경 폭을 다시 맞춘다(이름이 바뀌면 폭도 바뀐다). */
+function paintNameTag(view: AgentView, name: string): void {
+  view.nameTag.text = name
+  const pillW = view.nameTag.width + 14
+  const pillH = 20
+  view.nameTag.position.set(-view.nameTag.width / 2, 4 + (pillH - view.nameTag.height) / 2)
+  view.namePill
+    .clear()
+    .roundRect(-pillW / 2, 4, pillW, pillH, 9)
+    .fill({ color: 0x0d1220, alpha: 0.92 })
+    .stroke({ color: 0xffffff, alpha: 0.22, width: 1 })
+}
+
+/** 마스코트 이미지를 캐릭터 자리에 얹는다. 실패(404·네트워크)면 기존 캐릭터를 그대로 둔다. */
+function applyMascot(view: AgentView, url: string): void {
+  view.mascotUrl = url
+  void Assets.load<Texture>({ src: url, loadParser: 'loadTextures' })
+    .then((tex) => {
+      if (view.robot.destroyed || !tex) return
+      const sp = new Sprite(tex)
+      sp.anchor.set(0.5, 1)
+      sp.scale.set(MASCOT_H / tex.height)
+      view.robot.addChildAt(sp, 0)
+      // 기존 캐릭터/로봇 그림만 감춘다 — 이름표·말풍선은 살린다.
+      view.robot.children.forEach((c) => {
+        if (c !== sp && c !== view.namePill && (c instanceof Sprite || c instanceof Graphics)) {
+          c.visible = false
+        }
+      })
+    })
+    .catch(() => {
+      view.mascotUrl = '' // 다음 폴링에서 다시 시도할 수 있게
+    })
+}
+
+/**
+ * 경량 갱신 — 팀원이 이름·사진을 바꿨을 때 **씬을 다시 그리지 않고** 이름표·아이콘만 맞춘다.
+ * 캐릭터 위치·말풍선·클릭 상태가 유지되는 것이 목적이다(공통 신원 스펙 §3.2).
+ * 사람이 새로 들어오거나 나간 경우는 다루지 않는다 — 그건 방을 다시 열 때 반영된다.
+ */
+export function refreshAgentViews(scene: Container | null, agents: SpaceAgent[]): void {
+  const views = scene ? agentViews.get(scene) : undefined
+  if (!views) return
+  for (const agent of agents) {
+    const view = views.get(agent.agent_id)
+    if (!view) continue
+    if (agent.name && view.nameTag.text !== agent.name) paintNameTag(view, agent.name)
+    if (agent.mascot_url && agent.mascot_url !== view.mascotUrl) applyMascot(view, agent.mascot_url)
+  }
 }
 
 const ROBOT_COLORS = [0xd9a441, 0x7fb3d5, 0xa3be8c, 0xd08770, 0xb48ead, 0x8fbcbb]
@@ -442,6 +500,9 @@ export function buildLifeScene(
     robot.zIndex = depth(rgx, rgy)
     // 캐릭터 발끝이 격자 지점(원점)에 닿도록 앵커 하단 중앙. topY = 캐릭터 머리 위 y(음수).
     let topY = -34
+    // 공통 신원 — Life에 마스코트 이미지가 있으면 그 사람의 아이콘으로 세운다(절차 생성보다 우선).
+    // 스펙: docs/design/common/specs/2026-07-29-shared-identity-life-hub-lens.md
+    // 로드는 비동기라 먼저 기본 캐릭터를 세우고, 도착하면 갈아끼운다(실패하면 기본 그대로).
     const charKit = kitPiece(`char.${characterForSeed(agent.agent_id || agent.name || String(k))}`)
     if (charKit && charKit.mount === 'character') {
       const s = kitPieceScale() * CHAR_SCALE
@@ -473,6 +534,15 @@ export function buildLifeScene(
       .fill({ color: 0x0d1220, alpha: 0.92 })
       .stroke({ color: 0xffffff, alpha: 0.22, width: 1 })
     robot.addChild(namePill, nameTag)
+    // 폴링 갱신용 등록 + Life 마스코트가 있으면 지금 얹는다(비동기, 실패 시 기본 캐릭터 유지).
+    const view: AgentView = { robot, nameTag, namePill, mascotUrl: '' }
+    let views = agentViews.get(root)
+    if (!views) {
+      views = new Map()
+      agentViews.set(root, views)
+    }
+    views.set(agent.agent_id, view)
+    if (agent.mascot_url) applyMascot(view, agent.mascot_url)
     // 작업 중이면 머리 위에 말풍선 — 최근 활동 요약(brief)이 있으면 그 문구를, 없으면 '...'
     if (agent.status === 'working') {
       const brief = agent.recent_activity?.brief

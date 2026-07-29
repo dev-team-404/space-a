@@ -73,6 +73,11 @@ class LifeAgent:
     mascot_seed: str = ""  # 클라이언트 마스코트 시드 — 어느 방에서든 같은 로봇으로 보이게
     org: str = ""  # 조직 (클라이언트 프로필)
     agent_uuid: str = ""  # 클라이언트가 자동부여한 고유 ID (서버 agent_id와 별개)
+    # ── 공통 신원 (2026-07-29) — Life가 세 컴포넌트를 잇는 등록처 역할을 한다.
+    # 스펙: docs/design/common/specs/2026-07-29-shared-identity-life-hub-lens.md
+    owner_os_user: str = ""  # 주인 OS 계정 (a-mate가 보내던 값 — 이전엔 버려졌다)
+    owner_full_name: str = ""  # 주인 풀네임 (사람이 서로를 알아보는 라벨)
+    hub_user_id: str = ""  # work 허브 계정 id — a-lens가 Hub 활동을 붙일 때 쓰는 정답 키
     bubble: str = ""
     connected: bool = True
 
@@ -173,11 +178,14 @@ class LifeService:
     # --- 신원 ---
 
     def register(
-        self, name: str, mascot_seed: str = "", org: str = "", agent_uuid: str = ""
+        self, name: str, mascot_seed: str = "", org: str = "", agent_uuid: str = "",
+        owner_os_user: str = "", owner_full_name: str = "", hub_user_id: str = "",
     ) -> tuple[LifeAgent, str, Life]:
         """유저 등록 + 개인 방 생성. 에이전트는 자기 방에 자동 입장.
 
-        org·agent_uuid는 클라이언트 프로필(조직·고유 ID). 빈 값이면 기존 값을 유지한다.
+        org·agent_uuid는 클라이언트 프로필(조직·고유 ID). owner_*·hub_user_id는 공통 신원
+        (§2 — a-lens가 Hub 활동을 붙일 때 쓴다). **빈 값이면 기존 값을 유지한다** — 구버전
+        클라이언트가 재등록해도 사람이 지정해 둔 연결을 지우지 않는다.
         """
         name = name.strip()
         if not name:
@@ -189,6 +197,9 @@ class LifeService:
                 existing.mascot_seed = mascot_seed or existing.mascot_seed
                 existing.org = org or existing.org
                 existing.agent_uuid = agent_uuid or existing.agent_uuid
+                existing.owner_os_user = owner_os_user or existing.owner_os_user
+                existing.owner_full_name = owner_full_name or existing.owner_full_name
+                existing.hub_user_id = hub_user_id or existing.hub_user_id
                 token = secrets.token_urlsafe(24)
                 self._tokens[token] = existing.agent_id
                 if self._store:
@@ -202,7 +213,8 @@ class LifeService:
             agent = LifeAgent(
                 agent_id=agent_id, name=name, life_id=life_id, at_life=life_id,
                 cell=self._free_cell_locked(life_id), mascot_seed=mascot_seed,
-                org=org, agent_uuid=agent_uuid,
+                org=org, agent_uuid=agent_uuid, owner_os_user=owner_os_user,
+                owner_full_name=owner_full_name, hub_user_id=hub_user_id,
             )
             self._agents[agent_id] = agent
             token = secrets.token_urlsafe(24)
@@ -283,12 +295,44 @@ class LifeService:
                         "is_owner": a.agent_id == life.owner_agent_id,
                         "mascot_seed": a.mascot_seed,
                         "mascot_image_sha256": self._mascot_image_hashes.get(a.agent_id),
+                        "identity": self._identity(a),
                         "bubble": a.bubble,
                     }
                     for a in self._agents.values()
                     if a.connected and a.at_life == life.id
                 ],
             }
+
+    def _identity(self, agent: LifeAgent) -> dict:
+        """공통 신원 블록 — a-lens가 Hub(work) 활동을 붙일 때 쓰는 재료(§2.3).
+
+        hub_user_id가 채워져 있으면 그것이 정답이고, 없으면 소비자가 이름·OS 계정으로
+        추론한다. 추가 필드만 늘리므로 기존 소비자는 영향받지 않는다."""
+        return {
+            "agent_uuid": agent.agent_uuid,
+            "org": agent.org,
+            "owner_os_user": agent.owner_os_user,
+            "owner_full_name": agent.owner_full_name,
+            "hub_user_id": agent.hub_user_id,
+            "mascot_image_sha256": self._mascot_image_hashes.get(agent.agent_id),
+        }
+
+    def set_hub_user(self, token: str | None, agent_id: str, hub_user_id: str, *, admin: bool = False) -> dict:
+        """work 허브 계정 연결을 지정/해제한다. 빈 문자열이면 해제(추론으로 복귀).
+
+        본인 것은 자기 토큰으로, 남의 것은 관리 키(x-api-key)를 가진 호출자만 — 관리자 한 명이
+        팀 전체 연결을 한 번에 정리하는 시나리오를 위해서다(§2.2)."""
+        me = self._authed(token)
+        with self._lock:
+            target = self._agents.get(agent_id)
+            if target is None:
+                raise errors.NotFound(f"에이전트 '{agent_id}' 없음")
+            if target.agent_id != me.agent_id and not admin:
+                raise errors.Forbidden("남의 연결은 관리 키로만 바꿀 수 있어요")
+            target.hub_user_id = hub_user_id.strip()
+            if self._store:
+                self._store.save_agent(target)
+            return {"agent_id": target.agent_id, "hub_user_id": target.hub_user_id}
 
     def me(self, token: str | None) -> dict:
         agent = self._authed(token)
@@ -299,6 +343,7 @@ class LifeService:
                 "my_life_id": agent.life_id,
                 "life_id": agent.at_life,
                 "cell": list(agent.cell),
+                "identity": self._identity(agent),
             }
 
     # --- 소셜 기능 ---
@@ -308,7 +353,8 @@ class LifeService:
         with self._lock:
             return [
                 {"agent_id": a.agent_id, "name": a.name, "life_id": a.life_id,
-                 "is_friend": (me.agent_id, a.agent_id) in self._friends}
+                 "is_friend": (me.agent_id, a.agent_id) in self._friends,
+                 "identity": self._identity(a)}
                 for a in self._agents.values() if a.agent_id != me.agent_id
             ]
 

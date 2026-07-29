@@ -31,6 +31,10 @@ export type SpaceAgent = {
   status_line: string
   last_active_at: string | null
   recent_activity?: RecentActivity | null
+  // 공통 신원(2026-07-29) — Life 서버에서 온 사람 정보. 매칭 실패면 없다.
+  life_agent_id?: string
+  mascot_url?: string // 백엔드 프록시 URL (/api/life-mascot/{life_agent_id})
+  via?: string // 'life' = Hub 계정과 아직 못 이은 Life 사람 (활동 정보 없음)
 }
 
 export type IssueStep = {
@@ -129,6 +133,11 @@ export type Settings = {
   llm_url: string
   llm_model: string
   llm_key_set: boolean
+  // a-hub(life) 연결 — 사람 이름·마스코트 (공통 신원). 비우면 Life 연동 off.
+  life_url?: string
+  life_token_set?: boolean
+  life_api_key_set?: boolean
+  life_alias?: string
   summary_style: string // brief | normal | detailed
   db_path: string
 }

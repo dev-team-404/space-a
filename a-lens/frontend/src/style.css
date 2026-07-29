@@ -128,6 +128,17 @@ button { font: inherit; cursor: pointer; }
 }
 @keyframes caret-blink { 50% { opacity: 0; } }
 
+/* 팀 활동 줄의 Life 마스코트 아이콘 — 상태 점 자리를 대신한다 */
+.agent-mascot {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  object-fit: cover;
+  object-position: top center; /* 마스코트는 상반신이 위쪽에 있다 */
+  background: #262b33;
+  flex: 0 0 auto;
+}
+
 /* ── 창문 말풍선 — 창문 바로 위에 뜨는 잡담. 패널과 같은 픽셀 폰트·타이핑 연출 ── */
 /* 위치는 JS가 창문 상단 중앙(canvas 좌표)으로 잡고, transform으로 꼬리를 그 점에 맞춘다. */
 .pixel-bubble {
