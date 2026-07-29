@@ -89,12 +89,52 @@ fn mbti_traits(mbti: Option<&str>, seed: &str) -> (&'static str, &'static str, &
                             Some(b) if b[2] == b'F' => pick(&FINISH_F, d[7]),
                             _ => pick(&FINISH_ANY, d[7]) };
 
-    // 악세사리: 성향 그룹(N_T 분석가 / N_F 외교관 / S_J 관리자 / S_P 탐험가) 테마
-    const ACC_NT: [&str; 3] = ["with a slim backpack module", "with a utility tool belt", "with a tiny status light on its chest"];
-    const ACC_NF: [&str; 3] = ["with headphone-style side units", "with a small shoulder lamp", "with soft glowing trim"];
-    const ACC_SJ: [&str; 3] = ["with a utility tool belt", "with a tiny status light on its chest", ""];
-    const ACC_SP: [&str; 3] = ["with a small shoulder lamp", "", "with a light travel pack"];
-    const ACC_ANY: [&str; 6] = ["", "with a small shoulder lamp", "with a slim backpack module", "with headphone-style side units", "with a tiny status light on its chest", "with a utility tool belt"];
+    // 악세사리: 성향 그룹(N_T 분석가 / N_F 외교관 / S_J 관리자 / S_P 탐험가) 테마.
+    // 2026-07-29 다양화 — 로봇 부품류 일변도에서 헤드폰·가방·안경·모자 등 일상 소품 확장.
+    const ACC_NT: [&str; 6] = [
+        "wearing slim rectangular glasses",
+        "with a slim backpack module",
+        "with a utility tool belt",
+        "holding a small data tablet",
+        "with a tiny status light on its chest",
+        "with a pen tucked behind its head unit",
+    ];
+    const ACC_NF: [&str; 6] = [
+        "wearing over-ear headphones",
+        "with a soft knit scarf",
+        "with a small shoulder lamp",
+        "with soft glowing trim",
+        "holding a tiny flower",
+        "with a sticker-covered messenger bag",
+    ];
+    const ACC_SJ: [&str; 6] = [
+        "with a neat bow tie",
+        "wearing round glasses",
+        "with a utility tool belt",
+        "with a wristwatch panel",
+        "with a tiny status light on its chest",
+        "with a small name badge sticker on its chest",
+    ];
+    const ACC_SP: [&str; 6] = [
+        "wearing a baseball cap",
+        "with a crossbody sling bag",
+        "holding a small camera",
+        "with a light travel pack",
+        "with a small shoulder lamp",
+        "wearing sporty wristbands",
+    ];
+    const ACC_ANY: [&str; 10] = [
+        "",
+        "wearing over-ear headphones",
+        "wearing round glasses",
+        "with a crossbody sling bag",
+        "wearing a baseball cap",
+        "with a small shoulder lamp",
+        "with a slim backpack module",
+        "holding a small camera",
+        "with a tiny status light on its chest",
+        "with a utility tool belt",
+    ];
     let accessory = match mb {
         Some(b) if b[1] == b'N' && b[2] == b'T' => pick(&ACC_NT, d[8]),
         Some(b) if b[1] == b'N' && b[2] == b'F' => pick(&ACC_NF, d[8]),
