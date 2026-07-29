@@ -491,22 +491,51 @@ pub fn probe_endpoint(cfg: &SpriteConfig) -> ProbeVerdict {
 // ── H2 매일 마스코트 컷 (2026-07-28) ─────────────────────────────────────────
 // 스펙: docs/archive/design/a-mate/specs/2026-07-28-sprite-face-daily-cut-design.md
 
-/// H2 — 컷의 샷 축. Full/Bust/CloseUp은 마스코트 등장, Scene은 캐릭터 없는 정경
-/// (균등 4변형 → 마스코트:정경 = 3:1 가중).
+/// H2 — 컷의 샷 축 = 싸이월드 레전드 짤 연출 11종 + 정경 1종 (마스코트 11 : 정경 1).
+/// 정면 무난 샷 대신 그 시절 사진 클리셰(얼짱각도·하두리·점프샷·허세…)를 재현한다
+/// (2026-07-29 사용자 피드백 — 코믹 레전드 요소 반영).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CutShot {
-    Full,
-    Bust,
-    CloseUp,
+    /// 45도 위에서 내려찍은 얼짱각도 셀카 — 얼굴이 프레임 대부분, 과노출 플래시
+    HighAngle,
+    /// 하두리캠 흑백 셀카 — 거친 저해상, 괜히 심각한 응시
+    Haduri,
+    /// 억지 점프샷 — 공중부양, 허우적대는 팔다리
+    Jump,
+    /// 뒷모습 노을 갬성 — 먼 곳 응시
+    BackView,
+    /// 화장실 거울 셀카 — 폴더폰으로 얼굴 반 가림
+    Mirror,
+    /// 소품 허세 — 일상 물건을 기타처럼 들고 아티스트인 척
+    PropSwagger,
+    /// 중2병 허세샷 — 한쪽 눈 가리기·이마 짚기, 바람에 휘날림
+    Drama,
+    /// 손가락총 + 윙크 — 오글 포즈
+    FingerGun,
+    /// 찜질방 양머리 수건 — 간식 소품
+    Sauna,
+    /// 네컷 스티커사진 — 2×2 분할, 하트·별 낙서만 (글자 금지 유지)
+    FourCut,
+    /// 음식 인증샷 — 밥상 위에서 내려찍기, 젓가락 든 마스코트
+    FoodShot,
+    /// 정경 — 마스코트 없이 책상·소품으로 하루 은유
     Scene,
 }
 
 impl CutShot {
     pub fn as_str(&self) -> &'static str {
         match self {
-            CutShot::Full => "full",
-            CutShot::Bust => "bust",
-            CutShot::CloseUp => "closeup",
+            CutShot::HighAngle => "uljjang",
+            CutShot::Haduri => "haduri",
+            CutShot::Jump => "jump",
+            CutShot::BackView => "backview",
+            CutShot::Mirror => "mirror",
+            CutShot::PropSwagger => "prop",
+            CutShot::Drama => "drama",
+            CutShot::FingerGun => "fingergun",
+            CutShot::Sauna => "sauna",
+            CutShot::FourCut => "fourcut",
+            CutShot::FoodShot => "food",
             CutShot::Scene => "scene",
         }
     }
@@ -519,10 +548,18 @@ impl CutShot {
 pub fn pick_cut_shot(date: &str, seed: &str) -> CutShot {
     use sha2::{Digest, Sha256};
     let d = Sha256::digest(format!("{date}|{seed}").as_bytes());
-    match d[0] % 4 {
-        0 => CutShot::Full,
-        1 => CutShot::Bust,
-        2 => CutShot::CloseUp,
+    match d[0] % 12 {
+        0 => CutShot::HighAngle,
+        1 => CutShot::Haduri,
+        2 => CutShot::Jump,
+        3 => CutShot::BackView,
+        4 => CutShot::Mirror,
+        5 => CutShot::PropSwagger,
+        6 => CutShot::Drama,
+        7 => CutShot::FingerGun,
+        8 => CutShot::Sauna,
+        9 => CutShot::FourCut,
+        10 => CutShot::FoodShot,
         _ => CutShot::Scene,
     }
 }
@@ -580,9 +617,37 @@ pub fn register_success(s: &mut CutState, date: &str, caption: &str, shot: CutSh
 /// 고유명사·프로젝트/회사명·코드 식별자·수치 금지를 여기서 지시한다.
 pub fn build_cut_scene_prompt(diary: &str, shot: CutShot, mbti: Option<&str>) -> String {
     let framing = match shot {
-        CutShot::Full => "a full-body shot of the robot mascot doing today's activity",
-        CutShot::Bust => "a waist-up (bust) shot of the robot mascot mid-activity",
-        CutShot::CloseUp => "a close-up of the robot mascot's face showing today's mood",
+        CutShot::HighAngle => {
+            "a 45-degree high-angle selfie — the robot's face fills most of the frame, overexposed flash glow, dreamy haze"
+        }
+        CutShot::Haduri => {
+            "a grainy old-webcam monochrome selfie — the robot stares into the camera looking way too serious"
+        }
+        CutShot::Jump => {
+            "a forced dramatic jump shot — the robot frozen mid-air at a scenic spot, limbs flailing"
+        }
+        CutShot::BackView => {
+            "a sentimental back-view shot — the robot seen from behind, gazing into the distance under an evening sky"
+        }
+        CutShot::Mirror => {
+            "a bathroom-mirror selfie — the robot holds an old flip phone half covering its face"
+        }
+        CutShot::PropSwagger => {
+            "a swagger shot — the robot poses with an everyday object as if it were a rock star's guitar"
+        }
+        CutShot::Drama => {
+            "an overly dramatic pose — one hand covering an eye or pressed to the forehead, windswept, taking itself far too seriously"
+        }
+        CutShot::FingerGun => "a cheesy finger-gun pose winking at the camera",
+        CutShot::Sauna => {
+            "a Korean sauna shot — the robot wears a towel folded into lamb ears on its head, snacks beside it"
+        }
+        CutShot::FourCut => {
+            "a four-panel sticker-photo strip — the same robot doing four different silly poses, decorated with heart and star doodles only"
+        }
+        CutShot::FoodShot => {
+            "a top-down food-brag shot over a table of food — the robot reaching in with chopsticks"
+        }
         CutShot::Scene => {
             "a cozy scene WITHOUT any character — desk, objects and lighting that hint at today's activity"
         }
@@ -631,9 +696,31 @@ pub fn compute_cut_scene(
 /// (Scene 컷은 캐릭터 없는 정경 — 스펙 데이터 흐름 ⑤).
 pub fn build_cut_image_prompt(shot: CutShot, character_desc: Option<&str>, scene_en: &str) -> String {
     let composition = match shot {
-        CutShot::Full => "full-body composition, character centered",
-        CutShot::Bust => "waist-up bust composition",
-        CutShot::CloseUp => "face close-up composition",
+        CutShot::HighAngle => {
+            "extreme high-angle selfie composition, face filling most of the frame, overexposed flash, hazy glow"
+        }
+        CutShot::Haduri => {
+            "grainy black-and-white webcam selfie composition, low fidelity, soft vignette"
+        }
+        CutShot::Jump => {
+            "wide shot, character frozen mid-jump high above the ground, dynamic silly pose"
+        }
+        CutShot::BackView => "back-view composition, small character against a wide evening sky",
+        CutShot::Mirror => {
+            "mirror-reflection selfie composition, flip phone partly covering the face"
+        }
+        CutShot::PropSwagger => {
+            "three-quarter shot, confident swagger pose holding a prop like a guitar"
+        }
+        CutShot::Drama => "dramatic portrait, one hand over an eye, windswept, moody lighting",
+        CutShot::FingerGun => "medium shot, finger-gun pointed at the camera, winking",
+        CutShot::Sauna => "cozy indoor medium shot, towel folded like lamb ears on the head",
+        CutShot::FourCut => {
+            "single image split into a 2x2 sticker-photo grid, four silly poses, heart and star doodles only, absolutely no letters"
+        }
+        CutShot::FoodShot => {
+            "top-down table composition, dishes centered, character reaching in with chopsticks"
+        }
         CutShot::Scene => "environment-only composition, NO characters at all",
     };
     let character = character_desc
@@ -926,18 +1013,30 @@ mod tests {
     fn pick_cut_shot_is_deterministic_and_covers_all_variants() {
         assert_eq!(pick_cut_shot("2026-07-28", "uuid-1"), pick_cut_shot("2026-07-28", "uuid-1"));
         let mut seen = std::collections::HashSet::new();
-        for d in 1..=60 {
-            seen.insert(pick_cut_shot(&format!("2026-07-{d:02}"), "uuid-1").as_str());
+        for d in 1..=400 {
+            seen.insert(pick_cut_shot(&format!("2026-07-{d}"), "uuid-1").as_str());
         }
-        // 60일 표본이면 4변형(마스코트 3 : 정경 1)이 모두 등장해야 한다
-        assert_eq!(seen.len(), 4, "샷 축 4변형이 모두 나와야 함: {seen:?}");
+        // 400개 표본이면 12변형(레전드 짤 11 + 정경 1)이 모두 등장해야 한다
+        assert_eq!(seen.len(), 12, "샷 축 12변형이 모두 나와야 함: {seen:?}");
     }
 
     #[test]
     fn cut_shot_scene_has_no_mascot() {
-        assert!(CutShot::Full.has_mascot());
-        assert!(CutShot::Bust.has_mascot());
-        assert!(CutShot::CloseUp.has_mascot());
+        for shot in [
+            CutShot::HighAngle,
+            CutShot::Haduri,
+            CutShot::Jump,
+            CutShot::BackView,
+            CutShot::Mirror,
+            CutShot::PropSwagger,
+            CutShot::Drama,
+            CutShot::FingerGun,
+            CutShot::Sauna,
+            CutShot::FourCut,
+            CutShot::FoodShot,
+        ] {
+            assert!(shot.has_mascot(), "{}는 마스코트 컷", shot.as_str());
+        }
         assert!(!CutShot::Scene.has_mascot());
     }
 
@@ -949,7 +1048,7 @@ mod tests {
         // 최신 일기 컷 완료 + png 존재 → skip (재실행 멱등)
         let mut done = CutState::default();
         register_attempt(&mut done, d);
-        register_success(&mut done, d, "캡션", CutShot::Bust);
+        register_success(&mut done, d, "캡션", CutShot::Jump);
         assert!(!decide_cut(d, &done, true));
         // 메타는 완료인데 png가 사라짐 → 재생성 (영구 sprite 폴백 방지)
         assert!(decide_cut(d, &done, false));
@@ -990,11 +1089,14 @@ mod tests {
 
     #[test]
     fn cut_scene_prompt_embeds_diary_framing_and_privacy_rules() {
-        let p = build_cut_scene_prompt("오늘은 리팩토링을 했다", CutShot::Full, Some("INTJ"));
+        let p = build_cut_scene_prompt("오늘은 리팩토링을 했다", CutShot::HighAngle, Some("INTJ"));
         assert!(p.contains("오늘은 리팩토링을 했다"), "일기 본문 포함");
-        assert!(p.contains("full-body"), "샷 프레이밍 포함");
+        assert!(p.contains("high-angle selfie"), "샷 프레이밍 포함");
         assert!(p.contains("고유명사"), "전송 수위 금지 지시(ADR 0024) 포함");
         assert!(p.contains("scene_en") && p.contains("caption_ko"), "JSON 출력 계약 포함");
+        // 레전드 짤 연출이 프레이밍에 실제 반영되는지 표본 확인
+        assert!(build_cut_scene_prompt("일기", CutShot::Jump, None).contains("jump shot"));
+        assert!(build_cut_scene_prompt("일기", CutShot::Sauna, None).contains("lamb ears"));
         // 정경 샷은 캐릭터 없는 프레이밍
         let scene = build_cut_scene_prompt("일기", CutShot::Scene, None);
         assert!(scene.contains("WITHOUT any character"));
@@ -1016,12 +1118,15 @@ mod tests {
 
     #[test]
     fn cut_image_prompt_composes_style_scene_and_notext() {
-        let p = build_cut_image_prompt(CutShot::Bust, Some("a navy robot"), "coding at night");
+        let p = build_cut_image_prompt(CutShot::Haduri, Some("a navy robot"), "coding at night");
         assert!(p.contains("coding at night"), "장면 포함");
         assert!(p.contains("a navy robot"), "마스코트 샷은 캐릭터 묘사 포함");
-        assert!(p.contains("waist-up"), "샷별 구도 포함");
+        assert!(p.contains("black-and-white"), "샷별 구도(하두리 흑백) 포함");
         assert!(p.contains("No text"), "그림 안 텍스트 금지");
         assert!(p.contains("same art style"), "스타일 앵커 문구 포함");
+        // 네컷은 분할 구도 + 낙서만 (글자 금지 강조)
+        let four = build_cut_image_prompt(CutShot::FourCut, Some("a navy robot"), "four moods");
+        assert!(four.contains("2x2") && four.contains("no letters"));
         // 정경 샷: 캐릭터 묘사 없음 + 캐릭터 배제 구도
         let s = build_cut_image_prompt(CutShot::Scene, None, "a quiet desk");
         assert!(!s.contains("The character is"));

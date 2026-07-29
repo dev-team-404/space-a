@@ -1589,7 +1589,7 @@ mod tests {
         // png + 성공 상태 → Some
         let mut st = agent_mentor::sprite::CutState::default();
         agent_mentor::sprite::register_attempt(&mut st, "2026-07-28");
-        agent_mentor::sprite::register_success(&mut st, "2026-07-28", "오늘도 무사히", agent_mentor::sprite::CutShot::Bust);
+        agent_mentor::sprite::register_success(&mut st, "2026-07-28", "오늘도 무사히", agent_mentor::sprite::CutShot::Jump);
         std::fs::write(dir.path().join("daily_cut.json"), serde_json::to_string(&st).unwrap()).unwrap();
         let cut = daily_cut_inner(dir.path()).unwrap().unwrap();
         assert_eq!(cut.date, "2026-07-28");
