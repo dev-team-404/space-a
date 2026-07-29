@@ -25,6 +25,9 @@ impl VisitMode {
 /// 방문 순간 확보한 소재 — life_visits 1행이 된다 (스펙 §2).
 struct VisitSnapshot {
     life_id: String,
+    /// 방문 **시작** 시각(RFC3339). 커밋 시점에 찍으면 자정 직전 방문의 네트워크·LLM 작업이
+    /// 자정을 넘겨 끝날 때 다음 날 버킷에 기록돼, 그날 일기가 소재를 놓친다 (스펙 §6 윈도우).
+    started_at: String,
     owner_name: Option<String>,
     design_json: Option<String>,
     diary_excerpt_json: String,
@@ -80,6 +83,9 @@ pub fn prepare_visit(
     life_id: &str,
     mode: VisitMode,
 ) -> Option<VisitPrep> {
+    // 방문 시작 시각 — 기록에 쓸 타임스탬프를 네트워크·LLM 작업 **전에** 고정한다
+    let started_at = chrono::Utc::now().to_rfc3339();
+
     // ① 락: 토글·엔진·hub 설정·페르소나·vibe 스냅샷 → 즉시 해제
     let (
         sign_enabled,
@@ -176,6 +182,7 @@ pub fn prepare_visit(
     .unwrap_or_else(|_| "[]".to_string());
     let snapshot = VisitSnapshot {
         life_id: life_id.to_string(),
+        started_at,
         owner_name: owner_name.clone(),
         design_json,
         diary_excerpt_json,
@@ -355,11 +362,24 @@ pub fn maybe_auto_visit(store_mutex: &std::sync::Mutex<SqliteStore>) {
         return;
     }
     let signed = commit_visit(store_mutex, prep);
-    // 복귀는 방명록 성공 여부와 무관하게 반드시 — 1회 재시도 후 warn
-    if client.enter(&back, None).is_err() {
-        if let Err(e) = client.enter(&back, None) {
-            log::warn!("자율 방문: 복귀 실패(수동 이동으로 복구 필요): {e}");
+    // 복귀 전 위치 확인 — life_goto의 enter는 SIGNING 밖이라(commands.rs) 이 사이에 사용자가
+    // 수동으로 방을 옮겼을 수 있다. 그 경우 복귀하면 사용자의 명시적 이동을 덮으므로 생략한다.
+    // 확인 실패 시엔 복귀를 시도한다 — 봇이 남의 방에 남는 편이 더 나쁘다.
+    let still_in_target = client
+        .me()
+        .ok()
+        .and_then(|v| v.get("life_id").and_then(|s| s.as_str()).map(str::to_string))
+        .map(|current| current == target)
+        .unwrap_or(true);
+    if still_in_target {
+        // 복귀는 방명록 성공 여부와 무관하게 반드시 — 1회 재시도 후 warn
+        if client.enter(&back, None).is_err() {
+            if let Err(e) = client.enter(&back, None) {
+                log::warn!("자율 방문: 복귀 실패(수동 이동으로 복구 필요): {e}");
+            }
         }
+    } else {
+        log::info!("자율 방문: 그 사이 수동 이동 감지 — 복귀 생략");
     }
     log::info!("자율 방문: {name}({target}) 다녀옴, 방명록={signed}");
 }
@@ -409,7 +429,7 @@ pub fn commit_visit(store_mutex: &std::sync::Mutex<SqliteStore>, prep: VisitPrep
     // ⑥ 짧은 락: 방문 기록 + 보존 기간 초과 정리(방문에 편승 — 스펙 §2)
     let visit = LifeVisit {
         life_id: snapshot.life_id,
-        visited_at: chrono::Utc::now().to_rfc3339(),
+        visited_at: snapshot.started_at,
         kind: mode.as_str().to_string(),
         owner_name: snapshot.owner_name,
         design_json: snapshot.design_json,
