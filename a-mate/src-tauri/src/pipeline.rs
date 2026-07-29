@@ -881,9 +881,13 @@ mod runtime {
         // ② 리컨실리에이션 (파일 IO만) — skip이면 조용히
         let mut cut = cut_state_load(&dir);
         if !sprite::decide_cut(&date, &cut) { return; }
-        // 시도는 네트워크 **전에** persist — 실패·크래시에도 일일 상한 보장
+        // 시도는 네트워크 **전에** persist — 실패·크래시에도 일일 상한 보장.
+        // 원장 쓰기가 실패하면(디스크 풀·읽기 전용) 상한을 보장할 수 없으므로 진행하지 않는다.
         sprite::register_attempt(&mut cut, &date);
-        cut_state_save(&dir, &cut);
+        if let Err(e) = cut_state_save(&dir, &cut) {
+            log::warn!("daily-cut 시도 원장 저장 실패 — 과금 상한 보장 불가라 생성 중단: {e}");
+            return;
+        }
 
         // ③ 텍스트 엔진: 일기 → 추상 장면 + 캡션 (실패 시 이미지 호출 안 감)
         let shot = sprite::pick_cut_shot(&date, &uuid);
@@ -907,10 +911,17 @@ mod runtime {
         let prompt = sprite::build_cut_image_prompt(shot, desc.as_deref(), &scene_en);
         match sprite::generate_cut(&cfg, &prompt) {
             Ok(png) => {
+                // tmp→rename 원자 교체 — 크래시/동시 조회 시에도 기존 컷이 잘린 파일로 남지 않는다.
                 let _ = std::fs::create_dir_all(&dir);
-                if std::fs::write(dir.join("daily_cut.png"), png).is_ok() {
+                let tmp = dir.join("daily_cut.png.tmp");
+                let replaced = std::fs::write(&tmp, png).is_ok()
+                    && std::fs::rename(&tmp, dir.join("daily_cut.png")).is_ok();
+                if replaced {
                     sprite::register_success(&mut cut, &date, &caption, shot);
-                    cut_state_save(&dir, &cut);
+                    if let Err(e) = cut_state_save(&dir, &cut) {
+                        // 이미지는 교체됐고 attempts는 이미 durable — 다음 스캔이 메타만 재생성 시도
+                        log::warn!("daily-cut 성공 메타 저장 실패: {e}");
+                    }
                     log::info!("매일 컷 생성 완료({date}, {})", shot.as_str());
                     let _ = app.emit("daily_cut:ready", &date);
                 }
@@ -1074,11 +1085,17 @@ pub(crate) fn cut_state_load(dir: &std::path::Path) -> agent_mentor::sprite::Cut
         .unwrap_or_default()
 }
 
-pub(crate) fn cut_state_save(dir: &std::path::Path, s: &agent_mentor::sprite::CutState) {
-    let _ = std::fs::create_dir_all(dir);
-    if let Ok(json) = serde_json::to_string(s) {
-        let _ = std::fs::write(dir.join("daily_cut.json"), json);
-    }
+/// 저장 실패를 삼키지 않는다 — attempts는 과금 상한의 원장이라, 호출자가 실패 시
+/// 네트워크 진입을 중단해야 한다 (Codex 리뷰 P1). tmp→rename으로 부분 쓰기도 방지.
+pub(crate) fn cut_state_save(
+    dir: &std::path::Path,
+    s: &agent_mentor::sprite::CutState,
+) -> anyhow::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    let tmp = dir.join("daily_cut.json.tmp");
+    std::fs::write(&tmp, serde_json::to_string(s)?)?;
+    std::fs::rename(&tmp, dir.join("daily_cut.json"))?;
+    Ok(())
 }
 
 #[cfg(not(test))]
@@ -1092,11 +1109,12 @@ mod cut_state_tests {
         // 없으면 Default
         let s = super::cut_state_load(dir.path());
         assert_eq!(s, agent_mentor::sprite::CutState::default());
-        // 저장 → 로드 왕복
+        // 저장 → 로드 왕복 (tmp→rename 경로)
         let mut st = agent_mentor::sprite::CutState::default();
         agent_mentor::sprite::register_attempt(&mut st, "2026-07-28");
-        super::cut_state_save(dir.path(), &st);
+        super::cut_state_save(dir.path(), &st).unwrap();
         assert_eq!(super::cut_state_load(dir.path()), st);
+        assert!(!dir.path().join("daily_cut.json.tmp").exists(), "tmp는 rename으로 소진");
         // 손상 → Default로 재초기화 (스펙 에러 처리)
         std::fs::write(dir.path().join("daily_cut.json"), "{corrupt").unwrap();
         assert_eq!(
