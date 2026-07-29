@@ -421,13 +421,23 @@ pub fn commit_visit(store_mutex: &std::sync::Mutex<SqliteStore>, prep: VisitPrep
             if let Err(e) = store.record_life_visit(&visit) {
                 log::warn!("방문 기록 실패: {e}");
             }
-            let cutoff =
-                (chrono::Utc::now() - chrono::Duration::days(VISIT_RETENTION_DAYS)).to_rfc3339();
-            if let Err(e) = store.prune_life_visits(&cutoff) {
-                log::warn!("방문 기록 정리 실패: {e}");
-            }
         }
         Err(e) => log::warn!("store lock poisoned: {e}"),
     }
     signed
+}
+
+/// 보존 기간(30일)이 지난 방문 기록 삭제 — **스캔마다** 호출된다(스펙 §2 · ADR 0025).
+/// 방문에 편승시키면 방문이 멈춘 뒤 타인 일기 발췌가 무기한 남으므로, 방문 여부·토글과
+/// 무관한 정기 경로에 둔다. 짧은 락만 잡고 실패는 warn.
+pub fn prune_visit_history(store_mutex: &std::sync::Mutex<SqliteStore>) {
+    let cutoff = (chrono::Utc::now() - chrono::Duration::days(VISIT_RETENTION_DAYS)).to_rfc3339();
+    match store_mutex.lock() {
+        Ok(store) => match store.prune_life_visits(&cutoff) {
+            Ok(n) if n > 0 => log::info!("방문 기록 정리: {n}건 삭제(보존 {VISIT_RETENTION_DAYS}일)"),
+            Ok(_) => {}
+            Err(e) => log::warn!("방문 기록 정리 실패: {e}"),
+        },
+        Err(e) => log::warn!("store lock poisoned: {e}"),
+    }
 }
