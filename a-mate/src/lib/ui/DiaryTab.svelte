@@ -1,20 +1,29 @@
 <script lang="ts">
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
-  import { getDiary, lifeDiaries, lifeSetDiaryVisibility, listDiaryDates, onDiaryReady, type SharedDiary } from '../api';
+  import { getDiary, lifeDiaries, listDiaryDates, onDiaryReady, type SharedDiary } from '../api';
   import { monthGrid, shiftMonth } from './calendar';
 
   let { focusDate = null, visiting = false, lifeId = '' }: { focusDate?: string|null; visiting?: boolean; lifeId?: string } = $props();
   const now=new Date();let year=$state(now.getFullYear()),month=$state(now.getMonth()+1),dates=$state<Set<string>>(new Set()),selected=$state<string|null>(null),html=$state<string|null>(null);
   let remote=$state<Map<string,SharedDiary>>(new Map());
   const grid=$derived(monthGrid(year,month));
-  async function syncDate(date:string){const visibility=(localStorage.getItem('life-diary-visibility') as 'private'|'friends'|'public')||'private';if(visibility==='private')return;const body=await getDiary(date);if(body)await lifeSetDiaryVisibility(date,body,visibility)}
+  let loadSequence=0;
   async function loadDates(){
-    if(visiting){const rows=(await lifeDiaries(lifeId)).diaries;remote=new Map(rows.map(r=>[r.date,r]));dates=new Set(remote.keys())}
-    else{dates=new Set(await listDiaryDates().catch(()=>[]))}
+    const sequence=++loadSequence,targetVisiting=visiting,targetLifeId=lifeId;
+    if(targetVisiting){
+      const rows=(await lifeDiaries(targetLifeId)).diaries;
+      if(sequence!==loadSequence)return;
+      remote=new Map(rows.map(r=>[r.date,r]));dates=new Set(remote.keys())
+    }
+    else{
+      const rows=await listDiaryDates().catch(()=>[]);
+      if(sequence!==loadSequence)return;
+      dates=new Set(rows)
+    }
   }
-  loadDates();
-  $effect(()=>{if(visiting||!lifeId)return;const p=onDiaryReady(async(date)=>{await loadDates();await syncDate(date).catch(()=>{})});return()=>{p.then(u=>u())}});
+  $effect(()=>{visiting;lifeId;loadDates().catch(()=>{})});
+  $effect(()=>{if(visiting)return;const p=onDiaryReady(()=>{loadDates().catch(()=>{})});return()=>{p.then(u=>u())}});
   let consumedFocus:string|null=null;$effect(()=>{if(!focusDate||focusDate===consumedFocus||!dates.has(focusDate))return;consumedFocus=focusDate;year=+focusDate.slice(0,4);month=+focusDate.slice(5,7);pick(focusDate)});
   async function pick(date:string){if(!dates.has(date))return;selected=date;const text=visiting?remote.get(date)?.body??null:await getDiary(date).catch(()=>null);if(selected!==date)return;try{html=text?DOMPurify.sanitize(await marked.parse(text)):null}catch{html=null}}
   function nav(delta:number){[year,month]=shiftMonth(year,month,delta)}

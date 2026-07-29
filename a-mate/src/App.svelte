@@ -21,6 +21,7 @@
   } from './lib/notices';
   import { isTab, resolveTabAfterLifeChange, type Tab } from './lib/ui/tab-routing';
   import { normalizeGroup, type SettingsGroup } from './lib/ui/settings/groups';
+  import { diaryVisibility, syncAllSharedDiaries, syncSharedDiary } from './lib/diary-sharing';
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'home', label: '홈' },
@@ -47,6 +48,8 @@
   let ownerAgentId = $state(''), ownerImageVersion = $state('');
   let currentLifeId=$state(''),myLifeId=$state(''),meId=$state('');
   let canViewDiary=$state(true);
+  let diaryCatchUpStarted = false;
+  const currentDiaryVisibility = () => diaryVisibility(localStorage.getItem('life-diary-visibility'));
   // 창(App) 레벨에서 직접 폴링 — 어느 탭에 있든 방 이동을 감지해 방문 모드로 전환
   $effect(() => {
     let ticking = false;
@@ -62,6 +65,10 @@
         ownerAgentId = v.life.owner_agent_id;
         ownerImageVersion = v.life.owner_mascot_image_sha256 || '';
         currentLifeId=v.life.life_id;myLifeId=v.me.my_life_id;meId=v.me.agent_id;
+        if (!diaryCatchUpStarted) {
+          diaryCatchUpStarted = true;
+          syncAllSharedDiaries(currentDiaryVisibility()).catch(() => { diaryCatchUpStarted = false; });
+        }
         const next = resolveTabAfterLifeChange(lifeChanged, pendingTab, tab);
         tab = next.tab;
         pendingTab = next.pendingTab;
@@ -69,6 +76,7 @@
         // 설정 착지를 예약한 상태(내 방으로 돌아오는 중)면 홈으로 밀지 않는다 — 다음 tick이 착지시킨다.
         if (!pendingTab && visiting && (!['home','diary','guestbook'].includes(tab) || (tab === 'diary' && !canViewDiary))) tab = 'home';
       } catch {
+        diaryCatchUpStarted = false;
         visiting = false;
         lifeOwner = '';
         ownerSeed = '';
@@ -129,7 +137,10 @@
   $effect(() => {
     const subs = [
       onNewFindings((rows) => rows.length && record(findingNotice(rows, new Date().toISOString()))),
-      onDiaryReady((date) => record(diaryNotice(date, new Date().toISOString()))),
+      onDiaryReady((date) => {
+        record(diaryNotice(date, new Date().toISOString()));
+        syncSharedDiary(date, currentDiaryVisibility()).catch(() => { diaryCatchUpStarted = false; });
+      }),
       onOccasionToday((labels) => labels.length && record(occasionNotice(labels, new Date().toISOString()))),
       onDailyLine((text) => { dailyLine = text; }),
       onDailyCutReady(() => { getDailyCut().then((c) => (cutCaption = c?.caption || null)); }),
