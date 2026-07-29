@@ -13,11 +13,12 @@
   let cut = $state<DailyCut | null>(null);
 
   $effect(() => {
-    if (seed) return; // 남의 초상엔 매일 컷 없음
+    if (seed) { cut = null; return; } // 방문 초상 — 내 컷 잔상 제거 (seed 토글 시 필수)
     let un: (() => void) | null = null;
-    getDailyCut().then((c) => (cut = c));
-    listen('daily_cut:ready', () => getDailyCut().then((c) => (cut = c))).then((u) => (un = u));
-    return () => un?.();
+    let stale = false; // 방문 전환 뒤 도착하는 인플라이트 응답 무시
+    getDailyCut().then((c) => { if (!stale) cut = c; });
+    listen('daily_cut:ready', () => getDailyCut().then((c) => { if (!stale) cut = c; })).then((u) => (un = u));
+    return () => { stale = true; un?.(); };
   });
 
   $effect(() => {
