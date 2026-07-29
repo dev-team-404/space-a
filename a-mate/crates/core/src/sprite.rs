@@ -201,10 +201,16 @@ pub fn character_description(spec: &crate::mascot::RobotSpec, mbti: Option<&str>
         4 => format!("a white torso with {cc} trim and {cc} buttons"),
         _ => format!("a {cc} torso with an exposed cable harness"),
     };
-    let acc_part = if accessory.is_empty() { String::new() } else { format!(", {accessory}") };
+    // 악세서리는 쉼표 나열에 두면 이미지 모델이 잘 떨어뜨린다(레퍼런스에 악세가 없어 인력도 있음)
+    // → 문장 끝 독립 문장으로 빼고 가시성을 명시 (2026-07-29 "악세 적용 안 됨" 피드백).
+    let acc_part = if accessory.is_empty() {
+        String::new()
+    } else {
+        format!(". The robot is depicted {accessory} — make this accessory clearly visible")
+    };
     format!(
         "a chibi pixel-art ROBOT (not a human) with {build} and {finish}: {head}, {eyes}, \
-         {chassis}, {lc} leg units with flat feet, {ac} glowing accents{acc_part}, {pose}{styling}",
+         {chassis}, {lc} leg units with flat feet, {ac} glowing accents, {pose}{styling}{acc_part}",
         head = HEAD[(spec.antenna as usize) % 6],
         eyes = EYES[(spec.eyes as usize) % 6],
         pose = POSE[(spec.arms as usize) % 6],
@@ -824,6 +830,16 @@ mod tests {
         for human in ["skin", "hair", "pants", "sneakers", "hoodie"] {
             assert!(!d3.contains(human), "MBTI 묘사에 인물 어휘 '{human}'가 남아있음: {d3}");
         }
+    }
+
+    #[test]
+    fn description_emphasizes_accessory_as_standalone_sentence() {
+        // 악세서리가 쉼표 나열에 파묻히면 이미지 모델이 잘 떨어뜨린다(2026-07-29 피드백)
+        // → 문장 끝 독립 강조 문장으로. NF 그룹은 악세 풀에 빈 항목이 없어 항상 포함된다.
+        let spec = robot_spec_for("seed-A");
+        let d = character_description(&spec, Some("INFP"), "v1");
+        assert!(d.contains("The robot is depicted"), "악세 독립 문장: {d}");
+        assert!(d.contains("clearly visible"), "가시성 강조: {d}");
     }
 
     #[test]
