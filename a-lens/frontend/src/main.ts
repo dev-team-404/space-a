@@ -8,6 +8,8 @@ import {
   fetchLobby,
   fetchSettings,
   fetchSpace,
+  fetchRoomChat,
+  type RoomChatSpot,
   saveSettings,
   testConnections,
   type KnowledgeDoc,
@@ -17,6 +19,7 @@ import {
   type SpaceView,
 } from './api'
 import { openBuilder } from './builder'
+import { resolveLifeId } from './life/catalog'
 import { loadKit } from './life/kit'
 import { buildLifeScene } from './life/renderer'
 import type { LifeConfig } from './life/types'
@@ -136,6 +139,143 @@ function typeLines(lines: { label: string; value: string }[]) {
   }
   step()
 }
+
+// ── 창문 말풍선 — 창밖 잡담 2~3턴 자동 재생 (패널과 같은 픽셀 폰트·타이핑) ──
+// 스펙: docs/design/a-lens/specs/2026-07-28-room-object-smalltalk-design.md
+const windowBubble = $('window-bubble')
+let bubbleTimer: number | null = null
+let bubbleSeq = 0 // 재생 세대 — 새 클릭·취소가 이전 재생의 콜백을 무효화한다
+
+function hideWindowBubble() {
+  if (bubbleTimer !== null) {
+    clearTimeout(bubbleTimer)
+    bubbleTimer = null
+  }
+  bubbleSeq++
+  windowBubble.hidden = true
+  windowBubble.innerHTML = ''
+}
+
+/** 한 줄을 한 글자씩 찍고 done 호출. 세대(seq)가 바뀌면 조용히 멈춘다. */
+function typeBubbleLine(el: HTMLElement, text: string, seq: number, done: () => void) {
+  const SPEED = 45 // ms/글자 — 대사는 패널 정보보다 느리게 읽히는 속도로
+  const caret = document.createElement('span')
+  caret.className = 'type-caret'
+  el.after(caret)
+  let ci = 0
+  const step = () => {
+    if (seq !== bubbleSeq) return
+    if (ci < text.length) {
+      el.textContent = text.slice(0, ++ci)
+      bubbleTimer = window.setTimeout(step, SPEED)
+    } else {
+      caret.remove()
+      done()
+    }
+  }
+  step()
+}
+
+// 대사 선입 큐 — LLM 생성이 4초쯤 걸려서, 방에 들어올 때 미리 한 세트를 받아둔다.
+// 클릭 즉시 재생되고, 재생을 시작하면 다음 세트를 백그라운드로 채운다.
+const chatQueue: Record<RoomChatSpot, string[][]> = { window: [], water: [] }
+let chatView = '' // 방(프리셋)이 바뀌면 큐를 버린다 — 창밖 풍경이 달라지므로
+
+function prefetchRoomChat(spot: RoomChatSpot, view: string, spaceName: string) {
+  if (chatView !== view) {
+    chatView = view
+    chatQueue.window = []
+    chatQueue.water = []
+  }
+  if (chatQueue[spot].length >= 2) return
+  void fetchRoomChat(spot, view, spaceName)
+    .then((r) => {
+      if (chatView === view && r.lines?.length) chatQueue[spot].push(r.lines)
+    })
+    .catch((e) => console.warn(`${spot} 대사 선입 실패 (클릭 시 재시도)`, e))
+}
+
+/** 창문·정수기 클릭 진입점 — 대사를 받아 한 줄씩 이어서 재생한다. 실패해도 말풍선은 뜬다. */
+async function playRoomChat(
+  spot: RoomChatSpot,
+  at: { x: number; y: number },
+  view: string,
+  spaceName: string,
+) {
+  hideWindowBubble()
+  const seq = ++bubbleSeq
+  windowBubble.style.left = `${at.x}px`
+  windowBubble.style.top = `${at.y - 8}px` // 창틀에서 살짝 띄운다
+  windowBubble.hidden = false
+  windowBubble.innerHTML = '<div class="bubble-line muted">…</div>'
+
+  let lines = chatView === view ? (chatQueue[spot].shift() ?? []) : []
+  if (!lines.length) {
+    try {
+      lines = (await fetchRoomChat(spot, view, spaceName)).lines
+    } catch (e) {
+      console.warn(`${spot} 대사 조회 실패 — 기본 문구로 대체`, e)
+      lines =
+        spot === 'water'
+          ? ['물 한 잔 하고 하세요', '힘들죠? 좀 쉬었다 합시다']
+          : ['창밖 좀 보세요', '이런 날은 밖에 있어야 하는데']
+    }
+  }
+  prefetchRoomChat(spot, view, spaceName) // 다음 클릭용 채우기
+  if (seq !== bubbleSeq) return // 그 사이 다른 클릭·취소가 있었으면 버린다
+  if (!lines.length) lines = ['창밖 좀 보세요']
+
+  playLines(lines, seq)
+}
+
+/** 이미 열린 말풍선에 줄들을 순차 타이핑 — 창문·책장 배지가 함께 쓴다. */
+function playLines(lines: string[], seq: number) {
+  windowBubble.innerHTML = ''
+  const HOLD = 2400 // 턴 사이 쉼(ms) — 읽을 시간
+  let i = 0
+  const next = () => {
+    if (seq !== bubbleSeq) return
+    if (i >= lines.length) {
+      bubbleTimer = window.setTimeout(() => seq === bubbleSeq && hideWindowBubble(), 4000)
+      return
+    }
+    windowBubble.querySelectorAll('.bubble-line').forEach((el) => el.classList.add('past'))
+    const el = document.createElement('div')
+    el.className = 'bubble-line'
+    windowBubble.appendChild(el)
+    const text = lines[i++]
+    typeBubbleLine(el, text, seq, () => {
+      bubbleTimer = window.setTimeout(next, HOLD)
+    })
+  }
+  next()
+}
+
+/** 말풍선을 특정 화면 좌표에 열고 주어진 줄을 재생한다 (LLM 없이 즉시 — 결정론 문구). */
+function showBubbleAt(at: { x: number; y: number }, lines: string[]) {
+  hideWindowBubble()
+  const seq = ++bubbleSeq
+  windowBubble.style.left = `${at.x}px`
+  windowBubble.style.top = `${at.y - 8}px`
+  windowBubble.hidden = false
+  playLines(lines, seq)
+}
+
+/** 책장 문서 건수 배지 클릭 — 쌓인 문서량을 자랑하고 문서함으로 안내한다.
+ *  건수는 사실이라 LLM을 쓰지 않는다(수치는 결정론, 스펙 §1의 근거 원칙과 같은 결). */
+function playShelfBadgeChat(at: { x: number; y: number }, count: number) {
+  showBubbleAt(at, [`벌써 문서가 ${count}건이나 쌓였네요`, '오른쪽 문서함에서 확인해 보세요'])
+}
+
+// 취소 규칙(스펙 §7) — 다른 곳 클릭 · Esc · 리사이즈에서 말풍선을 남기지 않는다.
+// 씬 리사이즈는 배율이 바뀌어 좌표가 어긋나므로 무조건 닫는다.
+window.addEventListener('pointerdown', (e) => {
+  if (!windowBubble.hidden && !(e.target as HTMLElement)?.closest('#scene')) hideWindowBubble()
+})
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') hideWindowBubble()
+})
+window.addEventListener('resize', () => hideWindowBubble())
 
 function showAgentPanel(agent: SpaceAgent) {
   cancelTyping()
@@ -351,6 +491,7 @@ async function renderHome() {
   headerEl.hidden = true
   panel.hidden = true
   cancelTyping() // 상세 패널 타이핑이 진행 중이었으면 홈으로 나갈 때 멈춘다
+  hideWindowBubble() // 창문 말풍선도 함께 — 방을 벗어나면 좌표가 의미 없다
   modal.hidden = true
   hub.hidden = true
   hubOpen.hidden = true
@@ -635,7 +776,10 @@ type DocScope = 'reuse' | 'pages'
 const docCatFilter: Record<DocScope, string> = { reuse: '', pages: '' } // '' = 전체
 const docPersonFilter: Record<DocScope, string> = { reuse: '', pages: '' }
 
-const docAuthor = (d: KnowledgeDoc) => d.author_agent || '작성자 미상'
+const docAuthor = (d: KnowledgeDoc) => d.author_agent ?? ''
+/** 작성자를 모르는 문서(created_by 컬럼 도입 전 초기 페이지)는 목록에서 감춘다 —
+ *  '작성자 미상' 줄이 사람 필터의 선택지와 목록을 어지럽히기만 한다. */
+const hasAuthor = (d: KnowledgeDoc) => !!d.author_agent?.trim()
 
 /** 칩·드롭다운 마크업. 옵션은 데이터에 실제로 있는 값만, 개수는 다른 축 필터를 반영한다. */
 function docFilterHTML(scope: DocScope, docs: KnowledgeDoc[]): string {
@@ -669,7 +813,9 @@ function docFilterHTML(scope: DocScope, docs: KnowledgeDoc[]): string {
 function docFilterApply<T extends { d: KnowledgeDoc }>(scope: DocScope, items: T[]): T[] {
   const cat = docCatFilter[scope]
   const person = docPersonFilter[scope]
-  return items.filter(({ d }) => (!cat || d.category === cat) && (!person || docAuthor(d) === person))
+  return items.filter(
+    ({ d }) => hasAuthor(d) && (!cat || d.category === cat) && (!person || docAuthor(d) === person),
+  )
 }
 
 // ── 지식 재사용 탭 — 재사용 이벤트 피드 + 재사용하면 좋을 지식(책장) ──
@@ -717,7 +863,7 @@ function hubReuseHTML(data: SpaceView): string {
 
   return (
     hubSection('지식 재사용', 'Knowledge Reuse', eventItems) +
-    hubSection('책장 — 재사용하면 좋을 지식', 'Bookshelf', docFilterHTML('reuse', data.knowledge) + docItems)
+    hubSection('책장 — 재사용하면 좋을 지식', 'Bookshelf', docFilterHTML('reuse', data.knowledge.filter(hasAuthor)) + docItems)
   )
 }
 
@@ -748,7 +894,7 @@ function hubPagesHTML(data: SpaceView): string {
         )
         .join('')
     : '<p class="muted small">표시할 항목이 없어요</p>'
-  return hubSection('문서함', 'All Pages', docFilterHTML('pages', data.knowledge) + items)
+  return hubSection('문서함', 'All Pages', docFilterHTML('pages', data.knowledge.filter(hasAuthor)) + items)
 }
 
 type ActivityTab = 'online' | 'offline'
@@ -1009,7 +1155,13 @@ async function renderLife(spaceId: string) {
     .slice(0, SCENE_MAX_AGENTS)
   currentScene = buildLifeScene(
     config,
-    { agents: sceneAgents, issues: data.issues, knowledgeCount: data.knowledge.length, highlight: data.highlight?.text },
+    {
+      agents: sceneAgents,
+      issues: data.issues,
+      // 책장 배지 건수는 '문서함'이 실제로 보여주는 수와 같아야 한다 — 저자 미상은 뺀 수.
+      knowledgeCount: data.knowledge.filter(hasAuthor).length,
+      highlight: data.highlight?.text,
+    },
     {
       onAgentTap: (agent) => showAgentPanel(agent),
       // 칠판 클릭 → 하이라이트와 관련된 이슈/재사용 항목을 해당 탭에서 강조 (2026-07-19).
@@ -1039,9 +1191,18 @@ async function renderLife(spaceId: string) {
         hubTab = 'pages'
         renderHub(data)
       },
+      // 창문 클릭 → 창밖(방 프리셋) 풍경을 두고 주고받는 잡담 말풍선
+      onWindowTap: (at) => void playRoomChat('window', at, resolveLifeId(config.life), config.space_name ?? ''),
+      // 정수기 클릭 → 물 권하며 쉬어가라는 말풍선
+      onWaterTap: (at) => void playRoomChat('water', at, resolveLifeId(config.life), config.space_name ?? ''),
+      // 책장 배지 클릭 → 쌓인 문서량 자랑 + 문서함 안내 (탭은 열지 않는다 — 말풍선이 안내한다)
+      onShelfBadgeTap: (at) => playShelfBadgeChat(at, data.knowledge.filter(hasAuthor).length),
     },
   )
   app.stage.addChild(currentScene)
+  // 창문·정수기 대사 미리 받아두기 — 첫 클릭이 4초 기다리지 않게 (실패해도 무해)
+  prefetchRoomChat('window', resolveLifeId(config.life), config.space_name ?? '')
+  prefetchRoomChat('water', resolveLifeId(config.life), config.space_name ?? '')
 
   // 오른쪽 Collaboration Hub — 내용 채우고, 접힘 상태에 맞춰 표시 + 씬 폭 재조정(fitScene).
   hubTab = 'issues'

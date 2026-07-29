@@ -107,6 +107,16 @@ export function fetchSpace(spaceId: string, tier = 'member'): Promise<SpaceView>
   return getJson<SpaceView>(`/api/spaces/${encodeURIComponent(spaceId)}?tier=${tier}`)
 }
 
+// 방 오브젝트 클릭(창문·정수기) → 그 자리에 어울리는 잡담 2~3줄. LLM 없으면 서버가 폴백 문구.
+export type RoomChatSpot = 'window' | 'water'
+export type RoomChat = { lines: string[]; source: string }
+
+export function fetchRoomChat(spot: RoomChatSpot, view: string, spaceName = ''): Promise<RoomChat> {
+  return getJson<RoomChat>(
+    `/api/room-chat?spot=${spot}&view=${encodeURIComponent(view)}&space_name=${encodeURIComponent(spaceName)}`,
+  )
+}
+
 // ── 설정 (설정 창) — a-hub 연결 · LLM API 런타임 구성 ──
 // 비밀값은 서버가 값 대신 *_set 불리언으로만 내려준다 (마스킹).
 export type Settings = {

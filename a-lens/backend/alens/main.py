@@ -9,7 +9,7 @@ import httpx
 from fastapi import Body, FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from . import collector, pipeline, rooms, settings, store
+from . import collector, pipeline, room_chat, rooms, settings, store
 
 _A_LENS = Path(__file__).resolve().parents[2]
 _FRONT_DIST = _A_LENS / "frontend" / "dist"
@@ -30,6 +30,12 @@ def create_app() -> FastAPI:
     @app.get("/api/spaces/{space_id}")
     def space(space_id: str, tier: str = "member"):
         return pipeline.space_view(space_id, tier)
+
+    # 방 오브젝트 클릭(spot=window|water) → 그 자리에 어울리는 잡담 2~3줄.
+    # 창문은 view(방 프리셋)가 창밖 풍경을 정한다. LLM 없으면 폴백 문구.
+    @app.get("/api/room-chat")
+    def room_chat_lines(spot: str = "", view: str = "", space_name: str = ""):
+        return room_chat.chat(spot=spot, view=view, space_name=space_name)
 
     # ── 설정 (설정 창) — a-hub 연결 · LLM API 런타임 구성 ──
     @app.get("/api/settings")

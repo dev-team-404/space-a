@@ -2,65 +2,380 @@
   "_docs": "부품 PNG 등록 파일 — 제작 규격은 README.md. 등록된 부품만 Sprite로 그려지고 나머지는 Graphics 폴백.",
   "scale": 0.25,
   "pieces": {
-    "desk.d1": { "file": "desk-d1.png", "footprint": [2, 1] },
-    "desk.d2": { "file": "desk-d2.png", "footprint": [2, 1] },
-    "desk.d3": { "file": "desk-d3.png", "footprint": [2, 1] },
-    "desk.d4": { "file": "desk-d4.png", "footprint": [2, 1] },
-    "desk.d5": { "file": "desk-d5.png", "footprint": [2, 1] },
-    "desk.d6": { "file": "desk-d6.png", "footprint": [2, 1] },
-    "desk.d7": { "file": "desk-d7.png", "footprint": [2, 1] },
-    "desk.d8": { "file": "desk-d8.png", "footprint": [2, 1] },
-    "desk.d9": { "file": "desk-d9.png", "footprint": [2, 1] },
-    "char.c1": { "file": "char-c1.png", "mount": "character" },
-    "char.c2": { "file": "char-c2.png", "mount": "character" },
-    "char.c3": { "file": "char-c3.png", "mount": "character" },
-    "char.c4": { "file": "char-c4.png", "mount": "character" },
-    "char.c5": { "file": "char-c5.png", "mount": "character" },
-    "char.c6": { "file": "char-c6.png", "mount": "character" },
-    "char.c7": { "file": "char-c7.png", "mount": "character" },
-    "char.c8": { "file": "char-c8.png", "mount": "character" },
-    "char.c9": { "file": "char-c9.png", "mount": "character" },
-    "char.c10": { "file": "char-c10.png", "mount": "character" },
-    "char.c11": { "file": "char-c11.png", "mount": "character" },
-    "char.c12": { "file": "char-c12.png", "mount": "character" },
-    "char.c13": { "file": "char-c13.png", "mount": "character" },
-    "char.c14": { "file": "char-c14.png", "mount": "character" },
-    "char.c15": { "file": "char-c15.png", "mount": "character" },
+    "desk.d1": {
+      "file": "desk-d1.png",
+      "footprint": [
+        2,
+        1
+      ]
+    },
+    "desk.d2": {
+      "file": "desk-d2.png",
+      "footprint": [
+        2,
+        1
+      ]
+    },
+    "desk.d3": {
+      "file": "desk-d3.png",
+      "footprint": [
+        2,
+        1
+      ]
+    },
+    "desk.d4": {
+      "file": "desk-d4.png",
+      "footprint": [
+        2,
+        1
+      ]
+    },
+    "desk.d5": {
+      "file": "desk-d5.png",
+      "footprint": [
+        2,
+        1
+      ]
+    },
+    "desk.d6": {
+      "file": "desk-d6.png",
+      "footprint": [
+        2,
+        1
+      ]
+    },
+    "desk.d7": {
+      "file": "desk-d7.png",
+      "footprint": [
+        2,
+        1
+      ]
+    },
+    "desk.d8": {
+      "file": "desk-d8.png",
+      "footprint": [
+        2,
+        1
+      ]
+    },
+    "desk.d9": {
+      "file": "desk-d9.png",
+      "footprint": [
+        2,
+        1
+      ]
+    },
+    "char.c1": {
+      "file": "char-c1.png",
+      "mount": "character"
+    },
+    "char.c2": {
+      "file": "char-c2.png",
+      "mount": "character"
+    },
+    "char.c3": {
+      "file": "char-c3.png",
+      "mount": "character"
+    },
+    "char.c4": {
+      "file": "char-c4.png",
+      "mount": "character"
+    },
+    "char.c5": {
+      "file": "char-c5.png",
+      "mount": "character"
+    },
+    "char.c6": {
+      "file": "char-c6.png",
+      "mount": "character"
+    },
+    "char.c7": {
+      "file": "char-c7.png",
+      "mount": "character"
+    },
+    "char.c8": {
+      "file": "char-c8.png",
+      "mount": "character"
+    },
+    "char.c9": {
+      "file": "char-c9.png",
+      "mount": "character"
+    },
+    "char.c10": {
+      "file": "char-c10.png",
+      "mount": "character"
+    },
+    "char.c11": {
+      "file": "char-c11.png",
+      "mount": "character"
+    },
+    "char.c12": {
+      "file": "char-c12.png",
+      "mount": "character"
+    },
+    "char.c13": {
+      "file": "char-c13.png",
+      "mount": "character"
+    },
+    "char.c14": {
+      "file": "char-c14.png",
+      "mount": "character"
+    },
+    "char.c15": {
+      "file": "char-c15.png",
+      "mount": "character"
+    },
     "shell.life": {
       "file": "shell-life.png",
       "mount": "shell-life",
       "cal": {
-        "left": [18, 566],
-        "right": [1447, 566],
+        "left": [
+          18,
+          566
+        ],
+        "right": [
+          1447,
+          566
+        ],
         "backEdgeY": 300,
-        "backWall": [475, 28, 1000, 235],
+        "backWall": [
+          475,
+          28,
+          1000,
+          235
+        ],
         "slope": 0.6
       }
     },
     "life.r1": {
       "file": "life-preset-1.png",
       "mount": "shell-life",
-      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "signArea": [640, 72, 1010, 140], "slope": 0.5 }
+      "cal": {
+        "left": [
+          60,
+          685
+        ],
+        "right": [
+          1470,
+          685
+        ],
+        "backEdgeY": 395,
+        "backWall": [
+          640,
+          175,
+          1030,
+          365
+        ],
+        "shelfArea": [
+          115,
+          275,
+          475,
+          565
+        ],
+        "signArea": [
+          640,
+          72,
+          1010,
+          140
+        ],
+        "windowArea": [
+          318,
+          150,
+          538,
+          400
+        ],
+        "slope": 0.5,
+        "waterArea": [
+          70,
+          470,
+          180,
+          700
+        ]
+      }
     },
     "life.r2": {
       "file": "life-preset-2.png",
       "mount": "shell-life",
-      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "signArea": [655, 78, 1000, 135], "slope": 0.5 }
+      "cal": {
+        "left": [
+          60,
+          685
+        ],
+        "right": [
+          1470,
+          685
+        ],
+        "backEdgeY": 395,
+        "backWall": [
+          640,
+          175,
+          1030,
+          365
+        ],
+        "shelfArea": [
+          115,
+          275,
+          475,
+          565
+        ],
+        "signArea": [
+          655,
+          78,
+          1000,
+          135
+        ],
+        "windowArea": [
+          312,
+          148,
+          532,
+          398
+        ],
+        "slope": 0.5,
+        "waterArea": [
+          70,
+          455,
+          175,
+          690
+        ]
+      }
     },
     "life.r3": {
       "file": "life-preset-3.png",
       "mount": "shell-life",
-      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "signArea": [650, 70, 990, 128], "slope": 0.5 }
+      "cal": {
+        "left": [
+          60,
+          685
+        ],
+        "right": [
+          1470,
+          685
+        ],
+        "backEdgeY": 395,
+        "backWall": [
+          640,
+          175,
+          1030,
+          365
+        ],
+        "shelfArea": [
+          115,
+          275,
+          475,
+          565
+        ],
+        "signArea": [
+          650,
+          70,
+          990,
+          128
+        ],
+        "windowArea": [
+          315,
+          146,
+          534,
+          374
+        ],
+        "slope": 0.5,
+        "waterArea": [
+          88,
+          440,
+          195,
+          675
+        ]
+      }
     },
     "life.r4": {
       "file": "life-preset-4.png",
       "mount": "shell-life",
-      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "signArea": [660, 82, 1010, 140], "slope": 0.5 }
+      "cal": {
+        "left": [
+          60,
+          685
+        ],
+        "right": [
+          1470,
+          685
+        ],
+        "backEdgeY": 395,
+        "backWall": [
+          640,
+          175,
+          1030,
+          365
+        ],
+        "shelfArea": [
+          115,
+          275,
+          475,
+          565
+        ],
+        "signArea": [
+          660,
+          82,
+          1010,
+          140
+        ],
+        "windowArea": [
+          330,
+          150,
+          532,
+          386
+        ],
+        "slope": 0.5,
+        "waterArea": [
+          80,
+          440,
+          190,
+          670
+        ]
+      }
     },
     "life.r5": {
       "file": "life-preset-5.png",
       "mount": "shell-life",
-      "cal": { "left": [60, 685], "right": [1470, 685], "backEdgeY": 395, "backWall": [640, 175, 1030, 365], "shelfArea": [115, 275, 475, 565], "signArea": [640, 80, 985, 138], "slope": 0.5 }
+      "cal": {
+        "left": [
+          60,
+          685
+        ],
+        "right": [
+          1470,
+          685
+        ],
+        "backEdgeY": 395,
+        "backWall": [
+          640,
+          175,
+          1030,
+          365
+        ],
+        "shelfArea": [
+          115,
+          275,
+          475,
+          565
+        ],
+        "signArea": [
+          640,
+          80,
+          985,
+          138
+        ],
+        "windowArea": [
+          313,
+          156,
+          518,
+          354
+        ],
+        "slope": 0.5,
+        "waterArea": [
+          92,
+          425,
+          200,
+          660
+        ]
+      }
     }
   }
 }
