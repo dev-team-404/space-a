@@ -412,6 +412,7 @@ mod runtime {
                     days_idle,
                     occasions: brief.occasions.clone(),
                     recent_diaries: brief.recent_diaries.clone(),
+                    visits: brief.visits.clone(),
                 };
                 match render_idle_diary(&engine, &idle, &cfg, &memories) {
                     Ok(r) => r,
