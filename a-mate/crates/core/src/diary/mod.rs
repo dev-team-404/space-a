@@ -472,7 +472,7 @@ fn collect_recent_diaries(store: &SqliteStore, host: &str, today: NaiveDate) -> 
 }
 
 /// char 경계에서 안전하게 앞 max개 문자만 취한다(멀티바이트 한글·이모지 절단 방지).
-fn cap_chars(s: &str, max: usize) -> String {
+pub(crate) fn cap_chars(s: &str, max: usize) -> String {
     match s.char_indices().nth(max) {
         Some((idx, _)) => s[..idx].to_string(),
         None => s.to_string(),
