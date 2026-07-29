@@ -18,6 +18,10 @@ pub struct AppState {
     pub scan_tx: std::sync::mpsc::Sender<pipeline::PipelineMsg>,
     /// 마스코트 말풍선/메뉴 열림 여부 — 클릭 통과 폴러가 소비 (setup의 폴러 주석 참조)
     pub mascot_expanded: std::sync::atomic::AtomicBool,
+    /// 알림 로그 창(App)이 인바운드 소식 구독을 끝냈는지. P4+N1의 life:visit/guestbook:new는
+    /// 재조회 경로가 없는 일회성 소식이라, 리스너 등록 전에 emit하면(emit은 수신자 0이어도 Ok)
+    /// 커서만 전진해 영구 유실된다. maybe_poll_inbound가 이 플래그를 켜질 때까지 기다린다.
+    pub notices_ready: std::sync::atomic::AtomicBool,
 }
 
 /// 마스코트 창 논리 크기(px). 창은 이 크기로 **상시 고정** — 확장/접힘을 리사이즈로
@@ -245,6 +249,7 @@ pub fn run() {
                     store: Mutex::new(store),
                     scan_tx: tx.clone(),
                     mascot_expanded: std::sync::atomic::AtomicBool::new(false),
+                    notices_ready: std::sync::atomic::AtomicBool::new(false),
                 });
                 pipeline::start(app.handle().clone(), rx, tx);
                 tray::setup_tray(app.handle())?;
@@ -434,6 +439,7 @@ pub fn run() {
                 commands::life_mascot_image,
                 commands::robot_spec_for_seed,
                 commands::mascot_set_expanded,
+                commands::notices_ready,
             ])
             .run(tauri::generate_context!())
             .expect("tauri 실행 실패");

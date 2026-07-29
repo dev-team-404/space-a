@@ -13,12 +13,17 @@
   import {
     getSummary, getDailyLine, getDailyCut, listFindings, onScanDone, onGotoTab, onDailyCutReady,
     onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, onUpdateCheckRequested,
-    lifeContentAccess, lifeGoto, lifeView, type Summary,
+    onLifeVisit, onGuestbookNew, noticesReady, lifeContentAccess, lifeGoto, lifeGuestbook, lifeView,
+    type Summary,
   } from './lib/api';
   import {
-    diaryNotice, findingNotice, loadNotices, occasionNotice, pushNotice, saveNotices,
-    type Notice, type NoticeDest,
+    diaryNotice, findingNotice, guestbookNotice, loadNotices, occasionNotice, pushNotice, saveNotices,
+    visitNotice, type Notice, type NoticeDest,
   } from './lib/notices';
+  import {
+    addDiaryDate, clearDiaryDates, clearGuestbookSeen, loadUnseen, maxCreatedAt, newGuestbookIds,
+    saveUnseen,
+  } from './lib/unseen';
   import { isTab, resolveTabAfterLifeChange, type Tab } from './lib/ui/tab-routing';
   import { normalizeGroup, type SettingsGroup } from './lib/ui/settings/groups';
   import { diaryVisibility, syncAllSharedDiaries, syncSharedDiary } from './lib/diary-sharing';
@@ -49,6 +54,7 @@
   let currentLifeId=$state(''),myLifeId=$state(''),meId=$state('');
   let canViewDiary=$state(true);
   let diaryCatchUpStarted = false;
+  let gbBootstrapped = false;
   const currentDiaryVisibility = () => diaryVisibility(localStorage.getItem('life-diary-visibility'));
   // 창(App) 레벨에서 직접 폴링 — 어느 탭에 있든 방 이동을 감지해 방문 모드로 전환
   $effect(() => {
@@ -68,6 +74,15 @@
         if (!diaryCatchUpStarted) {
           diaryCatchUpStarted = true;
           syncAllSharedDiaries(currentDiaryVisibility()).catch(() => { diaryCatchUpStarted = false; });
+        }
+        // 방명록 뱃지 부트스트랩 — 앱 꺼진 동안 온 글 보완. $effect가 아니라 이 tick에 얹는 이유:
+        // 가드가 비반응 값이고 폴링은 같은 id를 재대입하므로 $effect는 실패 후 재시도가 걸리지
+        // 않는다(diaryCatchUpStarted와 같은 관용구 — 실패 시 다음 tick 재시도).
+        if (!gbBootstrapped && myLifeId && meId) {
+          gbBootstrapped = true;
+          lifeGuestbook(myLifeId)
+            .then(({ entries }) => observeGuestbook(entries))
+            .catch(() => { gbBootstrapped = false; });
         }
         const next = resolveTabAfterLifeChange(lifeChanged, pendingTab, tab);
         tab = next.tab;
@@ -99,6 +114,22 @@
   let coachFocus = $state<string | null>(null);
   let diaryFocus = $state<string | null>(null);
   let notices = $state<Notice[]>(loadNotices());
+  // N1 탭 뱃지 — 다이어리는 날짜 set(영속), 방명록은 entry_id set(세션) + lastSeen(영속)
+  let unseen = $state(loadUnseen(new Date().toISOString()));
+  saveUnseen(unseen); // 최초 실행: 초기 lastSeen을 고정해 재시작마다 리셋되지 않게
+  let gbUnseenIds = $state(new Set<string>());
+  // 관측한 타인 글의 최신 서버 시각 — 클리어 시 워터마크로 쓴다(클라이언트 시계 배제, 단조 증가)
+  let gbMaxSeenAt = $state<string | null>(null);
+  const unseenDiary = $derived(unseen.diaryDates.length);
+  const unseenGuestbook = $derived(gbUnseenIds.size);
+
+  // 부트스트랩(서버 조회)과 guestbook:new 이벤트의 공통 반영 — entry_id dedup이라 중복 카운트 없음
+  function observeGuestbook(rows: { entry_id: string; author_agent_id: string; created_at: string }[]) {
+    const fresh = newGuestbookIds(rows, meId, unseen.guestbookLastSeen);
+    if (fresh.length) gbUnseenIds = new Set([...gbUnseenIds, ...fresh]);
+    const at = maxCreatedAt(rows, meId);
+    if (at && (!gbMaxSeenAt || at > gbMaxSeenAt)) gbMaxSeenAt = at;
+  }
 
   async function refresh() {
     summary = await getSummary().catch(() => null);
@@ -139,13 +170,41 @@
       onNewFindings((rows) => rows.length && record(findingNotice(rows, new Date().toISOString()))),
       onDiaryReady((date) => {
         record(diaryNotice(date, new Date().toISOString()));
+        unseen = addDiaryDate(unseen, date);
+        saveUnseen(unseen);
         syncSharedDiary(date, currentDiaryVisibility()).catch(() => { diaryCatchUpStarted = false; });
       }),
       onOccasionToday((labels) => labels.length && record(occasionNotice(labels, new Date().toISOString()))),
+      onLifeVisit((rows) => rows.length && record(visitNotice(rows, new Date().toISOString()))),
+      onGuestbookNew((rows) => {
+        if (!rows.length) return;
+        record(guestbookNotice(rows, new Date().toISOString()));
+        observeGuestbook(rows);
+      }),
       onDailyLine((text) => { dailyLine = text; }),
       onDailyCutReady(() => { getDailyCut().then((c) => (cutCaption = c?.caption || null)); }),
     ];
+    // 등록이 전부 끝난 뒤에 신고 — listen()은 비동기라 배열 생성만으로는 아직 수신 준비가 아니다.
+    // 이 신고 전까지 백엔드는 인바운드 폴링을 보류한다(수신자 없는 emit = 소식 영구 유실).
+    Promise.all(subs).then(() => noticesReady()).catch(() => {});
     return () => { subs.forEach((p) => p.then((u) => u())); };
+  });
+
+  // 탭 확인 시 뱃지 클리어 — 방명록은 내 방 문맥일 때만 (남의 방 방명록을 봐도 내 소식은 그대로)
+  $effect(() => {
+    if (tab === 'diary' && !visiting && unseen.diaryDates.length) {
+      unseen = clearDiaryDates(unseen);
+      saveUnseen(unseen);
+    }
+    if (tab === 'guestbook' && !visiting && currentLifeId === myLifeId && gbUnseenIds.size) {
+      // 워터마크는 관측한 서버 시각으로 — 클라이언트 시계를 쓰면 오차만큼 새 글이 숨거나
+      // 본 글이 되살아난다 (Codex 리뷰 P2). 관측값이 없으면 워터마크는 그대로 두고 뱃지만 정리.
+      if (gbMaxSeenAt) {
+        unseen = clearGuestbookSeen(unseen, gbMaxSeenAt);
+        saveUnseen(unseen);
+      }
+      gbUnseenIds = new Set();
+    }
   });
 
   function gotoCoach(dedupKey: string) {
@@ -158,10 +217,17 @@
     tab = 'diary';
   }
 
-  // NoticeLog 클릭 착지 — dest.tab에 따라 코칭 카드/다이어리 날짜로
+  // NoticeLog 클릭 착지 — dest.tab에 따라 코칭 카드/다이어리 날짜/방명록 탭으로
   function gotoDest(dest: NoticeDest) {
     if (dest.tab === 'coach') gotoCoach(dest.target);
+    else if (dest.tab === 'guestbook') gotoGuestbook();
     else gotoDiary(dest.target);
+  }
+
+  // 방명록 알림은 내 방 문맥으로 착지 — 방문 중이면 내 방으로 돌아간 뒤 (설정 딥링크 선례)
+  function gotoGuestbook() {
+    if (visiting) { pendingTab = 'guestbook'; lifeGoto(myLifeId).catch(() => { pendingTab = null; }); }
+    else tab = 'guestbook';
   }
 </script>
 
@@ -213,6 +279,8 @@
           <button class:active={tab === t.id} onclick={() => (tab = t.id)}>
             <span class="label">{t.label}</span>
             {#if t.id === 'coach' && activeCount > 0}<span class="badge">{activeCount}</span>{/if}
+            {#if t.id === 'diary' && unseenDiary > 0}<span class="badge">{unseenDiary}</span>{/if}
+            {#if t.id === 'guestbook' && unseenGuestbook > 0}<span class="badge">{unseenGuestbook}</span>{/if}
           </button>
         {/each}
       </nav>

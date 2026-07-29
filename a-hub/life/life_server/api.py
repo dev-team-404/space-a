@@ -164,6 +164,12 @@ def create_app(life: LifeService | None = None) -> FastAPI:
     def life_me(authorization: str | None = Header(default=None)):
         return life.me(_bearer(authorization))
 
+    @app.get("/life/me/visits")
+    def life_visits(since: str | None = None, limit: int = 50,
+                    authorization: str | None = Header(default=None)):
+        # P4 인바운드 방문 — enter가 자동 기록(방문자≠주인), 본인 방 전용 (스펙 §3)
+        return {"visits": life.visits(_bearer(authorization), since, limit)}
+
     @app.patch("/life/me")
     def life_rename(body: LifeRegisterBody, authorization: str | None = Header(default=None)):
         return life.rename(_bearer(authorization), body.name)

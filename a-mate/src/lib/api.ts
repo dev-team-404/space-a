@@ -218,6 +218,7 @@ export const lifeSaveDesign = (lifeId: string, design: LifeState['design']) =>
 export interface LifePerson { agent_id: string; name: string; life_id: string; is_friend: boolean }
 export interface SharedDiary { date: string; body: string; visibility: 'friends' | 'public' }
 export interface GuestbookEntry { entry_id: string; life_id: string; author_agent_id: string; author_name: string; body: string; parent_id?: string | null; author_kind?: 'human' | 'bot' | null; created_at: string }
+export interface LifeVisit { visit_id: string; visitor_agent_id: string; visitor_name: string; first_at: string; last_at: string; present: boolean }
 export const lifePeople = () => invoke<{people: LifePerson[]}>('life_people');
 export const lifeSetFriend = (agentId: string, enabled: boolean) => invoke('life_set_friend', { agentId, enabled });
 export type ContentVisibility = 'private'|'friends'|'public';
@@ -271,6 +272,12 @@ export const onSettingsChanged = (cb: () => void): Promise<UnlistenFn> =>
   listen('settings:changed', () => cb());
 export const onContentReady = (cb: (rows: ContentItem[]) => void): Promise<UnlistenFn> =>
   listen<ContentItem[]>('content:ready', (e) => cb(e.payload));
+export const onLifeVisit = (cb: (rows: LifeVisit[]) => void): Promise<UnlistenFn> =>
+  listen<LifeVisit[]>('life:visit', (e) => cb(e.payload));
+export const onGuestbookNew = (cb: (rows: GuestbookEntry[]) => void): Promise<UnlistenFn> =>
+  listen<GuestbookEntry[]>('guestbook:new', (e) => cb(e.payload));
+/** 인바운드 소식 구독 완료 신고 — 백엔드가 이 신고 전에는 폴링하지 않는다(수신자 없는 emit = 영구 유실). */
+export const noticesReady = () => invoke<void>('notices_ready');
 /** 트레이 "업데이트 확인" → chat 창에서 수동 업데이트 체크를 트리거 */
 export const onUpdateCheckRequested = (cb: () => void): Promise<UnlistenFn> =>
   listen('update:check', () => cb());

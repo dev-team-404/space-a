@@ -6,11 +6,11 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
     emitOccasionToday, getChatterPool, getMascotSeed, getSettings, getSummary, getTodayOccasions,
     hubSettingsGet, listFindings, mascotSetExpanded, openChatTab,
     lifeGoto, lifeView, lifeList, lifeSetBubble, setSetting,
-    onDiaryReady, onNewFindings, onScanDone, onSettingsChanged,
+    onDiaryReady, onLifeVisit, onNewFindings, onScanDone, onSettingsChanged,
     type LifeListEntry, getSprite } from './lib/api';
   import { drawRobot, type RobotSpec } from './lib/robot/render';
   import { frameAt, resolveState, type BubbleKind } from './lib/robot/anim';
-  import { adviceBubble, diaryBubble, findingBubble, occasionBubble, pickChatter, type Bubble } from './lib/robot/bubble';
+  import { adviceBubble, diaryBubble, findingBubble, occasionBubble, pickChatter, visitBubble, type Bubble } from './lib/robot/bubble';
   import { isDrag } from './lib/robot/drag';
   import { lifeDestinations } from './lib/life-navigation';
 
@@ -69,6 +69,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
     const subs = [
       onNewFindings((rows) => rows.length && showBubble(findingBubble(rows, honorific))),
       onDiaryReady((date) => showBubble(diaryBubble(date))),
+      onLifeVisit((rows) => rows.length && showBubble(visitBubble(rows))),
       onScanDone(async () => {
         pullOccasions(); // 자정 넘김 대비 — 게이트 덕에 하루 1회만 유효
         if (!realtimeAdvice) return;

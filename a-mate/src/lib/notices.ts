@@ -1,8 +1,8 @@
 export interface Notice {
   ts: string;
-  kind: 'finding' | 'diary' | 'occasion';
+  kind: 'finding' | 'diary' | 'occasion' | 'visit' | 'guestbook';
   text: string;
-  /** 딥링크 대상 — finding이면 dedup_key, diary면 YYYY-MM-DD. 없으면 클릭 불가. */
+  /** 딥링크 대상 — finding=dedup_key, diary=YYYY-MM-DD, guestbook=entry_id. 없으면 클릭 불가. */
   target?: string;
 }
 
@@ -27,7 +27,7 @@ export function saveNotices(list: Notice[]): void {
 
 /** 알림 클릭 착지. target 없으면 null(클릭 불가) — 구버전 저장분·occasion이 자연 비활성. */
 export interface NoticeDest {
-  tab: 'coach' | 'diary';
+  tab: 'coach' | 'diary' | 'guestbook';
   target: string;
 }
 
@@ -48,9 +48,25 @@ export function occasionNotice(labels: string[], ts: string): Notice {
   return { ts, kind: 'occasion', text: `오늘은 ${labels[0]}!` };
 }
 
+/** P4 방문 알림 — target 없음(클릭 불가, occasion 선례). visits[0] = 가장 최근 방문자. */
+export function visitNotice(visits: { visitor_name: string }[], ts: string): Notice {
+  const more = visits.length > 1 ? ` 외 ${visits.length - 1}명` : '';
+  return { ts, kind: 'visit', text: `${visits[0].visitor_name}님${more}이 방에 다녀갔어요` };
+}
+
+/** N1 방명록 알림 — entries는 최신이 앞(백엔드가 서버 순서 유지). target=최신 entry_id. */
+export function guestbookNotice(entries: { entry_id: string; author_name: string }[], ts: string): Notice {
+  const who = entries[0].author_name;
+  const text = entries.length > 1
+    ? `방명록에 새 글 ${entries.length}건 — ${who}님 외`
+    : `방명록에 새 글 — ${who}님`;
+  return { ts, kind: 'guestbook', text, target: entries[0].entry_id };
+}
+
 export function noticeDest(n: Notice): NoticeDest | null {
   if (!n.target) return null;
   if (n.kind === 'finding') return { tab: 'coach', target: n.target };
   if (n.kind === 'diary') return { tab: 'diary', target: n.target };
+  if (n.kind === 'guestbook') return { tab: 'guestbook', target: n.target };
   return null;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adviceBubble, chatterCandidates, diaryBubble, findingBubble, occasionBubble, pickChatter } from './bubble';
+import { adviceBubble, chatterCandidates, diaryBubble, findingBubble, occasionBubble, pickChatter, visitBubble } from './bubble';
 
 describe('bubble 팩토리', () => {
   it('finding: 최대 절약 1건 + 외 N건, coach 탭, top dedup_key가 target', () => {
@@ -36,6 +36,21 @@ describe('bubble 팩토리', () => {
   it('occasion·chatter는 target 없음(탭 이동만)', () => {
     expect(occasionBubble(['크리스마스']).target).toBeUndefined();
     expect(pickChatter(['풀A'], null, [], () => 0, '주인').target).toBeUndefined();
+  });
+});
+
+describe('visitBubble', () => {
+  const v = (name: string, present = false) => ({ visitor_name: name, present });
+  it('단수 과거형: ○○님 다녀갔어요', () => {
+    const b = visitBubble([v('준녕')]);
+    expect(b).toEqual({ kind: 'visit', tab: 'home', text: '준녕님 다녀갔어요' });
+  });
+  it('단수 현재형: present면 놀러왔어요', () => {
+    expect(visitBubble([v('준녕', true)]).text).toBe('준녕님이 놀러왔어요!');
+  });
+  it('복수: 최근 방문자 + 외 N명, 하나라도 present면 현재형', () => {
+    expect(visitBubble([v('가'), v('나')]).text).toBe('가님 외 1명 다녀갔어요');
+    expect(visitBubble([v('가'), v('나', true)]).text).toBe('가님 외 1명이 놀러왔어요!');
   });
 });
 

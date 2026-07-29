@@ -85,6 +85,14 @@ CREATE TABLE IF NOT EXISTS guestbook (
   parent_id       TEXT,
   author_kind     TEXT
 );
+CREATE TABLE IF NOT EXISTS visits (
+  visit_id         TEXT PRIMARY KEY,
+  life_id          TEXT NOT NULL,
+  visitor_agent_id TEXT NOT NULL,
+  visitor_name     TEXT NOT NULL,
+  first_at         TEXT NOT NULL,
+  last_at          TEXT NOT NULL
+);
 """
 
 
@@ -287,6 +295,30 @@ class SqliteStore:
         # G2(ADR 0021): 원글 삭제 시 답글도 cascade — 1-depth라 재귀 불필요
         self._conn.execute("DELETE FROM guestbook WHERE entry_id = ? OR parent_id = ?",
                            (entry_id, entry_id))
+        self._conn.commit()
+
+    def load_visits(self) -> list[dict]:
+        return [
+            {"visit_id": visit_id, "life_id": life_id, "visitor_agent_id": visitor_id,
+             "visitor_name": visitor_name, "first_at": first_at, "last_at": last_at}
+            for visit_id, life_id, visitor_id, visitor_name, first_at, last_at in self._conn.execute(
+                "SELECT visit_id, life_id, visitor_agent_id, visitor_name, first_at, last_at "
+                "FROM visits ORDER BY last_at"
+            )
+        ]
+
+    def save_visit(self, row: dict) -> None:
+        # 세션 연장(last_at·visitor_name 갱신)과 신규 행을 upsert 하나로 처리
+        self._conn.execute(
+            "INSERT INTO visits VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(visit_id) DO UPDATE SET "
+            "last_at = excluded.last_at, visitor_name = excluded.visitor_name",
+            (row["visit_id"], row["life_id"], row["visitor_agent_id"], row["visitor_name"],
+             row["first_at"], row["last_at"]),
+        )
+        self._conn.commit()
+
+    def delete_visit(self, visit_id: str) -> None:
+        self._conn.execute("DELETE FROM visits WHERE visit_id = ?", (visit_id,))
         self._conn.commit()
 
     def save_owner_name(self, life: Life) -> None:
