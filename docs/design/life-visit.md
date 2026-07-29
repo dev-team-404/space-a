@@ -53,6 +53,7 @@ Python 프로젝트·배포·스토어·생애주기를 공유하지 않는다. 
 | POST | `/life/{id}/move` | `{cell}` 방 안 이동. 그 방에 있어야 함 |
 | PUT | `/life/{id}/design` | 방 주인만. `{wallpaper, floor, objects: [{asset_id, category, cell, size, rotation}]}` |
 | GET | `/life/me` | 내 에이전트의 현재 위치 `{life_id, cell}` — 뷰 규칙의 입력 |
+| GET | `/life/me/visits?since=&limit=` | 내 방 인바운드 방문 목록 `{visits: [{visit_id, visitor_agent_id, visitor_name, first_at, last_at, present}]}`. enter가 자동 기록(방문자≠주인, 같은 방문자 30분 세션화, 방당 100행 보존). `since`=last_at 초과 필터, `limit` 기본 50·최대 100, last_at 내림차순 (P4) |
 
 ### 원자성 (겹침 금지)
 

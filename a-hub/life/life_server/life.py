@@ -27,6 +27,9 @@ FLOOR_DEPTH = 20
 SPAWN_X = 9
 SPAWN_Y = 9
 WINDOW_ROTATION_BY_WALL = {"west": 90, "north": 180}
+# P4 인바운드 방문 추적 — 같은 방문자 연속 재입장 세션화 창·방당 보존 상한 (스펙 §3)
+VISIT_SESSION_WINDOW_SECS = 30 * 60
+VISITS_MAX_PER_LIFE = 100
 
 Cell = tuple[int, int]
 
@@ -130,10 +133,12 @@ class LifeService:
         self._diaries: dict[tuple[str, str], dict] = {}
         self._guestbook: list[dict] = []
         self._mascot_image_hashes: dict[str, str] = {}
+        self._visits: list[dict] = []
         if store is not None:
             self._life, self._agents, self._tokens = store.load()
             self._friends, self._content_visibility, self._diaries, self._guestbook = store.load_social()
             self._mascot_image_hashes = store.load_mascot_image_hashes()
+            self._visits = store.load_visits()
             # protocol v2에서는 창문 회전이 자유값이었다. v3부터 벽이 방향의 단일 원천이다.
             # protocol v4에서는 앞쪽 절반을 버린다. 창문 회전 보정과 함께 한 번에 영속화한다.
             for life in self._life.values():
@@ -549,6 +554,59 @@ class LifeService:
                 self._store.save_agent(agent)
         return {"disconnected": True}
 
+    # --- 인바운드 방문 추적 (P4) ---
+
+    def _record_visit_locked(self, life: Life, agent: LifeAgent) -> None:
+        """방문 자동 기록. 자기 방 입장은 기록하지 않는다. 같은 (방, 방문자)의 최신 방문이
+        세션 창(30분) 이내면 새 행 대신 last_at 연장 — 들락날락 도배 억제 (스펙 §1)."""
+        if life.owner_agent_id == agent.agent_id:
+            return
+        now = datetime.now(timezone.utc)
+        latest = next((v for v in reversed(self._visits)
+                       if v["life_id"] == life.id and v["visitor_agent_id"] == agent.agent_id), None)
+        if latest is not None:
+            last = datetime.fromisoformat(latest["last_at"])
+            if (now - last).total_seconds() <= VISIT_SESSION_WINDOW_SECS:
+                latest["last_at"] = now.isoformat()
+                latest["visitor_name"] = agent.name  # 개명 반영 (이력 행은 당시 이름 유지)
+                if self._store:
+                    self._store.save_visit(latest)
+                return
+        row = {"visit_id": f"vst_{uuid.uuid4().hex[:12]}", "life_id": life.id,
+               "visitor_agent_id": agent.agent_id, "visitor_name": agent.name,
+               "first_at": now.isoformat(), "last_at": now.isoformat()}
+        self._visits.append(row)
+        if self._store:
+            self._store.save_visit(row)
+        self._prune_visits_locked(life.id)
+
+    def _prune_visits_locked(self, life_id: str) -> None:
+        rows = [v for v in self._visits if v["life_id"] == life_id]
+        if len(rows) <= VISITS_MAX_PER_LIFE:
+            return
+        rows.sort(key=lambda v: v["last_at"])
+        for stale in rows[: len(rows) - VISITS_MAX_PER_LIFE]:
+            self._visits.remove(stale)
+            if self._store:
+                self._store.delete_visit(stale["visit_id"])
+
+    def visits(self, token: str | None, since: str | None = None, limit: int = 50) -> list[dict]:
+        """내 방 인바운드 방문 조회 — Bearer 본인 방 전용(타인 방 기록은 구조적으로 불가).
+        since: last_at 초과 필터(RFC3339 사전순). last_at 내림차순, limit 1~100 클램프.
+        present = 그 방문자가 지금도 내 방에 있는지 (문구 현재형/과거형 분기용, 스펙 §1)."""
+        me = self._authed(token)
+        limit = max(1, min(int(limit), 100))
+        with self._lock:
+            rows = [v for v in self._visits if v["life_id"] == me.life_id]
+            if since:
+                rows = [v for v in rows if v["last_at"] > since]
+            rows.sort(key=lambda v: v["last_at"], reverse=True)
+            out = []
+            for v in rows[:limit]:
+                visitor = self._agents.get(v["visitor_agent_id"])
+                out.append({**v, "present": bool(visitor and visitor.at_life == me.life_id)})
+            return out
+
     # --- 위치 변이 (전부 락 안에서 원자 처리) ---
 
     def enter(self, token: str | None, life_id: str, cell: Cell | None) -> dict:
@@ -558,6 +616,7 @@ class LifeService:
         with self._lock:
             if life_id not in self._life:
                 raise errors.NotFound(f"life '{life_id}' not found")
+            life = self._life[life_id]
             target = cell if cell is not None else self._free_cell_locked(life_id, for_agent=agent.agent_id)
             if self._occupied_locked(life_id, target, except_agent=agent.agent_id):
                 raise CellTaken(f"셀 ({target[0]},{target[1]}) 이미 점유됨")
@@ -567,6 +626,8 @@ class LifeService:
             agent.connected = True
             if self._store:
                 self._store.save_agent(agent)
+            # P4: 인바운드 방문 자동 기록 — 방문자≠주인일 때만 (같은 락 안)
+            self._record_visit_locked(life, agent)
         return self.me(token)
 
     def move(self, token: str | None, cell: Cell) -> dict:
