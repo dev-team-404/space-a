@@ -833,6 +833,9 @@ mod runtime {
             Ok(png) => {
                 let _ = std::fs::create_dir_all(&dir);
                 if std::fs::write(&path, png).is_ok() {
+                    // 이 sprite가 어떤 시드로 그려졌는지 기록 — 컷 재구성 정합·레거시 판별용
+                    // (실패해도 무해: resolve_cut_seeds가 레거시로 취급해 uuid 정합 폴백)
+                    let _ = std::fs::write(dir.join("sprite.seed"), &uuid);
                     log::info!("AI 스프라이트 생성 완료: {}", path.display());
                     let _ = app.emit("sprite:ready", ());
                 }
@@ -1029,15 +1032,25 @@ pub(crate) fn cut_state_save(
     Ok(())
 }
 
-/// H2 — 컷의 마스코트 정체성 시드. 리롤 승격(mascot_commit)이 남긴 sprite.seed(변주 시드)가
-/// 있으면 그것, 없으면 프로필 uuid(초기 자동 생성 sprite와 동일 정체성) — 스펙
-/// "현재 sprite와 동일한 정체성 유지" (Codex 리뷰 P2).
-pub(crate) fn identity_seed(dir: &std::path::Path, profile_uuid: &str) -> String {
-    std::fs::read_to_string(dir.join("sprite.seed"))
+/// H2 — 컷의 (스펙 시드, 변주 시드) 결정. 원칙 = "화면에 걸린 sprite와 같은 로봇".
+/// - sprite.seed 있음(자동 생성 기록·재생성 승격): 스펙=현재 정체성, 변주=그 시드.
+/// - 시드 파일 없이 sprite.png만 있음 = **레거시**(시드 도입 전 생성) → 그 시절 규칙인
+///   순수 uuid로 스펙·변주 모두 (이름 섞인 새 시드로 재구성하면 다른 로봇이 됨 — Codex 리뷰 P2).
+/// - 둘 다 없음(초기): 현재 정체성 시드.
+pub(crate) fn resolve_cut_seeds(
+    dir: &std::path::Path,
+    identity: &str,
+    raw_uuid: &str,
+) -> (String, String) {
+    let seed_file = std::fs::read_to_string(dir.join("sprite.seed"))
         .ok()
         .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| profile_uuid.to_string())
+        .filter(|s| !s.is_empty());
+    match seed_file {
+        Some(s) => (identity.to_string(), s),
+        None if dir.join("sprite.png").is_file() => (raw_uuid.to_string(), raw_uuid.to_string()),
+        None => (identity.to_string(), identity.to_string()),
+    }
 }
 
 /// H2 — 컷 생성 코어 (자동 경로 `maybe_generate_daily_cut` + 설정 탭 "지금 그려보기" 공용).
@@ -1047,17 +1060,26 @@ pub(crate) fn identity_seed(dir: &std::path::Path, profile_uuid: &str) -> String
 /// 반환: Ok(Some(date))=생성·교체 완료, Ok(None)=리컨실리에이션 skip(force=false 전용),
 /// Err(msg)=사용자에게 그대로 보여줄 수 있는 한국어 실패 사유.
 /// 스펙: docs/archive/design/a-mate/specs/2026-07-28-sprite-face-daily-cut-design.md
+/// 동시 생성 가드 — 수동 버튼(tauri 워커)과 자동 스캔(파이프라인 스레드)이 겹치면 같은
+/// daily_cut.json을 읽고 각자 attempt를 기록해 일일 상한이 뚫린다 (Codex 리뷰 P1).
+/// try_lock으로 후발 호출은 즉시 거절 — 버튼엔 "이미 그리는 중" 안내, 스캔은 다음 회 재시도.
+/// (멀티 인스턴스는 AGENT_MENTOR_DATA_DIR로 데이터 디렉터리를 분리하는 게 전제 — 범위 밖.)
+static CUT_GENERATION_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 pub(crate) fn generate_daily_cut_core(
     app: &tauri::AppHandle,
     force: bool,
 ) -> Result<Option<String>, String> {
     use agent_mentor::sprite;
     use tauri::{Emitter as _, Manager as _};
+    let Ok(_gen_guard) = CUT_GENERATION_LOCK.try_lock() else {
+        return Err("이미 대문사진을 그리는 중이에요 — 잠시 후 다시 시도해주세요".into());
+    };
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     let state = app.state::<crate::AppState>();
 
     // ① 짧은 락: 재료 읽기 → 즉시 해제 (네트워크 전 해제 규율)
-    let (engine, cfg, uuid, mbti, date, diary) = {
+    let (engine, cfg, identity, raw_uuid, mbti, date, diary) = {
         let store = state.store.lock().map_err(|_| "store lock poisoned".to_string())?;
         let Some(engine) = crate::resolve_engine(&store) else {
             return Err("텍스트 엔진이 설정되지 않았어요 — 설정 → 연결 → 텍스트 엔진을 확인해주세요".into());
@@ -1065,8 +1087,10 @@ pub(crate) fn generate_daily_cut_core(
         let Some(cfg) = crate::resolve_sprite_cfg(&store) else {
             return Err("이미지 모델이 설정되지 않았어요 — 설정 → 연결 → 캐릭터 이미지에서 URL·키를 넣어주세요".into());
         };
-        let (uuid, mbti) = crate::commands::sprite_identity(&store)
+        let (identity, mbti) = crate::commands::sprite_identity(&store)
             .map_err(|e| format!("프로필 해석 실패: {e}"))?;
+        // 레거시 sprite(시드 파일 없음) 정합용 순수 uuid — resolve_cut_seeds가 사용
+        let raw_uuid = crate::commands::ensure_uuid(&store)?;
         // diary_dates()는 date ASC 정렬 — 마지막이 최신 일기
         let Some(date) = store.diary_dates().map_err(|e| e.to_string())?.last().cloned() else {
             return Err("아직 일기가 없어요 — 첫 일기가 생긴 뒤 다시 시도해주세요".into());
@@ -1074,7 +1098,7 @@ pub(crate) fn generate_daily_cut_core(
         let Some(diary) = crate::commands::diary_inner(&store, &date).map_err(|e| e.to_string())? else {
             return Err("일기 본문을 읽지 못했어요 — 다음 스캔 후 다시 시도해주세요".into());
         };
-        (engine, cfg, uuid, mbti, date, diary)
+        (engine, cfg, identity, raw_uuid, mbti, date, diary)
     }; // guard drops here
 
     // ② 리컨실리에이션 (파일 IO만) — 자동 경로 전용. png 실존까지 확인해
@@ -1092,7 +1116,7 @@ pub(crate) fn generate_daily_cut_core(
     cut_state_save(&dir, &cut).map_err(|e| format!("시도 기록 저장 실패 — 생성을 중단했어요: {e}"))?;
 
     // ③ 텍스트 엔진: 일기 → 추상 장면 + 캡션 (실패 시 이미지 호출 안 감)
-    let shot = sprite::pick_cut_shot(&date, &uuid);
+    let shot = sprite::pick_cut_shot(&date, &identity);
     let (scene_en, caption) = match sprite::compute_cut_scene(&engine, &diary, shot, mbti.as_deref()) {
         Ok(Some(v)) => v,
         Ok(None) => {
@@ -1112,28 +1136,37 @@ pub(crate) fn generate_daily_cut_core(
     };
 
     // ④ 이미지 엔진: 화풍 앵커 + (마스코트 샷이면 현재 정체성 묘사) + 추상 장면
-    //    정체성 슬롯은 sprite_identity 시드(아이디+이름) 고정, 변주(포즈·체형·마감·악세)는
-    //    저장된 sprite와 동일한 시드(sprite.seed, 없으면 정체성 시드) — 홈의 마스코트와 일치.
-    let id_seed = identity_seed(&dir, &uuid);
+    //    시드는 resolve_cut_seeds가 결정 — 원칙은 "화면에 걸린 sprite와 같은 로봇"
+    //    (레거시 sprite는 순수 uuid, 그 외엔 스펙=정체성·변주=sprite.seed).
+    let (spec_seed, var_seed) = resolve_cut_seeds(&dir, &identity, &raw_uuid);
     let desc = shot.has_mascot().then(|| {
-        let spec = agent_mentor::mascot::robot_spec_from_profile(&uuid, mbti.as_deref());
-        let spec = agent_mentor::mascot::respec_pose_for_seed(spec, mbti.as_deref(), &id_seed);
-        sprite::character_description(&spec, mbti.as_deref(), &id_seed)
+        let spec = agent_mentor::mascot::robot_spec_from_profile(&spec_seed, mbti.as_deref());
+        let spec = agent_mentor::mascot::respec_pose_for_seed(spec, mbti.as_deref(), &var_seed);
+        sprite::character_description(&spec, mbti.as_deref(), &var_seed)
     });
     let prompt = sprite::build_cut_image_prompt(shot, desc.as_deref(), &scene_en);
     let png = sprite::generate_cut(&cfg, &prompt).map_err(|e| {
         format!("이미지 생성 실패 ({}/{}회): {e}", cut.attempts, sprite::MAX_CUT_ATTEMPTS_PER_DAY)
     })?;
 
-    // ⑤ tmp→rename 원자 교체 — 크래시/동시 조회 시에도 기존 컷이 잘린 파일로 남지 않는다.
+    // ⑤ 한 버전으로 발행 — tmp 쓰기 → 메타 선커밋 → rename (Codex 리뷰 P2).
+    //    메타 저장이 실패하면 발행하지 않고(emit 없음) 기존 컷+메타 쌍 유지.
+    //    rename이 실패하면 메타를 원복해 "새 메타 + 옛 이미지" 불일치를 막는다.
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let tmp = dir.join("daily_cut.png.tmp");
     std::fs::write(&tmp, png).map_err(|e| format!("컷 저장 실패: {e}"))?;
-    std::fs::rename(&tmp, dir.join("daily_cut.png")).map_err(|e| format!("컷 교체 실패: {e}"))?;
+    let prev = cut.clone();
     sprite::register_success(&mut cut, &date, &caption, shot);
-    if let Err(e) = cut_state_save(&dir, &cut) {
-        // 이미지는 교체됐고 attempts는 이미 durable — 다음 스캔이 메타만 재생성 시도
-        log::warn!("daily-cut 성공 메타 저장 실패: {e}");
+    cut_state_save(&dir, &cut).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("컷 메타 저장 실패 — 발행 취소: {e}")
+    })?;
+    if let Err(e) = std::fs::rename(&tmp, dir.join("daily_cut.png")) {
+        if let Err(e2) = cut_state_save(&dir, &prev) {
+            log::warn!("daily-cut 메타 원복 실패(쌍 불일치 가능): {e2}");
+        }
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("컷 교체 실패: {e}"));
     }
     let _ = app.emit("daily_cut:ready", &date);
     Ok(Some(date))
@@ -1165,15 +1198,24 @@ mod cut_state_tests {
     }
 
     #[test]
-    fn identity_seed_prefers_reroll_seed_file() {
+    fn resolve_cut_seeds_covers_fresh_legacy_and_reroll() {
         let dir = tempfile::tempdir().unwrap();
-        // 시드 파일 없음(초기 자동 생성 sprite) → 프로필 uuid
-        assert_eq!(super::identity_seed(dir.path(), "uuid-1"), "uuid-1");
-        // 리롤 승격이 남긴 변주 시드 → 그것을 사용 (개행·공백 트림)
-        std::fs::write(dir.path().join("sprite.seed"), "reroll-xyz\n").unwrap();
-        assert_eq!(super::identity_seed(dir.path(), "uuid-1"), "reroll-xyz");
-        // 빈/공백 파일 → uuid 폴백
+        let id = "u-1|둘쇠";
+        let raw = "u-1";
+        // ① 아무것도 없음(첫 실행, sprite도 아직) → 현재 정체성 시드로 스펙·변주 모두
+        assert_eq!(super::resolve_cut_seeds(dir.path(), id, raw), (id.into(), id.into()));
+        // ② sprite.png만 있고 시드 파일 없음 = 레거시(시드 도입 전) sprite
+        //    → 그 시절 규칙인 순수 uuid로 정합 (화면의 sprite와 같은 로봇)
+        std::fs::write(dir.path().join("sprite.png"), b"png").unwrap();
+        assert_eq!(super::resolve_cut_seeds(dir.path(), id, raw), (raw.into(), raw.into()));
+        // ③ 빈/공백 시드 파일도 레거시 취급
         std::fs::write(dir.path().join("sprite.seed"), "   ").unwrap();
-        assert_eq!(super::identity_seed(dir.path(), "uuid-1"), "uuid-1");
+        assert_eq!(super::resolve_cut_seeds(dir.path(), id, raw), (raw.into(), raw.into()));
+        // ④ 시드 파일 존재(자동 생성 기록 or 재생성 승격) → 스펙=현재 정체성, 변주=그 시드
+        std::fs::write(dir.path().join("sprite.seed"), "reroll-xyz\n").unwrap();
+        assert_eq!(
+            super::resolve_cut_seeds(dir.path(), id, raw),
+            (id.into(), "reroll-xyz".into())
+        );
     }
 }
