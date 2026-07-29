@@ -511,7 +511,7 @@ git commit -m "feat(agent): store room visits with material snapshots"
             serde_json::json!({"date":"2026-07-26","body":"그제 일기","visibility":"friends"}),
         ];
         let out = visit_diary_excerpts(&diaries);
-        assert_eq!(out.len(), VISIT_EXCERPT_MAX); // 앞 2편만
+        assert_eq!(out.len(), VISIT_EXCERPT_MAX); // 최신 2편만
         assert_eq!(out[0].0, "2026-07-28");
         assert_eq!(out[0].1.chars().count(), VISIT_EXCERPT_CHARS); // 300자 컷
         assert!(!out[0].1.contains("토큰")); // 푸터 제거
@@ -526,6 +526,19 @@ git commit -m "feat(agent): store room visits with material snapshots"
         assert!(!is_rest_day(d(2026, 7, 28), "ko-KR")); // 화요일 평일
         assert!(is_rest_day(d(2026, 7, 17), "ko-KR")); // 제헌절(평일 공휴일)
         assert!(!is_rest_day(d(2026, 7, 17), "ja")); // 비-ko 로케일은 공휴일 없음 → 평일
+    }
+
+    #[test]
+    fn diary_excerpts_sort_newest_first_regardless_of_server_order() {
+        // 서버가 오름차순으로 주더라도 최신 2편이 뽑힌다
+        let diaries = vec![
+            serde_json::json!({"date":"2026-07-20","body":"오래된"}),
+            serde_json::json!({"date":"2026-07-28","body":"최신"}),
+            serde_json::json!({"date":"2026-07-25","body":"중간"}),
+        ];
+        let out = visit_diary_excerpts(&diaries);
+        assert_eq!(out[0], ("2026-07-28".to_string(), "최신".to_string()));
+        assert_eq!(out[1], ("2026-07-25".to_string(), "중간".to_string()));
     }
 
     #[test]
@@ -805,10 +818,12 @@ pub fn os_locale() -> String {
 }
 
 /// `GET /life/{id}/diaries` 응답의 `diaries` 배열 → (date, excerpt) 목록 (스펙 §6.1).
-/// 서버가 최신순으로 주므로 앞 VISIT_EXCERPT_MAX편만 취하고, 각 편은 토큰 푸터를 떼고
-/// VISIT_EXCERPT_CHARS자로 자른다. 공개범위 미충족이면 서버가 빈 배열을 준다.
+/// **날짜 내림차순으로 우리가 정렬**한 뒤 앞 VISIT_EXCERPT_MAX편만 취한다 — a-hub가 지금은
+/// 최신순으로 주지만 서버 정렬에 기대면 서버가 바뀔 때 조용히 엉뚱한 편이 뽑힌다.
+/// 각 편은 토큰 푸터를 떼고 VISIT_EXCERPT_CHARS자로 자른다.
+/// 공개범위 미충족이면 서버가 빈 배열을 준다.
 pub fn visit_diary_excerpts(diaries: &[serde_json::Value]) -> Vec<(String, String)> {
-    diaries
+    let mut rows: Vec<(String, String)> = diaries
         .iter()
         .filter_map(|d| {
             let date = d.get("date").and_then(|v| v.as_str())?.trim();
@@ -819,8 +834,10 @@ pub fn visit_diary_excerpts(diaries: &[serde_json::Value]) -> Vec<(String, Strin
                 (date.to_string(), crate::diary::cap_chars(narrative, VISIT_EXCERPT_CHARS))
             })
         })
-        .take(VISIT_EXCERPT_MAX)
-        .collect()
+        .collect();
+    rows.sort_by(|a, b| b.0.cmp(&a.0)); // YYYY-MM-DD는 문자열 비교 = 날짜 비교
+    rows.truncate(VISIT_EXCERPT_MAX);
+    rows
 }
 ```
 
@@ -1446,7 +1463,7 @@ pub fn collect_visits(store: &SqliteStore, date: &str) -> Vec<VisitNote> {
 
 ```
          브리프의 `visits`는 그날 내가 이웃의 미니홈피에 놀러 간 기록입니다. \
-         `owner_name`(방 주인), `kind`(auto=쉬는 날 내가 스스로 놀러 감, manual={honorific}과 함께 감), \
+         `owner_name`(방 주인), `kind`(auto=쉬는 날 내가 혼자 놀러 감, manual={honorific}이 데리고 감), \
          `first_visit`, `interior`(방 꾸밈 — `added`/`removed`/`impression`은 `sofa.mint-loveseat` 같은 \
          **영어 식별자**이니 한국어로 자연스럽게 옮겨 쓰고, `wallpaper_changed`·`floor_changed`는 벽지·바닥이 \
          바뀌었다는 뜻입니다), `diary_excerpts`(그 이웃의 공개 일기 발췌)로 구성됩니다. \
