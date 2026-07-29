@@ -397,13 +397,19 @@ def _page_doc(client: httpx.Client, node: dict, space_id: str, member_name: dict
     row = st.get(page_id) if st is not None else None
     fresh = bool(row and row.get("updated_at") == updated_at and row.get("summary"))
 
+    # 작성자 표시 이름은 캐시에 기대지 않고 매번 이름표에서 다시 만든다 — 방에 뜬 사람 이름과
+    # 같아야 하기 때문이다(§3.2·§3.4). 캐시에 굳은 허브 계정 이름을 쓰면 문서함·지식 재사용의
+    # 사람 선택이 방에 뜬 닉네임과 어긋난다. 트리 노드가 created_by를 주므로 추가 조회는 없다.
+    creator = node.get("created_by") or ""
+    author = member_name.get(creator, "") or creator
+
     # 완전 캐시(본문까지) — 허브·LLM 모두 스킵
     if fresh and row.get("body") is not None:
         body = row.get("body") or ""
         doc["title"] = row.get("title") or doc["title"]
         doc["body"] = body
         doc["visibility"] = row.get("visibility") or "org"
-        doc["author_agent"] = row.get("author_agent") or ""
+        doc["author_agent"] = author or row.get("author_agent") or ""
         doc["category"] = row.get("category")
         doc["summary"] = row.get("summary") or body[:120]
         doc["narrative"] = row.get("narrative")
@@ -413,14 +419,15 @@ def _page_doc(client: httpx.Client, node: dict, space_id: str, member_name: dict
     try:
         page = _hub_get(client, f"/pages/{page_id}")
     except _DEGRADE:
-        doc.update(body="", visibility="space", author_agent="", summary="", category=None, narrative=None)
+        doc.update(body="", visibility="space", author_agent=author, summary="", category=None, narrative=None)
         return doc
 
     body = page.get("body", "")
     visibility = page.get("visibility", "org")
-    # 작성자: created_by_name(허브가 내려주면) 우선, 없으면 멤버 목록 이름, 그마저 없으면 agent_id.
-    creator = page.get("created_by")
-    author = page.get("created_by_name") or member_name.get(creator, creator) or ""
+    # 트리 노드에 created_by가 없는 옛 데이터만 페이지 응답으로 보충한다. 이름표(사람 이름)가
+    # 허브의 created_by_name(계정 이름)을 이긴다 — 위 주석과 같은 이유.
+    creator = creator or page.get("created_by") or ""
+    author = author or member_name.get(creator, "") or page.get("created_by_name") or creator
 
     if fresh:  # 번역은 이미 있으니 LLM 스킵, 본문만 채워 캐시 보강
         title_out = row.get("title") or node.get("title", "")
