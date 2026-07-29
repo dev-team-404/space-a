@@ -1908,15 +1908,15 @@ pub fn profile_set(
     let title = owner_title.trim();
     let title = if title.is_empty() { agent_mentor::mascot::DEFAULT_OWNER_TITLE } else { title };
     let full_name = owner_full_name.trim().to_string();
-    let (old_name, old_full_name) = {
+    let (old_name, old_full_name, hub_user) = {
         let guard = lock(&state)?;
         let old = guard.get_setting("user_name").ok().flatten().unwrap_or_default();
-        (old, self::owner_full_name(&guard))
+        (old, self::owner_full_name(&guard), work_user_id(&guard))
     };
     // 이름·풀네임 어느 쪽이 바뀌어도 rename으로 서버의 주인 식별자를 갱신한다 (G1 스펙 §B)
     if name != old_name || full_name != old_full_name {
         if let Some(client) = hub_client(&state)? {
-            client.rename(&name, &owner_os_user(), &full_name)
+            client.rename(&name, &owner_os_user(), &full_name, &hub_user)
                 .map_err(|e| format!("Life 서버 이름 변경 실패: {e}"))?;
         }
     }
