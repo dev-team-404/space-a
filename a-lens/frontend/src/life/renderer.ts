@@ -23,6 +23,12 @@ export type LifeSceneCallbacks = {
   onBoardTap?: () => void
   /** 배경 책장 영역 클릭 → 지식 패널 */
   onShelfTap?: () => void
+  /** 창문 클릭 → 창밖 잡담 말풍선. at = 창문 상단 중앙의 화면(canvas) 좌표 */
+  onWindowTap?: (at: { x: number; y: number }) => void
+  /** 책장 문서 건수 배지 클릭 → "이만큼 쌓였다" 말풍선. at = 배지 위쪽 화면 좌표 */
+  onShelfBadgeTap?: (at: { x: number; y: number }) => void
+  /** 정수기 클릭 → "물 한 잔 하고 하세요" 말풍선. at = 정수기 위쪽 화면 좌표 */
+  onWaterTap?: (at: { x: number; y: number }) => void
 }
 
 export type LifeSceneData = {
@@ -92,6 +98,26 @@ function placeKitSprite(root: Container, key: string, gx: number, gy: number, zI
   sp.zIndex = zIndex
   root.addChild(sp)
   return sp
+}
+
+type Rect = [number, number, number, number]
+
+/** a에서 b를 뺀 나머지 조각들(최대 4개). b가 없거나 안 겹치면 a 그대로.
+ *  히트존 우선순위를 z순서가 아니라 **영역 분리**로 해결하는 데 쓴다. */
+export function subtractRect(a: Rect, b?: Rect): Rect[] {
+  if (!b) return [a]
+  const [ax0, ay0, ax1, ay1] = a
+  const ix0 = Math.max(ax0, b[0])
+  const iy0 = Math.max(ay0, b[1])
+  const ix1 = Math.min(ax1, b[2])
+  const iy1 = Math.min(ay1, b[3])
+  if (ix0 >= ix1 || iy0 >= iy1) return [a] // 교집합 없음
+  const parts: Rect[] = []
+  if (iy0 > ay0) parts.push([ax0, ay0, ax1, iy0]) // 위
+  if (iy1 < ay1) parts.push([ax0, iy1, ax1, ay1]) // 아래
+  if (ix0 > ax0) parts.push([ax0, iy0, ix0, iy1]) // 왼쪽
+  if (ix1 < ax1) parts.push([ix1, iy0, ax1, iy1]) // 오른쪽
+  return parts
 }
 
 function shade(color: number, f: number): number {
@@ -174,24 +200,103 @@ export function buildLifeScene(
 
     // 배경에 이미 그려진 칠판·책장 영역에 투명 히트존 → 이슈/지식 패널 진입점 유지.
     // cal 좌표(이미지 px)를 배경 스프라이트와 같은 변환(sx/sy, -cxI/-cyI)으로 화면에 맞춘다.
+    // URL에 hitzones가 있으면 히트존을 색으로 칠하고 탭을 콘솔에 찍는다 — 클릭이 어느 영역에
+     // 먹는지 화면에서 바로 보기 위한 디버그 스위치 (예: /?hitzones=1#life/sw-innov).
+    const debugZones = typeof location !== 'undefined' && location.href.includes('hitzones')
     const hitZone = (
       area: [number, number, number, number],
       z: number,
       onTap?: () => void,
+      label = '',
     ) => {
       if (!onTap) return
       const [x0, y0, x1, y1] = area
+      const tint = label === 'window' ? 0xff3b30 : label === 'shelf' ? 0x00e5ff : 0xffd60a
       const hz = new Graphics()
         .rect((x0 - cxI) * sx, (y0 - cyI) * sy, (x1 - x0) * sx, (y1 - y0) * sy)
-        .fill({ color: 0xffffff, alpha: 0.001 }) // 투명하지만 히트 판정은 살아 있게
+        // 투명하지만 히트 판정은 살아 있게. 디버그일 때만 눈에 보이게 칠한다.
+        .fill(debugZones ? { color: tint, alpha: 0.3 } : { color: 0xffffff, alpha: 0.001 })
       hz.zIndex = z
       hz.eventMode = 'static'
       hz.cursor = 'pointer'
-      hz.on('pointertap', onTap)
+      hz.on('pointertap', () => {
+        if (debugZones) console.log(`[hitzone] ${label || '?'} tapped`, area)
+        onTap()
+      })
       root.addChild(hz)
     }
-    hitZone(lifeCal.backWall, -800, cb.onBoardTap)
-    if (lifeCal.shelfArea) hitZone(lifeCal.shelfArea, -800, cb.onShelfTap)
+    hitZone(lifeCal.backWall, -800, cb.onBoardTap, 'board')
+
+    // ── 책장 위 문서 건수 배지 — 클릭하면 "이만큼 쌓였다" 말풍선 ──
+    // 배지를 먼저 만든다: 아래에서 책장 히트존에서 배지 영역을 빼야 하기 때문이다.
+    // (배지도 책장 영역 안에 있어, 겹치면 배지 클릭을 책장이 먹는다 — 창문과 같은 문제)
+    let badgeRect: Rect | undefined
+    let badgeAnchor: { x: number; y: number } | undefined
+    if (lifeCal.shelfArea && data.knowledgeCount > 0) {
+      const [bx0, by0, bx1] = lifeCal.shelfArea
+      const badge = new Text({
+        text: `📑 문서 ${data.knowledgeCount}건`,
+        style: new TextStyle({
+          fill: 0xf3e6c8,
+          fontSize: 13,
+          fontWeight: '700',
+          fontFamily: '"Galmuri11", "Apple SD Gothic Neo", monospace',
+          dropShadow: { color: 0x1a1005, alpha: 0.9, blur: 4, distance: 0, angle: 0 },
+        }),
+      })
+      badge.anchor.set(0.5, 1)
+      // 책장 영역 안쪽으로 내려 붙인다 — 벽에 떠 있으면 책장 것인지 애매하다.
+      badge.position.set(((bx0 + bx1) / 2 - cxI) * sx, (by0 - cyI) * sy + 250 * sy)
+      badge.scale.set(Math.min(1, ((bx1 - bx0) * sx * 0.9) / badge.width))
+      badge.zIndex = -780
+      root.addChild(badge)
+      badgeAnchor = { x: badge.x, y: badge.y - badge.height }
+      // 배지 화면 사각형을 이미지 좌표로 되돌린다(px 여유 8) — 히트존·영역 차집합의 단위가 이미지 px.
+      const toImg = (lx: number, ly: number): [number, number] => [lx / sx + cxI, ly / sy + cyI]
+      const [ix0, iy0] = toImg(badge.x - badge.width / 2, badge.y - badge.height)
+      const [ix1, iy1] = toImg(badge.x + badge.width / 2, badge.y)
+      badgeRect = [ix0 - 8, iy0 - 6, ix1 + 8, iy1 + 6]
+    }
+
+    // 책장 영역에서 창문·배지 사각형을 빼고 남은 조각만 히트존으로 쓴다. 배경상 창문 아래에
+    // 사이드보드가 있어 두 영역이 겹치는데, 겹치면 사람이 창문 유리를 눌러도 책장이 먹었다
+    // (2026-07-29). z순서에 기대지 않고 영역 자체를 분리해 순서 의존을 없앤다.
+    if (lifeCal.shelfArea) {
+      // 창문·배지·정수기 순으로 구멍을 뚫는다 — 겹친 채로 두면 그 오브젝트 클릭을 책장이 먹는다.
+      const holes = [lifeCal.windowArea, badgeRect, lifeCal.waterArea]
+      const parts = holes.reduce<Rect[]>(
+        (acc, hole) => acc.flatMap((p) => subtractRect(p, hole)),
+        [lifeCal.shelfArea],
+      )
+      for (const part of parts) hitZone(part, -800, cb.onShelfTap, 'shelf')
+    }
+    if (badgeRect && badgeAnchor && cb.onShelfBadgeTap) {
+      const anchor = badgeAnchor
+      hitZone(badgeRect, -790, () => cb.onShelfBadgeTap?.(root.toGlobal(anchor)), 'badge')
+    }
+
+    // ── 정수기 — 클릭하면 "물 한 잔 하고 하세요" 말풍선 ──
+    if (lifeCal.waterArea && cb.onWaterTap) {
+      const [ax0, ay0, ax1] = lifeCal.waterArea
+      const waterAnchor = { x: ((ax0 + ax1) / 2 - cxI) * sx, y: (ay0 - cyI) * sy }
+      hitZone(lifeCal.waterArea, -795, () => cb.onWaterTap?.(root.toGlobal(waterAnchor)), 'water')
+    }
+
+    // ── 창문 — 클릭하면 창밖을 두고 주고받는 잡담 말풍선 ──
+    // 창문 아래쪽은 shelfArea와 겹친다(창 밑에 사이드보드가 있는 배경). 사람이 실제로 누르는
+    // 곳은 밝은 유리 한가운데라 **창문이 이겨야** 한다 — zIndex를 책장(-800)보다 위로 둔다.
+    // 말풍선은 DOM 오버레이라 화면 좌표가 필요하다. 씬 배율·위치는 fitScene이 매번 바꾸므로
+    // 미리 계산해 두지 않고 **탭 시점에** toGlobal로 구한다.
+    if (lifeCal.windowArea && cb.onWindowTap) {
+      const [wx0, wy0, wx1] = lifeCal.windowArea
+      const anchorLocal = { x: ((wx0 + wx1) / 2 - cxI) * sx, y: (wy0 - cyI) * sy }
+      hitZone(
+        lifeCal.windowArea,
+        -795,
+        () => cb.onWindowTap?.(root.toGlobal(anchorLocal)),
+        'window',
+      )
+    }
 
     // ── 칠판 위 나무 간판에 스페이스 이름 ──
     // 간판 안쪽 영역(signArea)은 프리셋마다 다르다(manifest cal). 배경과 같은 변환으로 얹는다.

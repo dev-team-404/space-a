@@ -127,6 +127,46 @@ button { font: inherit; cursor: pointer; }
   animation: caret-blink 0.7s steps(1) infinite;
 }
 @keyframes caret-blink { 50% { opacity: 0; } }
+
+/* ── 창문 말풍선 — 창문 바로 위에 뜨는 잡담. 패널과 같은 픽셀 폰트·타이핑 연출 ── */
+/* 위치는 JS가 창문 상단 중앙(canvas 좌표)으로 잡고, transform으로 꼬리를 그 점에 맞춘다. */
+.pixel-bubble {
+  position: fixed;
+  z-index: 40;
+  transform: translate(-50%, -100%);
+  max-width: min(320px, 42vw);
+  padding: 10px 14px;
+  background: #1e232b;
+  border: 1px solid #4a5361;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  font-family: 'Galmuri11', 'Apple SD Gothic Neo', monospace;
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+  font-size: 13px;
+  line-height: 1.8;
+  color: #e4e9f0;
+  pointer-events: none; /* 말풍선이 창문·캐릭터 클릭을 가리지 않게 */
+  animation: bubble-pop 0.12s ease-out;
+}
+/* 꼬리 — 아래쪽 중앙에서 창문을 가리키는 삼각형 (테두리색 위에 배경색을 겹쳐 1px 선을 살린다) */
+.pixel-bubble::after,
+.pixel-bubble::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  border: 8px solid transparent;
+  transform: translateX(-50%);
+}
+.pixel-bubble::before { bottom: -17px; border-top-color: #4a5361; }
+.pixel-bubble::after { bottom: -15px; border-top-color: #1e232b; }
+.pixel-bubble .bubble-line + .bubble-line { margin-top: 2px; }
+/* 앞선 턴은 흐리게 — 지금 말하는 줄에 시선이 가게 */
+.pixel-bubble .bubble-line.past { color: #8b93a0; }
+@keyframes bubble-pop {
+  from { opacity: 0; transform: translate(-50%, calc(-100% + 6px)); }
+  to { opacity: 1; transform: translate(-50%, -100%); }
+}
 #panel-body { font-size: 13px; line-height: 1.6; color: #aab2bd; }
 .panel-close { position: absolute; top: 8px; right: 8px; }
 .muted { color: #767d87; font-size: 12px; }
