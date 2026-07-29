@@ -4,7 +4,7 @@
     lifeSetDiaryVisibility, lifeSetFriend, lifeView, listDiaryDates, setSetting,
     type ContentVisibility, type LifePerson,
   } from '../../api';
-  import { visitGuestbookEnabled } from '../../guestbook';
+  import { autoVisitEnabled, visitGuestbookEnabled } from '../../guestbook';
   import { IDLE, err, type Status } from './status';
   import StatusLine from './StatusLine.svelte';
 
@@ -33,6 +33,15 @@
   async function toggleVisitGuestbook(){
     visitGuestbook = !visitGuestbook;
     try { await setSetting('visit_guestbook_enabled', visitGuestbook ? 'true' : 'false'); }
+    catch(e){ status = err(e); }
+  }
+
+  // 묶음 ② — 자율 방문 토글 (기본 on, 판정 규칙은 guestbook.ts autoVisitEnabled)
+  let autoVisit = $state(true);
+  getSettings().then((s) => { autoVisit = autoVisitEnabled(s); });
+  async function toggleAutoVisit(){
+    autoVisit = !autoVisit;
+    try { await setSetting('auto_visit_enabled', autoVisit ? 'true' : 'false'); }
     catch(e){ status = err(e); }
   }
 
@@ -78,6 +87,12 @@
   <h2>방문 방명록</h2>
   <p class="hint">다른 사람 방에 놀러가면 마스코트가 방명록에 인사를 남깁니다. 같은 방엔 하루 한 번, 재방문은 이유(주말·한가함·오랜만)가 있을 때만 남겨요.</p>
   <label class="vg"><span>방문 시 봇이 방명록 남기기</span><input type="checkbox" checked={visitGuestbook} onchange={toggleVisitGuestbook}/></label>
+</section>
+
+<section>
+  <h2>자율 방문</h2>
+  <p class="hint">주말·공휴일에 마스코트가 일촌 중 한 곳으로 스스로 놀러 가 방명록을 남기고 돌아옵니다. 그날 본 것(공개 일기·방 꾸밈 변화)은 그날 일기의 소재가 돼요.</p>
+  <label class="vg"><span>쉬는 날 스스로 놀러가기</span><input type="checkbox" checked={autoVisit} onchange={toggleAutoVisit}/></label>
 </section>
 
 <style>

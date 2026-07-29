@@ -119,6 +119,8 @@ mod runtime {
                 maybe_generate_chatter_pool(&state.store);
                 // G3 방명록 봇 자동 답글 — hub 미연결·엔진 없으면 no-op, 실패는 조용히(다음 스캔 재시도)
                 maybe_reply_guestbook(&state.store);
+                // 묶음 ② 자율 방문 — 주말·공휴일 하루 1방(토글 off·hub 미연결·일촌 없으면 no-op)
+                crate::visit::maybe_auto_visit(&state.store);
                 // a-hub 지식 공유 — 유의미 finding을 이슈→해결로 발행 (env 미설정 시 no-op)
                 maybe_share_findings(&state.store);
                 // 텔레메트리(#46) — 전날 파생 신호 하루 1회 발행 (env 미설정 시 no-op)

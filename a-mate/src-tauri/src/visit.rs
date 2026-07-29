@@ -232,6 +232,138 @@ pub fn prepare_visit(
     Some(VisitPrep { client, mode, snapshot, sign })
 }
 
+/// 묶음 ② — 자율 방문(스펙 §4). 주말·공휴일에 일촌 중 가장 오래 안 간 방으로 하루 1번:
+/// 문구를 먼저 만들고 → 들어가서 남기고 → 원래 있던 방으로 즉시 돌아온다(남의 방 체류 최소화).
+/// 앱이 도는 동안만 동작하며, 모든 실패는 warn+skip.
+pub fn maybe_auto_visit(store_mutex: &std::sync::Mutex<SqliteStore>) {
+    let _serial = match SIGNING.lock() {
+        Ok(g) => g,
+        Err(e) => {
+            log::warn!("자율 방문: 직렬화 락 오염(skip): {e}");
+            return;
+        }
+    };
+    let today_local = chrono::Local::now();
+    let today = today_local.format("%Y-%m-%d").to_string();
+
+    // ① 짧은 락: 토글·hub 설정·오늘 auto 방문 유무·방별 마지막 방문 → 즉시 해제
+    let (enabled, url, token, api_key, my_life_id, already, last_visits) = match store_mutex.lock()
+    {
+        Ok(store) => {
+            let get = |k: &str| store.get_setting(k).ok().flatten().unwrap_or_default();
+            let enabled = store
+                .get_setting("auto_visit_enabled")
+                .ok()
+                .flatten()
+                .map(|v| v != "false")
+                .unwrap_or(true);
+            let already = store
+                .life_visits_for_date(&today)
+                .unwrap_or_default()
+                .iter()
+                .any(|v| v.kind == "auto");
+            let last_visits: Vec<(String, chrono::DateTime<chrono::Utc>)> = store
+                .last_visit_times()
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|(id, ts)| {
+                    chrono::DateTime::parse_from_rfc3339(&ts)
+                        .ok()
+                        .map(|t| (id, t.with_timezone(&chrono::Utc)))
+                })
+                .collect();
+            (
+                enabled,
+                get("hub_url"),
+                get("hub_token"),
+                get("hub_api_key"),
+                get("hub_life_id"),
+                already,
+                last_visits,
+            )
+        }
+        Err(e) => {
+            log::warn!("store lock poisoned: {e}");
+            return;
+        }
+    };
+    if !enabled || already {
+        return;
+    }
+    if url.trim().is_empty() || token.is_empty() {
+        return; // hub 미연결
+    }
+
+    // ② 휴일 판정 — 판정 자체는 core의 순수 함수(주말 또는 한국 법정공휴일)
+    if !agent_mentor::visit::is_rest_day(
+        today_local.date_naive(),
+        &agent_mentor::visit::os_locale(),
+    ) {
+        return;
+    }
+
+    // ③ 락 밖: 일촌 목록 → 대상 선정
+    let client = LifeClient {
+        base_url: url,
+        token,
+        api_key: {
+            let k = api_key.trim();
+            (!k.is_empty()).then(|| k.to_string())
+        },
+    };
+    let friends: Vec<(String, String)> = match client.people() {
+        Ok(v) => v
+            .get("people")
+            .and_then(|p| p.as_array())
+            .map(|rows| {
+                rows.iter()
+                    .filter(|p| p.get("is_friend").and_then(|f| f.as_bool()).unwrap_or(false))
+                    .filter_map(|p| {
+                        let life_id = p.get("life_id").and_then(|v| v.as_str())?.to_string();
+                        let name =
+                            p.get("name").and_then(|v| v.as_str()).unwrap_or("이웃").to_string();
+                        Some((life_id, name))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        Err(e) => {
+            log::warn!("자율 방문: 일촌 조회 실패(skip): {e}");
+            return;
+        }
+    };
+    let Some((target, name)) =
+        agent_mentor::visit::pick_auto_visit_target(&friends, &last_visits, &my_life_id)
+    else {
+        return; // 일촌 없음
+    };
+
+    // ④ 문구·소재 준비를 먼저 — 방명록을 못 남기면 이동 자체를 취소한다(스펙 §4 ④)
+    let Some(prep) = prepare_visit(store_mutex, &target, VisitMode::Auto) else { return };
+    if !visit_has_sign(&prep) {
+        return;
+    }
+
+    // ⑤ 복귀 지점을 잡고 다녀온다 — 사용자가 수동으로 남의 방에 있을 수 있으므로 내 방이 아니라 현재 방
+    let back = client
+        .me()
+        .ok()
+        .and_then(|v| v.get("life_id").and_then(|s| s.as_str()).map(str::to_string))
+        .unwrap_or_else(|| my_life_id.clone());
+    if let Err(e) = client.enter(&target, None) {
+        log::warn!("자율 방문: 입장 실패(skip): {e}");
+        return;
+    }
+    let signed = commit_visit(store_mutex, prep);
+    // 복귀는 방명록 성공 여부와 무관하게 반드시 — 1회 재시도 후 warn
+    if client.enter(&back, None).is_err() {
+        if let Err(e) = client.enter(&back, None) {
+            log::warn!("자율 방문: 복귀 실패(수동 이동으로 복구 필요): {e}");
+        }
+    }
+    log::info!("자율 방문: {name}({target}) 다녀옴, 방명록={signed}");
+}
+
 /// ⑤ 게시 직전 재확인 후 POST → ⑥ 짧은 락으로 방문 1행 기록. 반환값 = 방명록을 남겼나.
 /// 방명록이 skip돼도 방문 기록·스냅샷은 남긴다 — P1·P2 소재는 방명록과 무관하다.
 pub fn commit_visit(store_mutex: &std::sync::Mutex<SqliteStore>, prep: VisitPrep) -> bool {

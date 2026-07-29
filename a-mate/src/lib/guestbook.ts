@@ -27,3 +27,8 @@ export function showOwnerAvatar(entry: GuestbookEntry, meId: string, isOwner: bo
 export function visitGuestbookEnabled(settings: Record<string, string>): boolean {
   return settings['visit_guestbook_enabled'] !== 'false';
 }
+
+/** 묶음 ② — 자율 방문(쉬는 날 스스로 놀러가기) 토글. 기본 on: 'false'일 때만 off. */
+export function autoVisitEnabled(settings: Record<string, string>): boolean {
+  return settings['auto_visit_enabled'] !== 'false';
+}

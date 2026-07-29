@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groupGuestbook, showOwnerAvatar, visitGuestbookEnabled } from './guestbook';
+import { autoVisitEnabled, groupGuestbook, showOwnerAvatar, visitGuestbookEnabled } from './guestbook';
 import type { GuestbookEntry } from './api';
 
 const e = (entry_id: string, parent_id: string | null = null): GuestbookEntry => ({
@@ -52,5 +52,14 @@ describe('visitGuestbookEnabled', () => {
     expect(visitGuestbookEnabled({ visit_guestbook_enabled: '' })).toBe(true);
     expect(visitGuestbookEnabled({ visit_guestbook_enabled: 'true' })).toBe(true);
     expect(visitGuestbookEnabled({ visit_guestbook_enabled: 'false' })).toBe(false);
+  });
+});
+
+describe('autoVisitEnabled', () => {
+  it("기본 on — 미설정/빈값/true 전부 켜짐, 'false'만 꺼짐 (러스트 글루와 동일 규칙)", () => {
+    expect(autoVisitEnabled({})).toBe(true);
+    expect(autoVisitEnabled({ auto_visit_enabled: '' })).toBe(true);
+    expect(autoVisitEnabled({ auto_visit_enabled: 'true' })).toBe(true);
+    expect(autoVisitEnabled({ auto_visit_enabled: 'false' })).toBe(false);
   });
 });
