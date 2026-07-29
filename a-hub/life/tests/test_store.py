@@ -224,3 +224,57 @@ def test_guestbook_author_kind_survives_restart(tmp_path):
 
     s2 = LifeService(store=SqliteStore(db))
     assert s2.guestbook(owner_life.id)[0]["author_kind"] == "bot"
+
+
+def test_shared_identity_survives_restart(tmp_path):
+    """공통 신원(주인 계정·풀네임·hub 연결)이 재시작 후에도 남는다."""
+    db = str(tmp_path / "life-identity.db")
+    s1 = LifeService(store=SqliteStore(db))
+    agent, token, _ = s1.register(
+        "소금맛",
+        agent_uuid="uuid-1",
+        owner_os_user="saltjeong",
+        owner_full_name="정소금",
+        hub_user_id="salt.jeong",
+    )
+
+    s2 = LifeService(store=SqliteStore(db))
+    me = s2.me(token)
+
+    assert me["identity"]["owner_os_user"] == "saltjeong"
+    assert me["identity"]["owner_full_name"] == "정소금"
+    assert me["identity"]["hub_user_id"] == "salt.jeong"
+    assert me["agent_id"] == agent.agent_id
+
+
+def test_old_db_without_identity_columns_migrates(tmp_path):
+    """신원 컬럼이 없던 DB(팀 서버 현행)를 열어도 마이그레이션되고 기존 행이 살아 있다."""
+    db = str(tmp_path / "life-old.db")
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        """
+        CREATE TABLE life (life_id TEXT PRIMARY KEY, owner_agent_id TEXT NOT NULL,
+          owner_name TEXT NOT NULL, wallpaper TEXT NOT NULL DEFAULT '', floor TEXT NOT NULL DEFAULT '');
+        CREATE TABLE agents (agent_id TEXT PRIMARY KEY, name TEXT NOT NULL, life_id TEXT NOT NULL,
+          at_life TEXT NOT NULL, x INTEGER NOT NULL, y INTEGER NOT NULL,
+          mascot_seed TEXT NOT NULL DEFAULT '', org TEXT NOT NULL DEFAULT '',
+          agent_uuid TEXT NOT NULL DEFAULT '', bubble TEXT NOT NULL DEFAULT '',
+          connected INTEGER NOT NULL DEFAULT 1);
+        CREATE TABLE tokens (token TEXT PRIMARY KEY, agent_id TEXT NOT NULL);
+        INSERT INTO life VALUES ('life_old', 'ragt_old', '돌쇠', '', '');
+        INSERT INTO agents VALUES ('ragt_old', '돌쇠', 'life_old', 'life_old', 3, 4, 'seed', '', 'uuid-old', '', 1);
+        INSERT INTO tokens VALUES ('tok-old', 'ragt_old');
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    service = LifeService(store=SqliteStore(db))
+    me = service.me("tok-old")
+
+    assert me["name"] == "돌쇠"
+    assert me["identity"]["agent_uuid"] == "uuid-old"
+    assert me["identity"]["hub_user_id"] == ""  # 새 컬럼은 빈 값으로 시작
+    # 마이그레이션 후 지정도 된다
+    service.set_hub_user("tok-old", "ragt_old", "palen")
+    assert LifeService(store=SqliteStore(db)).me("tok-old")["identity"]["hub_user_id"] == "palen"

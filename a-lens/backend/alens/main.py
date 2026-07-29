@@ -3,13 +3,14 @@
 실행: uvicorn alens.main:create_app --factory --port 8600 --reload
 """
 
+import hashlib
 from pathlib import Path
 
 import httpx
-from fastapi import Body, FastAPI
+from fastapi import Body, FastAPI, Header, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import collector, pipeline, room_chat, rooms, settings, store
+from . import collector, life_client, pipeline, room_chat, rooms, settings, store
 
 _A_LENS = Path(__file__).resolve().parents[2]
 _FRONT_DIST = _A_LENS / "frontend" / "dist"
@@ -37,6 +38,23 @@ def create_app() -> FastAPI:
     def room_chat_lines(spot: str = "", view: str = "", space_name: str = ""):
         return room_chat.chat(spot=spot, view=view, space_name=space_name)
 
+    # 마스코트 이미지 프록시 — 프론트가 Life 토큰을 들고 있지 않게 서버가 대신 가져온다.
+    # 없으면 404 → 프론트는 기존 절차 생성 로봇으로 폴백한다.
+    @app.get("/api/life-mascot/{agent_id}")
+    def life_mascot(agent_id: str, if_none_match: str | None = Header(default=None)):
+        # 캐시는 max-age가 아니라 **ETag 조건부 요청**으로 다룬다: 사진을 바꾸면 다음 조회에서
+        # 곧바로 새 이미지가 나가고(no-cache), 안 바뀌었으면 304로 1MB 전송을 건너뛴다.
+        # ETag는 Life가 주는 sha256이 있으면 그것, 없으면 본문 해시.
+        png = life_client.mascot_png(agent_id)
+        if not png:
+            raise HTTPException(status_code=404, detail="mascot not found")
+        digest = life_client.mascot_digest(agent_id) or hashlib.sha256(png).hexdigest()
+        etag = f'W/"{digest[:32]}"'
+        headers = {"Cache-Control": "no-cache", "ETag": etag}
+        if if_none_match == etag:
+            return Response(status_code=304, headers=headers)
+        return Response(content=png, media_type="image/png", headers=headers)
+
     # ── 설정 (설정 창) — a-hub 연결 · LLM API 런타임 구성 ──
     @app.get("/api/settings")
     def get_settings():
@@ -58,6 +76,7 @@ def create_app() -> FastAPI:
             if st is not None:
                 st.clear_translations()
         collector.clear_cache()  # 새 URL/토큰/원천/스타일을 다음 요청부터 즉시 반영
+        life_client.clear_cache()  # Life 연결값·별칭 매핑도 즉시 반영
         return settings.public(cfg)
 
     @app.post("/api/settings/test")

@@ -17,7 +17,7 @@ _DEFAULT_DIR = _BACKEND / ".a-lens"
 _SETTINGS_PATH = Path(os.environ.get("A_LENS_SETTINGS", str(_DEFAULT_DIR / "settings.json")))
 
 # GET에서 값을 숨기고 존재 여부만 내보낼 키
-SECRET_KEYS = {"work_token", "work_api_key", "llm_key"}
+SECRET_KEYS = {"work_token", "work_api_key", "llm_key", "life_token", "life_api_key"}
 _NUMERIC = {"presence_window", "cache_ttl"}
 
 
@@ -31,6 +31,15 @@ def _defaults() -> dict:
         "work_token": e("A_LENS_WORK_TOKEN", ""),
         "work_api_key": e("A_LENS_WORK_API_KEY", ""),
         "presence_window": float(e("A_LENS_PRESENCE_WINDOW", "3600")),
+        # a-hub(life) 연결 — 사람의 이름·마스코트 이미지를 여기서 읽는다.
+        # 비우면 Life 연동 전체가 조용히 off(Hub-only 화면 그대로).
+        # 스펙: docs/design/common/specs/2026-07-29-shared-identity-life-hub-lens.md
+        "life_url": e("A_LENS_LIFE_URL", ""),
+        "life_token": e("A_LENS_LIFE_TOKEN", ""),
+        "life_api_key": e("A_LENS_LIFE_API_KEY", ""),
+        # Life 닉네임 → work 계정 id 별칭 매핑. Life가 hub_user_id를 주기 전(구버전 서버)
+        # 수동 보정용. "닉네임=hub_user_id" 를 쉼표로 이어 쓴다: "소금맛=salt.jeong,돌쇠=palen"
+        "life_alias": e("A_LENS_LIFE_ALIAS", ""),
         "cache_ttl": float(e("A_LENS_CACHE_TTL", "30")),
         # LLM API (OpenAI 호환). 기본값 = 로컬 LM Studio(WSL 호스트).
         "llm_url": e("A_LENS_LLM_URL", "http://172.26.80.1:1234/v1"),

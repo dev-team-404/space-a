@@ -31,6 +31,7 @@ from pathlib import Path
 import httpx
 
 from . import settings, store, translator
+from . import life_client
 
 log = logging.getLogger("alens.collector")
 
@@ -199,6 +200,27 @@ def _bump_activity(
     prev = activity.get(agent_id)
     if prev is None or dt > prev["at"]:
         activity[agent_id] = {"at": dt, "kind": kind, "title": title, "ref_id": ref_id}
+
+
+def _life_only_agents(life_people: list[dict], used: set[str]) -> list[dict]:
+    """Hub 계정과 못 이은 Life 사람 — 이름·마스코트만 있고 활동 정보는 빈 카드로 붙인다.
+
+    사람을 화면에서 지우지 않는다: '연결 안 됨'은 데이터 상태이지 그 사람이 없는 게 아니다(§3.1 ④)."""
+    return [
+        {
+            "agent_id": f"life:{person['agent_id']}",
+            "name": person.get("name", person["agent_id"]),
+            "status": "idle",
+            "last_active_at": None,
+            "recent_activity": None,
+            "life_agent_id": person["agent_id"],
+            "mascot_url": f"/api/life-mascot/{person['agent_id']}",
+            "via": "life",  # Hub 활동이 없는 이유 = 아직 연결 안 됨
+            "owner": (person.get("identity") or {}).get("owner_full_name", ""),
+        }
+        for person in life_people
+        if person["agent_id"] not in used
+    ]
 
 
 def _flatten_tree(nodes: list[dict]) -> list[dict]:
@@ -421,6 +443,12 @@ def _hub_snapshot() -> dict:
             if sid_:
                 space_reuse_counts[sid_] = space_reuse_counts.get(sid_, 0) + 1
 
+        # 공통 신원 — Life 사람 목록은 공간과 무관하므로 한 번만 읽어 인덱스를 만든다.
+        # Life 미설정·실패면 빈 값이고, 아래 조인은 전부 no-op이 된다(Hub-only 폴백).
+        life_people = life_client.people()
+        life_index = life_client.index_by_hub_user(life_people)
+        life_used: set[str] = set()  # Hub와 매칭된 Life agent_id — 남은 사람은 Life-only로 붙인다
+
         for i, s in enumerate(spaces_raw):
             sid = s.get("id")
             if not sid:
@@ -486,7 +514,7 @@ def _hub_snapshot() -> dict:
             def _agent(m: dict) -> dict:
                 seen = last_write.get(m["agent_id"])
                 online = seen is not None and seen["at"].timestamp() >= online_cutoff
-                return {
+                out = {
                     "agent_id": m["agent_id"],
                     "name": m.get("name", m["agent_id"]),
                     "status": "working" if online else "idle",
@@ -494,10 +522,26 @@ def _hub_snapshot() -> dict:
                     # 사람이 읽을 최근 활동 문장 (말풍선=brief, 상세=detail). 번역은 _humanize_activity.
                     "recent_activity": _humanize_activity(seen) if seen else None,
                 }
+                # 공통 신원 — Life에 같은 사람이 있으면 그 사람의 이름·마스코트로 보여준다.
+                # 매칭 못 해도 Hub 정보는 그대로 남는다(§3.1 실패는 오류가 아니다).
+                person = life_index.get(life_client.normalize(m["agent_id"])) or life_index.get(
+                    life_client.normalize(m.get("name", ""))
+                )
+                if person:
+                    life_used.add(person["agent_id"])
+                    out["life_agent_id"] = person["agent_id"]
+                    if person.get("name"):
+                        out["name"] = person["name"]
+                    ident = person.get("identity") or {}
+                    if ident.get("owner_full_name"):
+                        out["owner"] = ident["owner_full_name"]
+                    # 이미지 유무는 프록시가 판정한다(구버전 Life는 identity를 안 주므로 URL을 항상 준다).
+                    out["mascot_url"] = f"/api/life-mascot/{person['agent_id']}"
+                return out
 
             details[sid] = {
                 "space_id": sid,
-                "agents": [_agent(m) for m in members],
+                "agents": [_agent(m) for m in members] + _life_only_agents(life_people, life_used),
                 "issues": [_issue_doc(it, member_name) for it in issues],
                 "knowledge": knowledge_docs,
             }

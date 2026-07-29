@@ -48,6 +48,14 @@ class LifeRegisterBody(BaseModel):
     mascot_seed: str = ""
     org: str = ""  # 조직 (클라이언트 프로필, 선택)
     agent_uuid: str = ""  # 클라이언트 고유 ID (서버 agent_id와 별개, 선택)
+    # 공통 신원(선택) — 빈 값이면 서버가 기존 값을 유지한다.
+    owner_os_user: str = ""
+    owner_full_name: str = ""
+    hub_user_id: str = ""  # work 허브 계정 id — a-lens가 Hub 활동을 붙일 때 쓰는 키
+
+
+class HubUserBody(BaseModel):
+    hub_user_id: str = ""  # 빈 문자열 = 연결 해제
 
 
 class LifeEnterBody(BaseModel):
@@ -143,7 +151,8 @@ def create_app(life: LifeService | None = None) -> FastAPI:
     @app.post("/life/register", status_code=201)
     def life_register(body: LifeRegisterBody):
         agent, token, created_life = life.register(
-            body.name, body.mascot_seed, body.org, body.agent_uuid
+            body.name, body.mascot_seed, body.org, body.agent_uuid,
+            body.owner_os_user, body.owner_full_name, body.hub_user_id,
         )
         return {"agent_id": agent.agent_id, "token": token, "life_id": created_life.id}
 
@@ -158,6 +167,19 @@ def create_app(life: LifeService | None = None) -> FastAPI:
     @app.patch("/life/me")
     def life_rename(body: LifeRegisterBody, authorization: str | None = Header(default=None)):
         return life.rename(_bearer(authorization), body.name)
+
+    # 공통 신원 — work 허브 계정 연결 지정/해제. 남의 것은 관리 키(x-api-key)를 가진 호출자만.
+    @app.patch("/life/agents/{agent_id}/hub-user")
+    def life_set_hub_user(
+        agent_id: str,
+        body: HubUserBody,
+        authorization: str | None = Header(default=None),
+        x_api_key: str | None = Header(default=None),
+    ):
+        admin = bool(os.environ.get("LIFE_SERVER_API_KEY")) and x_api_key == os.environ.get(
+            "LIFE_SERVER_API_KEY"
+        )
+        return life.set_hub_user(_bearer(authorization), agent_id, body.hub_user_id, admin=admin)
 
     @app.get("/life/people")
     def life_people(authorization: str | None = Header(default=None)):

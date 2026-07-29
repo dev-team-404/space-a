@@ -776,6 +776,21 @@ fn hub_client(state: &State<AppState>) -> Result<Option<LifeClient>, String> {
     Ok(Some(LifeClient { base_url: url, token, api_key: opt_key(get("hub_api_key")) }))
 }
 
+/// work 허브 계정 id — Life에 함께 보내 a-lens가 Hub 활동을 붙일 때 쓰는 키(공통 신원 스펙 §2.2).
+/// 해석 우선순위는 `hub::HubConfig`와 같다: 설정(knowledge_hub_user) → env(SPACE_A_USER) → user_name.
+/// 어느 쪽도 없으면 빈 문자열 — 그러면 Life는 기존 값을 유지하고 a-lens가 이름으로 추론한다.
+fn work_user_id(store: &SqliteStore) -> String {
+    let get = |k: &str| store.get_setting(k).ok().flatten().unwrap_or_default();
+    let stored = get("knowledge_hub_user");
+    if !stored.trim().is_empty() {
+        return stored.trim().to_string();
+    }
+    match std::env::var("SPACE_A_USER") {
+        Ok(v) if !v.trim().is_empty() => v.trim().to_string(),
+        _ => get("user_name").trim().to_string(),
+    }
+}
+
 fn upload_cached_mascot(app: &tauri::AppHandle, client: &LifeClient) -> Result<bool, String> {
     use tauri::Manager as _;
     let path = app.path().app_data_dir().map_err(|e| e.to_string())?.join("sprite.png");
@@ -822,14 +837,14 @@ pub fn hub_connect(
     }
     let key_opt = opt_key(api_key.clone());
     // 기존 연결 확인 (락은 읽기 동안만)
-    let existing = {
+    let (existing, hub_user) = {
         let guard = lock(&state)?;
         let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
-        (get("hub_url"), get("hub_token"))
+        ((get("hub_url"), get("hub_token")), work_user_id(&guard))
     };
     if !existing.1.is_empty() {
         let client = LifeClient { base_url: url.clone(), token: existing.1, api_key: key_opt.clone() };
-        match client.rename(&user, &owner_os_user(), &full_name) {
+        match client.rename(&user, &owner_os_user(), &full_name, &hub_user) {
             Ok(_) => {
                 let guard = lock(&state)?;
                 guard.set_setting("hub_url", &url).map_err(|e| e.to_string())?;
@@ -859,7 +874,9 @@ pub fn hub_connect(
     };
     // 네트워크는 락 밖
     let os_user = owner_os_user();
-    let v = life_client::register_profile(&url, key_opt.as_deref(), &user, &uuid, &org, &uuid, &os_user, &full_name)
+    let v = life_client::register_profile(
+        &url, key_opt.as_deref(), &user, &uuid, &org, &uuid, &os_user, &full_name, &hub_user,
+    )
         .map_err(|e| e.to_string())?;
     let token = v["token"].as_str().unwrap_or_default().to_string();
     let agent_id = v["agent_id"].as_str().unwrap_or_default().to_string();

@@ -173,3 +173,85 @@ def test_guestbook_reply_roundtrip_and_error_codes(client):
     assert client.post(f"/life/{owner['life_id']}/guestbook",
                        json={"body": "고아", "parent_id": "gb_missing"},
                        headers=ho).status_code == 404
+
+
+# ── 공통 신원 (2026-07-29) — Life가 세 컴포넌트를 잇는 등록처 ──
+# 스펙: docs/design/common/specs/2026-07-29-shared-identity-life-hub-lens.md
+
+
+def test_register_keeps_owner_and_hub_identity(client):
+    r = client.post(
+        "/life/register",
+        json={
+            "name": "소금맛",
+            "agent_uuid": "uuid-1",
+            "org": "sw-innov",
+            "owner_os_user": "saltjeong",
+            "owner_full_name": "정소금",
+            "hub_user_id": "salt.jeong",
+        },
+    )
+    assert r.status_code == 201
+    me = client.get("/life/me", headers={"Authorization": f"Bearer {r.json()['token']}"}).json()
+    assert me["identity"] == {
+        "agent_uuid": "uuid-1",
+        "org": "sw-innov",
+        "owner_os_user": "saltjeong",
+        "owner_full_name": "정소금",
+        "hub_user_id": "salt.jeong",
+        "mascot_image_sha256": None,
+    }
+
+
+def test_reregister_without_identity_keeps_existing(client):
+    """구버전 클라이언트가 재등록해도 사람이 지정해 둔 연결을 지우지 않는다."""
+    first = client.post(
+        "/life/register", json={"name": "돌쇠", "hub_user_id": "palen", "owner_os_user": "palen"}
+    ).json()
+    client.post("/life/register", json={"name": "돌쇠"})  # 신원 필드 없이 재등록
+    me = client.get("/life/me", headers={"Authorization": f"Bearer {first['token']}"}).json()
+    assert me["identity"]["hub_user_id"] == "palen"
+    assert me["identity"]["owner_os_user"] == "palen"
+
+
+def test_people_carries_identity(client):
+    a = _register(client, "준냥헐")
+    client.post("/life/register", json={"name": "palendy", "hub_user_id": "palendy"})
+    people = client.get("/life/people", headers={"Authorization": f"Bearer {a['token']}"}).json()
+    hub_ids = {p["name"]: p["identity"]["hub_user_id"] for p in people["people"]}
+    assert hub_ids == {"palendy": "palendy"}
+
+
+def test_set_hub_user_own_and_clear(client):
+    a = _register(client, "kimmy")
+    h = {"Authorization": f"Bearer {a['token']}"}
+    r = client.patch(f"/life/agents/{a['agent_id']}/hub-user", json={"hub_user_id": "kimmy-claude"}, headers=h)
+    assert r.status_code == 200 and r.json()["hub_user_id"] == "kimmy-claude"
+    assert client.get("/life/me", headers=h).json()["identity"]["hub_user_id"] == "kimmy-claude"
+    # 빈 문자열 = 연결 해제 (추론으로 복귀)
+    client.patch(f"/life/agents/{a['agent_id']}/hub-user", json={"hub_user_id": ""}, headers=h)
+    assert client.get("/life/me", headers=h).json()["identity"]["hub_user_id"] == ""
+
+
+def test_set_hub_user_on_others_is_forbidden_without_admin_key(client):
+    a = _register(client, "kimmy")
+    b = _register(client, "돌쇠")
+    r = client.patch(
+        f"/life/agents/{b['agent_id']}/hub-user",
+        json={"hub_user_id": "palen"},
+        headers={"Authorization": f"Bearer {a['token']}"},
+    )
+    assert r.status_code == 403
+
+
+def test_admin_key_can_link_others(monkeypatch):
+    monkeypatch.setenv("LIFE_SERVER_API_KEY", "adminkey")
+    c = TestClient(create_app())
+    a = c.post("/life/register", json={"name": "kimmy"}, headers={"x-api-key": "adminkey"}).json()
+    b = c.post("/life/register", json={"name": "돌쇠"}, headers={"x-api-key": "adminkey"}).json()
+    r = c.patch(
+        f"/life/agents/{b['agent_id']}/hub-user",
+        json={"hub_user_id": "palen"},
+        headers={"Authorization": f"Bearer {a['token']}", "x-api-key": "adminkey"},
+    )
+    assert r.status_code == 200 and r.json()["hub_user_id"] == "palen"

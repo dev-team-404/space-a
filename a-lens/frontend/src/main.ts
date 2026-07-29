@@ -21,7 +21,7 @@ import {
 import { openBuilder } from './builder'
 import { resolveLifeId } from './life/catalog'
 import { loadKit } from './life/kit'
-import { buildLifeScene } from './life/renderer'
+import { buildLifeScene, refreshAgentViews } from './life/renderer'
 import type { LifeConfig } from './life/types'
 import { deleteLife, getLife, loadLife, loadRooms, saveLife } from './store'
 
@@ -336,6 +336,15 @@ async function openSettings() {
       ${secret('set-work_token', 'a-hub Token (Bearer)', s.work_token_set)}
       <label class="set-field"><span>데이터 원천</span><select id="set-source">${sourceOpts}</select></label>
 
+      <h3 class="set-group">a-hub(life) 연결 — 사람 이름·마스코트</h3>
+      <label class="set-field"><span>Life URL <em class="muted">(비우면 Life 연동 off)</em></span>
+        <input id="set-life_url" type="text" value="${esc(s.life_url ?? '')}" placeholder="http://10.0.0.1:8001" /></label>
+      ${secret('set-life_token', 'Life Token (Bearer)', !!s.life_token_set)}
+      ${secret('set-life_api_key', 'Life API Key (x-api-key)', !!s.life_api_key_set)}
+      <label class="set-field"><span>별칭 매핑 <em class="muted">(닉네임=hub 계정, 쉼표 구분)</em></span>
+        <input id="set-life_alias" type="text" value="${esc(s.life_alias ?? '')}"
+          placeholder="소금맛=salt.jeong,돌쇠=palen" /></label>
+
       <h3 class="set-group">LLM API — 분류·요약·서사</h3>
       <label class="set-field"><span>LLM URL (OpenAI 호환)</span>
         <input id="set-llm_url" type="text" value="${esc(s.llm_url)}" placeholder="http://…/v1" /></label>
@@ -369,6 +378,8 @@ async function openSettings() {
     const patch: Record<string, unknown> = {
       work_url: v('#set-work_url'),
       source: v('#set-source'),
+      life_url: v('#set-life_url'),
+      life_alias: v('#set-life_alias'),
       llm_url: v('#set-llm_url'),
       llm_model: v('#set-llm_model'),
       summary_style: v('#set-summary_style'),
@@ -379,6 +390,8 @@ async function openSettings() {
       ['#set-work_api_key', 'work_api_key'],
       ['#set-work_token', 'work_token'],
       ['#set-llm_key', 'llm_key'],
+      ['#set-life_token', 'life_token'],
+      ['#set-life_api_key', 'life_api_key'],
     ] as const) {
       const val = v(id)
       if (val) patch[key] = val // 비밀값은 입력했을 때만 (빈 값 = 유지)
@@ -492,6 +505,7 @@ async function renderHome() {
   panel.hidden = true
   cancelTyping() // 상세 패널 타이핑이 진행 중이었으면 홈으로 나갈 때 멈춘다
   hideWindowBubble() // 창문 말풍선도 함께 — 방을 벗어나면 좌표가 의미 없다
+  stopLivePoll() // 방을 벗어나면 사람 정보 폴링도 멈춘다
   modal.hidden = true
   hub.hidden = true
   hubOpen.hidden = true
@@ -902,19 +916,34 @@ let activityTab: ActivityTab = 'online'
 
 function agentRowHTML(a: SpaceAgent): string {
   const at = kstTime(a.last_active_at)
-  const status = a.status_line || (a.status === 'working' ? '활동 중' : at ? `마지막 활동 ${at}` : '자리 비움')
+  // Life 사람인데 Hub 활동이 없으면 '자리 비움'이 아니라 연결 상태를 알려준다.
+  const status =
+    a.status_line ||
+    (a.status === 'working'
+      ? '활동 중'
+      : at
+        ? `마지막 활동 ${at}`
+        : a.via === 'life'
+          ? '허브 활동 없음'
+          : '자리 비움')
+  // 마스코트가 있으면 아이콘으로, 없으면 기존처럼 상태 점만.
+  const icon = a.mascot_url
+    ? `<img class="agent-mascot" src="${esc(a.mascot_url)}" alt="" loading="lazy"
+         onerror="this.remove()" />`
+    : `<span class="agent-dot ${a.status === 'working' ? 'on' : ''}"></span>`
   return `
     <div class="agent-row ${a.status === 'working' ? '' : 'off'}">
-      <span class="agent-dot ${a.status === 'working' ? 'on' : ''}"></span>
+      ${icon}
       <span class="agent-name">${esc(a.name)}</span>
       <span class="agent-status">${esc(status)}</span>
     </div>`
 }
 
 /** 활동 기록이 하나도 없는 멤버 — 페이지·이슈를 한 번도 쓰지 않아 백엔드가 last_write를
- *  못 찾은 계정(collector `_agent`). 테스트·프로브용 등록만 남은 계정이라 목록에서 감춘다. */
+ *  못 찾은 계정(collector `_agent`). 테스트·프로브용 등록만 남은 계정이라 목록에서 감춘다.
+ *  단 **Life에 등록된 사람은 남긴다** — 아직 Hub 활동이 없을 뿐 실제 팀원이다(공통 신원 §3.1 ④). */
 function hasSentAnything(a: SpaceAgent): boolean {
-  return a.last_active_at !== null || !!a.recent_activity
+  return a.last_active_at !== null || !!a.recent_activity || !!a.life_agent_id
 }
 
 function hubActivityHTML(data: SpaceView): string {
@@ -1083,6 +1112,36 @@ function renderHubActivity(data: SpaceView) {
   })
 }
 
+// ── 경량 폴링 — 팀원이 이름·사진을 바꾸면 새로고침 없이 반영한다 ──
+// 방 씬을 다시 그리지 않는다(캐릭터 위치·말풍선·클릭 상태 유지). 갱신 대상은 이름표·마스코트
+// 아이콘과 사이드바 '팀 활동' 목록뿐. 이슈·문서 탭은 사용자가 보고 있는 중일 수 있어 건드리지
+// 않는다 — 그건 방을 다시 열 때 갱신된다. (공통 신원 스펙 §3.2)
+const LIVE_POLL_MS = 45_000
+let livePoll: number | null = null
+
+function stopLivePoll() {
+  if (livePoll !== null) {
+    clearInterval(livePoll)
+    livePoll = null
+  }
+}
+
+function startLivePoll(spaceId: string) {
+  stopLivePoll()
+  livePoll = window.setInterval(async () => {
+    // 방을 벗어났으면(해시 변경) 조용히 멈춘다
+    if (!location.hash.startsWith(`#life/`)) return stopLivePoll()
+    if (document.hidden) return // 백그라운드 탭에서는 서버를 두드리지 않는다
+    try {
+      const fresh = await fetchSpace(spaceId)
+      refreshAgentViews(currentScene, fresh.agents)
+      renderHubActivity(fresh) // 이름·아이콘·상태 줄만 다시 — 위 탭 내용은 유지
+    } catch (e) {
+      console.warn('사람 정보 갱신 실패 (다음 주기에 재시도)', e)
+    }
+  }, LIVE_POLL_MS)
+}
+
 async function renderLife(spaceId: string) {
   const config = getLife(spaceId)
   if (!config) {
@@ -1200,6 +1259,7 @@ async function renderLife(spaceId: string) {
     },
   )
   app.stage.addChild(currentScene)
+  startLivePoll(spaceId) // 이름·사진 변경을 새로고침 없이 반영
   // 창문·정수기 대사 미리 받아두기 — 첫 클릭이 4초 기다리지 않게 (실패해도 무해)
   prefetchRoomChat('window', resolveLifeId(config.life), config.space_name ?? '')
   prefetchRoomChat('water', resolveLifeId(config.life), config.space_name ?? '')
