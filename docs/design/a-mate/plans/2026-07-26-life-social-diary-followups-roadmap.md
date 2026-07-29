@@ -13,7 +13,7 @@
 
 ## 아이템
 
-### P1 — 일촌 방문 → 상대 공개 일기 참조해 내 일기에 반영
+### P1 — 일촌 방문 → 상대 공개 일기 참조해 내 일기에 반영 — ✅ 완료(2026-07-29, feat/diary-social-cluster)
 - 내가 방문한 Life 목록을 로컬에 기록(방문 로그, `life_goto` 시 append).
 - 일기 생성 시, 최근 방문한 일촌 중 공개(friends/public) 일기를 `lifeDiaries`로 가져와 diary 컨텍스트에 **요약** 주입(예: "어제 ○○네 놀러갔더니…").
 - **터치**: `diary/mod.rs`(프롬프트·컨텍스트), `life_client.rs`(fetch), `store`(방문 로그), `commands`/`pipeline`.
