@@ -39,8 +39,21 @@ export function clearDiaryDates(s: UnseenState): UnseenState {
   return { ...s, diaryDates: [] };
 }
 
-export function clearGuestbookSeen(s: UnseenState, nowIso: string): UnseenState {
-  return { ...s, guestbookLastSeen: nowIso };
+/** 읽음 워터마크 갱신. `atIso`는 **서버 발급 created_at**이어야 한다 — 클라이언트 시계를 쓰면
+ *  오차만큼 새 글이 숨거나(시계 빠름) 본 글이 되살아난다(느림). 후보는 maxCreatedAt로 뽑는다. */
+export function clearGuestbookSeen(s: UnseenState, atIso: string): UnseenState {
+  return { ...s, guestbookLastSeen: atIso };
+}
+
+/** 관측한 타인 글의 최신 created_at (없으면 null) — 워터마크를 서버 시각으로 올리기 위한 후보. */
+export function maxCreatedAt(
+  entries: { author_agent_id: string; created_at: string }[],
+  myAgentId: string,
+): string | null {
+  const times = entries
+    .filter((e) => e.author_agent_id !== myAgentId)
+    .map((e) => e.created_at);
+  return times.length ? times.reduce((a, b) => (b > a ? b : a)) : null;
 }
 
 /** lastSeen 이후의 타인 글 entry_id — 부트스트랩(서버 조회)과 이벤트 payload 양쪽에 같은 판정. */

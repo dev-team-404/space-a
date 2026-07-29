@@ -1019,9 +1019,26 @@ mod runtime {
     /// 스캔 재시도. 커서 저장은 emit 성공 후 — 실패 시 커서 미갱신으로 재-emit된다.
     /// 구서버(visits 404)는 이번 실행 동안 방문 폴링만 비활성(maybe_reply_guestbook
     /// INCOMPATIBLE 선례). 기존 maybe_reply_guestbook은 건드리지 않는다(묶음 ② 충돌 억제).
+    /// 알림 창이 구독을 끝냈다고 신고한 직후의 1회 폴링. 스캔은 파일 변경 구동(주기 타이머
+    /// 없음)이라 준비 이전에 스캔이 지나갔으면 다음 변경까지 소식이 안 온다 — 그 공백을 메운다.
+    /// 네트워크를 타므로 커맨드 스레드를 막지 않게 별 스레드에서.
+    pub fn poll_inbound_now(app: AppHandle) {
+        std::thread::spawn(move || {
+            let state = app.state::<AppState>();
+            maybe_poll_inbound(&app, &state.store);
+        });
+    }
+
     fn maybe_poll_inbound(app: &AppHandle, store_mutex: &std::sync::Mutex<SqliteStore>) {
         use std::sync::atomic::{AtomicBool, Ordering};
         static VISITS_UNSUPPORTED: AtomicBool = AtomicBool::new(false);
+
+        // ⓪ 알림 창이 구독을 끝내기 전에는 폴링하지 않는다. emit은 수신자가 0이어도 Ok라서
+        // 여기서 커서를 저장하면 앱 꺼진 동안 쌓인 소식이 영구 유실된다 (Codex 리뷰 P1).
+        // 커서를 그대로 두면 다음 스캔이 같은 구간을 다시 받아온다 — 손실 없음.
+        if !app.state::<AppState>().notices_ready.load(Ordering::SeqCst) {
+            return;
+        }
 
         // ① 락: 설정·커서 스냅샷 → 즉시 해제 (maybe_reply_guestbook 선례)
         let (url, token, api_key, life_id, agent_id, visits_cursor, gb_cursor) = match store_mutex.lock() {
@@ -1256,7 +1273,7 @@ pub(crate) fn generate_daily_cut_core(
 }
 
 #[cfg(not(test))]
-pub use runtime::start;
+pub use runtime::{poll_inbound_now, start};
 
 #[cfg(test)]
 mod cut_state_tests {

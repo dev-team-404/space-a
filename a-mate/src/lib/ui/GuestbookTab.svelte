@@ -11,6 +11,9 @@
   $effect(()=>{let un:(()=>void)|null=null;getFaceIcon().then(s=>ownFace=s);listen('sprite:ready',()=>getFaceIcon().then(s=>ownFace=s)).then(u=>un=u);return()=>un?.()});
   let threads=$derived(groupGuestbook(entries));
   async function load(){entries=(await lifeGuestbook(lifeId)).entries}load();
+  // N1 — 내 방 방명록을 열어 둔 동안 도착한 새 글을 즉시 반영. App이 같은 이벤트로 뱃지를
+  // 읽음 처리하므로 여기서 다시 읽지 않으면 화면에 안 보인 채 읽음이 된다 (Codex 리뷰 P2).
+  $effect(()=>{if(lifeId!==myLifeId)return;let un:(()=>void)|null=null;listen('guestbook:new',()=>load()).then(u=>un=u);return()=>un?.()});
   async function add(){if(!text.trim()||busy)return;busy=true;try{await lifeAddGuestbook(lifeId,text);text='';await load()}finally{busy=false}}
   async function addReply(parentId:string){if(!replyText.trim()||busy)return;busy=true;try{await lifeAddGuestbook(lifeId,replyText,parentId);replyText='';replyTo=null;await load()}finally{busy=false}}
   function toggleReply(id:string){replyTo=replyTo===id?null:id;replyText=''}

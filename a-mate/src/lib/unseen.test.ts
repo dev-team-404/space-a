@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDiaryDate, clearDiaryDates, clearGuestbookSeen, newGuestbookIds, parseUnseen,
+  addDiaryDate, clearDiaryDates, clearGuestbookSeen, maxCreatedAt, newGuestbookIds, parseUnseen,
 } from './unseen';
 
 const NOW = '2026-07-29T10:00:00+00:00';
@@ -40,5 +40,14 @@ describe('guestbook unseen', () => {
   it('클리어 = lastSeen 갱신', () => {
     const s = clearGuestbookSeen(parseUnseen(null, NOW), '2026-07-30T00:00:00+00:00');
     expect(s.guestbookLastSeen).toBe('2026-07-30T00:00:00+00:00');
+  });
+  it('maxCreatedAt: 타인 글의 최신 서버 시각 — 내 글 제외, 없으면 null', () => {
+    expect(maxCreatedAt(
+      [e('a', 'other', '2026-07-01T00:00:00+00:00'), e('b', 'other', '2026-07-29T00:00:00+00:00'),
+       e('c', 'me', '2026-07-30T00:00:00+00:00')],
+      'me',
+    )).toBe('2026-07-29T00:00:00+00:00');
+    expect(maxCreatedAt([e('c', 'me', '2026-07-30T00:00:00+00:00')], 'me')).toBeNull();
+    expect(maxCreatedAt([], 'me')).toBeNull();
   });
 });

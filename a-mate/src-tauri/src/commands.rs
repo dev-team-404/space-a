@@ -1125,6 +1125,21 @@ pub fn mascot_set_expanded(state: State<AppState>, expanded: bool) {
         .store(expanded, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// 알림 창이 인바운드 소식(life:visit·guestbook:new) 구독을 끝냈다는 신고. 이벤트가 아니라
+/// 커맨드인 이유: 이벤트는 백엔드 listen보다 프론트 emit이 먼저면 영영 유실돼 같은 레이스가
+/// 방향만 바뀐 채 남는다. 커맨드 핸들러는 웹뷰 생성 전에 등록되므로 순서 무관.
+#[tauri::command]
+pub fn notices_ready(state: State<AppState>, app: tauri::AppHandle) {
+    state
+        .notices_ready
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    // 게이트가 열리기 전에 스캔이 지나갔을 수 있으니 여기서 1회 만회한다.
+    #[cfg(not(test))]
+    crate::pipeline::poll_inbound_now(app);
+    #[cfg(test)]
+    let _ = app;
+}
+
 #[cfg_attr(test, allow(dead_code))]
 pub(crate) fn valid_tab(tab: &str) -> bool {
     // settings는 트레이·마스코트가 설정 탭으로 딥링크할 때 쓴다(target=그룹 id).

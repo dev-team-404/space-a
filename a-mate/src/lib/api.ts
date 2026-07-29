@@ -276,6 +276,8 @@ export const onLifeVisit = (cb: (rows: LifeVisit[]) => void): Promise<UnlistenFn
   listen<LifeVisit[]>('life:visit', (e) => cb(e.payload));
 export const onGuestbookNew = (cb: (rows: GuestbookEntry[]) => void): Promise<UnlistenFn> =>
   listen<GuestbookEntry[]>('guestbook:new', (e) => cb(e.payload));
+/** 인바운드 소식 구독 완료 신고 — 백엔드가 이 신고 전에는 폴링하지 않는다(수신자 없는 emit = 영구 유실). */
+export const noticesReady = () => invoke<void>('notices_ready');
 /** 트레이 "업데이트 확인" → chat 창에서 수동 업데이트 체크를 트리거 */
 export const onUpdateCheckRequested = (cb: () => void): Promise<UnlistenFn> =>
   listen('update:check', () => cb());
