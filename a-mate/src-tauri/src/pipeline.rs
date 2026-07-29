@@ -906,9 +906,11 @@ mod runtime {
         };
 
         // ④ 이미지 엔진: 화풍 앵커 + (마스코트 샷이면 현재 정체성 묘사) + 추상 장면
+        //    정체성 시드 = sprite.seed(리롤 승격분) 우선, 없으면 프로필 uuid.
+        let id_seed = identity_seed(&dir, &uuid);
         let desc = shot.has_mascot().then(|| {
-            let spec = agent_mentor::mascot::robot_spec_from_profile(&uuid, mbti.as_deref());
-            sprite::character_description(&spec, mbti.as_deref(), &uuid)
+            let spec = agent_mentor::mascot::robot_spec_from_profile(&id_seed, mbti.as_deref());
+            sprite::character_description(&spec, mbti.as_deref(), &id_seed)
         });
         let prompt = sprite::build_cut_image_prompt(shot, desc.as_deref(), &scene_en);
         match sprite::generate_cut(&cfg, &prompt) {
@@ -1100,6 +1102,17 @@ pub(crate) fn cut_state_save(
     Ok(())
 }
 
+/// H2 — 컷의 마스코트 정체성 시드. 리롤 승격(mascot_commit)이 남긴 sprite.seed(변주 시드)가
+/// 있으면 그것, 없으면 프로필 uuid(초기 자동 생성 sprite와 동일 정체성) — 스펙
+/// "현재 sprite와 동일한 정체성 유지" (Codex 리뷰 P2).
+pub(crate) fn identity_seed(dir: &std::path::Path, profile_uuid: &str) -> String {
+    std::fs::read_to_string(dir.join("sprite.seed"))
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| profile_uuid.to_string())
+}
+
 #[cfg(not(test))]
 pub use runtime::start;
 
@@ -1123,5 +1136,18 @@ mod cut_state_tests {
             super::cut_state_load(dir.path()),
             agent_mentor::sprite::CutState::default()
         );
+    }
+
+    #[test]
+    fn identity_seed_prefers_reroll_seed_file() {
+        let dir = tempfile::tempdir().unwrap();
+        // 시드 파일 없음(초기 자동 생성 sprite) → 프로필 uuid
+        assert_eq!(super::identity_seed(dir.path(), "uuid-1"), "uuid-1");
+        // 리롤 승격이 남긴 변주 시드 → 그것을 사용 (개행·공백 트림)
+        std::fs::write(dir.path().join("sprite.seed"), "reroll-xyz\n").unwrap();
+        assert_eq!(super::identity_seed(dir.path(), "uuid-1"), "reroll-xyz");
+        // 빈/공백 파일 → uuid 폴백
+        std::fs::write(dir.path().join("sprite.seed"), "   ").unwrap();
+        assert_eq!(super::identity_seed(dir.path(), "uuid-1"), "uuid-1");
     }
 }

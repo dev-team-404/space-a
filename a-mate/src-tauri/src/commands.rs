@@ -1959,6 +1959,9 @@ pub fn mascot_preview(app: tauri::AppHandle, state: State<AppState>) -> Result<S
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     std::fs::write(dir.join("sprite.candidate.png"), &png).map_err(|e| e.to_string())?;
+    // H2 — 매일 컷이 이 후보의 정체성(변주 시드)을 재사용할 수 있게 시드도 남긴다 (commit 시 승격).
+    // 실패해도 컷은 프로필 uuid로 폴백하므로 비치명적.
+    let _ = std::fs::write(dir.join("sprite.candidate.seed"), &seed);
     Ok(base64::engine::general_purpose::STANDARD.encode(&png))
 }
 
@@ -1972,6 +1975,18 @@ pub fn mascot_commit(app: tauri::AppHandle, state: State<AppState>) -> Result<()
         .map_err(|_| "저장할 미리보기가 없어요 — 먼저 '재생성'을 눌러주세요".to_string())?;
     std::fs::write(dir.join("sprite.png"), &png).map_err(|e| e.to_string())?;
     let _ = std::fs::remove_file(&candidate);
+    // H2 — 변주 시드 승격: 매일 컷의 마스코트 묘사가 이 sprite와 같은 정체성을 쓰게 한다.
+    // 후보 시드가 없으면(구버전 잔재) 이전 sprite.seed를 지워 uuid 폴백으로 — 엉뚱한 시드 잔존 방지.
+    let cand_seed = dir.join("sprite.candidate.seed");
+    match std::fs::read_to_string(&cand_seed) {
+        Ok(s) if !s.trim().is_empty() => {
+            let _ = std::fs::write(dir.join("sprite.seed"), s.trim());
+        }
+        _ => {
+            let _ = std::fs::remove_file(dir.join("sprite.seed"));
+        }
+    }
+    let _ = std::fs::remove_file(&cand_seed);
     if let Some(client) = hub_client(&state)? {
         let _ = upload_cached_mascot(&app, &client);
     }
