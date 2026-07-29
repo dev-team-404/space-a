@@ -113,11 +113,49 @@ CREATE TABLE IF NOT EXISTS session_work_kinds (
   last_ts TEXT,
   judged_at TEXT
 );
+CREATE TABLE IF NOT EXISTS life_visits (
+  life_id            TEXT NOT NULL,
+  visited_at         TEXT NOT NULL,
+  kind               TEXT NOT NULL,
+  owner_name         TEXT,
+  design_json        TEXT,
+  diary_excerpt_json TEXT NOT NULL DEFAULT '[]',
+  signed             INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (life_id, visited_at)
+);
 "#;
 
 pub struct SqliteStore {
     pub conn: Connection,
 }
+
+/// 방문 1건 — 그 순간의 방 꾸밈·상대 공개 일기 발췌 스냅샷을 함께 담는다 (스펙 §2).
+/// 일기 생성이 네트워크 없이 소재를 얻는 유일한 경로.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LifeVisit {
+    pub life_id: String,
+    pub visited_at: String, // RFC3339. 날짜 버킷은 date(visited_at,'localtime')
+    pub kind: String,       // "manual" | "auto"
+    pub owner_name: Option<String>,
+    pub design_json: Option<String>,
+    pub diary_excerpt_json: String, // [{date, excerpt}] — 없으면 "[]"
+    pub signed: bool,
+}
+
+fn row_to_life_visit(r: &rusqlite::Row) -> rusqlite::Result<LifeVisit> {
+    Ok(LifeVisit {
+        life_id: r.get(0)?,
+        visited_at: r.get(1)?,
+        kind: r.get(2)?,
+        owner_name: r.get(3)?,
+        design_json: r.get(4)?,
+        diary_excerpt_json: r.get(5)?,
+        signed: r.get::<_, i64>(6)? != 0,
+    })
+}
+
+const LIFE_VISIT_COLS: &str =
+    "life_id, visited_at, kind, owner_name, design_json, diary_excerpt_json, signed";
 
 /// 스키마 마이그레이션. events.model_raw 추가 — 기존 행은 raw id를 소급할 수 없으므로
 /// events/ingest_state/daily_rollup을 비워 다음 스캔에서 전체 재수집한다
@@ -1859,6 +1897,66 @@ impl SqliteStore {
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
     }
 
+    /// 방문 1행 기록. 같은 (life_id, visited_at) 재기록은 덮어쓴다(재시도 멱등).
+    pub fn record_life_visit(&self, v: &LifeVisit) -> Result<()> {
+        self.conn.execute(
+            &format!(
+                "INSERT OR REPLACE INTO life_visits ({LIFE_VISIT_COLS}) VALUES (?1,?2,?3,?4,?5,?6,?7)"
+            ),
+            params![
+                v.life_id,
+                v.visited_at,
+                v.kind,
+                v.owner_name,
+                v.design_json,
+                v.diary_excerpt_json,
+                v.signed as i64
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// 그 로컬 날짜의 방문 목록(오래된 순) — 일기 조립·자율 방문 중복 판정.
+    pub fn life_visits_for_date(&self, date: &str) -> Result<Vec<LifeVisit>> {
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {LIFE_VISIT_COLS} FROM life_visits
+             WHERE date(visited_at,'localtime')=?1 ORDER BY visited_at"
+        ))?;
+        let rows = stmt.query_map(params![date], row_to_life_visit)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+    }
+
+    /// 그 방문보다 이전, 같은 방의 가장 최근 행 — 인테리어 변화 감지 기준(스펙 §5).
+    pub fn prev_life_visit(&self, life_id: &str, before: &str) -> Result<Option<LifeVisit>> {
+        self.conn
+            .query_row(
+                &format!(
+                    "SELECT {LIFE_VISIT_COLS} FROM life_visits
+                     WHERE life_id=?1 AND visited_at < ?2 ORDER BY visited_at DESC LIMIT 1"
+                ),
+                params![life_id, before],
+                row_to_life_visit,
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    /// 방별 마지막 방문 시각 — 자율 방문 대상 선정(가장 오래 안 간 방).
+    pub fn last_visit_times(&self) -> Result<Vec<(String, String)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT life_id, MAX(visited_at) FROM life_visits GROUP BY life_id")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(Into::into)
+    }
+
+    /// 보존 기간 초과 방문 삭제 — 삭제된 행 수를 돌려준다.
+    pub fn prune_life_visits(&self, before: &str) -> Result<usize> {
+        Ok(self
+            .conn
+            .execute("DELETE FROM life_visits WHERE visited_at < ?1", params![before])?)
+    }
+
     pub fn get_daily_line(&self, date: &str) -> Result<Option<(String, String)>> {
         self.conn
             .query_row(
@@ -2136,6 +2234,88 @@ fn tool_kind_str(k: &ToolKind) -> &'static str {
 mod tests {
     use super::*;
     use crate::model::*;
+
+    /// 테스트용 방문 1건 — 필요한 필드만 바꿔 쓴다.
+    fn visit(life_id: &str, visited_at: &str, kind: &str) -> LifeVisit {
+        LifeVisit {
+            life_id: life_id.into(),
+            visited_at: visited_at.into(),
+            kind: kind.into(),
+            owner_name: Some("코난".into()),
+            design_json: Some(r#"{"wallpaper":"cream","floor":"wood","objects":[]}"#.into()),
+            diary_excerpt_json: "[]".into(),
+            signed: true,
+        }
+    }
+
+    #[test]
+    fn life_visit_round_trips_and_buckets_by_local_date() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 로컬 시각으로 기록 → 로컬 날짜로 조회 (타임존 무관하게 성립)
+        let now = chrono::Local::now();
+        let today = now.format("%Y-%m-%d").to_string();
+        store.record_life_visit(&visit("life-a", &now.to_rfc3339(), "auto")).unwrap();
+
+        let rows = store.life_visits_for_date(&today).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].life_id, "life-a");
+        assert_eq!(rows[0].kind, "auto");
+        assert_eq!(rows[0].owner_name.as_deref(), Some("코난"));
+        assert!(rows[0].signed);
+        // 다른 날짜 버킷엔 안 잡힌다
+        let yesterday =
+            (now.date_naive() - chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
+        assert!(store.life_visits_for_date(&yesterday).unwrap().is_empty());
+    }
+
+    #[test]
+    fn prev_life_visit_returns_nearest_earlier_row_of_same_room() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.record_life_visit(&visit("life-a", "2026-07-01T10:00:00Z", "manual")).unwrap();
+        store.record_life_visit(&visit("life-a", "2026-07-10T10:00:00Z", "manual")).unwrap();
+        store.record_life_visit(&visit("life-b", "2026-07-09T10:00:00Z", "manual")).unwrap();
+
+        let prev = store.prev_life_visit("life-a", "2026-07-20T00:00:00Z").unwrap().unwrap();
+        assert_eq!(prev.visited_at, "2026-07-10T10:00:00Z"); // 가장 가까운 과거
+        // 첫 방문(그보다 이전 행 없음)
+        assert!(store.prev_life_visit("life-a", "2026-07-01T10:00:00Z").unwrap().is_none());
+        // 다른 방 행은 섞이지 않는다
+        assert_eq!(
+            store.prev_life_visit("life-b", "2026-07-20T00:00:00Z").unwrap().unwrap().visited_at,
+            "2026-07-09T10:00:00Z"
+        );
+    }
+
+    #[test]
+    fn last_visit_times_returns_latest_per_room() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.record_life_visit(&visit("life-a", "2026-07-01T10:00:00Z", "auto")).unwrap();
+        store.record_life_visit(&visit("life-a", "2026-07-12T10:00:00Z", "auto")).unwrap();
+        store.record_life_visit(&visit("life-b", "2026-07-05T10:00:00Z", "manual")).unwrap();
+
+        let mut times = store.last_visit_times().unwrap();
+        times.sort();
+        assert_eq!(
+            times,
+            vec![
+                ("life-a".to_string(), "2026-07-12T10:00:00Z".to_string()),
+                ("life-b".to_string(), "2026-07-05T10:00:00Z".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn prune_life_visits_deletes_only_older_rows() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.record_life_visit(&visit("life-a", "2026-06-01T10:00:00Z", "auto")).unwrap();
+        store.record_life_visit(&visit("life-a", "2026-07-20T10:00:00Z", "auto")).unwrap();
+
+        assert_eq!(store.prune_life_visits("2026-07-01T00:00:00Z").unwrap(), 1);
+        assert_eq!(
+            store.last_visit_times().unwrap(),
+            vec![("life-a".to_string(), "2026-07-20T10:00:00Z".to_string())]
+        );
+    }
 
     fn turn(session: &str, uuid: &str, cache_create: u64) -> NormalizedEvent {
         NormalizedEvent {
