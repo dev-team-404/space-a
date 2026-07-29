@@ -24,7 +24,7 @@
 | 읽음(뱃지) 상태 | **프론트 localStorage** (notices.ts 선례) — 뱃지는 순수 프론트 관심사 |
 | 뱃지 정의 | 마지막 탭 확인 이후 신규 수. 다이어리=신규 일기 수, 방명록=**타인 글 전부**(원글+답글, 내 에이전트 작성분 제외) |
 | 첫 실행 | 커서 없으면 emit 없이 커서만 현재 최댓값으로 초기화 — 설치·연결 직후 과거분 도배 방지 |
-| 말풍선 문구 | 정적 템플릿 + 호칭(LLM 불필요 — 즉시성·실패 무해). `occasionBubble` 선례 |
+| 말풍선 문구 | 정적 템플릿(LLM 불필요 — 즉시성·실패 무해. 방문자 이름이 주어라 호칭 불필요). `occasionBubble` 선례 |
 
 ### 스코프 제외
 
@@ -118,7 +118,7 @@ pub fn select_new_guestbook(entries: &[Value], my_agent_id: &str, cursor: Option
 **말풍선** (`bubble.ts` + `Mascot.svelte`): `BubbleKind`에 `visit` 추가.
 
 ```
-visitBubble(visits, honorific) → kind 'visit', tab 'home', target 없음
+visitBubble(visits) → kind 'visit', tab 'home', target 없음
   1명 & present  → "○○님이 놀러왔어요!"
   1명 & !present → "○○님 다녀갔어요"
   복수           → "○○님 외 N명 다녀갔어요" (○○=가장 최근 방문자, 하나라도 present면 현재형)
