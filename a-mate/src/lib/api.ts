@@ -289,6 +289,9 @@ export async function getDailyCut(): Promise<DailyCut | null> {
   try { return await invoke<DailyCut | null>('get_daily_cut'); } catch { return null; }
 }
 
+/** H2 — 설정의 "지금 그려보기": 즉시 새 컷 생성 후 일기 날짜 반환. 실패는 한국어 메시지로 reject. */
+export const generateDailyCutNow = () => invoke<string>('generate_daily_cut_now');
+
 /** 방 점유자 AI 스프라이트(캐시) base64 — 없으면 null. */
 export async function getOccupantSprite(seed: string): Promise<string | null> {
   try { return await invoke<string | null>('get_occupant_sprite', { seed }); } catch { return null; }

@@ -841,96 +841,23 @@ mod runtime {
         }
     }
 
-    /// H2 — 매일 마스코트 컷. 스캔 리컨실리에이션: 최신 일기 날짜 vs daily_cut.json을 비교해
-    /// 필요할 때만 생성한다 (재실행 멱등 · 일일 3회 상한 · 옵트인 daily_cut_enabled 기본 off).
-    /// 네트워크는 텍스트 → 이미지 순서(텍스트 실패 시 이미지 과금 없음), 모두 store 락 밖.
-    /// 스펙: docs/archive/design/a-mate/specs/2026-07-28-sprite-face-daily-cut-design.md
+    /// H2 — 매일 마스코트 컷 (자동 경로). 옵트인(daily_cut_enabled 기본 off) 게이트만 여기서
+    /// 보고, 생성 코어는 설정 탭 "지금 그려보기" 버튼과 공유한다 (`generate_daily_cut_core`).
     fn maybe_generate_daily_cut(app: &AppHandle) {
-        use agent_mentor::sprite;
-        let Ok(dir) = app.path().app_data_dir() else { return };
-        let state = app.state::<crate::AppState>();
-
-        // ① 짧은 락: 게이트 + 재료 읽기 → 즉시 해제 (네트워크 전 해제 규율)
-        let (engine, cfg, uuid, mbti, date, diary) = match state.store.lock() {
-            Ok(store) => {
-                let enabled = store
-                    .get_setting("daily_cut_enabled")
-                    .ok()
-                    .flatten()
-                    .map(|v| v == "true")
-                    .unwrap_or(false);
-                if !enabled { return; }
-                let Some(engine) = crate::resolve_engine(&store) else { return };
-                let Some(cfg) = crate::resolve_sprite_cfg(&store) else { return };
-                let (uuid, mbti) = match crate::commands::sprite_identity(&store) {
-                    Ok(v) => v,
-                    Err(e) => { log::warn!("daily-cut 프로필 해석 실패: {e}"); return; }
-                };
-                // diary_dates()는 date ASC 정렬 — 마지막이 최신 일기
-                let Some(date) = store.diary_dates().ok().and_then(|v| v.last().cloned()) else { return };
-                let diary = match crate::commands::diary_inner(&store, &date) {
-                    Ok(Some(d)) => d,
-                    Ok(None) => return,
-                    Err(e) => { log::warn!("daily-cut 일기 읽기 실패: {e}"); return; }
-                };
-                (engine, cfg, uuid, mbti, date, diary)
-            }
+        let enabled = match app.state::<crate::AppState>().store.lock() {
+            Ok(store) => store
+                .get_setting("daily_cut_enabled")
+                .ok()
+                .flatten()
+                .map(|v| v == "true")
+                .unwrap_or(false),
             Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
-        }; // guard drops here
-
-        // ② 리컨실리에이션 (파일 IO만) — skip이면 조용히. png 실존까지 확인해
-        //    "메타만 완료" 고착(파일 삭제 등)을 방지.
-        let mut cut = cut_state_load(&dir);
-        let png_exists = dir.join("daily_cut.png").is_file();
-        if !sprite::decide_cut(&date, &cut, png_exists) { return; }
-        // 시도는 네트워크 **전에** persist — 실패·크래시에도 일일 상한 보장.
-        // 원장 쓰기가 실패하면(디스크 풀·읽기 전용) 상한을 보장할 수 없으므로 진행하지 않는다.
-        sprite::register_attempt(&mut cut, &date);
-        if let Err(e) = cut_state_save(&dir, &cut) {
-            log::warn!("daily-cut 시도 원장 저장 실패 — 과금 상한 보장 불가라 생성 중단: {e}");
-            return;
-        }
-
-        // ③ 텍스트 엔진: 일기 → 추상 장면 + 캡션 (실패 시 이미지 호출 안 감)
-        let shot = sprite::pick_cut_shot(&date, &uuid);
-        let (scene_en, caption) = match sprite::compute_cut_scene(&engine, &diary, shot, mbti.as_deref()) {
-            Ok(Some(v)) => v,
-            Ok(None) => {
-                log::warn!("daily-cut 장면 JSON 파싱 실패({}/{})", cut.attempts, sprite::MAX_CUT_ATTEMPTS_PER_DAY);
-                return;
-            }
-            Err(e) => {
-                log::warn!("daily-cut 장면 생성 실패({}/{}): {e}", cut.attempts, sprite::MAX_CUT_ATTEMPTS_PER_DAY);
-                return;
-            }
         };
-
-        // ④ 이미지 엔진: 화풍 앵커 + (마스코트 샷이면 현재 정체성 묘사) + 추상 장면
-        //    정체성 시드 = sprite.seed(리롤 승격분) 우선, 없으면 프로필 uuid.
-        let id_seed = identity_seed(&dir, &uuid);
-        let desc = shot.has_mascot().then(|| {
-            let spec = agent_mentor::mascot::robot_spec_from_profile(&id_seed, mbti.as_deref());
-            sprite::character_description(&spec, mbti.as_deref(), &id_seed)
-        });
-        let prompt = sprite::build_cut_image_prompt(shot, desc.as_deref(), &scene_en);
-        match sprite::generate_cut(&cfg, &prompt) {
-            Ok(png) => {
-                // tmp→rename 원자 교체 — 크래시/동시 조회 시에도 기존 컷이 잘린 파일로 남지 않는다.
-                let _ = std::fs::create_dir_all(&dir);
-                let tmp = dir.join("daily_cut.png.tmp");
-                let replaced = std::fs::write(&tmp, png).is_ok()
-                    && std::fs::rename(&tmp, dir.join("daily_cut.png")).is_ok();
-                if replaced {
-                    sprite::register_success(&mut cut, &date, &caption, shot);
-                    if let Err(e) = cut_state_save(&dir, &cut) {
-                        // 이미지는 교체됐고 attempts는 이미 durable — 다음 스캔이 메타만 재생성 시도
-                        log::warn!("daily-cut 성공 메타 저장 실패: {e}");
-                    }
-                    log::info!("매일 컷 생성 완료({date}, {})", shot.as_str());
-                    let _ = app.emit("daily_cut:ready", &date);
-                }
-            }
-            Err(e) => log::warn!("daily-cut 이미지 생성 실패({}/{}): {e}", cut.attempts, sprite::MAX_CUT_ATTEMPTS_PER_DAY),
+        if !enabled { return; }
+        match generate_daily_cut_core(app, false) {
+            Ok(Some(date)) => log::info!("매일 컷 생성 완료({date})"),
+            Ok(None) => {} // 리컨실리에이션 skip (멱등·상한)
+            Err(e) => log::warn!("daily-cut 생성 실패(다음 스캔 재시도 가능): {e}"),
         }
     }
 
@@ -1111,6 +1038,103 @@ pub(crate) fn identity_seed(dir: &std::path::Path, profile_uuid: &str) -> String
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| profile_uuid.to_string())
+}
+
+/// H2 — 컷 생성 코어 (자동 경로 `maybe_generate_daily_cut` + 설정 탭 "지금 그려보기" 공용).
+/// `force=true`(버튼)면 멱등·일일 상한 판정을 건너뛰고 즉시 새로 그린다 (mascot_preview 선례
+/// — 명시적 버튼은 누를 때마다 생성). 원장(attempts) 기록은 force에서도 동일하게 남긴다.
+/// 네트워크는 텍스트 → 이미지 순서, 모두 store 락 밖.
+/// 반환: Ok(Some(date))=생성·교체 완료, Ok(None)=리컨실리에이션 skip(force=false 전용),
+/// Err(msg)=사용자에게 그대로 보여줄 수 있는 한국어 실패 사유.
+/// 스펙: docs/archive/design/a-mate/specs/2026-07-28-sprite-face-daily-cut-design.md
+pub(crate) fn generate_daily_cut_core(
+    app: &tauri::AppHandle,
+    force: bool,
+) -> Result<Option<String>, String> {
+    use agent_mentor::sprite;
+    use tauri::{Emitter as _, Manager as _};
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let state = app.state::<crate::AppState>();
+
+    // ① 짧은 락: 재료 읽기 → 즉시 해제 (네트워크 전 해제 규율)
+    let (engine, cfg, uuid, mbti, date, diary) = {
+        let store = state.store.lock().map_err(|_| "store lock poisoned".to_string())?;
+        let Some(engine) = crate::resolve_engine(&store) else {
+            return Err("텍스트 엔진이 설정되지 않았어요 — 설정 → 연결 → 텍스트 엔진을 확인해주세요".into());
+        };
+        let Some(cfg) = crate::resolve_sprite_cfg(&store) else {
+            return Err("이미지 모델이 설정되지 않았어요 — 설정 → 연결 → 캐릭터 이미지에서 URL·키를 넣어주세요".into());
+        };
+        let (uuid, mbti) = crate::commands::sprite_identity(&store)
+            .map_err(|e| format!("프로필 해석 실패: {e}"))?;
+        // diary_dates()는 date ASC 정렬 — 마지막이 최신 일기
+        let Some(date) = store.diary_dates().map_err(|e| e.to_string())?.last().cloned() else {
+            return Err("아직 일기가 없어요 — 첫 일기가 생긴 뒤 다시 시도해주세요".into());
+        };
+        let Some(diary) = crate::commands::diary_inner(&store, &date).map_err(|e| e.to_string())? else {
+            return Err("일기 본문을 읽지 못했어요 — 다음 스캔 후 다시 시도해주세요".into());
+        };
+        (engine, cfg, uuid, mbti, date, diary)
+    }; // guard drops here
+
+    // ② 리컨실리에이션 (파일 IO만) — 자동 경로 전용. png 실존까지 확인해
+    //    "메타만 완료" 고착(파일 삭제 등)을 방지. 버튼(force)은 즉시 새로 그린다.
+    let mut cut = cut_state_load(&dir);
+    if !force {
+        let png_exists = dir.join("daily_cut.png").is_file();
+        if !sprite::decide_cut(&date, &cut, png_exists) {
+            return Ok(None);
+        }
+    }
+    // 시도는 네트워크 **전에** persist — 실패·크래시에도 일일 상한 보장.
+    // 원장 쓰기가 실패하면(디스크 풀·읽기 전용) 상한을 보장할 수 없으므로 진행하지 않는다.
+    sprite::register_attempt(&mut cut, &date);
+    cut_state_save(&dir, &cut).map_err(|e| format!("시도 기록 저장 실패 — 생성을 중단했어요: {e}"))?;
+
+    // ③ 텍스트 엔진: 일기 → 추상 장면 + 캡션 (실패 시 이미지 호출 안 감)
+    let shot = sprite::pick_cut_shot(&date, &uuid);
+    let (scene_en, caption) = match sprite::compute_cut_scene(&engine, &diary, shot, mbti.as_deref()) {
+        Ok(Some(v)) => v,
+        Ok(None) => {
+            return Err(format!(
+                "장면 응답을 해석하지 못했어요 ({}/{}회)",
+                cut.attempts,
+                sprite::MAX_CUT_ATTEMPTS_PER_DAY
+            ))
+        }
+        Err(e) => {
+            return Err(format!(
+                "장면 생성 실패 ({}/{}회): {e}",
+                cut.attempts,
+                sprite::MAX_CUT_ATTEMPTS_PER_DAY
+            ))
+        }
+    };
+
+    // ④ 이미지 엔진: 화풍 앵커 + (마스코트 샷이면 현재 정체성 묘사) + 추상 장면
+    //    정체성 시드 = sprite.seed(리롤 승격분) 우선, 없으면 프로필 uuid.
+    let id_seed = identity_seed(&dir, &uuid);
+    let desc = shot.has_mascot().then(|| {
+        let spec = agent_mentor::mascot::robot_spec_from_profile(&id_seed, mbti.as_deref());
+        sprite::character_description(&spec, mbti.as_deref(), &id_seed)
+    });
+    let prompt = sprite::build_cut_image_prompt(shot, desc.as_deref(), &scene_en);
+    let png = sprite::generate_cut(&cfg, &prompt).map_err(|e| {
+        format!("이미지 생성 실패 ({}/{}회): {e}", cut.attempts, sprite::MAX_CUT_ATTEMPTS_PER_DAY)
+    })?;
+
+    // ⑤ tmp→rename 원자 교체 — 크래시/동시 조회 시에도 기존 컷이 잘린 파일로 남지 않는다.
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let tmp = dir.join("daily_cut.png.tmp");
+    std::fs::write(&tmp, png).map_err(|e| format!("컷 저장 실패: {e}"))?;
+    std::fs::rename(&tmp, dir.join("daily_cut.png")).map_err(|e| format!("컷 교체 실패: {e}"))?;
+    sprite::register_success(&mut cut, &date, &caption, shot);
+    if let Err(e) = cut_state_save(&dir, &cut) {
+        // 이미지는 교체됐고 attempts는 이미 durable — 다음 스캔이 메타만 재생성 시도
+        log::warn!("daily-cut 성공 메타 저장 실패: {e}");
+    }
+    let _ = app.emit("daily_cut:ready", &date);
+    Ok(Some(date))
 }
 
 #[cfg(not(test))]

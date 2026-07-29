@@ -371,6 +371,7 @@ pub fn run() {
                 commands::get_sprite,
                 commands::get_face_icon,
                 commands::get_daily_cut,
+                commands::generate_daily_cut_now,
                 commands::get_occupant_sprite,
                 commands::request_occupant_sprite,
                 commands::image_settings_get,

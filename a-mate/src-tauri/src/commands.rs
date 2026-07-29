@@ -1662,6 +1662,19 @@ pub fn get_daily_cut(app: tauri::AppHandle) -> Result<Option<DailyCut>, String> 
     daily_cut_inner(&dir).map_err(|e| e.to_string())
 }
 
+/// H2 — 설정 탭 "지금 그려보기": 멱등·일일 상한 없이 즉시 새 컷을 생성·교체한다
+/// (mascot_preview 선례 — 명시적 버튼은 누를 때마다 생성). 성공 시 일기 날짜 반환,
+/// 화면 갱신은 코어가 emit하는 daily_cut:ready로 전파된다. 네트워크 호출이라 async.
+#[tauri::command(async)]
+pub fn generate_daily_cut_now(app: tauri::AppHandle) -> Result<String, String> {
+    match crate::pipeline::generate_daily_cut_core(&app, true) {
+        Ok(Some(date)) => Ok(date),
+        // force=true라 리컨실리에이션 skip(None)은 발생하지 않지만, 방어적으로 처리
+        Ok(None) => Err("생성이 건너뛰어졌어요 — 다시 시도해주세요".into()),
+        Err(e) => Err(e),
+    }
+}
+
 /// AI 스프라이트(캐시) — app_data/sprite.png를 base64로. 없으면 None(프론트는 절차 생성 폴백).
 #[tauri::command]
 pub fn get_sprite(app: tauri::AppHandle) -> Result<Option<String>, String> {

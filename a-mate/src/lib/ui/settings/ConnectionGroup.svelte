@@ -3,7 +3,7 @@
     engineSettingsGet, engineSettingsSet, engineTest,
     getSettings, hubConnect, hubDisconnect, hubSettingsGet,
     imageSettingsGet, imageSettingsSet, imageTest,
-    knowledgeHubSettingsGet, knowledgeHubSettingsSet, knowledgeHubShareSet, setSetting,
+    generateDailyCutNow, knowledgeHubSettingsGet, knowledgeHubSettingsSet, knowledgeHubShareSet, setSetting,
     type EngineSettings, type HubSettings, type ImageSettings, type KnowledgeHubSettings,
   } from '../../api';
   import { dailyCutEnabled } from '../../daily-cut';
@@ -81,6 +81,13 @@
     dailyCut = !dailyCut;
     try { await setSetting('daily_cut_enabled', dailyCut ? 'true' : 'false'); }
     catch { dailyCut = !dailyCut; } // 저장 실패 시 원복 (PrivacyGroup 선례)
+  }
+  // "지금 그려보기" — 멱등·상한 없이 즉시 생성 (홈 초상은 daily_cut:ready로 자동 갱신)
+  let cutStatus = $state<Status>(IDLE);
+  async function tryDailyCut(){
+    cutStatus = busy('컷을 그리는 중… (수십 초 걸릴 수 있어요)');
+    try { await generateDailyCutNow(); cutStatus = ok('오늘 컷을 만들었어요 — 홈 왼쪽 위에서 확인하세요.'); }
+    catch(e){ cutStatus = err(e); }
   }
 
   // --- 팀 지식 허브 (a-hub work) — Life Server와 다른 서버다 ---
@@ -222,8 +229,12 @@
     <button onclick={testImage} disabled={imgStatus.kind==='busy'}>연결 테스트</button>
   </div>
   <StatusLine status={imgStatus}/>
-  <label class="cut-toggle"><input type="checkbox" checked={dailyCut} onchange={toggleDailyCut}/>
-    <span>매일 일기 컷 생성 — 하루 1장 이미지를 생성(과금)하고, 일기에서 뽑은 <b>추상 장면 묘사</b>가 위 이미지 모델로 전송됩니다</span></label>
+  <div class="cut-row">
+    <label class="cut-toggle"><input type="checkbox" checked={dailyCut} onchange={toggleDailyCut}/>
+      <span>매일 일기 컷 — 새 일기가 생기면 위 이미지 모델로 하루 한 장 컷을 그려 홈 초상에 겁니다. 일기에서 뽑은 <b>추상 장면 묘사만</b> 전송돼요.</span></label>
+    <button onclick={tryDailyCut} disabled={cutStatus.kind==='busy'}>지금 그려보기</button>
+  </div>
+  <StatusLine status={cutStatus}/>
 </section>
 
 <style>
@@ -240,6 +251,9 @@
   .actions button.primary{background:var(--accent);color:var(--accent-ink);font-weight:700}
   .actions button:disabled{opacity:.55;cursor:default}
   .hint2{color:var(--text-soft);font-size:11px;margin:8px 0 0}
-  .cut-toggle{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:12px;color:var(--text-soft)}
+  .cut-row{display:flex;gap:10px;align-items:flex-start;margin-top:10px}
+  .cut-toggle{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--text-soft);flex:1}
   .cut-toggle input{margin-top:2px}
+  .cut-row button{flex:0 0 auto;border:0;border-radius:99px;padding:7px 14px;background:var(--lav-surface);color:var(--lav-ink);cursor:pointer;font:inherit}
+  .cut-row button:disabled{opacity:.55;cursor:default}
 </style>
