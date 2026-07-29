@@ -11,7 +11,7 @@
   import UpdateBanner from './lib/ui/UpdateBanner.svelte';
   import { runCheck } from './lib/ui/update-store.svelte';
   import {
-    getSummary, getDailyLine, listFindings, onScanDone, onGotoTab,
+    getSummary, getDailyLine, getDailyCut, listFindings, onScanDone, onGotoTab, onDailyCutReady,
     onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, onUpdateCheckRequested,
     lifeContentAccess, lifeGoto, lifeView, type Summary,
   } from './lib/api';
@@ -85,6 +85,8 @@
   const visibleTabs = $derived(visiting ? TABS.filter((t) => ['home','guestbook'].includes(t.id) || (t.id === 'diary' && canViewDiary)) : TABS);
   let summary = $state<Summary | null>(null);
   let dailyLine = $state<string | null>(null);
+  // H2 — 컷 캡션. 있으면 한마디 카드에 캡션을 우선 표시 (그림을 아는 텍스트가 이김, 컷 밑 별도 텍스트 없음)
+  let cutCaption = $state<string | null>(null);
   let activeCount = $state(0);
   let coachFocus = $state<string | null>(null);
   let diaryFocus = $state<string | null>(null);
@@ -94,6 +96,7 @@
     summary = await getSummary().catch(() => null);
     activeCount = (await listFindings(false).catch(() => [])).length;
     dailyLine = await getDailyLine().catch(() => null);
+    cutCaption = (await getDailyCut())?.caption || null;
   }
   refresh();
   onScanDone(() => refresh());
@@ -129,6 +132,7 @@
       onDiaryReady((date) => record(diaryNotice(date, new Date().toISOString()))),
       onOccasionToday((labels) => labels.length && record(occasionNotice(labels, new Date().toISOString()))),
       onDailyLine((text) => { dailyLine = text; }),
+      onDailyCutReady(() => { getDailyCut().then((c) => (cutCaption = c?.caption || null)); }),
     ];
     return () => { subs.forEach((p) => p.then((u) => u())); };
   });
@@ -167,10 +171,10 @@
       <aside class="profile">
         <!-- 프로필 = 지금 보는 미니홈피의 주인. 방문 중이면 그 방 주인의 로봇 -->
         <RobotPortrait seed={visiting ? ownerSeed : null} agentId={visiting ? ownerAgentId : null} imageVersion={visiting ? ownerImageVersion : null} />
-        {#if dailyLine && !visiting}
+        {#if (cutCaption || dailyLine) && !visiting}
           <div class="daily">
             <span class="cap">💬 오늘의 한마디</span>
-            <span class="daily-line">{dailyLine}</span>
+            <span class="daily-line">{cutCaption || dailyLine}</span>
           </div>
         {/if}
         <LifeNavigator {myLifeId} currentLifeId={currentLifeId} />

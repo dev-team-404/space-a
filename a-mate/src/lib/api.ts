@@ -261,6 +261,8 @@ export const onDiaryReady = (cb: (date: string) => void): Promise<UnlistenFn> =>
   listen<string>('diary:ready', (e) => cb(e.payload));
 export const onDailyLine = (cb: (text: string) => void): Promise<UnlistenFn> =>
   listen<string>('daily-line:ready', (e) => cb(e.payload));
+export const onDailyCutReady = (cb: (date: string) => void): Promise<UnlistenFn> =>
+  listen<string>('daily_cut:ready', (e) => cb(e.payload));
 export const onOccasionToday = (cb: (labels: string[]) => void): Promise<UnlistenFn> =>
   listen<string[]>('occasion:today', (e) => cb(e.payload));
 export const onGotoTab = (cb: (p: GotoTabPayload) => void): Promise<UnlistenFn> =>

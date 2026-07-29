@@ -47,10 +47,8 @@
 
 <div class="portrait">
   {#if cut}
-    <figure class="cut">
-      <img src={'data:image/png;base64,' + cut.png} alt="오늘의 컷" />
-      <figcaption>{cut.caption}</figcaption>
-    </figure>
+    <!-- 캡션은 App의 "오늘의 한마디" 카드가 표시 — 초상은 이미지만 (공간 절약) -->
+    <img class="cut" src={'data:image/png;base64,' + cut.png} alt="오늘의 컷" />
   {:else if sprite}
     <img class="sprite" src={'data:image/png;base64,' + sprite} alt="내 캐릭터" />
   {:else}
@@ -69,8 +67,6 @@
   }
   canvas { width: 96px; height: 96px; image-rendering: pixelated; }
   .sprite { width: 96px; height: 96px; object-fit: contain; }
-  /* H2 — 미니홈피 대문사진 결: 이미지 위, 감성 캡션 아래 (폴라로이드 프레임) */
-  .cut { margin: 0; display: flex; flex-direction: column; gap: 6px; align-items: center; }
-  .cut img { width: 116px; height: 116px; object-fit: cover; border-radius: var(--radius-s); image-rendering: pixelated; }
-  .cut figcaption { font-size: 11px; color: var(--ink-soft); text-align: center; line-height: 1.35; max-width: 124px; word-break: keep-all; }
+  /* H2 — 미니홈피 대문사진: 이미지만 (감성 글귀는 아래 "오늘의 한마디" 카드가 담당) */
+  .cut { width: 116px; height: 116px; object-fit: cover; border-radius: var(--radius-s); image-rendering: pixelated; }
 </style>
