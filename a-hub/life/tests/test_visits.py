@@ -1,5 +1,5 @@
 """인바운드 방문 추적 (P4) — enter 자동 기록·세션화·prune·조회.
-설계: docs/design/a-mate/specs/2026-07-29-visit-infra-notices-design.md §3"""
+설계: docs/archive/design/a-mate/specs/2026-07-29-visit-infra-notices-design.md §3"""
 
 import pytest
 
