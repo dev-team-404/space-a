@@ -123,6 +123,45 @@ pub fn robot_spec_from_profile(uuid: &str, mbti: Option<&str>) -> RobotSpec {
     RobotSpec { antenna: base.antenna, head, eyes, body, arms, palette }
 }
 
+/// 재생성 변주 — 정체성 슬롯(색·머리·눈·몸통)은 프로필 아이디에 고정하고 **포즈만** 변주
+/// 시드로 재추첨한다 (MBTI J/P 포즈 부분집합은 존중). 체형·마감·악세서리 변주는
+/// character_description의 mbti_traits가 같은 시드로 수행 — 재생성 = "같은 캐릭터의 다른 컷"
+/// (2026-07-29 "id에 따라 약간의 일관성" 피드백. 종전엔 spec 전체를 새 시드로 재추첨했다).
+pub fn respec_pose_for_seed(mut spec: RobotSpec, mbti: Option<&str>, seed: &str) -> RobotSpec {
+    let d = Sha256::digest(seed.as_bytes());
+    spec.arms = match mbti.and_then(|m| normalize_mbti(m)) {
+        Some(m) if m.as_bytes()[3] == b'J' => pick(&[0, 3, 1], d[4]),
+        Some(_) => pick(&[2, 4, 5], d[4]),
+        None => d[4] % ARMS_VARIANTS,
+    };
+    spec
+}
+
+#[cfg(test)]
+mod respec_tests {
+    use super::*;
+
+    #[test]
+    fn respec_pose_keeps_identity_slots_and_is_deterministic() {
+        let spec = robot_spec_from_profile("uuid-fixed", Some("INTJ"));
+        let a = respec_pose_for_seed(spec, Some("INTJ"), "variation-1");
+        let b = respec_pose_for_seed(spec, Some("INTJ"), "variation-1");
+        assert_eq!(a, b, "같은 시드 → 같은 포즈 (결정론)");
+        assert_eq!(
+            (a.antenna, a.head, a.eyes, a.body, a.palette),
+            (spec.antenna, spec.head, spec.eyes, spec.body, spec.palette),
+            "정체성 슬롯은 변주 시드와 무관하게 고정"
+        );
+        // J 성향 → 정돈 포즈 부분집합(0·1·3) 준수
+        assert!([0u8, 1, 3].contains(&a.arms), "J 포즈 부분집합 위반: {}", a.arms);
+        // 여러 시드에서 포즈가 실제로 변주되는지
+        let poses: std::collections::HashSet<u8> = (0..12)
+            .map(|i| respec_pose_for_seed(spec, Some("INTJ"), &format!("v{i}")).arms)
+            .collect();
+        assert!(poses.len() > 1, "변주 시드로 포즈가 달라져야 함");
+    }
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // 오늘의 한마디 (마스코트 보이스 #1) — 채팅과 동일 인물이 오늘 하루를 한 문장으로.
 // 사실 기반은 chat::ChatContext(오늘 요약), 자연스러움은 diary::voice_guidance() 재사용.

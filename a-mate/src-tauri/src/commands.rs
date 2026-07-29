@@ -1955,18 +1955,21 @@ pub fn memory_delete(state: State<AppState>, id: i64) -> Result<(), String> {
 pub fn mascot_preview(app: tauri::AppHandle, state: State<AppState>) -> Result<String, String> {
     use base64::Engine as _;
     use tauri::Manager as _;
-    let (cfg, mbti) = {
+    let (cfg, uuid, mbti) = {
         let guard = lock(&state)?;
         let cfg = crate::resolve_sprite_cfg(&guard);
-        let (_uuid, mbti) = sprite_identity(&guard)?;
-        (cfg, mbti)
+        let (uuid, mbti) = sprite_identity(&guard)?;
+        (cfg, uuid, mbti)
     };
     let Some(cfg) = cfg else {
         return Err("이미지 모델이 설정되지 않았어요 — 설정 → 연결 → 캐릭터 이미지에서 URL·키를 넣어주세요".into());
     };
-    // 변주 시드 = 새 UUID(재생성마다 다른 후보). spec·묘사 모두 이 시드로 뽑는다.
+    // 변주 시드 = 새 UUID — 단 정체성 슬롯(색·머리·눈·몸통)은 프로필 아이디에 고정하고
+    // 포즈·체형·마감·악세서리만 이 시드로 변주한다 (2026-07-29 "id 일관성" 피드백.
+    // 아이디 자체는 절대 바뀌지 않는다 — 이 시드는 그리기용 변주값일 뿐).
     let seed = uuid::Uuid::new_v4().to_string();
-    let spec = agent_mentor::mascot::robot_spec_from_profile(&seed, mbti.as_deref());
+    let spec = agent_mentor::mascot::robot_spec_from_profile(&uuid, mbti.as_deref());
+    let spec = agent_mentor::mascot::respec_pose_for_seed(spec, mbti.as_deref(), &seed);
     let desc = agent_mentor::sprite::character_description(&spec, mbti.as_deref(), &seed);
     let png = agent_mentor::sprite::generate(&cfg, &desc).map_err(|e| e.to_string())?;
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;

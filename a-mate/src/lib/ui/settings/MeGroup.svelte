@@ -96,7 +96,7 @@
 
 <section>
   <h2>마스코트 생성</h2>
-  <p class="hint">MBTI·성향에 맞춰 마스코트를 그립니다. '재생성'으로 미리보고 '저장'을 눌러야 실제로 반영돼요. (연결 탭의 캐릭터 이미지 모델 설정 필요)</p>
+  <p class="hint">MBTI·성향에 맞춰 마스코트를 그립니다. '재생성'으로 미리보고 '저장'을 눌러야 실제로 반영돼요. 재생성해도 아이디에 뿌리를 둔 같은 캐릭터가 유지되고, 포즈·체형·마감·악세서리만 달라져요. (연결 탭의 캐릭터 이미지 모델 설정 필요)</p>
   <div class="preview">
     {#if sprite}
       <img src={`data:image/png;base64,${sprite}`} alt="마스코트 미리보기"/>
@@ -114,7 +114,7 @@
 <section>
   <h2>오늘의 대문사진</h2>
   <p class="hint">새 일기가 생기면 그날을 담은 대문사진 한 장을 캐릭터 이미지 모델로 그려 홈에 겁니다. 일기에서 뽑은 추상 장면 묘사만 전송되고, 글귀는 '오늘의 한마디' 자리에 함께 걸려요.</p>
-  <label class="cut-toggle"><input type="checkbox" checked={dailyCut} onchange={toggleDailyCut}/><span>매일 자동으로 걸기</span></label>
+  <label class="cut-toggle"><input type="checkbox" checked={dailyCut} onchange={toggleDailyCut}/><span>매일 자동으로 생성</span></label>
   <div class="actions">
     <button onclick={tryDailyCut} disabled={cutStatus.kind==='busy'}>지금 그려보기</button>
   </div>
