@@ -1975,6 +1975,8 @@ pub fn mascot_preview(app: tauri::AppHandle, state: State<AppState>) -> Result<S
     let spec = agent_mentor::mascot::robot_spec_from_profile(&uuid, mbti.as_deref());
     let spec = agent_mentor::mascot::respec_pose_for_seed(spec, mbti.as_deref(), &seed);
     let desc = agent_mentor::sprite::character_description(&spec, mbti.as_deref(), &seed);
+    // 재생성 검증용 — 어떤 묘사(특히 악세서리)를 요청했는지 로그로 남겨 그림과 대조 가능하게
+    log::info!("마스코트 재생성 묘사: {desc}");
     let png = agent_mentor::sprite::generate(&cfg, &desc).map_err(|e| e.to_string())?;
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
