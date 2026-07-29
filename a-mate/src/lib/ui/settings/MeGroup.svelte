@@ -1,9 +1,11 @@
 <script lang="ts">
   import {
+    generateDailyCutNow, getSettings, setSetting,
     memoryAdd, memoryDelete, memoryList, memoryUpdate,
     profileGet, profileSet, mascotPreview, mascotCommit, getSprite,
     type Memory, type Profile,
   } from '../../api';
+  import { dailyCutEnabled } from '../../daily-cut';
   import { IDLE, busy, err, ok, type Status } from './status';
   import StatusLine from './StatusLine.svelte';
 
@@ -36,6 +38,21 @@
     genStatus = busy('저장 중…');
     try { await mascotCommit(); hasCandidate = false; genStatus = ok('마스코트를 저장했어요!'); }
     catch(e){ genStatus = err(e); }
+  }
+
+  // H2 오늘의 대문사진 — 옵트인(기본 off) + "지금 그려보기"(멱등·상한 없이 즉시 생성, ADR 0024)
+  let dailyCut = $state(false);
+  getSettings().then((s) => { dailyCut = dailyCutEnabled(s); });
+  async function toggleDailyCut(){
+    dailyCut = !dailyCut;
+    try { await setSetting('daily_cut_enabled', dailyCut ? 'true' : 'false'); }
+    catch { dailyCut = !dailyCut; } // 저장 실패 시 원복 (PrivacyGroup 선례)
+  }
+  let cutStatus = $state<Status>(IDLE);
+  async function tryDailyCut(){
+    cutStatus = busy('대문사진 그리는 중… 수십 초 걸릴 수 있어요');
+    try { await generateDailyCutNow(); cutStatus = ok('오늘의 대문사진을 걸었어요 — 홈에서 확인하세요.'); }
+    catch(e){ cutStatus = err(e); }
   }
 
   let memories = $state<Memory[]>([]);
@@ -95,6 +112,16 @@
 </section>
 
 <section>
+  <h2>오늘의 대문사진</h2>
+  <p class="hint">새 일기가 생기면 그날을 담은 대문사진 한 장을 캐릭터 이미지 모델로 그려 홈에 겁니다. 일기에서 뽑은 추상 장면 묘사만 전송되고, 글귀는 '오늘의 한마디' 자리에 함께 걸려요.</p>
+  <label class="cut-toggle"><input type="checkbox" checked={dailyCut} onchange={toggleDailyCut}/><span>매일 자동으로 걸기</span></label>
+  <div class="actions">
+    <button onclick={tryDailyCut} disabled={cutStatus.kind==='busy'}>지금 그려보기</button>
+  </div>
+  <StatusLine status={cutStatus}/>
+</section>
+
+<section>
   <h2>주인 메모리</h2>
   <p class="hint">마스코트가 기억할 나에 대한 사실이에요. 채팅에서 "기억해둬"라고 하거나 여기서 직접 추가할 수 있어요. (엔진으로 전송됩니다)</p>
   <div class="memadd">
@@ -134,6 +161,7 @@
   .actions button.primary{background:var(--accent);color:var(--accent-ink);font-weight:700}
   .actions button:disabled{opacity:.55;cursor:default}
   .hint2{color:var(--text-soft);font-size:11px;margin:8px 0 0}
+  .cut-toggle{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:12px;color:var(--text-soft)}
   .preview{margin-top:12px;display:flex;align-items:center;justify-content:center;min-height:140px;background:var(--surface-inset);border:1px solid var(--line);border-radius:8px}
   .preview img{max-height:180px;image-rendering:pixelated}
   .preview .noimg{color:var(--text-soft);font-size:12px}

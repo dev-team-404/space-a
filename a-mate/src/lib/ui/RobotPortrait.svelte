@@ -49,7 +49,7 @@
 <div class="portrait" class:full={!!cut}>
   {#if cut}
     <!-- 캡션은 App의 "오늘의 한마디" 카드가 표시 — 초상은 이미지만 (공간 절약) -->
-    <img class="cut" src={'data:image/png;base64,' + cut.png} alt="오늘의 컷" />
+    <img class="cut" src={'data:image/png;base64,' + cut.png} alt="오늘의 대문사진" />
   {:else if sprite}
     <img class="sprite" src={'data:image/png;base64,' + sprite} alt="내 캐릭터" />
   {:else}

@@ -1,12 +1,11 @@
 <script lang="ts">
   import {
     engineSettingsGet, engineSettingsSet, engineTest,
-    getSettings, hubConnect, hubDisconnect, hubSettingsGet,
+    hubConnect, hubDisconnect, hubSettingsGet,
     imageSettingsGet, imageSettingsSet, imageTest,
-    generateDailyCutNow, knowledgeHubSettingsGet, knowledgeHubSettingsSet, knowledgeHubShareSet, setSetting,
+    knowledgeHubSettingsGet, knowledgeHubSettingsSet, knowledgeHubShareSet,
     type EngineSettings, type HubSettings, type ImageSettings, type KnowledgeHubSettings,
   } from '../../api';
-  import { dailyCutEnabled } from '../../daily-cut';
   import { IDLE, busy, err, ok, type Status } from './status';
   import StatusLine from './StatusLine.svelte';
 
@@ -73,22 +72,6 @@
     : img.source === 'env' ? '.env 값 사용 중'
     : '미설정 — 캐릭터가 기본 그림으로 표시됩니다',
   );
-
-  // --- H2 매일 컷 (옵트인 — 하루 1장 이미지 과금 + 일기 파생 추상 장면 전송: ADR 0024) ---
-  let dailyCut = $state(false);
-  getSettings().then((s) => { dailyCut = dailyCutEnabled(s); });
-  async function toggleDailyCut(){
-    dailyCut = !dailyCut;
-    try { await setSetting('daily_cut_enabled', dailyCut ? 'true' : 'false'); }
-    catch { dailyCut = !dailyCut; } // 저장 실패 시 원복 (PrivacyGroup 선례)
-  }
-  // "지금 그려보기" — 멱등·상한 없이 즉시 생성 (홈 초상은 daily_cut:ready로 자동 갱신)
-  let cutStatus = $state<Status>(IDLE);
-  async function tryDailyCut(){
-    cutStatus = busy('컷을 그리는 중… (수십 초 걸릴 수 있어요)');
-    try { await generateDailyCutNow(); cutStatus = ok('오늘 컷을 만들었어요 — 홈 왼쪽 위에서 확인하세요.'); }
-    catch(e){ cutStatus = err(e); }
-  }
 
   // --- 팀 지식 허브 (a-hub work) — Life Server와 다른 서버다 ---
   // 팀 기본값. 입력을 비우고 저장하면 이 값들이 다시 채워진다(사내 배포 공용 주소).
@@ -214,7 +197,7 @@
 
 <section>
   <h2>캐릭터 이미지</h2>
-  <p class="hint">마스코트 캐릭터를 그릴 이미지 생성 모델입니다. 사내 LLM은 그림을 못 그리므로 위 텍스트 엔진과 따로 지정합니다. 사람마다 한 번 생성해 캐시하므로 이후에는 호출하지 않습니다. 캐릭터 생성·재생성은 봇 탭의 '마스코트 생성'에서 합니다.</p>
+  <p class="hint">마스코트 캐릭터를 그릴 이미지 생성 모델입니다. 사내 LLM은 그림을 못 그리므로 위 텍스트 엔진과 따로 지정합니다. 사람마다 한 번 생성해 캐시하므로 이후에는 호출하지 않습니다. 캐릭터 생성·재생성과 '오늘의 대문사진'은 봇 탭에서 합니다.</p>
   <p class="source" data-kind={img.source}>{imgSourceLabel}</p>
   <div class="fields">
     <label class="field"><span>엔드포인트 URL</span>
@@ -229,12 +212,6 @@
     <button onclick={testImage} disabled={imgStatus.kind==='busy'}>연결 테스트</button>
   </div>
   <StatusLine status={imgStatus}/>
-  <div class="cut-row">
-    <label class="cut-toggle"><input type="checkbox" checked={dailyCut} onchange={toggleDailyCut}/>
-      <span>매일 일기 컷 — 새 일기가 생기면 위 이미지 모델로 하루 한 장 컷을 그려 홈 초상에 겁니다. 일기에서 뽑은 <b>추상 장면 묘사만</b> 전송돼요.</span></label>
-    <button onclick={tryDailyCut} disabled={cutStatus.kind==='busy'}>지금 그려보기</button>
-  </div>
-  <StatusLine status={cutStatus}/>
 </section>
 
 <style>
@@ -251,9 +228,4 @@
   .actions button.primary{background:var(--accent);color:var(--accent-ink);font-weight:700}
   .actions button:disabled{opacity:.55;cursor:default}
   .hint2{color:var(--text-soft);font-size:11px;margin:8px 0 0}
-  .cut-row{display:flex;gap:10px;align-items:flex-start;margin-top:10px}
-  .cut-toggle{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--text-soft);flex:1}
-  .cut-toggle input{margin-top:2px}
-  .cut-row button{flex:0 0 auto;border:0;border-radius:99px;padding:7px 14px;background:var(--lav-surface);color:var(--lav-ink);cursor:pointer;font:inherit}
-  .cut-row button:disabled{opacity:.55;cursor:default}
 </style>
