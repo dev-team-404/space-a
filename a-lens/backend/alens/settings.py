@@ -38,7 +38,9 @@ def _defaults() -> dict:
         "life_token": e("A_LENS_LIFE_TOKEN", ""),
         "life_api_key": e("A_LENS_LIFE_API_KEY", ""),
         # Life 닉네임 → work 계정 id 별칭 매핑. Life가 hub_user_id를 주기 전(구버전 서버)
-        # 수동 보정용. "닉네임=hub_user_id" 를 쉼표로 이어 쓴다: "소금맛=salt.jeong,돌쇠=palen"
+        # 수동 보정용. "닉네임=hub_user_id" 를 쉼표로 이어 쓴다: "소금맛=salt.jeong,돌쇠=palen".
+        # 한 사람의 허브 계정이 여러 개면 `|`로 잇는다(화면에서는 한 줄로 합쳐진다):
+        # "돌쇠=palen|coolfebreeze,kimmy=kimmy-claude|kimmy-mate"
         "life_alias": e("A_LENS_LIFE_ALIAS", ""),
         "cache_ttl": float(e("A_LENS_CACHE_TTL", "30")),
         # LLM API (OpenAI 호환). 기본값 = 로컬 LM Studio(WSL 호스트).

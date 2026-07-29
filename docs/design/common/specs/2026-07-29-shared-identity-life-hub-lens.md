@@ -10,6 +10,7 @@
 | 신원 등록처 | **Life 서버** — a-mate가 이미 보내는 값(UUID·조직·주인 계정)을 저장·노출한다 |
 | Hub 연결 키 | Life에 `hub_user_id`를 두고, 값이 있으면 그것을 정답으로 쓴다 |
 | 자동 매칭 | `hub_user_id`가 없으면 이름 정규화 → 주인 OS 계정 순으로 시도 |
+| 중복 계정 | 한 사람이 허브 계정 여러 개 → 한 줄로 합치고 대표는 **a-mate로 등록한 계정** (§3.4) |
 | 표시 | a-lens 방 캐릭터·팀 활동에 Life 이름 + 마스코트 이미지, 활동 정보는 Hub에서 |
 | 수정 범위 | **Life(a-hub/life) · Lens(a-lens)만.** a-mate는 손대지 않는다 |
 
@@ -95,6 +96,41 @@ PATCH /life/agents/{agent_id}/hub-user   { "hub_user_id": "salt.jeong" }
 a-lens 설정 창에 Life 연결 3개를 추가한다: `life_url` · `life_token` · `life_api_key`.
 `life_url`이 비면 Life 연동 전체가 **조용히 off**(기존 Hub-only 화면 그대로) — 기존 설정
 관례(`work_*`, `llm_*`)와 같다.
+
+### 3.4 한 사람이 허브 계정을 여러 개 가질 때 (2026-07-29 추가)
+
+§3.1은 "한 허브 계정 → 한 사람"만 풀었다. 실제로는 **한 사람이 허브 계정을 여러 개** 갖는다 —
+등록 경로마다 id가 달라서다:
+
+| 사람 | 허브 계정 | 등록 경로 |
+|---|---|---|
+| 돌쇠 | `coolfebreeze` · `palen` | a-mate (`SPACE_A_USER` 미설정 시 Windows `USERNAME`이 들어간다) |
+| kimmy | `kimmy-mate` · `kimmy-claude` · `agt_9` | a-mate · Claude Code 스킬 · 초기 자동배정 id |
+
+조인만으로는 부족하다. 계정 둘이 같은 Life 사람에 붙어도 **줄은 여전히 둘**이라 같은 사람이
+두 번 보인다(kimmy가 실제로 그렇게 보였다).
+
+**결정 — 허브 원장은 고치지 않고 보는 층에서만 합친다.**
+
+1. **별칭을 1:N으로**: `life_alias`에 `닉네임=id1|id2`로 쓴다(`돌쇠=palen|coolfebreeze`).
+   같은 닉네임을 두 번 써도 덮지 않고 더한다.
+2. **사람 단위 병합**: `life_agent_id`가 같은 줄을 한 줄로 접는다(`collector._merge_people`).
+   - **대표는 a-mate로 등록한 계정** — 허브 표시 이름의 `a-mate/` 접두어로 판정한다. 사람이
+     실제로 쓰는 본계정이고, 신원(이름·마스코트)의 출처인 Life에 값을 보내는 주체이기도 하다.
+     후보가 여럿이면 최근 활동이 있는 쪽.
+   - 활동(`status`·`last_active_at`·`recent_activity`)은 **계정이 아니라 사람의 것**이므로 전부
+     합친다. 대표가 조용하고 활동은 옛 계정에 있는 경우가 실제로 있다(`kimmy-mate`는 기록 0건,
+     실적은 `kimmy-claude`에 11건).
+   - 흡수한 id는 `merged_ids`로 남긴다. 허브 원장의 작성자 id(`created_by`·`opened_by`)는 그대로
+     이므로 추적이 끊기지 않는다.
+   - 이슈·문서의 담당자 표시 이름도 사람 이름을 따른다 — 방에는 "돌쇠"인데 담당자는
+     "a-mate/coolfebreeze"로 뜨면 같은 혼동이 되돌아온다.
+3. **`life_agent_id`가 없는 줄은 합치지 않는다.** 같은 사람인지 알 방법이 없고, 추측으로 남의
+   활동을 한 사람에게 몰아주는 것이 두 줄로 보이는 것보다 나쁘다.
+
+> 별칭은 어디까지나 **Life가 `hub_user_id`를 주기 전의 임시 보정**이다(§5 1단계). Life가 배포되면
+> `hub_user_id`가 1순위가 되고, 그때도 병합은 그대로 필요하다 — 계정이 여러 개인 사실 자체는
+> Life 배포로 사라지지 않는다.
 
 ## 4. 실패 격리
 
