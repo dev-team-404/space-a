@@ -62,17 +62,23 @@ def normalize(value: str) -> str:
     return v
 
 
-def alias_map() -> dict[str, str]:
-    """설정의 `life_alias`("닉네임=hub_user_id,…") → 정규화 닉네임 → hub_user_id."""
+def alias_map() -> dict[str, list[str]]:
+    """설정의 `life_alias`("닉네임=hub_user_id[|hub_user_id…],…") → 정규화 닉네임 → hub id 목록.
+
+    한 사람이 허브 계정을 **여러 개** 갖는 일이 흔하다 — 등록 경로마다 id가 다르기 때문이다
+    (a-mate · Claude Code 스킬 · 초기 자동배정 id). `|`로 이어 쓰면 전부 같은 사람으로 잇고,
+    화면에서는 `collector._merge_people`이 한 줄로 합친다.
+    """
     raw = (settings.get().get("life_alias") or "").strip()
-    out: dict[str, str] = {}
+    out: dict[str, list[str]] = {}
     for pair in raw.split(","):
         if "=" not in pair:
             continue
-        nick, hub = pair.split("=", 1)
-        nick, hub = nick.strip(), hub.strip()
-        if nick and hub:
-            out[normalize(nick)] = hub
+        nick, hubs = pair.split("=", 1)
+        ids = [h.strip() for h in hubs.split("|") if h.strip()]
+        if nick.strip() and ids:
+            # 같은 닉네임이 두 번 나와도 덮지 않고 더한다("돌쇠=palen,돌쇠=coolfebreeze"도 통한다)
+            out.setdefault(normalize(nick), []).extend(ids)
     return out
 
 
@@ -169,8 +175,7 @@ def index_by_hub_user(rows: list[dict] | None = None) -> dict[str, dict]:
         if ident.get("hub_user_id"):
             put(ident["hub_user_id"], person)
     for person in rows:
-        hub = aliases.get(normalize(person.get("name", "")))
-        if hub:
+        for hub in aliases.get(normalize(person.get("name", "")), []):
             put(hub, person)
     for person in rows:
         put(person.get("name", ""), person)

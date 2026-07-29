@@ -341,9 +341,10 @@ async function openSettings() {
         <input id="set-life_url" type="text" value="${esc(s.life_url ?? '')}" placeholder="http://10.0.0.1:8001" /></label>
       ${secret('set-life_token', 'Life Token (Bearer)', !!s.life_token_set)}
       ${secret('set-life_api_key', 'Life API Key (x-api-key)', !!s.life_api_key_set)}
-      <label class="set-field"><span>별칭 매핑 <em class="muted">(닉네임=hub 계정, 쉼표 구분)</em></span>
+      <label class="set-field"><span>별칭 매핑
+          <em class="muted">(닉네임=hub 계정, 쉼표 구분 · 한 사람이 계정 여러 개면 <code>|</code>로 잇기)</em></span>
         <input id="set-life_alias" type="text" value="${esc(s.life_alias ?? '')}"
-          placeholder="소금맛=salt.jeong,돌쇠=palen" /></label>
+          placeholder="소금맛=salt.jeong,돌쇠=palen|coolfebreeze" /></label>
 
       <h3 class="set-group">LLM API — 분류·요약·서사</h3>
       <label class="set-field"><span>LLM URL (OpenAI 호환)</span>

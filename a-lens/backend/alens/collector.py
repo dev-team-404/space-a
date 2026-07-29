@@ -223,6 +223,56 @@ def _life_only_agents(life_people: list[dict], used: set[str]) -> list[dict]:
     ]
 
 
+def _registered_by_amate(row: dict) -> bool:
+    """허브 표시 이름의 `a-mate/` 접두어 = a-mate가 등록한 계정. 다른 경로(스킬·REST)는 접두어가 없다."""
+    return (row.get("hub_name") or row.get("name") or "").startswith("a-mate/")
+
+
+def _one_person(group: list[dict]) -> dict:
+    """같은 사람의 허브 계정 여러 줄 → 한 줄. 대표는 a-mate 계정, 활동은 전부 합친다."""
+    if len(group) == 1:
+        return group[0]
+    # 안정 정렬 2회 = "a-mate로 등록한 계정 우선, 그 안에서 최근 활동 우선"
+    ranked = sorted(group, key=lambda r: r.get("last_active_at") or "", reverse=True)
+    ranked.sort(key=lambda r: not _registered_by_amate(r))
+    rep, *others = ranked
+    latest = max(group, key=lambda r: r.get("last_active_at") or "")
+    return {
+        **rep,
+        # 대표 계정이 조용하고 활동은 옛 계정에 있을 수 있다 — 활동은 계정이 아니라 사람의 것이다.
+        "status": "working" if any(r.get("status") == "working" for r in group) else "idle",
+        "last_active_at": latest.get("last_active_at"),
+        "recent_activity": latest.get("recent_activity"),
+        # 흡수한 허브 계정 id. 원장의 작성자 id는 그대로이므로 추적이 끊기지 않는다.
+        "merged_ids": [r["agent_id"] for r in others],
+    }
+
+
+def _merge_people(rows: list[dict]) -> list[dict]:
+    """한 사람이 허브 계정 여러 개로 여러 줄 뜨는 것을 막는다 — Life 신원이 같으면 한 사람이다.
+
+    계정이 갈라지는 건 등록 경로가 여럿이라서다(a-mate · Claude Code 스킬 · 초기 자동배정 id).
+    허브 원장을 고치는 건 팀 공용 데이터를 건드리는 일이라, 보는 층에서만 합친다.
+
+    `life_agent_id`가 없는 줄은 합치지 않는다 — 같은 사람인지 알 방법이 없고, 추측으로 남의
+    활동을 한 사람에게 몰아주는 것이 두 줄로 보이는 것보다 나쁘다.
+    """
+    groups: dict[str, list[dict]] = {}
+    for row in rows:
+        if row.get("life_agent_id"):
+            groups.setdefault(row["life_agent_id"], []).append(row)
+    out: list[dict] = []
+    emitted: set[str] = set()
+    for row in rows:
+        life_id = row.get("life_agent_id")
+        if not life_id:
+            out.append(row)
+        elif life_id not in emitted:  # 그룹의 첫 줄 자리에 합친 한 줄을 놓는다(순서 유지)
+            emitted.add(life_id)
+            out.append(_one_person(groups[life_id]))
+    return out
+
+
 def _flatten_tree(nodes: list[dict]) -> list[dict]:
     """tree 응답은 children 중첩 구조 — 프레즌스 집계용으로 모든 노드를 평탄화한다.
     응답이 예상과 다른 모양(리스트 아님·노드가 dict 아님)이어도 스냅숏을 살리도록 방어한다."""
@@ -347,13 +397,19 @@ def _page_doc(client: httpx.Client, node: dict, space_id: str, member_name: dict
     row = st.get(page_id) if st is not None else None
     fresh = bool(row and row.get("updated_at") == updated_at and row.get("summary"))
 
+    # 작성자 표시 이름은 캐시에 기대지 않고 매번 이름표에서 다시 만든다 — 방에 뜬 사람 이름과
+    # 같아야 하기 때문이다(§3.2·§3.4). 캐시에 굳은 허브 계정 이름을 쓰면 문서함·지식 재사용의
+    # 사람 선택이 방에 뜬 닉네임과 어긋난다. 트리 노드가 created_by를 주므로 추가 조회는 없다.
+    creator = node.get("created_by") or ""
+    author = member_name.get(creator, "") or creator
+
     # 완전 캐시(본문까지) — 허브·LLM 모두 스킵
     if fresh and row.get("body") is not None:
         body = row.get("body") or ""
         doc["title"] = row.get("title") or doc["title"]
         doc["body"] = body
         doc["visibility"] = row.get("visibility") or "org"
-        doc["author_agent"] = row.get("author_agent") or ""
+        doc["author_agent"] = author or row.get("author_agent") or ""
         doc["category"] = row.get("category")
         doc["summary"] = row.get("summary") or body[:120]
         doc["narrative"] = row.get("narrative")
@@ -363,14 +419,15 @@ def _page_doc(client: httpx.Client, node: dict, space_id: str, member_name: dict
     try:
         page = _hub_get(client, f"/pages/{page_id}")
     except _DEGRADE:
-        doc.update(body="", visibility="space", author_agent="", summary="", category=None, narrative=None)
+        doc.update(body="", visibility="space", author_agent=author, summary="", category=None, narrative=None)
         return doc
 
     body = page.get("body", "")
     visibility = page.get("visibility", "org")
-    # 작성자: created_by_name(허브가 내려주면) 우선, 없으면 멤버 목록 이름, 그마저 없으면 agent_id.
-    creator = page.get("created_by")
-    author = page.get("created_by_name") or member_name.get(creator, creator) or ""
+    # 트리 노드에 created_by가 없는 옛 데이터만 페이지 응답으로 보충한다. 이름표(사람 이름)가
+    # 허브의 created_by_name(계정 이름)을 이긴다 — 위 주석과 같은 이유.
+    creator = creator or page.get("created_by") or ""
+    author = author or member_name.get(creator, "") or page.get("created_by_name") or creator
 
     if fresh:  # 번역은 이미 있으니 LLM 스킵, 본문만 채워 캐시 보강
         title_out = row.get("title") or node.get("title", "")
@@ -508,9 +565,6 @@ def _hub_snapshot() -> dict:
                     "highlight": None,  # 서버 서사 부재 — 아래 활동 피드에서 결정론 선정
                 }
             )
-            # 지식 본문+번역: 페이지별 store 캐시. updated_at이 그대로면 허브 재조회·LLM 둘 다 스킵.
-            knowledge_docs = [_page_doc(client, p, sid, member_name) for p in pages]
-
             def _agent(m: dict) -> dict:
                 seen = last_write.get(m["agent_id"])
                 online = seen is not None and seen["at"].timestamp() >= online_cutoff
@@ -531,6 +585,7 @@ def _hub_snapshot() -> dict:
                     life_used.add(person["agent_id"])
                     out["life_agent_id"] = person["agent_id"]
                     if person.get("name"):
+                        out["hub_name"] = out["name"]  # 덮기 전 허브 표시 이름(대표 계정 판정·툴팁용)
                         out["name"] = person["name"]
                     ident = person.get("identity") or {}
                     if ident.get("owner_full_name"):
@@ -539,9 +594,20 @@ def _hub_snapshot() -> dict:
                     out["mascot_url"] = f"/api/life-mascot/{person['agent_id']}"
                 return out
 
+            agents = _merge_people([_agent(m) for m in members])
+            # 합쳐진 사람은 흡수된 계정 id로 남긴 기록도 그 사람 이름으로 읽혀야 한다 — 방에는
+            # "돌쇠"인데 이슈 담당자는 "a-mate/coolfebreeze"로 뜨면 같은 혼동이 되돌아온다.
+            for row in agents:
+                if row.get("life_agent_id"):
+                    for hub_id in (row["agent_id"], *row.get("merged_ids", [])):
+                        member_name[hub_id] = row["name"]
+
+            # 지식 본문+번역: 페이지별 store 캐시. updated_at이 그대로면 허브 재조회·LLM 둘 다 스킵.
+            knowledge_docs = [_page_doc(client, p, sid, member_name) for p in pages]
+
             details[sid] = {
                 "space_id": sid,
-                "agents": [_agent(m) for m in members] + _life_only_agents(life_people, life_used),
+                "agents": agents + _life_only_agents(life_people, life_used),
                 "issues": [_issue_doc(it, member_name) for it in issues],
                 "knowledge": knowledge_docs,
             }

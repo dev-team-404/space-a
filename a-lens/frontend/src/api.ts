@@ -33,6 +33,8 @@ export type SpaceAgent = {
   recent_activity?: RecentActivity | null
   // 공통 신원(2026-07-29) — Life 서버에서 온 사람 정보. 매칭 실패면 없다.
   life_agent_id?: string
+  hub_name?: string // Life 이름으로 덮이기 전의 허브 표시 이름
+  merged_ids?: string[] // 같은 사람의 다른 허브 계정 id — 이 줄이 흡수했다
   mascot_url?: string // 백엔드 프록시 URL (/api/life-mascot/{life_agent_id})
   via?: string // 'life' = Hub 계정과 아직 못 이은 Life 사람 (활동 정보 없음)
 }
