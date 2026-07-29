@@ -1836,15 +1836,19 @@ fn owner_os_user() -> String {
     std::env::var("USERNAME").or_else(|_| std::env::var("USER")).unwrap_or_default()
 }
 
-/// 스프라이트 생성 정체성 = (uuid, mbti). uuid는 없으면 생성.
+/// 스프라이트 생성 정체성 = (정체성 시드, mbti). 시드 = uuid에 마스코트 이름을 섞은 값
+/// (`mascot_identity_seed` — 이름 따라 생김새, 이름 미설정이면 uuid 단독). uuid는 없으면 생성.
+/// 초기 생성·재생성·대문사진이 모두 이 관문을 지나므로 세 경로의 캐릭터가 항상 일치한다.
 pub(crate) fn sprite_identity(store: &SqliteStore) -> Result<(String, Option<String>), String> {
     let uuid = ensure_uuid(store)?;
+    let name = store.get_setting("user_name").ok().flatten().unwrap_or_default();
+    let seed = agent_mentor::mascot::mascot_identity_seed(&uuid, &name);
     let mbti = store
         .get_setting("user_mbti")
         .ok()
         .flatten()
         .and_then(|m| agent_mentor::mascot::normalize_mbti(&m));
-    Ok((uuid, mbti))
+    Ok((seed, mbti))
 }
 
 #[tauri::command(async)]

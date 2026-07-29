@@ -1112,8 +1112,8 @@ pub(crate) fn generate_daily_cut_core(
     };
 
     // ④ 이미지 엔진: 화풍 앵커 + (마스코트 샷이면 현재 정체성 묘사) + 추상 장면
-    //    정체성 슬롯은 프로필 uuid 고정, 변주(포즈·체형·마감·악세)는 저장된 sprite와 동일한
-    //    시드(sprite.seed, 없으면 uuid) — 홈에 걸린 마스코트와 같은 캐릭터로 그려진다.
+    //    정체성 슬롯은 sprite_identity 시드(아이디+이름) 고정, 변주(포즈·체형·마감·악세)는
+    //    저장된 sprite와 동일한 시드(sprite.seed, 없으면 정체성 시드) — 홈의 마스코트와 일치.
     let id_seed = identity_seed(&dir, &uuid);
     let desc = shot.has_mascot().then(|| {
         let spec = agent_mentor::mascot::robot_spec_from_profile(&uuid, mbti.as_deref());

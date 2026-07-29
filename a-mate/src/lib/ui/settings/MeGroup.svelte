@@ -87,7 +87,7 @@
     <label class="field"><span>MBTI <em>(선택)</em></span>
       <select bind:value={profMbti}>{#each MBTI_OPTIONS as m}<option value={m}>{m === '' ? '미설정' : m}</option>{/each}</select></label>
   </div>
-  <p class="hint2">MBTI는 마스코트 외관 성향과 말투에 반영돼요. 외관은 아래 '마스코트 생성'에서 재생성·저장해야 실제로 바뀝니다.</p>
+  <p class="hint2">이름과 MBTI는 마스코트 외관에 반영돼요 — 이름은 생김새의 뿌리, MBTI는 성향 결과 말투. 바꾼 뒤엔 아래 '마스코트 생성'에서 재생성·저장해야 실제로 바뀝니다.</p>
   <div class="actions">
     <button class="primary" onclick={saveProfile} disabled={profStatus.kind==='busy'}>저장</button>
   </div>
