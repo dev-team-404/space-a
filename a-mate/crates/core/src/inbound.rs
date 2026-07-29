@@ -1,5 +1,5 @@
 //! 인바운드 소식(방문·방명록) diff — 스캔 편승 폴링의 순수 판정부.
-//! 스펙: docs/design/a-mate/specs/2026-07-29-visit-infra-notices-design.md §4
+//! 스펙: docs/archive/design/a-mate/specs/2026-07-29-visit-infra-notices-design.md §4
 //!
 //! 커서는 서버 발급 RFC3339(UTC, 동일 서식) 문자열 — 사전순 비교로 충분하다.
 //! 파싱 불가·필드 누락 행은 방어적으로 무시한다.

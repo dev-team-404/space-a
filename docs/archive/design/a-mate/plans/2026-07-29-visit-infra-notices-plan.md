@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-29
+---
+
 # 방문 인프라 (P4+N1) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

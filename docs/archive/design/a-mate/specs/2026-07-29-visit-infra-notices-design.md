@@ -1,11 +1,16 @@
+---
+status: done
+archived: 2026-07-29
+---
+
 # 방문 인프라 — 인바운드 방문 추적·말풍선 (P4) + 알림·탭 뱃지 (N1) 설계
 
 - **날짜**: 2026-07-29
 - **컴포넌트**: a-mate + a-hub life 서버 (P4 방문 추적 API 신설)
 - **관계**:
-  - 로드맵 [2026-07-26-life-social-diary-followups-roadmap.md](../plans/2026-07-26-life-social-diary-followups-roadmap.md)의 **P4** + **6차 배치 N1** + 묶음 실행 계획 **④**.
-  - 방명록 폴링·실패 무해 규율은 P3/G3 선례([아카이브: 자동 방명록](../../../archive/design/a-mate/specs/2026-07-27-auto-guestbook-design.md) — `maybe_reply_guestbook`)를 따른다.
-  - life 서버 API 계약의 정본은 [docs/design/life-visit.md §4](../../life-visit.md) — 이번 방문 추적 엔드포인트를 같은 표에 추가한다. **contracts/ 미접촉**(C2는 work hub→a-lens 계약 — 조사로 확인, P3 스펙과 동일 결론).
+  - 로드맵 [2026-07-26-life-social-diary-followups-roadmap.md](../../../../design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md)의 **P4** + **6차 배치 N1** + 묶음 실행 계획 **④**.
+  - 방명록 폴링·실패 무해 규율은 P3/G3 선례([아카이브: 자동 방명록](2026-07-27-auto-guestbook-design.md) — `maybe_reply_guestbook`)를 따른다.
+  - life 서버 API 계약의 정본은 [docs/design/life-visit.md §4](../../../../design/life-visit.md) — 이번 방문 추적 엔드포인트를 같은 표에 추가한다. **contracts/ 미접촉**(C2는 work hub→a-lens 계약 — 조사로 확인, P3 스펙과 동일 결론).
 
 ## 1. 요구사항 (브레인스토밍 확정)
 
