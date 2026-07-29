@@ -1024,13 +1024,13 @@ mod runtime {
         static VISITS_UNSUPPORTED: AtomicBool = AtomicBool::new(false);
 
         // ① 락: 설정·커서 스냅샷 → 즉시 해제 (maybe_reply_guestbook 선례)
-        let (url, token, api_key, life_id, agent_id, visits_cursor) = match store_mutex.lock() {
+        let (url, token, api_key, life_id, agent_id, visits_cursor, gb_cursor) = match store_mutex.lock() {
             Ok(store) => {
                 let get = |k: &str| store.get_setting(k).ok().flatten().unwrap_or_default();
-                let cursor = store.get_setting("inbound_visits_cursor").ok().flatten()
-                    .filter(|v| !v.is_empty());
+                let cursor = |k: &str| store.get_setting(k).ok().flatten().filter(|v: &String| !v.is_empty());
                 (get("hub_url"), get("hub_token"), get("hub_api_key"),
-                 get("hub_life_id"), get("hub_agent_id"), cursor)
+                 get("hub_life_id"), get("hub_agent_id"),
+                 cursor("inbound_visits_cursor"), cursor("inbound_guestbook_cursor"))
             }
             Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
         };
@@ -1072,6 +1072,21 @@ mod runtime {
                 }
                 Err(e) => log::warn!("방문 폴링: 조회 실패(다음 스캔 재시도): {e}"),
             }
+        }
+
+        // ③ 방명록 diff → guestbook:new (타인 글만 — 내 작성분 제외는 core 판정)
+        match client.guestbook(&life_id) {
+            Ok(v) => {
+                let entries = v.get("entries").and_then(|x| x.as_array()).cloned().unwrap_or_default();
+                let (fresh, next) =
+                    agent_mentor::inbound::select_new_guestbook(&entries, &agent_id, gb_cursor.as_deref());
+                if fresh.is_empty() || app.emit("guestbook:new", &fresh).is_ok() {
+                    save_cursor("inbound_guestbook_cursor", &next);
+                } else {
+                    log::warn!("guestbook:new emit 실패 — 다음 스캔 재시도");
+                }
+            }
+            Err(e) => log::warn!("방명록 신규 폴링: 조회 실패(다음 스캔 재시도): {e}"),
         }
     }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diaryNotice, findingNotice, noticeDest, occasionNotice, pushNotice, visitNotice, type Notice } from './notices';
+import { diaryNotice, findingNotice, guestbookNotice, noticeDest, occasionNotice, pushNotice, visitNotice, type Notice } from './notices';
 
 const n = (text: string): Notice => ({ ts: '2026-07-05T10:00:00Z', kind: 'finding', text });
 
@@ -53,6 +53,18 @@ describe('notice 팩토리', () => {
     expect(noticeDest(one)).toBeNull();
     const many = visitNotice([{ visitor_name: '가' }, { visitor_name: '나' }], '2026-07-29T10:00:00Z');
     expect(many.text).toBe('가님 외 1명이 방에 다녀갔어요');
+  });
+  it('guestbook: N건 문구 + 최신 entry_id target + 방명록 탭 dest', () => {
+    const one = guestbookNotice([{ entry_id: 'e1', author_name: '준녕' }], '2026-07-29T10:00:00Z');
+    expect(one.kind).toBe('guestbook');
+    expect(one.text).toBe('방명록에 새 글 — 준녕님');
+    expect(noticeDest(one)).toEqual({ tab: 'guestbook', target: 'e1' });
+    const many = guestbookNotice(
+      [{ entry_id: 'e2', author_name: '가' }, { entry_id: 'e1', author_name: '나' }],
+      '2026-07-29T10:00:00Z',
+    );
+    expect(many.text).toBe('방명록에 새 글 2건 — 가님 외');
+    expect(many.target).toBe('e2');
   });
 });
 

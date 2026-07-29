@@ -26,6 +26,35 @@ pub fn select_new_visits(rows: &[Value], cursor: Option<&str>) -> (Vec<Value>, O
     (fresh, next)
 }
 
+/// 방명록 diff: 타인 글(author_agent_id ≠ 나)만 대상 — 내 봇 답글·수동 글은 소식이 아니다.
+/// created_at > cursor인 항목만 emit. 커서 규약은 select_new_visits와 동일
+/// (None=첫 실행 초기화, 관측 최댓값으로 단조 증가).
+pub fn select_new_guestbook(
+    entries: &[Value],
+    my_agent_id: &str,
+    cursor: Option<&str>,
+) -> (Vec<Value>, Option<String>) {
+    let others: Vec<&Value> = entries
+        .iter()
+        .filter(|e| {
+            e.get("author_agent_id").and_then(|v| v.as_str()).is_some_and(|a| a != my_agent_id)
+        })
+        .collect();
+    let next = others
+        .iter()
+        .filter_map(|e| e.get("created_at").and_then(|v| v.as_str()))
+        .chain(cursor)
+        .max()
+        .map(str::to_string);
+    let Some(cur) = cursor else { return (Vec::new(), next) };
+    let fresh = others
+        .into_iter()
+        .filter(|e| e.get("created_at").and_then(|v| v.as_str()).is_some_and(|c| c > cur))
+        .cloned()
+        .collect();
+    (fresh, next)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -84,5 +113,45 @@ mod tests {
         let (fresh, cur) = select_new_visits(&rows, Some("2026-07-29T01:00:00+00:00"));
         assert!(fresh.is_empty());
         assert_eq!(cur.as_deref(), Some("2026-07-29T01:00:00+00:00"));
+    }
+
+    fn entry(id: &str, author: &str, created_at: &str, parent: Option<&str>) -> Value {
+        json!({"entry_id": id, "author_agent_id": author, "author_name": author,
+               "body": "글", "parent_id": parent, "created_at": created_at})
+    }
+
+    #[test]
+    fn guestbook_first_run_initializes_without_emitting() {
+        let entries = vec![entry("e1", "other", "2026-07-29T01:00:00+00:00", None)];
+        let (fresh, cur) = select_new_guestbook(&entries, "me", None);
+        assert!(fresh.is_empty());
+        assert_eq!(cur.as_deref(), Some("2026-07-29T01:00:00+00:00"));
+    }
+
+    #[test]
+    fn guestbook_excludes_my_own_entries_everywhere() {
+        // 내 글은 emit 대상도, 커서 후보도 아니다 — 내 답글로 커서가 앞서가 타인 글을 놓치면 안 됨
+        let entries = vec![
+            entry("mine", "me", "2026-07-29T05:00:00+00:00", Some("e1")),
+            entry("e1", "other", "2026-07-29T03:00:00+00:00", None),
+        ];
+        let (fresh, cur) = select_new_guestbook(&entries, "me", Some("2026-07-29T02:00:00+00:00"));
+        assert_eq!(fresh.len(), 1);
+        assert_eq!(fresh[0]["entry_id"], "e1");
+        assert_eq!(cur.as_deref(), Some("2026-07-29T03:00:00+00:00"));
+    }
+
+    #[test]
+    fn guestbook_counts_replies_from_others_too() {
+        let entries = vec![entry("r1", "other", "2026-07-29T03:00:00+00:00", Some("mine-post"))];
+        let (fresh, _) = select_new_guestbook(&entries, "me", Some("2026-07-29T02:00:00+00:00"));
+        assert_eq!(fresh.len(), 1); // parent 유무 무관 — 타인 글 전부 (스펙 §1)
+    }
+
+    #[test]
+    fn guestbook_cursor_boundary_is_exclusive() {
+        let entries = vec![entry("e1", "other", "2026-07-29T02:00:00+00:00", None)];
+        let (fresh, _) = select_new_guestbook(&entries, "me", Some("2026-07-29T02:00:00+00:00"));
+        assert!(fresh.is_empty()); // 커서와 같은 시각 = 이미 본 것
     }
 }

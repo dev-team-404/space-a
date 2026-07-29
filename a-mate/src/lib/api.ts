@@ -274,6 +274,8 @@ export const onContentReady = (cb: (rows: ContentItem[]) => void): Promise<Unlis
   listen<ContentItem[]>('content:ready', (e) => cb(e.payload));
 export const onLifeVisit = (cb: (rows: LifeVisit[]) => void): Promise<UnlistenFn> =>
   listen<LifeVisit[]>('life:visit', (e) => cb(e.payload));
+export const onGuestbookNew = (cb: (rows: GuestbookEntry[]) => void): Promise<UnlistenFn> =>
+  listen<GuestbookEntry[]>('guestbook:new', (e) => cb(e.payload));
 /** 트레이 "업데이트 확인" → chat 창에서 수동 업데이트 체크를 트리거 */
 export const onUpdateCheckRequested = (cb: () => void): Promise<UnlistenFn> =>
   listen('update:check', () => cb());
