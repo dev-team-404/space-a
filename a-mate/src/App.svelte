@@ -159,7 +159,10 @@
     <UpdateBanner />
     <header class="titlebar">
       <!-- 헤더 = 지금 보는 방의 주인. 자기 방이면 hub 등록 이름, hub 미연결이면 로컬 계정명 -->
-      <h1>{lifeOwner || (summary?.user_name ?? '주인')}님의 <span class="mh">미니홈피</span></h1>
+      <h1>
+        <span>{lifeOwner || (summary?.user_name ?? '주인')}님의 <span class="mh">미니홈피</span></span>
+        {#if visiting}<span class="visit-chip">방문 중</span>{/if}
+      </h1>
       <!-- 카운터도 내 로컬 세션 수 — 방문 중엔 숨김 (주인 수치로 오독 방지) -->
       {#if !visiting}
         <div class="counter">
@@ -227,8 +230,18 @@
     padding: 12px 20px;
     border-bottom: 1px solid var(--pastel-lav);
   }
-  .titlebar h1 { margin: 0; font-size: 16px; font-weight: 700; }
+  .titlebar h1 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; font-weight: 700; }
   .titlebar h1 .mh { color: var(--accent-strong); }
+  .visit-chip {
+    flex: none;
+    border-radius: 999px;
+    padding: 2px 7px;
+    background: var(--coral);
+    color: var(--coral-ink);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.4;
+  }
   .counter { font-size: 12px; color: var(--ink-soft); }
   .counter b { color: var(--accent-strong); }
   .body { flex: 1; display: flex; min-height: 0; position: relative; }
