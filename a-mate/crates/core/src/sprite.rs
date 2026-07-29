@@ -412,12 +412,16 @@ fn request_image(cfg: &SpriteConfig, prompt: &str) -> Result<Vec<u8>> {
 
 /// 이미지 생성 — 스타일 앵커 + 인물 묘사. 반환 = PNG 바이트.
 pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
+    // "checkerboard 금지"는 실측 대응 — 모델이 가끔 '투명 배경' 흉내로 회색-흰색 체커보드를
+    // 실제 픽셀로 그려버리는데, 균일 배경만 지우는 투명화가 이를 못 걷어낸다 (2026-07-29).
     let prompt = format!(
         "Using the EXACT same art style as the attached reference image (16-bit pixel art sprite, \
          chibi proportions with large head, clean dark pixel outline, soft cel shading, \
          front-facing full body, centered, plain white background), draw a DIFFERENT character: \
          {description}. Match the reference's pixel density, outline thickness, shading style and \
-         proportions exactly. Single character only, no text, no watermark, plain white background."
+         proportions exactly. Single character only, no text, no watermark. The background must be \
+         one flat solid white color (#ffffff) — NEVER a gray-and-white checkerboard or any \
+         transparency pattern."
     );
     let png = request_image(cfg, &prompt)?;
     // 흰 배경 → 투명. 실패해도 캐릭터는 보여야 하므로 원본으로 폴백(무해).
