@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS knowledge_translation (
   body          TEXT,   -- 원문 본문 (허브 재조회 스킵용 — updated_at 그대로면 재fetch 안 함)
   visibility    TEXT,
   author_agent  TEXT,
+  author_agent_id TEXT, -- 작성자 원본 agent_id — 사람별 작업 기록을 묶는 키(표시 이름과 분리)
   title         TEXT,   -- LLM이 생성한 명사형 제목 (원문 제목이 길거나 깨졌을 때 대체 표시)
   category      TEXT,   -- ① 분류
   summary       TEXT,   -- ② 요약
@@ -35,7 +36,7 @@ CREATE TABLE IF NOT EXISTS knowledge_translation (
 """
 
 # 기존 DB(구 스키마)에 추가된 컬럼 — 있으면 건너뛰고 없으면 ALTER로 붙인다.
-_ADDED_COLUMNS = ("body", "visibility", "author_agent", "title")
+_ADDED_COLUMNS = ("body", "visibility", "author_agent", "author_agent_id", "title")
 _ISSUE_ADDED_COLUMNS = ("gen_title",)
 
 # 이슈 번역 캐시 — 제목(title)이 번역 대상. 상태(open→resolved)가 바뀌어도 제목 그대로면 재번역 안 함.
@@ -96,14 +97,17 @@ class TranslationStore:
                 """
                 INSERT INTO knowledge_translation
                   (page_id, space_id, updated_at, source_hash, body, visibility,
-                   author_agent, title, category, summary, narrative, model, translated_at)
+                   author_agent, author_agent_id, title, category, summary, narrative,
+                   model, translated_at)
                 VALUES
                   (:page_id, :space_id, :updated_at, :source_hash, :body, :visibility,
-                   :author_agent, :title, :category, :summary, :narrative, :model, :translated_at)
+                   :author_agent, :author_agent_id, :title, :category, :summary, :narrative,
+                   :model, :translated_at)
                 ON CONFLICT(page_id) DO UPDATE SET
                   space_id=excluded.space_id, updated_at=excluded.updated_at,
                   source_hash=excluded.source_hash, body=excluded.body,
                   visibility=excluded.visibility, author_agent=excluded.author_agent,
+                  author_agent_id=excluded.author_agent_id,
                   title=excluded.title, category=excluded.category, summary=excluded.summary,
                   narrative=excluded.narrative, model=excluded.model,
                   translated_at=excluded.translated_at

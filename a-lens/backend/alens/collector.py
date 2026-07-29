@@ -396,20 +396,28 @@ def _page_doc(client: httpx.Client, node: dict, space_id: str, member_name: dict
     st = store.get_store()
     row = st.get(page_id) if st is not None else None
     fresh = bool(row and row.get("updated_at") == updated_at and row.get("summary"))
+    # author_agent_id(작성자 원본 id)는 나중에 추가된 컬럼이라 기존 캐시 행엔 없다. 사람별 작업
+    # 기록이 이름 문자열에 의존하지 않게, 이 값이 빈 행은 페이지를 한 번만 다시 받아 채운다.
+    # (번역은 캐시를 그대로 재사용하므로 LLM 비용은 없다 — 아래 need_translate 참고)
+    needs_author_id = False  # 아래에서 creator를 확인한 뒤 결정한다
 
     # 작성자 표시 이름은 캐시에 기대지 않고 매번 이름표에서 다시 만든다 — 방에 뜬 사람 이름과
     # 같아야 하기 때문이다(§3.2·§3.4). 캐시에 굳은 허브 계정 이름을 쓰면 문서함·지식 재사용의
     # 사람 선택이 방에 뜬 닉네임과 어긋난다. 트리 노드가 created_by를 주므로 추가 조회는 없다.
     creator = node.get("created_by") or ""
     author = member_name.get(creator, "") or creator
+    # 트리 노드에도, 캐시에도 작성자 원본 id가 없을 때만 페이지를 한 번 다시 받는다
+    # (사람별 작업 기록을 이름 문자열에 의존시키지 않기 위해. 번역 캐시는 재사용 — LLM 비용 없음)
+    needs_author_id = bool(row) and not creator and not (row or {}).get("author_agent_id")
 
     # 완전 캐시(본문까지) — 허브·LLM 모두 스킵
-    if fresh and row.get("body") is not None:
+    if fresh and not needs_author_id and row.get("body") is not None:
         body = row.get("body") or ""
         doc["title"] = row.get("title") or doc["title"]
         doc["body"] = body
         doc["visibility"] = row.get("visibility") or "org"
         doc["author_agent"] = author or row.get("author_agent") or ""
+        doc["author_agent_id"] = creator or row.get("author_agent_id") or ""
         doc["category"] = row.get("category")
         doc["summary"] = row.get("summary") or body[:120]
         doc["narrative"] = row.get("narrative")
@@ -428,6 +436,9 @@ def _page_doc(client: httpx.Client, node: dict, space_id: str, member_name: dict
     # 허브의 created_by_name(계정 이름)을 이긴다 — 위 주석과 같은 이유.
     creator = creator or page.get("created_by") or ""
     author = author or member_name.get(creator, "") or page.get("created_by_name") or creator
+    # 사람별 작업 기록은 표시 이름이 아니라 **원본 agent_id**로 묶는다 — 이름은 Life 이름으로
+    # 덮이거나 'a-mate/' 접두어가 붙어 흔들린다.
+    doc["author_agent_id"] = creator
 
     if fresh:  # 번역은 이미 있으니 LLM 스킵, 본문만 채워 캐시 보강
         title_out = row.get("title") or node.get("title", "")
@@ -458,6 +469,7 @@ def _page_doc(client: httpx.Client, node: dict, space_id: str, member_name: dict
                 "body": body,
                 "visibility": visibility,
                 "author_agent": author,
+                "author_agent_id": creator or "",
                 "title": title_out,
                 "category": category,
                 "summary": summary,
