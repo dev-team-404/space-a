@@ -89,12 +89,52 @@ fn mbti_traits(mbti: Option<&str>, seed: &str) -> (&'static str, &'static str, &
                             Some(b) if b[2] == b'F' => pick(&FINISH_F, d[7]),
                             _ => pick(&FINISH_ANY, d[7]) };
 
-    // 악세사리: 성향 그룹(N_T 분석가 / N_F 외교관 / S_J 관리자 / S_P 탐험가) 테마
-    const ACC_NT: [&str; 3] = ["with a slim backpack module", "with a utility tool belt", "with a tiny status light on its chest"];
-    const ACC_NF: [&str; 3] = ["with headphone-style side units", "with a small shoulder lamp", "with soft glowing trim"];
-    const ACC_SJ: [&str; 3] = ["with a utility tool belt", "with a tiny status light on its chest", ""];
-    const ACC_SP: [&str; 3] = ["with a small shoulder lamp", "", "with a light travel pack"];
-    const ACC_ANY: [&str; 6] = ["", "with a small shoulder lamp", "with a slim backpack module", "with headphone-style side units", "with a tiny status light on its chest", "with a utility tool belt"];
+    // 악세사리: 성향 그룹(N_T 분석가 / N_F 외교관 / S_J 관리자 / S_P 탐험가) 테마.
+    // 2026-07-29 다양화 — 로봇 부품류 일변도에서 헤드폰·가방·안경·모자 등 일상 소품 확장.
+    const ACC_NT: [&str; 6] = [
+        "wearing slim rectangular glasses",
+        "with a slim backpack module",
+        "with a utility tool belt",
+        "holding a small data tablet",
+        "with a tiny status light on its chest",
+        "with a pen tucked behind its head unit",
+    ];
+    const ACC_NF: [&str; 6] = [
+        "wearing over-ear headphones",
+        "with a soft knit scarf",
+        "with a small shoulder lamp",
+        "with soft glowing trim",
+        "holding a tiny flower",
+        "with a sticker-covered messenger bag",
+    ];
+    const ACC_SJ: [&str; 6] = [
+        "with a neat bow tie",
+        "wearing round glasses",
+        "with a utility tool belt",
+        "with a wristwatch panel",
+        "with a tiny status light on its chest",
+        "with a small name badge sticker on its chest",
+    ];
+    const ACC_SP: [&str; 6] = [
+        "wearing a baseball cap",
+        "with a crossbody sling bag",
+        "holding a small camera",
+        "with a light travel pack",
+        "with a small shoulder lamp",
+        "wearing sporty wristbands",
+    ];
+    const ACC_ANY: [&str; 10] = [
+        "",
+        "wearing over-ear headphones",
+        "wearing round glasses",
+        "with a crossbody sling bag",
+        "wearing a baseball cap",
+        "with a small shoulder lamp",
+        "with a slim backpack module",
+        "holding a small camera",
+        "with a tiny status light on its chest",
+        "with a utility tool belt",
+    ];
     let accessory = match mb {
         Some(b) if b[1] == b'N' && b[2] == b'T' => pick(&ACC_NT, d[8]),
         Some(b) if b[1] == b'N' && b[2] == b'F' => pick(&ACC_NF, d[8]),
@@ -161,10 +201,16 @@ pub fn character_description(spec: &crate::mascot::RobotSpec, mbti: Option<&str>
         4 => format!("a white torso with {cc} trim and {cc} buttons"),
         _ => format!("a {cc} torso with an exposed cable harness"),
     };
-    let acc_part = if accessory.is_empty() { String::new() } else { format!(", {accessory}") };
+    // 악세서리는 쉼표 나열에 두면 이미지 모델이 잘 떨어뜨린다(레퍼런스에 악세가 없어 인력도 있음)
+    // → 문장 끝 독립 문장으로 빼고 가시성을 명시 (2026-07-29 "악세 적용 안 됨" 피드백).
+    let acc_part = if accessory.is_empty() {
+        String::new()
+    } else {
+        format!(". The robot is depicted {accessory} — make this accessory clearly visible")
+    };
     format!(
         "a chibi pixel-art ROBOT (not a human) with {build} and {finish}: {head}, {eyes}, \
-         {chassis}, {lc} leg units with flat feet, {ac} glowing accents{acc_part}, {pose}{styling}",
+         {chassis}, {lc} leg units with flat feet, {ac} glowing accents, {pose}{styling}{acc_part}",
         head = HEAD[(spec.antenna as usize) % 6],
         eyes = EYES[(spec.eyes as usize) % 6],
         pose = POSE[(spec.arms as usize) % 6],
@@ -292,6 +338,53 @@ pub fn make_background_transparent(png_bytes: &[u8]) -> Result<Vec<u8>> {
     Ok(out)
 }
 
+/// G6 — 스프라이트에서 얼굴(머리) 영역을 잘라 128×128 아이콘 PNG로 만든다.
+/// 크롭 기준은 시각 검증된 CSS(background-size:180%, position 50% 14%)의 환산:
+/// 윈도우 한 변 = min(W,H)/1.8, 가로 중앙, 세로 top = 0.14 × (H − 윈도우).
+/// 다운스케일은 nearest-neighbor — 치비 픽셀아트의 또렷한 픽셀 경계 보존.
+pub fn crop_face(png_bytes: &[u8]) -> Result<Vec<u8>> {
+    const FACE_ICON_SIZE: usize = 128;
+    let mut decoder = png::Decoder::new(png_bytes);
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info()?;
+    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf)?;
+    let (w, h) = (info.width as usize, info.height as usize);
+    if w == 0 || h == 0 {
+        return Err(anyhow!("빈 이미지"));
+    }
+    let ch = match info.color_type {
+        png::ColorType::Rgb => 3,
+        png::ColorType::Rgba => 4,
+        other => return Err(anyhow!("지원하지 않는 PNG 색 형식: {other:?}")),
+    };
+    let side = ((w.min(h) as f32 / 1.8).round() as usize).clamp(1, w.min(h));
+    let x0 = (w - side) / 2;
+    let y0 = (((h - side) as f32) * 0.14).round() as usize;
+    let mut out_rgba = vec![0u8; FACE_ICON_SIZE * FACE_ICON_SIZE * 4];
+    for oy in 0..FACE_ICON_SIZE {
+        let sy = y0 + oy * side / FACE_ICON_SIZE;
+        for ox in 0..FACE_ICON_SIZE {
+            let sx = x0 + ox * side / FACE_ICON_SIZE;
+            let si = sy * w + sx;
+            let oi = (oy * FACE_ICON_SIZE + ox) * 4;
+            out_rgba[oi] = buf[si * ch];
+            out_rgba[oi + 1] = buf[si * ch + 1];
+            out_rgba[oi + 2] = buf[si * ch + 2];
+            out_rgba[oi + 3] = if ch == 4 { buf[si * ch + 3] } else { 255 };
+        }
+    }
+    let mut out = Vec::new();
+    {
+        let mut enc = png::Encoder::new(&mut out, FACE_ICON_SIZE as u32, FACE_ICON_SIZE as u32);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut writer = enc.write_header()?;
+        writer.write_image_data(&out_rgba)?;
+    }
+    Ok(out)
+}
+
 /// 이미지 생성 응답에서 PNG 바이트를 추출한다. 게이트웨이마다 이미지를 담는 위치가 달라서
 /// (같은 "OpenAI 호환"이라도) 알려진 형태를 순서대로 시도하는 **관용적 파서**다:
 /// - OpenRouter: `choices[0].message.images[0].image_url.url` = data URL
@@ -339,16 +432,9 @@ fn with_bearer(req: ureq::Request, api_key: &str) -> ureq::Request {
     }
 }
 
-/// 이미지 생성 — 스타일 앵커 + 인물 묘사. 반환 = PNG 바이트.
-pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
+/// 스타일 앵커(레퍼런스 이미지)를 첨부해 이미지 1장을 요청한다 — generate/generate_cut 공용 배관.
+fn request_image(cfg: &SpriteConfig, prompt: &str) -> Result<Vec<u8>> {
     let ref_b64 = base64::engine::general_purpose::STANDARD.encode(STYLE_REF_JPG);
-    let prompt = format!(
-        "Using the EXACT same art style as the attached reference image (16-bit pixel art sprite, \
-         chibi proportions with large head, clean dark pixel outline, soft cel shading, \
-         front-facing full body, centered, plain white background), draw a DIFFERENT character: \
-         {description}. Match the reference's pixel density, outline thickness, shading style and \
-         proportions exactly. Single character only, no text, no watermark, plain white background."
-    );
     let body = serde_json::json!({
         "model": cfg.model,
         "messages": [{
@@ -367,7 +453,23 @@ pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
         .send_json(body)
         .map_err(|e| anyhow!("sprite 생성 요청 실패: {e}"))?
         .into_json()?;
-    let png = extract_image_bytes(&resp)?;
+    extract_image_bytes(&resp)
+}
+
+/// 이미지 생성 — 스타일 앵커 + 인물 묘사. 반환 = PNG 바이트.
+pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
+    // "checkerboard 금지"는 실측 대응 — 모델이 가끔 '투명 배경' 흉내로 회색-흰색 체커보드를
+    // 실제 픽셀로 그려버리는데, 균일 배경만 지우는 투명화가 이를 못 걷어낸다 (2026-07-29).
+    let prompt = format!(
+        "Using the EXACT same art style as the attached reference image (16-bit pixel art sprite, \
+         chibi proportions with large head, clean dark pixel outline, soft cel shading, \
+         front-facing full body, centered, plain white background), draw a DIFFERENT character: \
+         {description}. Match the reference's pixel density, outline thickness, shading style and \
+         proportions exactly. Single character only, no text, no watermark. The background must be \
+         one flat solid white color (#ffffff) — NEVER a gray-and-white checkerboard or any \
+         transparency pattern."
+    );
+    let png = request_image(cfg, &prompt)?;
     // 흰 배경 → 투명. 실패해도 캐릭터는 보여야 하므로 원본으로 폴백(무해).
     match make_background_transparent(&png) {
         Ok(t) => Ok(t),
@@ -436,6 +538,257 @@ pub fn probe_endpoint(cfg: &SpriteConfig) -> ProbeVerdict {
     }
 }
 
+// ── H2 매일 마스코트 컷 (2026-07-28) ─────────────────────────────────────────
+// 스펙: docs/archive/design/a-mate/specs/2026-07-28-sprite-face-daily-cut-design.md
+
+/// H2 — 컷의 샷 축 = 싸이월드 레전드 짤 연출 11종 + 정경 1종 (마스코트 11 : 정경 1).
+/// 정면 무난 샷 대신 그 시절 사진 클리셰(얼짱각도·하두리·점프샷·허세…)를 재현한다
+/// (2026-07-29 사용자 피드백 — 코믹 레전드 요소 반영).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CutShot {
+    /// 45도 위에서 내려찍은 얼짱각도 셀카 — 얼굴이 프레임 대부분, 과노출 플래시
+    HighAngle,
+    /// 하두리캠 흑백 셀카 — 거친 저해상, 괜히 심각한 응시
+    Haduri,
+    /// 억지 점프샷 — 공중부양, 허우적대는 팔다리
+    Jump,
+    /// 뒷모습 노을 갬성 — 먼 곳 응시
+    BackView,
+    /// 화장실 거울 셀카 — 폴더폰으로 얼굴 반 가림
+    Mirror,
+    /// 소품 허세 — 일상 물건을 기타처럼 들고 아티스트인 척
+    PropSwagger,
+    /// 중2병 허세샷 — 한쪽 눈 가리기·이마 짚기, 바람에 휘날림
+    Drama,
+    /// 손가락총 + 윙크 — 오글 포즈
+    FingerGun,
+    /// 찜질방 양머리 수건 — 간식 소품
+    Sauna,
+    /// 네컷 스티커사진 — 2×2 분할, 하트·별 낙서만 (글자 금지 유지)
+    FourCut,
+    /// 음식 인증샷 — 밥상 위에서 내려찍기, 젓가락 든 마스코트
+    FoodShot,
+    /// 정경 — 마스코트 없이 책상·소품으로 하루 은유
+    Scene,
+}
+
+impl CutShot {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CutShot::HighAngle => "uljjang",
+            CutShot::Haduri => "haduri",
+            CutShot::Jump => "jump",
+            CutShot::BackView => "backview",
+            CutShot::Mirror => "mirror",
+            CutShot::PropSwagger => "prop",
+            CutShot::Drama => "drama",
+            CutShot::FingerGun => "fingergun",
+            CutShot::Sauna => "sauna",
+            CutShot::FourCut => "fourcut",
+            CutShot::FoodShot => "food",
+            CutShot::Scene => "scene",
+        }
+    }
+    pub fn has_mascot(&self) -> bool {
+        !matches!(self, CutShot::Scene)
+    }
+}
+
+/// 날짜+정체성 시드 → 결정론적 샷 pick (재현·테스트 가능 — character_description 변주 시드 선례).
+pub fn pick_cut_shot(date: &str, seed: &str) -> CutShot {
+    use sha2::{Digest, Sha256};
+    let d = Sha256::digest(format!("{date}|{seed}").as_bytes());
+    match d[0] % 12 {
+        0 => CutShot::HighAngle,
+        1 => CutShot::Haduri,
+        2 => CutShot::Jump,
+        3 => CutShot::BackView,
+        4 => CutShot::Mirror,
+        5 => CutShot::PropSwagger,
+        6 => CutShot::Drama,
+        7 => CutShot::FingerGun,
+        8 => CutShot::Sauna,
+        9 => CutShot::FourCut,
+        10 => CutShot::FoodShot,
+        _ => CutShot::Scene,
+    }
+}
+
+/// H2 — 컷 상태(app_data/daily_cut.json). `cut_date`는 화면의 daily_cut.png가 어느 일기의
+/// 컷인지(재실행 멱등 키), `attempt_date`/`attempts`는 일일 과금 상한의 원장이다.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct CutState {
+    pub cut_date: Option<String>,
+    #[serde(default)]
+    pub caption: String,
+    #[serde(default)]
+    pub shot: String,
+    #[serde(default)]
+    pub attempt_date: String,
+    #[serde(default)]
+    pub attempts: u8,
+}
+
+/// 하루 최대 생성 시도 — 이미지 건당 과금 가드 (스펙 결정 2).
+pub const MAX_CUT_ATTEMPTS_PER_DAY: u8 = 3;
+
+/// 리컨실리에이션 판단 — true면 생성 시도. 최신 일기 컷이 이미 있거나(멱등)
+/// 그 날짜의 시도가 소진됐으면 skip. 멱등 판단은 메타만 믿지 않고 **png 실존**도 본다 —
+/// 파일만 지워진 경우 그 일기 날짜 내내 sprite 폴백으로 고착되는 것을 막는다 (과금 상한은 유지).
+pub fn decide_cut(latest_diary_date: &str, s: &CutState, cut_png_exists: bool) -> bool {
+    if s.cut_date.as_deref() == Some(latest_diary_date) && cut_png_exists {
+        return false;
+    }
+    if s.attempt_date == latest_diary_date && s.attempts >= MAX_CUT_ATTEMPTS_PER_DAY {
+        return false;
+    }
+    true
+}
+
+/// 시도 기록 — 대상 날짜가 바뀌면 카운터 리셋. 호출자는 네트워크 **전에** persist해
+/// 실패·크래시에도 상한을 보장한다.
+pub fn register_attempt(s: &mut CutState, date: &str) {
+    if s.attempt_date != date {
+        s.attempt_date = date.to_string();
+        s.attempts = 0;
+    }
+    s.attempts = s.attempts.saturating_add(1);
+}
+
+/// 성공 기록 — 화면 상태(cut_date·caption·shot)를 새 컷으로 갱신.
+pub fn register_success(s: &mut CutState, date: &str, caption: &str, shot: CutShot) {
+    s.cut_date = Some(date.to_string());
+    s.caption = caption.to_string();
+    s.shot = shot.as_str().to_string();
+}
+
+/// H2 — 일기 → {scene_en, caption_ko} 텍스트 엔진 시스템 프롬프트.
+/// 전송 수위(ADR 0024): scene_en은 이미지 엔진으로 넘어가므로 **추상 장면만** —
+/// 고유명사·프로젝트/회사명·코드 식별자·수치 금지를 여기서 지시한다.
+pub fn build_cut_scene_prompt(diary: &str, shot: CutShot, mbti: Option<&str>) -> String {
+    let framing = match shot {
+        CutShot::HighAngle => {
+            "a 45-degree high-angle selfie — the robot's face fills most of the frame, overexposed flash glow, dreamy haze"
+        }
+        CutShot::Haduri => {
+            "a grainy old-webcam monochrome selfie — the robot stares into the camera looking way too serious"
+        }
+        CutShot::Jump => {
+            "a forced dramatic jump shot — the robot frozen mid-air at a scenic spot, limbs flailing"
+        }
+        CutShot::BackView => {
+            "a sentimental back-view shot — the robot seen from behind, gazing into the distance under an evening sky"
+        }
+        CutShot::Mirror => {
+            "a bathroom-mirror selfie — the robot holds an old flip phone half covering its face"
+        }
+        CutShot::PropSwagger => {
+            "a swagger shot — the robot poses with an everyday object as if it were a rock star's guitar"
+        }
+        CutShot::Drama => {
+            "an overly dramatic pose — one hand covering an eye or pressed to the forehead, windswept, taking itself far too seriously"
+        }
+        CutShot::FingerGun => "a cheesy finger-gun pose winking at the camera",
+        CutShot::Sauna => {
+            "a Korean sauna shot — the robot wears a towel folded into lamb ears on its head, snacks beside it"
+        }
+        CutShot::FourCut => {
+            "a four-panel sticker-photo strip — the same robot doing four different silly poses, decorated with heart and star doodles only"
+        }
+        CutShot::FoodShot => {
+            "a top-down food-brag shot over a table of food — the robot reaching in with chopsticks"
+        }
+        CutShot::Scene => {
+            "a cozy scene WITHOUT any character — desk, objects and lighting that hint at today's activity"
+        }
+    };
+    let mood = crate::mascot::mbti_voice_hint_style_only(mbti);
+    format!(
+        "너는 픽셀아트 일러스트 연출가다. 아래 '오늘의 일기'를 읽고, 오늘 하루를 은유하는 \
+         그림 한 컷을 기획하라.\n\
+         구도: {framing}.\n{mood}\n\
+         규칙:\n\
+         - scene_en: 영어 1~2문장 장면 묘사. 반드시 **추상적으로** — 고유명사(사람·회사·프로젝트 \
+           이름), 코드 식별자, 파일명, 숫자 수치를 절대 쓰지 마라. 분위기·행동·소품·조명 위주로.\n\
+         - caption_ko: 그림 아래 붙일 한국어 감성 한 줄(40자 이내, 싸이월드 미니홈피 갬성, \
+           마스코트 1인칭, 따옴표 없이).\n\
+         - 그림 속에 글자는 넣을 수 없다 — 텍스트가 필요한 장면을 만들지 마라.\n\
+         출력은 JSON 하나만: {{\"scene_en\": \"...\", \"caption_ko\": \"...\"}}\n\n\
+         오늘의 일기:\n{diary}"
+    )
+}
+
+/// 응답 JSON 관용 파싱 — 코드펜스·잡담을 걷어내고 첫 '{'…마지막 '}'만 취한다
+/// (extract_image_bytes의 관용 파서와 같은 철학). 빈 필드는 실패로 본다.
+pub fn parse_cut_scene(raw: &str) -> Option<(String, String)> {
+    let start = raw.find('{')?;
+    let end = raw.rfind('}')?;
+    let v: serde_json::Value = serde_json::from_str(&raw[start..=end]).ok()?;
+    let scene = v.get("scene_en")?.as_str()?.trim().to_string();
+    let caption = v.get("caption_ko")?.as_str()?.trim().to_string();
+    (!scene.is_empty() && !caption.is_empty()).then_some((scene, caption))
+}
+
+/// H2 — 장면+캡션 계산 (store 접근 없음, 네트워크만 — mascot::compute_daily_line 선례).
+/// Ok(None) = 응답 파싱 실패 (호출자는 시도 카운트만 남기고 skip).
+pub fn compute_cut_scene(
+    engine: &dyn crate::diary::engine::Engine,
+    diary: &str,
+    shot: CutShot,
+    mbti: Option<&str>,
+) -> Result<Option<(String, String)>> {
+    let system = build_cut_scene_prompt(diary, shot, mbti);
+    let raw = engine.generate(&system, "")?.text;
+    Ok(parse_cut_scene(&raw))
+}
+
+/// H2 — 컷 이미지 프롬프트 조립 (로컬, 네트워크 없음). 캐릭터 묘사는 마스코트 샷에만 붙는다
+/// (Scene 컷은 캐릭터 없는 정경 — 스펙 데이터 흐름 ⑤).
+pub fn build_cut_image_prompt(shot: CutShot, character_desc: Option<&str>, scene_en: &str) -> String {
+    let composition = match shot {
+        CutShot::HighAngle => {
+            "extreme high-angle selfie composition, face filling most of the frame, overexposed flash, hazy glow"
+        }
+        CutShot::Haduri => {
+            "grainy black-and-white webcam selfie composition, low fidelity, soft vignette"
+        }
+        CutShot::Jump => {
+            "wide shot, character frozen mid-jump high above the ground, dynamic silly pose"
+        }
+        CutShot::BackView => "back-view composition, small character against a wide evening sky",
+        CutShot::Mirror => {
+            "mirror-reflection selfie composition, flip phone partly covering the face"
+        }
+        CutShot::PropSwagger => {
+            "three-quarter shot, confident swagger pose holding a prop like a guitar"
+        }
+        CutShot::Drama => "dramatic portrait, one hand over an eye, windswept, moody lighting",
+        CutShot::FingerGun => "medium shot, finger-gun pointed at the camera, winking",
+        CutShot::Sauna => "cozy indoor medium shot, towel folded like lamb ears on the head",
+        CutShot::FourCut => {
+            "single image split into a 2x2 sticker-photo grid, four silly poses, heart and star doodles only, absolutely no letters"
+        }
+        CutShot::FoodShot => {
+            "top-down table composition, dishes centered, character reaching in with chopsticks"
+        }
+        CutShot::Scene => "environment-only composition, NO characters at all",
+    };
+    let character = character_desc
+        .map(|d| format!(" The character is {d}."))
+        .unwrap_or_default();
+    format!(
+        "Using the EXACT same art style as the attached reference image (16-bit pixel art, \
+         chibi proportions, clean dark pixel outline, soft cel shading), draw one scene: \
+         {scene_en}.{character} {composition}. \
+         No text, no letters, no words, no watermark."
+    )
+}
+
+/// H2 — 장면 컷 생성. sprite와 달리 배경 투명화를 하지 않는다 — 장면 전체가 그림이다.
+pub fn generate_cut(cfg: &SpriteConfig, image_prompt: &str) -> Result<Vec<u8>> {
+    request_image(cfg, image_prompt)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -477,6 +830,16 @@ mod tests {
         for human in ["skin", "hair", "pants", "sneakers", "hoodie"] {
             assert!(!d3.contains(human), "MBTI 묘사에 인물 어휘 '{human}'가 남아있음: {d3}");
         }
+    }
+
+    #[test]
+    fn description_emphasizes_accessory_as_standalone_sentence() {
+        // 악세서리가 쉼표 나열에 파묻히면 이미지 모델이 잘 떨어뜨린다(2026-07-29 피드백)
+        // → 문장 끝 독립 강조 문장으로. NF 그룹은 악세 풀에 빈 항목이 없어 항상 포함된다.
+        let spec = robot_spec_for("seed-A");
+        let d = character_description(&spec, Some("INFP"), "v1");
+        assert!(d.contains("The robot is depicted"), "악세 독립 문장: {d}");
+        assert!(d.contains("clearly visible"), "가시성 강조: {d}");
     }
 
     #[test]
@@ -645,5 +1008,188 @@ mod tests {
     fn classify_models_body_trims_model_before_compare() {
         let body = serde_json::json!({"data":[{"id":"some/model"}]});
         assert_eq!(classify_models_body(&body, "  some/model  "), ProbeVerdict::Ok);
+    }
+
+    /// 테스트용 RGBA PNG 인코더 (crop_face 검증 전용).
+    fn encode_rgba_png(w: u32, h: u32, px: impl Fn(u32, u32) -> [u8; 4]) -> Vec<u8> {
+        let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+        for y in 0..h {
+            for x in 0..w {
+                rgba.extend_from_slice(&px(x, y));
+            }
+        }
+        let mut out = Vec::new();
+        {
+            let mut enc = png::Encoder::new(&mut out, w, h);
+            enc.set_color(png::ColorType::Rgba);
+            enc.set_depth(png::BitDepth::Eight);
+            let mut writer = enc.write_header().unwrap();
+            writer.write_image_data(&rgba).unwrap();
+        }
+        out
+    }
+
+    fn decode_rgba_png(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
+        let mut decoder = png::Decoder::new(bytes);
+        decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+        let mut reader = decoder.read_info().unwrap();
+        let mut buf = vec![0u8; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        assert_eq!(info.color_type, png::ColorType::Rgba);
+        buf.truncate((info.width * info.height * 4) as usize);
+        (info.width, info.height, buf)
+    }
+
+    #[test]
+    fn crop_face_extracts_upper_center_window_at_128() {
+        // 360×360: 윈도우 side = round(360/1.8) = 200, x0 = (360-200)/2 = 80,
+        // y0 = round((360-200)×0.14) = 22 — CSS(background-size:180%, position 50% 14%) 환산.
+        // 윈도우 안 = 초록, 밖 = 빨강. 크롭 결과는 전부 초록이어야 한다.
+        let png = encode_rgba_png(360, 360, |x, y| {
+            if (80..280).contains(&x) && (22..222).contains(&y) {
+                [10, 200, 30, 255]
+            } else {
+                [200, 10, 30, 255]
+            }
+        });
+        let out = crop_face(&png).unwrap();
+        let (w, h, rgba) = decode_rgba_png(&out);
+        assert_eq!((w, h), (128, 128));
+        for (x, y) in [(0u32, 0u32), (64, 64), (127, 127)] {
+            let i = ((y * 128 + x) * 4) as usize;
+            assert_eq!(&rgba[i..i + 3], &[10, 200, 30], "픽셀 ({x},{y})는 크롭 윈도우 안이어야 함");
+        }
+    }
+
+    #[test]
+    fn crop_face_handles_tiny_image_by_clamping() {
+        // 4×4 초소형: side = round(4/1.8) = 2 → 클램프·업스케일 경로도 에러 없이 128×128.
+        let png = encode_rgba_png(4, 4, |_, _| [1, 2, 3, 255]);
+        let (w, h, _) = decode_rgba_png(&crop_face(&png).unwrap());
+        assert_eq!((w, h), (128, 128));
+    }
+
+    #[test]
+    fn pick_cut_shot_is_deterministic_and_covers_all_variants() {
+        assert_eq!(pick_cut_shot("2026-07-28", "uuid-1"), pick_cut_shot("2026-07-28", "uuid-1"));
+        let mut seen = std::collections::HashSet::new();
+        for d in 1..=400 {
+            seen.insert(pick_cut_shot(&format!("2026-07-{d}"), "uuid-1").as_str());
+        }
+        // 400개 표본이면 12변형(레전드 짤 11 + 정경 1)이 모두 등장해야 한다
+        assert_eq!(seen.len(), 12, "샷 축 12변형이 모두 나와야 함: {seen:?}");
+    }
+
+    #[test]
+    fn cut_shot_scene_has_no_mascot() {
+        for shot in [
+            CutShot::HighAngle,
+            CutShot::Haduri,
+            CutShot::Jump,
+            CutShot::BackView,
+            CutShot::Mirror,
+            CutShot::PropSwagger,
+            CutShot::Drama,
+            CutShot::FingerGun,
+            CutShot::Sauna,
+            CutShot::FourCut,
+            CutShot::FoodShot,
+        ] {
+            assert!(shot.has_mascot(), "{}는 마스코트 컷", shot.as_str());
+        }
+        assert!(!CutShot::Scene.has_mascot());
+    }
+
+    #[test]
+    fn decide_cut_reconciliation_table() {
+        let d = "2026-07-28";
+        // 초기 상태(첫 실행) → 생성
+        assert!(decide_cut(d, &CutState::default(), false));
+        // 최신 일기 컷 완료 + png 존재 → skip (재실행 멱등)
+        let mut done = CutState::default();
+        register_attempt(&mut done, d);
+        register_success(&mut done, d, "캡션", CutShot::Jump);
+        assert!(!decide_cut(d, &done, true));
+        // 메타는 완료인데 png가 사라짐 → 재생성 (영구 sprite 폴백 방지)
+        assert!(decide_cut(d, &done, false));
+        // 오늘 3회 실패 소진 → skip (과금 상한 — png 유무와 무관)
+        let mut spent = CutState::default();
+        for _ in 0..MAX_CUT_ATTEMPTS_PER_DAY {
+            register_attempt(&mut spent, d);
+        }
+        assert!(!decide_cut(d, &spent, false));
+        // 어제 소진했어도 새 일기 날짜 → 생성 (카운터는 register_attempt가 리셋)
+        assert!(decide_cut("2026-07-29", &spent, false));
+        // 어제 성공 컷이 있고 오늘 일기가 새로 생김 → 생성
+        assert!(decide_cut("2026-07-29", &done, true));
+    }
+
+    #[test]
+    fn register_attempt_resets_counter_on_new_date() {
+        let mut s = CutState::default();
+        register_attempt(&mut s, "2026-07-28");
+        register_attempt(&mut s, "2026-07-28");
+        assert_eq!((s.attempt_date.as_str(), s.attempts), ("2026-07-28", 2));
+        register_attempt(&mut s, "2026-07-29");
+        assert_eq!((s.attempt_date.as_str(), s.attempts), ("2026-07-29", 1));
+    }
+
+    #[test]
+    fn register_success_updates_display_state_and_roundtrips_json() {
+        let mut s = CutState::default();
+        register_attempt(&mut s, "2026-07-28");
+        register_success(&mut s, "2026-07-28", "밤샘 끝, 뿌듯", CutShot::Scene);
+        assert_eq!(s.cut_date.as_deref(), Some("2026-07-28"));
+        assert_eq!(s.caption, "밤샘 끝, 뿌듯");
+        assert_eq!(s.shot, "scene");
+        // 손상 대비 직렬화 왕복 (daily_cut.json 포맷)
+        let json = serde_json::to_string(&s).unwrap();
+        assert_eq!(serde_json::from_str::<CutState>(&json).unwrap(), s);
+    }
+
+    #[test]
+    fn cut_scene_prompt_embeds_diary_framing_and_privacy_rules() {
+        let p = build_cut_scene_prompt("오늘은 리팩토링을 했다", CutShot::HighAngle, Some("INTJ"));
+        assert!(p.contains("오늘은 리팩토링을 했다"), "일기 본문 포함");
+        assert!(p.contains("high-angle selfie"), "샷 프레이밍 포함");
+        assert!(p.contains("고유명사"), "전송 수위 금지 지시(ADR 0024) 포함");
+        assert!(p.contains("scene_en") && p.contains("caption_ko"), "JSON 출력 계약 포함");
+        // 레전드 짤 연출이 프레이밍에 실제 반영되는지 표본 확인
+        assert!(build_cut_scene_prompt("일기", CutShot::Jump, None).contains("jump shot"));
+        assert!(build_cut_scene_prompt("일기", CutShot::Sauna, None).contains("lamb ears"));
+        // 정경 샷은 캐릭터 없는 프레이밍
+        let scene = build_cut_scene_prompt("일기", CutShot::Scene, None);
+        assert!(scene.contains("WITHOUT any character"));
+    }
+
+    #[test]
+    fn parse_cut_scene_accepts_clean_and_fenced_json_rejects_garbage() {
+        let ok = r#"{"scene_en": "a robot at a desk", "caption_ko": "오늘도 무사히"}"#;
+        assert_eq!(
+            parse_cut_scene(ok),
+            Some(("a robot at a desk".into(), "오늘도 무사히".into()))
+        );
+        let fenced = "```json\n{\"scene_en\": \"night sky\", \"caption_ko\": \"별 헤는 밤\"}\n```";
+        assert_eq!(parse_cut_scene(fenced), Some(("night sky".into(), "별 헤는 밤".into())));
+        assert_eq!(parse_cut_scene("그림 그려드릴게요!"), None);
+        assert_eq!(parse_cut_scene(r#"{"scene_en": "", "caption_ko": "x"}"#), None);
+        assert_eq!(parse_cut_scene(r#"{"scene_en": "x"}"#), None);
+    }
+
+    #[test]
+    fn cut_image_prompt_composes_style_scene_and_notext() {
+        let p = build_cut_image_prompt(CutShot::Haduri, Some("a navy robot"), "coding at night");
+        assert!(p.contains("coding at night"), "장면 포함");
+        assert!(p.contains("a navy robot"), "마스코트 샷은 캐릭터 묘사 포함");
+        assert!(p.contains("black-and-white"), "샷별 구도(하두리 흑백) 포함");
+        assert!(p.contains("No text"), "그림 안 텍스트 금지");
+        assert!(p.contains("same art style"), "스타일 앵커 문구 포함");
+        // 네컷은 분할 구도 + 낙서만 (글자 금지 강조)
+        let four = build_cut_image_prompt(CutShot::FourCut, Some("a navy robot"), "four moods");
+        assert!(four.contains("2x2") && four.contains("no letters"));
+        // 정경 샷: 캐릭터 묘사 없음 + 캐릭터 배제 구도
+        let s = build_cut_image_prompt(CutShot::Scene, None, "a quiet desk");
+        assert!(!s.contains("The character is"));
+        assert!(s.contains("NO characters"));
     }
 }

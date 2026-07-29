@@ -1,9 +1,11 @@
 <script lang="ts">
   import {
+    generateDailyCutNow, getSettings, setSetting,
     memoryAdd, memoryDelete, memoryList, memoryUpdate,
     profileGet, profileSet, mascotPreview, mascotCommit, getSprite,
     type Memory, type Profile,
   } from '../../api';
+  import { dailyCutEnabled } from '../../daily-cut';
   import { IDLE, busy, err, ok, type Status } from './status';
   import StatusLine from './StatusLine.svelte';
 
@@ -38,6 +40,21 @@
     catch(e){ genStatus = err(e); }
   }
 
+  // H2 오늘의 대문사진 — 옵트인(기본 off) + "지금 그려보기"(멱등·상한 없이 즉시 생성, ADR 0024)
+  let dailyCut = $state(false);
+  getSettings().then((s) => { dailyCut = dailyCutEnabled(s); });
+  async function toggleDailyCut(){
+    dailyCut = !dailyCut;
+    try { await setSetting('daily_cut_enabled', dailyCut ? 'true' : 'false'); }
+    catch { dailyCut = !dailyCut; } // 저장 실패 시 원복 (PrivacyGroup 선례)
+  }
+  let cutStatus = $state<Status>(IDLE);
+  async function tryDailyCut(){
+    cutStatus = busy('대문사진 그리는 중… 수십 초 걸릴 수 있어요');
+    try { await generateDailyCutNow(); cutStatus = ok('오늘의 대문사진을 걸었어요 — 홈에서 확인하세요.'); }
+    catch(e){ cutStatus = err(e); }
+  }
+
   let memories = $state<Memory[]>([]);
   let memInput = $state(''), memEditId = $state<number | null>(null), memEditText = $state('');
   let memStatus = $state<Status>(IDLE);
@@ -70,7 +87,7 @@
     <label class="field"><span>MBTI <em>(선택)</em></span>
       <select bind:value={profMbti}>{#each MBTI_OPTIONS as m}<option value={m}>{m === '' ? '미설정' : m}</option>{/each}</select></label>
   </div>
-  <p class="hint2">MBTI는 마스코트 외관 성향과 말투에 반영돼요. 외관은 아래 '마스코트 생성'에서 재생성·저장해야 실제로 바뀝니다.</p>
+  <p class="hint2">이름과 MBTI는 마스코트 외관에 반영돼요 — 이름은 생김새의 뿌리, MBTI는 성향 결과 말투. 바꾼 뒤엔 아래 '마스코트 생성'에서 재생성·저장해야 실제로 바뀝니다.</p>
   <div class="actions">
     <button class="primary" onclick={saveProfile} disabled={profStatus.kind==='busy'}>저장</button>
   </div>
@@ -79,7 +96,7 @@
 
 <section>
   <h2>마스코트 생성</h2>
-  <p class="hint">MBTI·성향에 맞춰 마스코트를 그립니다. '재생성'으로 미리보고 '저장'을 눌러야 실제로 반영돼요. (연결 탭의 캐릭터 이미지 모델 설정 필요)</p>
+  <p class="hint">MBTI·성향에 맞춰 마스코트를 그립니다. '재생성'으로 미리보고 '저장'을 눌러야 실제로 반영돼요. 재생성해도 아이디에 뿌리를 둔 같은 캐릭터가 유지되고, 포즈·체형·마감·악세서리만 달라져요. (연결 탭의 캐릭터 이미지 모델 설정 필요)</p>
   <div class="preview">
     {#if sprite}
       <img src={`data:image/png;base64,${sprite}`} alt="마스코트 미리보기"/>
@@ -92,6 +109,16 @@
     <button class="primary" onclick={saveMascot} disabled={!hasCandidate || genStatus.kind==='busy'}>저장</button>
   </div>
   <StatusLine status={genStatus}/>
+</section>
+
+<section>
+  <h2>오늘의 대문사진</h2>
+  <p class="hint">새 일기가 생기면 그날을 담은 대문사진 한 장을 캐릭터 이미지 모델로 그려 홈에 겁니다. 일기에서 뽑은 추상 장면 묘사만 전송되고, 글귀는 '오늘의 한마디' 자리에 함께 걸려요.</p>
+  <label class="cut-toggle"><input type="checkbox" checked={dailyCut} onchange={toggleDailyCut}/><span>매일 자동으로 생성</span></label>
+  <div class="actions">
+    <button onclick={tryDailyCut} disabled={cutStatus.kind==='busy'}>지금 그려보기</button>
+  </div>
+  <StatusLine status={cutStatus}/>
 </section>
 
 <section>
@@ -134,6 +161,7 @@
   .actions button.primary{background:var(--accent);color:var(--accent-ink);font-weight:700}
   .actions button:disabled{opacity:.55;cursor:default}
   .hint2{color:var(--text-soft);font-size:11px;margin:8px 0 0}
+  .cut-toggle{display:flex;gap:8px;align-items:center;margin-top:12px;font-size:12px;color:var(--text-soft)}
   .preview{margin-top:12px;display:flex;align-items:center;justify-content:center;min-height:140px;background:var(--surface-inset);border:1px solid var(--line);border-radius:8px}
   .preview img{max-height:180px;image-rendering:pixelated}
   .preview .noimg{color:var(--text-soft);font-size:12px}

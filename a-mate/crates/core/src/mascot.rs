@@ -123,6 +123,72 @@ pub fn robot_spec_from_profile(uuid: &str, mbti: Option<&str>) -> RobotSpec {
     RobotSpec { antenna: base.antenna, head, eyes, body, arms, palette }
 }
 
+/// 마스코트 정체성 시드 — 아이디(고유성)에 **마스코트 이름**을 섞는다. 이름을 지어주면
+/// 생김새가 정해지고("이름 따라 생김새"), 이름을 바꾸면 재생성부터 기본형이 바뀐다
+/// (2026-07-29 결정 — uuid는 무작위 식별자라 개인적 요소가 없다는 피드백).
+/// 이름 미설정이면 uuid 단독(종전과 동일). 아이디 자체는 불변 — 시드 재료로만 쓴다.
+pub fn mascot_identity_seed(uuid: &str, name: &str) -> String {
+    let n = name.trim();
+    if n.is_empty() {
+        uuid.to_string()
+    } else {
+        format!("{uuid}|{n}")
+    }
+}
+
+/// 재생성 변주 — 정체성 슬롯(색·머리·눈·몸통)은 프로필 아이디에 고정하고 **포즈만** 변주
+/// 시드로 재추첨한다 (MBTI J/P 포즈 부분집합은 존중). 체형·마감·악세서리 변주는
+/// character_description의 mbti_traits가 같은 시드로 수행 — 재생성 = "같은 캐릭터의 다른 컷"
+/// (2026-07-29 "id에 따라 약간의 일관성" 피드백. 종전엔 spec 전체를 새 시드로 재추첨했다).
+pub fn respec_pose_for_seed(mut spec: RobotSpec, mbti: Option<&str>, seed: &str) -> RobotSpec {
+    let d = Sha256::digest(seed.as_bytes());
+    spec.arms = match mbti.and_then(|m| normalize_mbti(m)) {
+        Some(m) if m.as_bytes()[3] == b'J' => pick(&[0, 3, 1], d[4]),
+        Some(_) => pick(&[2, 4, 5], d[4]),
+        None => d[4] % ARMS_VARIANTS,
+    };
+    spec
+}
+
+#[cfg(test)]
+mod respec_tests {
+    use super::*;
+
+    #[test]
+    fn mascot_identity_seed_mixes_name_and_falls_back_to_uuid() {
+        // 이름 미설정(빈/공백) → uuid 단독 (종전 동작)
+        assert_eq!(mascot_identity_seed("u-1", ""), "u-1");
+        assert_eq!(mascot_identity_seed("u-1", "   "), "u-1");
+        // 이름 설정 → 생김새 시드에 편입 (트림) — 이름이 바뀌면 기본형도 바뀐다
+        assert_eq!(mascot_identity_seed("u-1", " 둘쇠 "), "u-1|둘쇠");
+        assert_ne!(
+            robot_spec_for(&mascot_identity_seed("u-1", "둘쇠")),
+            robot_spec_for(&mascot_identity_seed("u-1", "봇순이")),
+            "다른 이름 → 다른 기본형이어야 자연스러움 (해시 충돌 없는 표본)"
+        );
+    }
+
+    #[test]
+    fn respec_pose_keeps_identity_slots_and_is_deterministic() {
+        let spec = robot_spec_from_profile("uuid-fixed", Some("INTJ"));
+        let a = respec_pose_for_seed(spec, Some("INTJ"), "variation-1");
+        let b = respec_pose_for_seed(spec, Some("INTJ"), "variation-1");
+        assert_eq!(a, b, "같은 시드 → 같은 포즈 (결정론)");
+        assert_eq!(
+            (a.antenna, a.head, a.eyes, a.body, a.palette),
+            (spec.antenna, spec.head, spec.eyes, spec.body, spec.palette),
+            "정체성 슬롯은 변주 시드와 무관하게 고정"
+        );
+        // J 성향 → 정돈 포즈 부분집합(0·1·3) 준수
+        assert!([0u8, 1, 3].contains(&a.arms), "J 포즈 부분집합 위반: {}", a.arms);
+        // 여러 시드에서 포즈가 실제로 변주되는지
+        let poses: std::collections::HashSet<u8> = (0..12)
+            .map(|i| respec_pose_for_seed(spec, Some("INTJ"), &format!("v{i}")).arms)
+            .collect();
+        assert!(poses.len() > 1, "변주 시드로 포즈가 달라져야 함");
+    }
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // 오늘의 한마디 (마스코트 보이스 #1) — 채팅과 동일 인물이 오늘 하루를 한 문장으로.
 // 사실 기반은 chat::ChatContext(오늘 요약), 자연스러움은 diary::voice_guidance() 재사용.

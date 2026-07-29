@@ -1,6 +1,6 @@
 <script lang="ts">
   import { listen } from '@tauri-apps/api/event';
-  import { getMascotSeed, getSprite, lifeMascotImage, robotSpecForSeed } from '../api';
+  import { getDailyCut, getMascotSeed, getSprite, lifeMascotImage, robotSpecForSeed, type DailyCut } from '../api';
   import { drawRobot, type RobotSpec } from '../robot/render';
   import { frameAt } from '../robot/anim';
 
@@ -9,6 +9,17 @@
   let canvas = $state<HTMLCanvasElement | null>(null);
   // AI 스프라이트(내 캐릭터 전용 캐시) — 있으면 이미지, 없으면 절차 생성 폴백
   let sprite = $state<string | null>(null);
+  // H2 — 오늘의 컷 (내 화면 전용). 있으면 sprite/canvas 대신 컷+캡션 프레임.
+  let cut = $state<DailyCut | null>(null);
+
+  $effect(() => {
+    if (seed) { cut = null; return; } // 방문 초상 — 내 컷 잔상 제거 (seed 토글 시 필수)
+    let un: (() => void) | null = null;
+    let stale = false; // 방문 전환 뒤 도착하는 인플라이트 응답 무시
+    getDailyCut().then((c) => { if (!stale) cut = c; });
+    listen('daily_cut:ready', () => getDailyCut().then((c) => { if (!stale) cut = c; })).then((u) => (un = u));
+    return () => { stale = true; un?.(); };
+  });
 
   $effect(() => {
     const id = agentId, version = imageVersion;
@@ -34,8 +45,12 @@
   });
 </script>
 
-<div class="portrait">
-  {#if sprite}
+<!-- 컷 = 자체 배경을 가진 사진이라 풀블리드, 폴백 캐릭터(투명 배경)만 민트 여백 유지 -->
+<div class="portrait" class:full={!!cut}>
+  {#if cut}
+    <!-- 캡션은 App의 "오늘의 한마디" 카드가 표시 — 초상은 이미지만 (공간 절약) -->
+    <img class="cut" src={'data:image/png;base64,' + cut.png} alt="오늘의 대문사진" />
+  {:else if sprite}
     <img class="sprite" src={'data:image/png;base64,' + sprite} alt="내 캐릭터" />
   {:else}
     <canvas bind:this={canvas} width="128" height="128"></canvas>
@@ -53,4 +68,7 @@
   }
   canvas { width: 96px; height: 96px; image-rendering: pixelated; }
   .sprite { width: 96px; height: 96px; object-fit: contain; }
+  /* H2 — 미니홈피 대문사진: 박스를 꽉 채우는 풀블리드 (감성 글귀는 "오늘의 한마디" 카드가 담당) */
+  .portrait.full { padding: 0; overflow: hidden; }
+  .cut { display: block; width: 100%; aspect-ratio: 1 / 1; height: auto; object-fit: cover; image-rendering: pixelated; }
 </style>

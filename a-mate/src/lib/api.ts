@@ -261,6 +261,8 @@ export const onDiaryReady = (cb: (date: string) => void): Promise<UnlistenFn> =>
   listen<string>('diary:ready', (e) => cb(e.payload));
 export const onDailyLine = (cb: (text: string) => void): Promise<UnlistenFn> =>
   listen<string>('daily-line:ready', (e) => cb(e.payload));
+export const onDailyCutReady = (cb: (date: string) => void): Promise<UnlistenFn> =>
+  listen<string>('daily_cut:ready', (e) => cb(e.payload));
 export const onOccasionToday = (cb: (labels: string[]) => void): Promise<UnlistenFn> =>
   listen<string[]>('occasion:today', (e) => cb(e.payload));
 export const onGotoTab = (cb: (p: GotoTabPayload) => void): Promise<UnlistenFn> =>
@@ -277,6 +279,20 @@ export const onUpdateCheckRequested = (cb: () => void): Promise<UnlistenFn> =>
 export async function getSprite(): Promise<string | null> {
   try { return await invoke<string | null>('get_sprite'); } catch { return null; }
 }
+
+/** G6 — 얼굴 아이콘(128×128 캐시) base64 — sprite 없으면 null (이모지 폴백). */
+export async function getFaceIcon(): Promise<string | null> {
+  try { return await invoke<string | null>('get_face_icon'); } catch { return null; }
+}
+
+/** H2 — 오늘의 컷 (png base64 + 하단 캡션 + 일기 날짜). 없으면 null (sprite 폴백). */
+export interface DailyCut { png: string; caption: string; date: string }
+export async function getDailyCut(): Promise<DailyCut | null> {
+  try { return await invoke<DailyCut | null>('get_daily_cut'); } catch { return null; }
+}
+
+/** H2 — 설정의 "지금 그려보기": 즉시 새 컷 생성 후 일기 날짜 반환. 실패는 한국어 메시지로 reject. */
+export const generateDailyCutNow = () => invoke<string>('generate_daily_cut_now');
 
 /** 방 점유자 AI 스프라이트(캐시) base64 — 없으면 null. */
 export async function getOccupantSprite(seed: string): Promise<string | null> {

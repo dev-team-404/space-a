@@ -445,7 +445,7 @@ pub fn get_settings(state: State<AppState>) -> Result<HashMap<String, String>, S
 
 #[tauri::command(async)]
 pub fn set_setting(app: tauri::AppHandle, state: State<AppState>, key: String, value: String) -> Result<(), String> {
-    const ALLOWED: &[&str] = &["mascot_visible", "chatter_level", "content_protected", "mascot_pos", "realtime_advice", "last_advice_key", "visit_guestbook_enabled"];
+    const ALLOWED: &[&str] = &["mascot_visible", "chatter_level", "content_protected", "mascot_pos", "realtime_advice", "last_advice_key", "visit_guestbook_enabled", "daily_cut_enabled"];
     if !ALLOWED.contains(&key.as_str()) {
         return Err(format!("허용되지 않은 설정 키: {key}"));
     }
@@ -1548,6 +1548,131 @@ mod tests {
         store.set_setting("owner_full_name", "   ").unwrap(); // 공백 → 미설정과 동일
         assert_eq!(owner_full_name(&store), "");
     }
+
+    #[test]
+    fn face_icon_inner_lazy_materializes_and_caches() {
+        use base64::Engine as _;
+        let dir = tempfile::tempdir().unwrap();
+        // ① sprite.png 없음 → None (프론트 이모지 폴백)
+        assert_eq!(face_icon_inner(dir.path()).unwrap(), None);
+        // ② sprite.png 생성(1×1 투명 PNG) → face.png 재료화 + base64 반환
+        let sprite = base64::engine::general_purpose::STANDARD
+            .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+            .unwrap();
+        std::fs::write(dir.path().join("sprite.png"), &sprite).unwrap();
+        let b64 = face_icon_inner(dir.path()).unwrap().unwrap();
+        assert!(dir.path().join("face.png").exists());
+        // ③ 재호출 = 캐시 그대로 (내용 동일)
+        assert_eq!(face_icon_inner(dir.path()).unwrap().unwrap(), b64);
+        // ④ face.png를 sprite보다 과거로 백데이트(=리롤로 sprite가 더 새것) → 재크롭 경로
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+        std::fs::File::options()
+            .write(true)
+            .open(dir.path().join("face.png"))
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        assert_eq!(face_icon_inner(dir.path()).unwrap().unwrap(), b64); // 같은 sprite → 같은 결과
+        // 재크롭됐다면 mtime이 현재로 갱신됨
+        let refreshed = std::fs::metadata(dir.path().join("face.png")).unwrap().modified().unwrap();
+        assert!(refreshed > old, "stale face.png는 재크롭으로 갱신돼야 함");
+    }
+
+    #[test]
+    fn daily_cut_inner_requires_png_and_cut_date() {
+        let dir = tempfile::tempdir().unwrap();
+        // 아무것도 없음 → None
+        assert!(daily_cut_inner(dir.path()).unwrap().is_none());
+        // png만 있고 상태 없음(cut_date 없음) → None (캡션·날짜 없는 컷은 표시하지 않음)
+        std::fs::write(dir.path().join("daily_cut.png"), b"png-bytes").unwrap();
+        assert!(daily_cut_inner(dir.path()).unwrap().is_none());
+        // png + 성공 상태 → Some
+        let mut st = agent_mentor::sprite::CutState::default();
+        agent_mentor::sprite::register_attempt(&mut st, "2026-07-28");
+        agent_mentor::sprite::register_success(&mut st, "2026-07-28", "오늘도 무사히", agent_mentor::sprite::CutShot::Jump);
+        std::fs::write(dir.path().join("daily_cut.json"), serde_json::to_string(&st).unwrap()).unwrap();
+        let cut = daily_cut_inner(dir.path()).unwrap().unwrap();
+        assert_eq!(cut.date, "2026-07-28");
+        assert_eq!(cut.caption, "오늘도 무사히");
+        assert!(!cut.png.is_empty());
+    }
+}
+
+/// G6 — 얼굴 아이콘 lazy 재료화: face.png가 없거나 sprite.png보다 오래되면 그 자리에서
+/// 크롭·저장한다. sprite 쓰기 경로(파이프라인 생성·리롤 승격)에 훅을 걸지 않는 이유:
+/// mtime 비교가 모든 갱신 경로를 자동 커버한다 (스펙 2026-07-28 결정 7).
+pub fn face_icon_inner(dir: &std::path::Path) -> anyhow::Result<Option<String>> {
+    use base64::Engine as _;
+    let sprite = dir.join("sprite.png");
+    let face = dir.join("face.png");
+    let Ok(sprite_meta) = std::fs::metadata(&sprite) else { return Ok(None) };
+    let fresh = match std::fs::metadata(&face) {
+        Ok(m) => match (m.modified(), sprite_meta.modified()) {
+            (Ok(f), Ok(s)) => f >= s,
+            _ => false, // mtime을 못 읽으면 보수적으로 재크롭
+        },
+        Err(_) => false,
+    };
+    let bytes = if fresh {
+        std::fs::read(&face)?
+    } else {
+        let png = agent_mentor::sprite::crop_face(&std::fs::read(&sprite)?)?;
+        std::fs::write(&face, &png)?;
+        png
+    };
+    Ok(Some(base64::engine::general_purpose::STANDARD.encode(bytes)))
+}
+
+/// G6 — 방명록 아바타 등 소형 UI용 얼굴 아이콘(128×128 캐시). 없으면 None(이모지 폴백).
+#[tauri::command]
+pub fn get_face_icon(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri::Manager as _;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    face_icon_inner(&dir).map_err(|e| e.to_string())
+}
+
+/// H2 — 홈 컷 조회 payload. 생성은 파이프라인만 한다 (읽기 전용 — 과금 가드).
+#[derive(Debug, Clone, Serialize)]
+pub struct DailyCut {
+    pub png: String,
+    pub caption: String,
+    pub date: String,
+}
+
+pub fn daily_cut_inner(dir: &std::path::Path) -> anyhow::Result<Option<DailyCut>> {
+    use base64::Engine as _;
+    let Ok(bytes) = std::fs::read(dir.join("daily_cut.png")) else { return Ok(None) };
+    let state: agent_mentor::sprite::CutState = std::fs::read_to_string(dir.join("daily_cut.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    let Some(date) = state.cut_date else { return Ok(None) };
+    Ok(Some(DailyCut {
+        png: base64::engine::general_purpose::STANDARD.encode(bytes),
+        caption: state.caption,
+        date,
+    }))
+}
+
+/// H2 — 오늘의 컷 (png base64 + 캡션 + 일기 날짜). 없으면 None(sprite 폴백).
+#[tauri::command]
+pub fn get_daily_cut(app: tauri::AppHandle) -> Result<Option<DailyCut>, String> {
+    use tauri::Manager as _;
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    daily_cut_inner(&dir).map_err(|e| e.to_string())
+}
+
+/// H2 — 설정 탭 "지금 그려보기": 멱등·일일 상한 없이 즉시 새 컷을 생성·교체한다
+/// (mascot_preview 선례 — 명시적 버튼은 누를 때마다 생성). 성공 시 일기 날짜 반환,
+/// 화면 갱신은 코어가 emit하는 daily_cut:ready로 전파된다. 네트워크 호출이라 async.
+#[tauri::command(async)]
+pub fn generate_daily_cut_now(app: tauri::AppHandle) -> Result<String, String> {
+    match crate::pipeline::generate_daily_cut_core(&app, true) {
+        Ok(Some(date)) => Ok(date),
+        // force=true라 리컨실리에이션 skip(None)은 발생하지 않지만, 방어적으로 처리
+        Ok(None) => Err("생성이 건너뛰어졌어요 — 다시 시도해주세요".into()),
+        Err(e) => Err(e),
+    }
 }
 
 /// AI 스프라이트(캐시) — app_data/sprite.png를 base64로. 없으면 None(프론트는 절차 생성 폴백).
@@ -1711,15 +1836,19 @@ fn owner_os_user() -> String {
     std::env::var("USERNAME").or_else(|_| std::env::var("USER")).unwrap_or_default()
 }
 
-/// 스프라이트 생성 정체성 = (uuid, mbti). uuid는 없으면 생성.
+/// 스프라이트 생성 정체성 = (정체성 시드, mbti). 시드 = uuid에 마스코트 이름을 섞은 값
+/// (`mascot_identity_seed` — 이름 따라 생김새, 이름 미설정이면 uuid 단독). uuid는 없으면 생성.
+/// 초기 생성·재생성·대문사진이 모두 이 관문을 지나므로 세 경로의 캐릭터가 항상 일치한다.
 pub(crate) fn sprite_identity(store: &SqliteStore) -> Result<(String, Option<String>), String> {
     let uuid = ensure_uuid(store)?;
+    let name = store.get_setting("user_name").ok().flatten().unwrap_or_default();
+    let seed = agent_mentor::mascot::mascot_identity_seed(&uuid, &name);
     let mbti = store
         .get_setting("user_mbti")
         .ok()
         .flatten()
         .and_then(|m| agent_mentor::mascot::normalize_mbti(&m));
-    Ok((uuid, mbti))
+    Ok((seed, mbti))
 }
 
 #[tauri::command(async)]
@@ -1830,23 +1959,31 @@ pub fn memory_delete(state: State<AppState>, id: i64) -> Result<(), String> {
 pub fn mascot_preview(app: tauri::AppHandle, state: State<AppState>) -> Result<String, String> {
     use base64::Engine as _;
     use tauri::Manager as _;
-    let (cfg, mbti) = {
+    let (cfg, uuid, mbti) = {
         let guard = lock(&state)?;
         let cfg = crate::resolve_sprite_cfg(&guard);
-        let (_uuid, mbti) = sprite_identity(&guard)?;
-        (cfg, mbti)
+        let (uuid, mbti) = sprite_identity(&guard)?;
+        (cfg, uuid, mbti)
     };
     let Some(cfg) = cfg else {
         return Err("이미지 모델이 설정되지 않았어요 — 설정 → 연결 → 캐릭터 이미지에서 URL·키를 넣어주세요".into());
     };
-    // 변주 시드 = 새 UUID(재생성마다 다른 후보). spec·묘사 모두 이 시드로 뽑는다.
+    // 변주 시드 = 새 UUID — 단 정체성 슬롯(색·머리·눈·몸통)은 프로필 아이디에 고정하고
+    // 포즈·체형·마감·악세서리만 이 시드로 변주한다 (2026-07-29 "id 일관성" 피드백.
+    // 아이디 자체는 절대 바뀌지 않는다 — 이 시드는 그리기용 변주값일 뿐).
     let seed = uuid::Uuid::new_v4().to_string();
-    let spec = agent_mentor::mascot::robot_spec_from_profile(&seed, mbti.as_deref());
+    let spec = agent_mentor::mascot::robot_spec_from_profile(&uuid, mbti.as_deref());
+    let spec = agent_mentor::mascot::respec_pose_for_seed(spec, mbti.as_deref(), &seed);
     let desc = agent_mentor::sprite::character_description(&spec, mbti.as_deref(), &seed);
+    // 재생성 검증용 — 어떤 묘사(특히 악세서리)를 요청했는지 로그로 남겨 그림과 대조 가능하게
+    log::info!("마스코트 재생성 묘사: {desc}");
     let png = agent_mentor::sprite::generate(&cfg, &desc).map_err(|e| e.to_string())?;
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     std::fs::write(dir.join("sprite.candidate.png"), &png).map_err(|e| e.to_string())?;
+    // H2 — 매일 컷이 이 후보의 정체성(변주 시드)을 재사용할 수 있게 시드도 남긴다 (commit 시 승격).
+    // 실패해도 컷은 프로필 uuid로 폴백하므로 비치명적.
+    let _ = std::fs::write(dir.join("sprite.candidate.seed"), &seed);
     Ok(base64::engine::general_purpose::STANDARD.encode(&png))
 }
 
@@ -1860,6 +1997,18 @@ pub fn mascot_commit(app: tauri::AppHandle, state: State<AppState>) -> Result<()
         .map_err(|_| "저장할 미리보기가 없어요 — 먼저 '재생성'을 눌러주세요".to_string())?;
     std::fs::write(dir.join("sprite.png"), &png).map_err(|e| e.to_string())?;
     let _ = std::fs::remove_file(&candidate);
+    // H2 — 변주 시드 승격: 매일 컷의 마스코트 묘사가 이 sprite와 같은 정체성을 쓰게 한다.
+    // 후보 시드가 없으면(구버전 잔재) 이전 sprite.seed를 지워 uuid 폴백으로 — 엉뚱한 시드 잔존 방지.
+    let cand_seed = dir.join("sprite.candidate.seed");
+    match std::fs::read_to_string(&cand_seed) {
+        Ok(s) if !s.trim().is_empty() => {
+            let _ = std::fs::write(dir.join("sprite.seed"), s.trim());
+        }
+        _ => {
+            let _ = std::fs::remove_file(dir.join("sprite.seed"));
+        }
+    }
+    let _ = std::fs::remove_file(&cand_seed);
     if let Some(client) = hub_client(&state)? {
         let _ = upload_cached_mascot(&app, &client);
     }
