@@ -546,9 +546,10 @@ pub struct CutState {
 pub const MAX_CUT_ATTEMPTS_PER_DAY: u8 = 3;
 
 /// 리컨실리에이션 판단 — true면 생성 시도. 최신 일기 컷이 이미 있거나(멱등)
-/// 그 날짜의 시도가 소진됐으면 skip.
-pub fn decide_cut(latest_diary_date: &str, s: &CutState) -> bool {
-    if s.cut_date.as_deref() == Some(latest_diary_date) {
+/// 그 날짜의 시도가 소진됐으면 skip. 멱등 판단은 메타만 믿지 않고 **png 실존**도 본다 —
+/// 파일만 지워진 경우 그 일기 날짜 내내 sprite 폴백으로 고착되는 것을 막는다 (과금 상한은 유지).
+pub fn decide_cut(latest_diary_date: &str, s: &CutState, cut_png_exists: bool) -> bool {
+    if s.cut_date.as_deref() == Some(latest_diary_date) && cut_png_exists {
         return false;
     }
     if s.attempt_date == latest_diary_date && s.attempts >= MAX_CUT_ATTEMPTS_PER_DAY {
@@ -944,22 +945,24 @@ mod tests {
     fn decide_cut_reconciliation_table() {
         let d = "2026-07-28";
         // 초기 상태(첫 실행) → 생성
-        assert!(decide_cut(d, &CutState::default()));
-        // 최신 일기 컷 완료 → skip (재실행 멱등)
+        assert!(decide_cut(d, &CutState::default(), false));
+        // 최신 일기 컷 완료 + png 존재 → skip (재실행 멱등)
         let mut done = CutState::default();
         register_attempt(&mut done, d);
         register_success(&mut done, d, "캡션", CutShot::Bust);
-        assert!(!decide_cut(d, &done));
-        // 오늘 3회 실패 소진 → skip (과금 상한)
+        assert!(!decide_cut(d, &done, true));
+        // 메타는 완료인데 png가 사라짐 → 재생성 (영구 sprite 폴백 방지)
+        assert!(decide_cut(d, &done, false));
+        // 오늘 3회 실패 소진 → skip (과금 상한 — png 유무와 무관)
         let mut spent = CutState::default();
         for _ in 0..MAX_CUT_ATTEMPTS_PER_DAY {
             register_attempt(&mut spent, d);
         }
-        assert!(!decide_cut(d, &spent));
+        assert!(!decide_cut(d, &spent, false));
         // 어제 소진했어도 새 일기 날짜 → 생성 (카운터는 register_attempt가 리셋)
-        assert!(decide_cut("2026-07-29", &spent));
+        assert!(decide_cut("2026-07-29", &spent, false));
         // 어제 성공 컷이 있고 오늘 일기가 새로 생김 → 생성
-        assert!(decide_cut("2026-07-29", &done));
+        assert!(decide_cut("2026-07-29", &done, true));
     }
 
     #[test]

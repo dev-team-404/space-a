@@ -878,9 +878,11 @@ mod runtime {
             Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
         }; // guard drops here
 
-        // ② 리컨실리에이션 (파일 IO만) — skip이면 조용히
+        // ② 리컨실리에이션 (파일 IO만) — skip이면 조용히. png 실존까지 확인해
+        //    "메타만 완료" 고착(파일 삭제 등)을 방지.
         let mut cut = cut_state_load(&dir);
-        if !sprite::decide_cut(&date, &cut) { return; }
+        let png_exists = dir.join("daily_cut.png").is_file();
+        if !sprite::decide_cut(&date, &cut, png_exists) { return; }
         // 시도는 네트워크 **전에** persist — 실패·크래시에도 일일 상한 보장.
         // 원장 쓰기가 실패하면(디스크 풀·읽기 전용) 상한을 보장할 수 없으므로 진행하지 않는다.
         sprite::register_attempt(&mut cut, &date);
