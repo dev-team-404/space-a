@@ -112,6 +112,9 @@ fn rename_body(name: &str, owner_os_user: &str, owner_full_name: &str, hub_user_
     if !owner_full_name.trim().is_empty() {
         body["owner_full_name"] = json!(owner_full_name);
     }
+    if !hub_user_id.trim().is_empty() {
+        body["hub_user_id"] = json!(hub_user_id);
+    }
     body
 }
 
@@ -336,6 +339,7 @@ mod tests {
         let b = rename_body("둘쇠", "jibin", "홍길동", "kimmy-claude");
         assert_eq!(b["owner_full_name"], serde_json::json!("홍길동"));
         assert_eq!(b["owner_os_user"], serde_json::json!("jibin"));
+        assert_eq!(b["hub_user_id"], serde_json::json!("kimmy-claude"));
     }
 
     #[test]
@@ -343,6 +347,7 @@ mod tests {
         let b = rename_body("둘쇠", "", "", "");
         assert!(b.get("owner_os_user").is_none());
         assert!(b.get("owner_full_name").is_none());
+        assert!(b.get("hub_user_id").is_none());
     }
 
     #[test]
