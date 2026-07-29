@@ -5,7 +5,7 @@
 - 대상: a-mate(Agent Mentor) 일기 생성 경로의 전송 소재 수위
 - 관련: [ADR 0019](0019-owner-memory-transmission-boundary.md)(주인 메모리),
   [ADR 0024](0024-image-engine-material-boundary.md)(이미지 엔진),
-  [설계 스펙](../design/a-mate/specs/2026-07-29-diary-social-cluster-design.md)
+  [설계 스펙](../archive/design/a-mate/specs/2026-07-29-diary-social-cluster-design.md)
 
 ## 배경
 
