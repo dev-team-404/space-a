@@ -332,3 +332,50 @@ def test_daily_cut_png_survives_restart(tmp_path):
     restarted = LifeService(store=SqliteStore(db))
     assert restarted.daily_cut(token, agent.agent_id)[0] == png
     assert restarted.life_state(created_life.id)["owner_daily_cut_sha256"] == saved["sha256"]
+
+
+def test_last_seen_survives_restart(tmp_path):
+    """프레즌스 관측 이력은 재시작을 견뎌야 한다 — 서버를 올리자마자 전원 오프라인이 되면
+    a-lens가 배포 직후 몇 분간 빈 화면을 그린다."""
+    db = str(tmp_path / "life-presence.db")
+    service = LifeService(store=SqliteStore(db))
+    _, token, _ = service.register("presence-owner")
+    before = service.me(token)["last_seen"]
+
+    restarted = LifeService(store=SqliteStore(db))
+    agent = restarted._agents[restarted._tokens[token]]
+
+    assert agent.last_seen == before
+
+
+def test_old_db_without_last_seen_starts_unobserved(tmp_path):
+    """last_seen 컬럼이 없던 DB를 열면 기존 행은 '관측 이력 없음'으로 시작한다.
+
+    기본값을 '지금'으로 두면, 몇 달 전 등록만 해두고 떠난 계정들이 마이그레이션 직후 일괄
+    온라인으로 표시된다 — 고치려던 문제(영구 online)를 그대로 재현하는 셈이다."""
+    db = str(tmp_path / "life-no-lastseen.db")
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        """
+        CREATE TABLE life (life_id TEXT PRIMARY KEY, owner_agent_id TEXT NOT NULL,
+          owner_name TEXT NOT NULL, wallpaper TEXT NOT NULL DEFAULT '', floor TEXT NOT NULL DEFAULT '');
+        CREATE TABLE agents (agent_id TEXT PRIMARY KEY, name TEXT NOT NULL, life_id TEXT NOT NULL,
+          at_life TEXT NOT NULL, x INTEGER NOT NULL, y INTEGER NOT NULL,
+          mascot_seed TEXT NOT NULL DEFAULT '', org TEXT NOT NULL DEFAULT '',
+          agent_uuid TEXT NOT NULL DEFAULT '', bubble TEXT NOT NULL DEFAULT '',
+          connected INTEGER NOT NULL DEFAULT 1);
+        CREATE TABLE tokens (token TEXT PRIMARY KEY, agent_id TEXT NOT NULL);
+        INSERT INTO life VALUES ('life_stale', 'ragt_stale', '옛사람', '', '');
+        INSERT INTO agents VALUES ('ragt_stale', '옛사람', 'life_stale', 'life_stale', 1, 1, '', '', '', '', 1);
+        INSERT INTO agents VALUES ('ragt_other', '남', 'life_stale', 'life_stale', 2, 2, '', '', '', '', 1);
+        INSERT INTO tokens VALUES ('tok-stale', 'ragt_stale');
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    service = LifeService(store=SqliteStore(db))
+    # 아직 아무 호출도 안 한 남의 행 — connected=1이지만 관측 이력은 없다.
+    other = next(p for p in service.people("tok-stale") if p["agent_id"] == "ragt_other")
+    assert other["connected"] is True
+    assert other["last_seen"] is None, "연결 설정만 되어 있고 관측된 적은 없다"

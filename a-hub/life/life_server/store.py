@@ -46,7 +46,10 @@ CREATE TABLE IF NOT EXISTS agents (
   hub_user_id     TEXT NOT NULL DEFAULT '',
   bubble      TEXT NOT NULL DEFAULT '',
   daily_line  TEXT NOT NULL DEFAULT '',
-  connected   INTEGER NOT NULL DEFAULT 1
+  connected   INTEGER NOT NULL DEFAULT 1,
+  -- 마지막 인증 호출 시각(rfc3339 UTC). 프레즌스 신선도의 유일한 근거 —
+  -- `connected`만으로는 "연결을 설정해뒀나"밖에 알 수 없다. 빈 문자열 = 관측 이력 없음.
+  last_seen   TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS tokens (
   token    TEXT PRIMARY KEY,
@@ -116,6 +119,10 @@ class SqliteStore:
             self._conn.execute("ALTER TABLE agents ADD COLUMN bubble TEXT NOT NULL DEFAULT ''")
         if "connected" not in agent_columns:
             self._conn.execute("ALTER TABLE agents ADD COLUMN connected INTEGER NOT NULL DEFAULT 1")
+        if "last_seen" not in agent_columns:
+            # 기본값을 빈 문자열로 두는 게 중요하다 — 기존 행에 "지금"을 넣으면 몇 달 전에
+            # 등록만 해둔 계정이 마이그레이션 직후 일괄 온라인으로 보인다.
+            self._conn.execute("ALTER TABLE agents ADD COLUMN last_seen TEXT NOT NULL DEFAULT ''")
         if "org" not in agent_columns:
             self._conn.execute("ALTER TABLE agents ADD COLUMN org TEXT NOT NULL DEFAULT ''")
         if "agent_uuid" not in agent_columns:
@@ -192,12 +199,14 @@ class SqliteStore:
                 cell=(x, y), mascot_seed=mascot_seed, org=org, agent_uuid=agent_uuid,
                 owner_os_user=owner_os_user, owner_full_name=owner_full_name,
                 hub_user_id=hub_user_id, bubble=bubble, daily_line=daily_line,
-                connected=bool(connected),
+                connected=bool(connected), last_seen=last_seen,
             )
             for (agent_id, name, life_id, at_life, x, y, mascot_seed, org, agent_uuid,
-                 owner_os_user, owner_full_name, hub_user_id, bubble, daily_line, connected) in c.execute(
+                 owner_os_user, owner_full_name, hub_user_id, bubble, daily_line, connected,
+                 last_seen) in c.execute(
                 "SELECT agent_id, name, life_id, at_life, x, y, mascot_seed, org, agent_uuid, "
-                "owner_os_user, owner_full_name, hub_user_id, bubble, daily_line, connected FROM agents"
+                "owner_os_user, owner_full_name, hub_user_id, bubble, daily_line, connected, "
+                "last_seen FROM agents"
             )
         }
         tokens = dict(c.execute("SELECT token, agent_id FROM tokens"))
@@ -378,18 +387,20 @@ class SqliteStore:
     def _save_agent_row(self, agent: LifeAgent) -> None:
         self._conn.execute(
             "INSERT INTO agents (agent_id, name, life_id, at_life, x, y, mascot_seed, org, agent_uuid, "
-            "owner_os_user, owner_full_name, hub_user_id, bubble, daily_line, connected) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "owner_os_user, owner_full_name, hub_user_id, bubble, daily_line, connected, "
+            "last_seen) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(agent_id) DO UPDATE SET "
             "name = excluded.name, at_life = excluded.at_life, x = excluded.x, y = excluded.y, "
             "mascot_seed = excluded.mascot_seed, org = excluded.org, agent_uuid = excluded.agent_uuid, "
             "owner_os_user = excluded.owner_os_user, owner_full_name = excluded.owner_full_name, "
             "hub_user_id = excluded.hub_user_id, "
-            "bubble = excluded.bubble, daily_line = excluded.daily_line, connected = excluded.connected",
+            "bubble = excluded.bubble, daily_line = excluded.daily_line, "
+            "connected = excluded.connected, last_seen = excluded.last_seen",
             (
                 agent.agent_id, agent.name, agent.life_id, agent.at_life,
                 agent.cell[0], agent.cell[1], agent.mascot_seed, agent.org, agent.agent_uuid,
                 agent.owner_os_user, agent.owner_full_name, agent.hub_user_id,
-                agent.bubble, agent.daily_line, int(agent.connected),
+                agent.bubble, agent.daily_line, int(agent.connected), agent.last_seen,
             ),
         )

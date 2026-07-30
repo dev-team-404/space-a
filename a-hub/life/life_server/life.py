@@ -30,8 +30,22 @@ WINDOW_ROTATION_BY_WALL = {"west": 90, "north": 180}
 # P4 인바운드 방문 추적 — 같은 방문자 연속 재입장 세션화 창·방당 보존 상한 (스펙 §3)
 VISIT_SESSION_WINDOW_SECS = 30 * 60
 VISITS_MAX_PER_LIFE = 100
+# 프레즌스 `last_seen`을 DB에 실제로 쓰는 최소 간격(초). 인메모리 값은 매 호출 갱신된다.
+# 소비자의 판정 창(a-lens 기본 3600초)보다 훨씬 촘촘하므로 정확도 손실은 없다.
+_TOUCH_PERSIST_SECONDS = 30
 
 Cell = tuple[int, int]
+
+
+def _parse_ts(value: str | None) -> datetime | None:
+    """rfc3339 문자열 → tz-aware datetime. 빈 값·파싱 실패는 None(관측 이력 없음)."""
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 @dataclass
@@ -86,6 +100,10 @@ class LifeAgent:
     # (owner_mascot_image_sha256 선례 — 주인이 자리를 비워도 대문은 걸려 있어야 한다).
     daily_line: str = ""
     connected: bool = True
+    # 마지막 인증 호출 시각(rfc3339 UTC). `connected`는 "연결을 설정해뒀나"만 말해 준다 —
+    # register/enter에서 True가 되고 수동 disconnect로만 False가 되므로 신선도가 없다.
+    # 실제 프레즌스는 이 값 + 소비자 쪽 창(window)으로 판정한다. "" = 관측 이력 없음.
+    last_seen: str = ""
 
 
 @dataclass
@@ -237,7 +255,31 @@ class LifeService:
         agent_id = self._tokens.get(token or "")
         if agent_id is None:
             raise errors.Unauthorized("invalid or missing token")
-        return self._agents[agent_id]
+        agent = self._agents[agent_id]
+        self._touch(agent)
+        return agent
+
+    def _touch(self, agent: LifeAgent) -> None:
+        """인증된 호출 = 클라이언트가 살아 있다는 증거. 그 시각을 `last_seen`에 남긴다.
+
+        전용 하트비트 엔드포인트를 두지 않는 이유: a-mate가 이미 스캔에 편승해 방문·방명록
+        폴링으로 분당 한 번쯤 인증 호출을 하고 있다. 그 트래픽에 시각만 붙이면 프레즌스가
+        공짜로 생기고, 클라이언트는 고칠 것이 없다.
+
+        DB 쓰기는 `_TOUCH_PERSIST_SECONDS` 간격으로 성글게 한다 — 이 서버는 지금까지 변이에서만
+        쓰기를 했으므로, 읽기 요청마다 쓰기를 하면 쓰기량 성격이 달라진다. 인메모리 값은 항상
+        최신이라 판정 정확도는 떨어지지 않는다.
+
+        주의: 호출자는 `self._lock`을 들고 있지 않아야 한다(비재진입 Lock). 현재 `_authed`의
+        모든 호출부가 락 밖이다.
+        """
+        now = datetime.now(timezone.utc)
+        with self._lock:
+            prev = _parse_ts(agent.last_seen)
+            agent.last_seen = now.isoformat()
+            stale = prev is None or (now - prev).total_seconds() >= _TOUCH_PERSIST_SECONDS
+            if self._store and stale:
+                self._store.save_agent(agent)
 
     def rename(self, token: str | None, name: str) -> dict:
         """유저 이름 변경 — 에이전트 이름과 자기 방의 주인 이름을 함께 바꾼다."""
@@ -356,6 +398,8 @@ class LifeService:
                 "my_life_id": agent.life_id,
                 "life_id": agent.at_life,
                 "cell": list(agent.cell),
+                "connected": agent.connected,
+                "last_seen": agent.last_seen or None,
                 "identity": self._identity(agent),
             }
 
@@ -367,6 +411,9 @@ class LifeService:
             return [
                 {"agent_id": a.agent_id, "name": a.name, "life_id": a.life_id,
                  "is_friend": (me.agent_id, a.agent_id) in self._friends,
+                 # 프레즌스 재료 — 판정(창 크기)은 소비자 몫이다. `connected`만으로는 부족하고
+                 # `last_seen`이 있어야 "지금 켜져 있나"를 알 수 있다.
+                 "connected": a.connected, "last_seen": a.last_seen or None,
                  "identity": self._identity(a)}
                 for a in self._agents.values() if a.agent_id != me.agent_id
             ]
