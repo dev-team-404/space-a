@@ -970,33 +970,12 @@ def main() -> None:
             elif mine_issues:
                 m["activity"] = {"kind": "issue", "title": p(mine_issues)["title"]}
 
-        # 오늘의 하이라이트 — 하루치 raw data 중 가장 핵심인 사건 한 줄 (칠판에 표시).
-        # 가장 많이 재사용된 지식 > 최근 해결 이슈 순. kind+참조 id를 함께 실어
-        # 칠판 클릭 시 사이드바에서 관련 항목을 하이라이트할 수 있게 한다.
-        top = max(docs, key=lambda d: d["reuse_count"])
-        resolved = [i for i in issues if i["status"] == "resolved"]
-        if top["reuse_count"] > 0 and top["cited_by"]:
-            highlight = {
-                "kind": "reuse",
-                "doc_id": top["doc_id"],
-                "text": (
-                    f"『{top['title']}』 지식이 {TEAM_NAME[top['cited_by'][0]]}에서 재사용됐어요"
-                    f" (누적 {top['reuse_count']}회)"
-                ),
-            }
-        elif resolved:
-            highlight = {
-                "kind": "issue",
-                "issue_id": resolved[0]["issue_id"],
-                "text": f"‘{resolved[0]['title']}’ 이슈가 해결됐어요",
-            }
-        else:
-            highlight = None
-
+        # 칠판 하이라이트는 여기서 만들지 않는다 — 소스별 규칙이 갈리면 같은 칠판이 데이터
+        # 출처에 따라 다르게 뜬다. 아래 events/reuse_events 풀만 제공하고 선정은 alens.pipeline이
+        # 랭킹으로 한 곳에서 한다. 스펙: docs/design/a-lens/specs/2026-07-30-room-board-highlight.md §6
         lo1, hi1, lo2, hi2 = team["visits"]
         payload = {
             "space": {"space_id": team["space_id"], "name": team["name"]},
-            "highlight": highlight,
             "visits": {"today": rng.randint(lo1, hi1), "total": rng.randint(lo2, hi2)},
             "members": members,
             "issues": issues,

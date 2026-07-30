@@ -1398,6 +1398,11 @@ async function renderLife(spaceId: string) {
           hubTab = 'reuse'
           renderHub(data)
           flashRelated(`[data-reuse-doc="${h.doc_id}"], [data-docid="${h.doc_id}"]`)
+        } else if (h?.kind === 'knowledge' && h.doc_id) {
+          // 새로 등록된 지식이 하이라이트 → 재사용 피드엔 없으므로 문서함에서 그 문서를 강조
+          hubTab = 'pages'
+          renderHub(data)
+          flashRelated(`[data-docid="${h.doc_id}"]`)
         } else if (h?.kind === 'issue' && h.issue_id) {
           hubTab = 'issues'
           // 필터에 가려 강조 대상이 안 보이는 일이 없게 필터를 초기화하고 연다

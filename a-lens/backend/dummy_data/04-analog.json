@@ -3,11 +3,6 @@
   "space_id": "analog",
   "name": "아날로그 설계팀 (AMS)"
  },
- "highlight": {
-  "kind": "reuse",
-  "doc_id": "analog-doc-0030",
-  "text": "『SerDes 송신부 ESD 보호 전략 노트』 지식이 펌웨어개발팀에서 재사용됐어요 (누적 13회)"
- },
  "visits": {
   "today": 4,
   "total": 225

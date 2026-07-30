@@ -3,11 +3,6 @@
   "space_id": "firmware",
   "name": "펌웨어개발팀"
  },
- "highlight": {
-  "kind": "reuse",
-  "doc_id": "firmware-doc-0036",
-  "text": "『미디어 코덱 레지스터 헤더 자동 생성 적용기』 지식이 DFT팀에서 재사용됐어요 (누적 12회)"
- },
  "visits": {
   "today": 17,
   "total": 578
