@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-30
+---
+
 # 대문 아웃바운드 게시 구현 계획 (O1)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

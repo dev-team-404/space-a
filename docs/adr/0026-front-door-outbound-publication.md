@@ -6,7 +6,7 @@
 - 관련: [ADR 0019](0019-owner-memory-transmission-boundary.md)(주인 메모리),
   [ADR 0024](0024-image-engine-material-boundary.md)(이미지 엔진),
   [ADR 0025](0025-neighbour-content-transmission-boundary.md)(이웃 일기),
-  [설계 스펙](../design/a-mate/specs/2026-07-30-front-door-outbound-design.md)
+  [설계 스펙](../archive/design/a-mate/specs/2026-07-30-front-door-outbound-design.md)
 
 ## 배경
 
