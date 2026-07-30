@@ -27,7 +27,6 @@
 
 {#if url}
   <button class="lens-link" onclick={open} title={url}>
-    <span class="ico">🔭</span>
     <span class="txt">
       <b>A-Lens에서 보기</b>
       <small>{space} 팀 방</small>
@@ -53,7 +52,6 @@
     cursor: pointer;
   }
   .lens-link:hover { border-color: var(--accent); }
-  .ico { font-size: 15px; flex: 0 0 auto; }
   .txt { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
   .txt b { font-size: 12px; }
   .txt small { font-size: 10px; color: var(--ink-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
