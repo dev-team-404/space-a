@@ -298,6 +298,34 @@ impl LifeClient {
         }
     }
 
+    /// O1 — 대문에 걸린 오늘의 한마디 게시. 빈 문자열은 지움 (set_bubble 동형).
+    pub fn set_daily_line(&self, body: &str) -> Result<Value> {
+        self.req("PATCH", "/life/me/daily-line")
+            .send_json(json!({"body": body})).map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
+    /// O1 — 대문사진(PNG) 게시. 서버가 sha256이 같으면 쓰기를 생략한다 (upload_mascot_image 동형).
+    pub fn upload_daily_cut(&self, png: &[u8]) -> Result<Value> {
+        self.req("PUT", "/life/me/daily-cut")
+            .set("Content-Type", "image/png")
+            .send_bytes(png).map_err(err_of)?.into_json().map_err(Into::into)
+    }
+
+    /// O1 — 방문 중인 방 주인의 대문사진. 없으면 Ok(None) — 구서버의 404도 같게 처리해
+    /// 클라이언트가 마스코트 이미지로 폴백한다 (mascot_image 동형).
+    pub fn daily_cut(&self, agent_id: &str) -> Result<Option<Vec<u8>>> {
+        use std::io::Read as _;
+        match self.req("GET", &format!("/life/agents/{agent_id}/daily-cut")).call() {
+            Ok(response) => {
+                let mut bytes = Vec::new();
+                response.into_reader().read_to_end(&mut bytes)?;
+                Ok(Some(bytes))
+            }
+            Err(ureq::Error::Status(404, _)) => Ok(None),
+            Err(error) => Err(err_of(error)),
+        }
+    }
+
     pub fn disconnect(&self) -> Result<Value> {
         self.req("POST", "/life/me/disconnect").send_json(json!({})).map_err(err_of)?.into_json().map_err(Into::into)
     }

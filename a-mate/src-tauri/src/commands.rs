@@ -798,6 +798,15 @@ fn upload_cached_mascot(app: &tauri::AppHandle, client: &LifeClient) -> Result<b
     client.upload_mascot_image(&png).map(|_| true).map_err(|e| e.to_string())
 }
 
+/// O1 — 캐시된 대문사진을 서버에 게시. 컷이 아직 없으면 Ok(false)(올릴 게 없음 = 실패 아님).
+/// PNG 바이트를 프론트로 왕복시키지 않기 위해 Rust가 파일을 직접 읽는다.
+fn upload_cached_daily_cut(app: &tauri::AppHandle, client: &LifeClient) -> Result<bool, String> {
+    use tauri::Manager as _;
+    let path = app.path().app_data_dir().map_err(|e| e.to_string())?.join("daily_cut.png");
+    let Ok(png) = std::fs::read(path) else { return Ok(false) };
+    client.upload_daily_cut(&png).map(|_| true).map_err(|e| e.to_string())
+}
+
 #[tauri::command(async)]
 pub fn hub_settings_get(state: State<AppState>) -> Result<HubSettings, String> {
     let guard = lock(&state)?;
@@ -1104,6 +1113,35 @@ pub async fn life_mascot_image(state: State<'_, AppState>, agent_id: String) -> 
     let Some(client) = hub_client(&state)? else { return Ok(None) };
     run_life_http("life_mascot_image", move || {
         client.mascot_image(&agent_id)
+            .map(|value| value.map(|png| base64::engine::general_purpose::STANDARD.encode(png)))
+            .map_err(|e| e.to_string())
+    }).await
+}
+
+/// O1 — 대문 한마디 게시. **자동 경로**이므로 hub 미연결이면 조용히 Ok(false)
+/// (life_sync_mascot_image 선례 — 사용자 개시 커맨드처럼 Err("hub_not_connected")를 던지지 않는다).
+#[tauri::command]
+pub async fn life_set_daily_line(state: State<'_, AppState>, body: String) -> Result<bool, String> {
+    let Some(client) = hub_client(&state)? else { return Ok(false) };
+    run_life_http("life_set_daily_line", move || {
+        client.set_daily_line(&body).map(|_| true).map_err(|e| e.to_string())
+    }).await
+}
+
+/// O1 — 캐시된 대문사진을 서버에 게시. 컷·연결이 없으면 Ok(false).
+#[tauri::command]
+pub async fn life_sync_daily_cut(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<bool, String> {
+    let Some(client) = hub_client(&state)? else { return Ok(false) };
+    run_life_http("life_sync_daily_cut", move || upload_cached_daily_cut(&app, &client)).await
+}
+
+/// O1 — 방문 중인 방 주인의 대문사진 base64. 없으면 None(마스코트 이미지로 폴백).
+#[tauri::command]
+pub async fn life_daily_cut(state: State<'_, AppState>, agent_id: String) -> Result<Option<String>, String> {
+    use base64::Engine as _;
+    let Some(client) = hub_client(&state)? else { return Ok(None) };
+    run_life_http("life_daily_cut", move || {
+        client.daily_cut(&agent_id)
             .map(|value| value.map(|png| base64::engine::general_purpose::STANDARD.encode(png)))
             .map_err(|e| e.to_string())
     }).await
