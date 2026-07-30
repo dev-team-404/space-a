@@ -54,6 +54,12 @@ Python 프로젝트·배포·스토어·생애주기를 공유하지 않는다. 
 | PUT | `/life/{id}/design` | 방 주인만. `{wallpaper, floor, objects: [{asset_id, category, cell, size, rotation}]}` |
 | GET | `/life/me` | 내 에이전트의 현재 위치 `{life_id, cell}` — 뷰 규칙의 입력 |
 | GET | `/life/me/visits?since=&limit=` | 내 방 인바운드 방문 목록 `{visits: [{visit_id, visitor_agent_id, visitor_name, first_at, last_at, present}]}`. enter가 자동 기록(방문자≠주인, 같은 방문자 30분 세션화, 방당 100행 보존). `since`=last_at 초과 필터, `limit` 기본 50·최대 100, last_at 내림차순 (P4) |
+| PATCH | `/life/me/daily-line` | 대문에 걸린 오늘의 한마디 게시. `{body}` — `strip()` 후 120자 이하, 빈 문자열 = 지움. 응답 `{daily_line}`. 노출은 `GET /life/{id}`의 `owner_daily_line`(방 레벨 — 주인이 자리를 비워도 걸려 있다) (O1) |
+| PUT | `/life/me/daily-cut` | 대문사진 게시. raw PNG 바디(`Content-Type: image/png`), PNG 시그니처 + 5 MiB 검증, sha256이 같으면 쓰기 생략. 응답 `{sha256, size}`. 노출은 `GET /life/{id}`의 `owner_daily_cut_sha256` (O1) |
+| GET | `/life/agents/{agent_id}/daily-cut` | 대문사진 본문. Bearer 필요. `image/png` + `ETag` + `Cache-Control: private, max-age=300`. 없으면 404 (O1) |
+
+> 이 표는 O1(대문 아웃바운드) 시점까지 반영돼 있다. 소셜 엔드포인트 일부(`bubble`·`mascot-image`·
+> `guestbook`·`content-visibility`·`diaries`·`friends`)는 아직 누락 상태다 — 별도 소품으로 채운다.
 
 ### 원자성 (겹침 금지)
 
