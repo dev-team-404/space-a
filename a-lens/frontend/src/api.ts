@@ -62,6 +62,7 @@ export type KnowledgeDoc = {
   doc_id: string
   title: string
   author_agent: string
+  author_agent_id?: string // 작성자 원본 agent_id — 사람별 작업 기록을 묶는 키
   visibility: string
   summary: string
   body: string

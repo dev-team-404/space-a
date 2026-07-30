@@ -645,8 +645,9 @@ function catBadge(cat?: string | null): string {
 // ── 오른쪽 Collaboration Hub (상시 사이드바) ──
 // a-lens는 사람이 보는 view — 캐릭터·Activity는 '사람'이다. 라벨도 사람/팀 관점.
 // 위 2/3 = 탭(이슈 공유 / 지식 재사용) 내용, 아래 1/3 = 팀 활동 상시 표시.
-type HubTab = 'issues' | 'reuse' | 'pages'
+type HubTab = 'trail' | 'issues' | 'reuse' | 'pages'
 const HUB_TABS: { id: HubTab; label: string; icon: string }[] = [
+  { id: 'trail', label: '작업 기록', icon: '🧭' },
   { id: 'issues', label: '이슈 공유', icon: '🔗' },
   { id: 'reuse', label: '지식 재사용', icon: '📄' },
   { id: 'pages', label: '문서함', icon: '📑' },
@@ -782,6 +783,130 @@ function hubIssuesHTML(data: SpaceView): string {
   if (!list.length) content = '<p class="muted small">표시할 항목이 없어요</p>'
 
   return hubSection('이슈 흐름', 'Issue Flow', chips + personSel + content)
+}
+
+// ── 작업 기록 탭 — 사람 하나를 골라 그 사람의 이슈·문서를 시간순 한 줄기로 ──
+// 카드 나열은 "무엇이 있다"만 보여준다. 사람을 축으로 세우면 "이 사람이 무엇을 하며
+// 지내는가"가 읽힌다. 데이터가 허락하는 범위: 이슈·문서를 원본 agent_id로 묶고, 이미
+// 있는 LLM 한 줄 서사를 줄 설명으로 쓴다. (허브에 다단계 타임라인·재사용 사슬은 없다)
+let trailPerson: string | null = null // 선택된 사람의 agent_id
+
+/** 이 사람이 남긴 것인가 — 표시 이름은 흔들리므로(Life 이름·'a-mate/' 접두어) id를 우선한다. */
+function isBy(agent: SpaceAgent, actorId: string | undefined, actorName: string): boolean {
+  if (actorId && actorId === agent.agent_id) return true
+  const names = [agent.agent_id, agent.hub_name, agent.name].filter(Boolean) as string[]
+  return names.some((n) => n === actorName)
+}
+
+type TrailItem = { at: string; kind: 'issue' | 'doc'; issue?: SpaceIssue; doc?: KnowledgeDoc; i?: number }
+
+function trailItems(data: SpaceView, agent: SpaceAgent): TrailItem[] {
+  const items: TrailItem[] = []
+  for (const iss of data.issues) {
+    if (isBy(agent, iss.opened_by, issueActor(iss))) items.push({ at: issueAt(iss), kind: 'issue', issue: iss })
+  }
+  data.knowledge.forEach((d, i) => {
+    if (isBy(agent, d.author_agent_id, d.author_agent)) items.push({ at: '', kind: 'doc', doc: d, i })
+  })
+  // 문서엔 시각이 없는 것이 많다(초기 데이터) — id 순서를 의사 시간으로 쓰는 기존 관례를 따른다.
+  return items.sort((a, b) => {
+    if (a.at && b.at) return b.at.localeCompare(a.at)
+    if (a.at) return -1
+    if (b.at) return 1
+    return docSeq(b.doc?.doc_id ?? '') - docSeq(a.doc?.doc_id ?? '')
+  })
+}
+
+function trailRowHTML(item: TrailItem): string {
+  if (item.kind === 'issue' && item.issue) {
+    const i = item.issue
+    const [, color] = statusMeta(i.status)
+    const gist = i.narrative || i.summary || ''
+    return `
+      <div class="trail-row" data-issue="${esc(i.issue_id)}" style="border-left-color:${color}">
+        <div class="trail-head"><span class="trail-kind">🔗 이슈</span>${statusBadge(i.status)}
+          <span class="trail-at">${issueTimeLabel(issueAt(i))}</span></div>
+        <div class="trail-title">${catBadge(i.category)}${esc(i.title)}</div>
+        ${gist ? `<div class="doc-summary">${esc(gist)}</div>` : ''}
+      </div>`
+  }
+  const d = item.doc!
+  const gist = d.narrative || d.summary || ''
+  return `
+    <div class="trail-row doc" data-doc="${item.i}" data-docid="${esc(d.doc_id)}">
+      <div class="trail-head"><span class="trail-kind">📄 문서</span>
+        <span class="badge">${d.visibility === 'org' ? '조직 공개' : '방 전용'}</span></div>
+      <div class="trail-title">${catBadge(d.category)}${esc(d.title)}</div>
+      ${gist ? `<div class="doc-summary">${esc(gist)}</div>` : ''}
+    </div>`
+}
+
+/** 사람 선택 전 화면 — 활동 있는 사람을 최근 활동순으로, 각자 이슈·문서 건수와 함께. */
+function trailPickerHTML(data: SpaceView): string {
+  // 같은 사람이 허브 계정 여러 개(옛 계정·재등록)를 가질 수 있다 — Life 신원이 같으면 한 줄로
+  // 합친다. 기록 수가 많은 계정을 대표로 둔다(그쪽이 본계정일 가능성이 높다).
+  const merged = new Map<string, { a: SpaceAgent; n: number }>()
+  for (const a of data.agents.filter(hasSentAnything)) {
+    const key = a.life_agent_id || a.agent_id
+    const n = trailItems(data, a).length
+    const prev = merged.get(key)
+    if (!prev || n > prev.n) merged.set(key, { a, n })
+  }
+  const people = [...merged.values()].sort(
+    (x, y) => y.n - x.n || x.a.name.localeCompare(y.a.name, 'ko'),
+  )
+  const rows = people
+    .map(({ a, n }) => {
+      const icon = a.mascot_url
+        ? `<img class="agent-mascot" src="${esc(a.mascot_url)}" alt="" loading="lazy" onerror="this.remove()" />`
+        : `<span class="agent-dot ${a.status === 'working' ? 'on' : ''}"></span>`
+      return `
+        <div class="agent-row trail-pick" data-person="${esc(a.agent_id)}">
+          ${icon}<span class="agent-name">${esc(a.name)}</span>
+          <span class="agent-status">${n}건</span>
+        </div>`
+    })
+    .join('')
+  return hubSection('작업 기록', 'Work Trail', rows || '<p class="muted small">표시할 사람이 없어요</p>')
+}
+
+function hubTrailHTML(data: SpaceView): string {
+  const agent = data.agents.find((a) => a.agent_id === trailPerson)
+  if (!agent) return trailPickerHTML(data)
+  const items = trailItems(data, agent)
+  const issues = items.filter((t) => t.kind === 'issue')
+  const resolved = issues.filter((t) => t.issue?.status === 'resolved').length
+  const docs = items.length - issues.length
+  const last = items.find((t) => t.at)?.at ?? ''
+  const icon = agent.mascot_url
+    ? `<img class="trail-face" src="${esc(agent.mascot_url)}" alt="" onerror="this.remove()" />`
+    : ''
+  const head = `
+    <div class="trail-person">
+      <button class="sub-tab" data-person="">← 전체</button>
+      ${icon}
+      <div class="trail-who"><b>${esc(agent.name)}</b>
+        <div class="muted small">${esc(agent.hub_name && agent.hub_name !== agent.name ? agent.hub_name : agent.agent_id)}</div></div>
+    </div>
+    <div class="trail-stats">
+      <span>이슈 <b>${issues.length}</b>${issues.length ? ` · 해결 <b>${resolved}</b>` : ''}</span>
+      <span>문서 <b>${docs}</b></span>
+      ${last ? `<span class="muted">최근 ${esc(issueTimeLabel(last))}</span>` : ''}
+    </div>`
+
+  // 시간 버킷 헤더 — 이슈 흐름과 같은 구획(오늘/어제/이번 주/이전). 시각 없는 문서는 '기록' 묶음.
+  let body = ''
+  let bucket = ''
+  for (const item of items) {
+    const b = item.at ? timeBucket(item.at) : '시각 미상'
+    if (b !== bucket) {
+      bucket = b
+      body += `<div class="bucket-head">${b}</div>`
+    }
+    body += trailRowHTML(item)
+  }
+  if (!items.length) body = '<p class="muted small">아직 남긴 기록이 없어요</p>'
+  return hubSection('작업 기록', 'Work Trail', head + body)
 }
 
 // ── 지식 문서 필터 (지식 재사용 '책장' · 문서함 공용) ──
@@ -933,7 +1058,7 @@ function agentRowHTML(a: SpaceAgent): string {
          onerror="this.remove()" />`
     : `<span class="agent-dot ${a.status === 'working' ? 'on' : ''}"></span>`
   return `
-    <div class="agent-row ${a.status === 'working' ? '' : 'off'}">
+    <div class="agent-row clickable ${a.status === 'working' ? '' : 'off'}" data-person="${esc(a.agent_id)}">
       ${icon}
       <span class="agent-name">${esc(a.name)}</span>
       <span class="agent-status">${esc(status)}</span>
@@ -1053,7 +1178,33 @@ function renderHub(data: SpaceView) {
 
   // 위 2/3: 선택 탭 내용. 아래 1/3: 팀 활동 상시 (온라인/오프라인 서브탭).
   hubBody.innerHTML =
-    hubTab === 'issues' ? hubIssuesHTML(data) : hubTab === 'reuse' ? hubReuseHTML(data) : hubPagesHTML(data)
+    hubTab === 'trail'
+      ? hubTrailHTML(data)
+      : hubTab === 'issues'
+        ? hubIssuesHTML(data)
+        : hubTab === 'reuse'
+          ? hubReuseHTML(data)
+          : hubPagesHTML(data)
+  // 작업 기록 — 사람 선택/해제
+  hubBody.querySelectorAll<HTMLElement>('[data-person]').forEach((el) => {
+    el.addEventListener('click', () => {
+      trailPerson = el.dataset.person || null
+      renderHub(data)
+    })
+  })
+  // 작업 기록의 이슈 줄 → 이슈 상세 모달 (문서 줄은 아래 .doc-item과 같은 data-doc를 쓴다)
+  hubBody.querySelectorAll<HTMLElement>('.trail-row[data-issue]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const iss = data.issues.find((x) => x.issue_id === el.dataset.issue)
+      if (iss) showModal(iss.title, issueModalHTML(iss))
+    })
+  })
+  hubBody.querySelectorAll<HTMLElement>('.trail-row[data-doc]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const doc = data.knowledge[Number(el.dataset.doc)]
+      if (doc) showModal(doc.title, docModalHTML(doc))
+    })
+  })
   // 이슈 흐름 필터 — 상태 칩 + 사람 드롭다운
   hubBody.querySelectorAll<HTMLElement>('[data-ifilter]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -1109,6 +1260,14 @@ function renderHubActivity(data: SpaceView) {
     btn.addEventListener('click', () => {
       activityTab = btn.dataset.atab as ActivityTab
       renderHubActivity(data) // 활동 영역만 다시 — 위 탭 내용·스크롤 유지
+    })
+  })
+  // 사람 줄 클릭 → 위 탭을 그 사람의 작업 기록으로 (캐릭터 클릭과 같은 진입)
+  hubActivity.querySelectorAll<HTMLElement>('.agent-row[data-person]').forEach((el) => {
+    el.addEventListener('click', () => {
+      trailPerson = el.dataset.person || null
+      hubTab = 'trail'
+      renderHub(data)
     })
   })
 }
@@ -1223,7 +1382,14 @@ async function renderLife(spaceId: string) {
       highlight: data.highlight?.text,
     },
     {
-      onAgentTap: (agent) => showAgentPanel(agent),
+      onAgentTap: (agent) => {
+        showAgentPanel(agent)
+        // 사이드바를 그 사람의 작업 기록으로 — "이 사람이 무엇을 하며 지내는가"로 바로 진입
+        if (hubCollapsed) toggleHub(false)
+        trailPerson = agent.agent_id
+        hubTab = 'trail'
+        renderHub(data)
+      },
       // 칠판 클릭 → 하이라이트와 관련된 이슈/재사용 항목을 해당 탭에서 강조 (2026-07-19).
       onBoardTap: () => {
         if (hubCollapsed) toggleHub(false)

@@ -7,6 +7,7 @@
   import GuestbookTab from './lib/ui/GuestbookTab.svelte';
   import SettingsTab from './lib/ui/settings/SettingsTab.svelte';
   import RobotPortrait from './lib/ui/RobotPortrait.svelte';
+  import LensLink from './lib/ui/LensLink.svelte';
   import LifeNavigator from './lib/ui/LifeNavigator.svelte';
   import UpdateBanner from './lib/ui/UpdateBanner.svelte';
   import { runCheck } from './lib/ui/update-store.svelte';
@@ -257,7 +258,12 @@
             <span class="daily-line">{cutCaption || dailyLine}</span>
           </div>
         {/if}
-        <LifeNavigator {myLifeId} currentLifeId={currentLifeId} />
+        <!-- 프로필 하단 도크: a-lens 링크 → 미니홈피 이동 순서로 붙인다.
+             두 컴포넌트가 각자 margin-top:auto를 쓰면 서로 밀어내므로 여기서 한 번만 띄운다. -->
+        <div class="bottom-dock">
+          <LensLink />
+          <LifeNavigator {myLifeId} currentLifeId={currentLifeId} />
+        </div>
       </aside>
       <main class="content">
         {#if tab === 'home'}
@@ -329,6 +335,12 @@
     border-right: 1px solid var(--pastel-lav);
     display: flex; flex-direction: column; gap: 12px;
   }
+  /* 프로필 하단 도크 — a-lens 링크 + 미니홈피 이동을 아래에 붙여 한 묶음으로 둔다 */
+  .bottom-dock {
+    margin-top: auto;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .bottom-dock :global(.life-navigator) { margin-top: 0; }
   /* 한마디 카드 — LLM 오늘의 한마디를 4줄로 접는(…) 표시 전용. 좁은 프로필 칸 가독성 */
   .daily {
     display: flex; flex-direction: column; gap: 5px;

@@ -54,7 +54,7 @@ export const PREVIEW_DATA: LifeSceneData = {
 }
 
 // Life 마스코트 이미지를 캐릭터로 쓸 때의 목표 높이(px) — 원본은 1000px 급이라 축소한다.
-const MASCOT_H = 58
+const MASCOT_H = 74
 
 /** 씬별 캐릭터 표시 요소 — 경량 폴링(이름·아이콘만 갱신)이 씬을 다시 그리지 않도록 잡아둔다. */
 type AgentView = { robot: Container; nameTag: Text; namePill: Graphics; mascotUrl: string }
@@ -492,8 +492,17 @@ export function buildLifeScene(
     fontFamily: '"Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif',
     dropShadow: { color: 0x000000, alpha: 0.8, blur: 2, distance: 0, angle: 0 },
   })
-  const CHAR_SCALE = 1.0 // kitPieceScale 위에 곱하는 배수 — 책상(1.7배)과 어울리게, 의자에 앉은 크기
+  const CHAR_SCALE = 1.28 // kitPieceScale 위에 곱하는 배수 — 책상(1.7배)과 어울리게, 의자에 앉은 크기
+  // 말풍선은 캐릭터의 자식으로 두면 앞줄 책상·캐릭터가 뒷줄 말풍선을 덮는다(깊이 정렬의 부작용).
+  // 전용 오버레이 레이어에 모아 항상 맨 위에 그리고, 캐릭터의 흔들림만 따라가게 한다.
+  const bubbleLayer = new Container()
+  bubbleLayer.zIndex = 5000
+  root.addChild(bubbleLayer)
+  // 캐릭터가 위아래로 흔들리므로 말풍선도 같은 오프셋을 따라가야 붙어 보인다.
+  const bubbles: { g: Container; baseY: number }[] = []
+
   const makeRobot = (agent: SpaceAgent, k: number, rgx: number, rgy: number) => {
+    let myBubble: { g: Container; baseY: number } | null = null
     const robot = new Container()
     const [rx, ry] = pt(rgx, rgy)
     robot.position.set(rx, ry)
@@ -546,16 +555,24 @@ export function buildLifeScene(
     // 작업 중이면 머리 위에 말풍선 — 최근 활동 요약(brief)이 있으면 그 문구를, 없으면 '...'
     if (agent.status === 'working') {
       const brief = agent.recent_activity?.brief
-      const by = topY - 8
+      // 마스코트 이미지는 기본 캐릭터보다 커서(MASCOT_H) 머리 위 기준선도 그만큼 올려야 한다.
+      const headY = agent.mascot_url ? Math.min(topY, -MASCOT_H) : topY
+      const by = headY - 8
+      // 오버레이 레이어에 얹을 묶음 — 캐릭터 위치를 따라간다.
+      const bubbleG = new Container()
+      bubbleG.position.set(rx, ry)
+      bubbleLayer.addChild(bubbleG)
+      myBubble = { g: bubbleG, baseY: ry }
+      bubbles.push(myBubble)
       if (brief) {
         // 말풍선은 한 줄만 — 넘치면 '…'로 자른다 (Pixi Text엔 CSS ellipsis가 없어 직접 계산).
         const bubbleStyle = new TextStyle({
-          fill: 0x3a2f1a,
-          fontSize: 11,
-          fontWeight: '600',
+          fill: 0x241a0c, // 더 진한 먹색 — 방이 축소돼도 읽히게
+          fontSize: 14, // 11 → 14 (fitScene이 씬 전체를 축소하므로 작게 잡으면 뭉개진다)
+          fontWeight: '700',
           fontFamily: '"Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif',
         })
-        const MAX_W = 150
+        const MAX_W = 190
         const txt = new Text({ text: brief, style: bubbleStyle })
         if (txt.width > MAX_W) {
           // 들어갈 최대 길이를 이진 탐색으로 — 한 글자씩 지우며 매번 측정하는 O(N)을 O(log N)으로.
@@ -581,18 +598,25 @@ export function buildLifeScene(
         const bh = txt.height + padY * 2
         const cx = 0 // 캐릭터 머리 중앙 위
         const bub = new Graphics()
-        bub.roundRect(cx - bw / 2, by - bh, bw, bh, 8).fill(0xf0e6d2)
-        bub.poly([cx - 5, by - 1, cx + 5, by - 1, cx, by + 6]).fill(0xf0e6d2) // 꼬리
+        // 어두운 방·밝은 방 어디서든 떠 보이게: 흰 종이색 + 진한 테두리 + 바닥 그림자
+        bub.roundRect(cx - bw / 2 + 1.5, by - bh + 2.5, bw, bh, 9).fill({ color: 0x000000, alpha: 0.35 })
+        bub.roundRect(cx - bw / 2, by - bh, bw, bh, 9)
+          .fill(0xfdf6e3)
+          .stroke({ color: 0x3b2f1c, width: 1.5, alpha: 0.9 })
+        bub.poly([cx - 6, by - 1, cx + 6, by - 1, cx, by + 8]).fill(0xfdf6e3)
         txt.position.set(cx, by - padY)
-        robot.addChild(bub, txt)
+        bubbleG.addChild(bub, txt)
       } else {
         const bub = new Graphics()
-        bub.roundRect(12, by - 14, 30, 16, 8).fill(0xf0e6d2)
-        bub.poly([16, by + 1, 24, by + 1, 15, by + 8]).fill(0xf0e6d2)
-        bub.circle(20, by - 6, 1.8).fill(0x555)
-        bub.circle(27, by - 6, 1.8).fill(0x555)
-        bub.circle(34, by - 6, 1.8).fill(0x555)
-        robot.addChild(bub)
+        bub.roundRect(13.5, by - 15.5, 32, 18, 9).fill({ color: 0x000000, alpha: 0.35 })
+        bub.roundRect(12, by - 18, 32, 18, 9)
+          .fill(0xfdf6e3)
+          .stroke({ color: 0x3b2f1c, width: 1.5, alpha: 0.9 })
+        bub.poly([16, by - 1, 25, by - 1, 15, by + 7]).fill(0xfdf6e3)
+        bub.circle(21, by - 9, 2).fill(0x3b2f1c)
+        bub.circle(28, by - 9, 2).fill(0x3b2f1c)
+        bub.circle(35, by - 9, 2).fill(0x3b2f1c)
+        bubbleG.addChild(bub)
       }
     }
     // 오프라인(idle) 에이전트는 유령처럼 반투명하게 — 방에 있지만 지금은 활동 중이 아님을 표시.
@@ -605,7 +629,9 @@ export function buildLifeScene(
     const amp = agent.status === 'working' ? 3 : 1.2
     const speed = agent.status === 'working' ? 1.8 : 0.9
     robot.onRender = () => {
-      robot.y = ry + Math.sin(performance.now() / 1000 * speed + phase) * amp
+      const dy = Math.sin((performance.now() / 1000) * speed + phase) * amp
+      robot.y = ry + dy
+      if (myBubble) myBubble.g.y = myBubble.baseY + dy
     }
     robot.eventMode = 'static'
     robot.cursor = 'pointer'
