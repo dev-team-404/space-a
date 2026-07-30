@@ -3,9 +3,11 @@
     engineSettingsGet, engineSettingsSet, engineTest,
     hubConnect, hubDisconnect, hubSettingsGet,
     imageSettingsGet, imageSettingsSet, imageTest,
+    getSettings, setSetting,
     knowledgeHubSettingsGet, knowledgeHubSettingsSet, knowledgeHubShareSet,
     type EngineSettings, type HubSettings, type ImageSettings, type KnowledgeHubSettings,
   } from '../../api';
+  import { LENS_DEFAULT_URL, LENS_OFF } from '../../lens';
   import { IDLE, busy, err, ok, type Status } from './status';
   import StatusLine from './StatusLine.svelte';
 
@@ -72,6 +74,31 @@
     : img.source === 'env' ? '.env 값 사용 중'
     : '미설정 — 캐릭터가 기본 그림으로 표시됩니다',
   );
+
+  // --- A-Lens (관전 웹) 주소 — 홈 화면의 'A-Lens에서 보기' 링크가 쓴다 ---
+  // 링크는 <주소>/#life/<기록할 공간>으로 조립되므로, 공간은 아래 지식 허브 설정을 따른다.
+  // 기본 주소·조립 규칙은 lib/lens.ts와 공유한다 — 홈 화면 링크와 어긋나지 않게.
+  let lensUrl = $state('');
+  let lensStatus = $state<Status>(IDLE);
+  async function loadLens(){
+    try {
+      const all = await getSettings();
+      lensUrl = (all.a_lens_url ?? '').trim() || LENS_DEFAULT_URL;
+    } catch(e){ lensStatus = err(`A-Lens 주소를 불러오지 못했어요: ${e}`); }
+  }
+  loadLens();
+  async function saveLens(){
+    lensStatus = busy('저장 중…');
+    // 비워두면 팀 기본 주소로 동작한다. 링크를 아예 숨기려면 'off'를 넣는다(lens.ts 규칙).
+    try {
+      await setSetting('a_lens_url', lensUrl.trim());
+      lensStatus = ok(
+        lensUrl.trim().toLowerCase() === LENS_OFF
+          ? '홈 화면 링크를 숨깁니다.'
+          : '저장했어요. 홈 화면 링크에 반영됩니다.',
+      );
+    } catch(e){ lensStatus = err(e); }
+  }
 
   // --- 팀 지식 허브 (a-hub work) — Life Server와 다른 서버다 ---
   // 팀 기본값. 입력을 비우고 저장하면 이 값들이 다시 채워진다(사내 배포 공용 주소).
@@ -143,6 +170,22 @@
     {#if hub?.connected}<button onclick={disconnectHub} disabled={hubStatus.kind==='busy'}>연결 종료</button>{/if}
   </div>
   <StatusLine status={hubStatus}/>
+</section>
+
+<section>
+  <h2>A-Lens (관전 웹)</h2>
+  <p class="hint">
+    우리 팀 방을 브라우저에서 구경하는 화면입니다. 홈 화면 왼쪽 아래 'A-Lens에서 보기'가
+    <em>{`<주소>/#life/<기록할 공간>`}</em> 로 열립니다 — 공간은 아래 지식 허브 설정을 따릅니다.
+  </p>
+  <div class="fields">
+    <label class="field"><span>A-Lens 주소 <em>(숨기려면 off)</em></span>
+      <input type="text" bind:value={lensUrl} placeholder={LENS_DEFAULT_URL} spellcheck="false"/></label>
+  </div>
+  <div class="actions">
+    <button class="primary" onclick={saveLens} disabled={lensStatus.kind==='busy'}>저장</button>
+  </div>
+  <StatusLine status={lensStatus}/>
 </section>
 
 <section>
