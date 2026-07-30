@@ -3,11 +3,6 @@
   "space_id": "physical-design",
   "name": "백엔드 설계팀 (PD)"
  },
- "highlight": {
-  "kind": "reuse",
-  "doc_id": "physical-design-doc-0008",
-  "text": "『파운드리 DRC 덱 v3.8 신규 룰 요약』 지식이 제품기획·마케팅팀에서 재사용됐어요 (누적 14회)"
- },
  "visits": {
   "today": 15,
   "total": 237

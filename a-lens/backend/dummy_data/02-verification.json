@@ -3,11 +3,6 @@
   "space_id": "verification",
   "name": "설계검증팀 (DV)"
  },
- "highlight": {
-  "kind": "reuse",
-  "doc_id": "verification-doc-0016",
-  "text": "『DDR4 컨트롤러 리그레션 실패 triage 기록 (5월 3주)』 지식이 백엔드 설계팀 (PD)에서 재사용됐어요 (누적 10회)"
- },
  "visits": {
   "today": 26,
   "total": 453

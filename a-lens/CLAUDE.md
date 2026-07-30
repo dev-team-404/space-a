@@ -32,6 +32,15 @@ npm install && npm run dev
   (`A_LENS_WORK_API_KEY`, `A_LENS_WORK_TOKEN`)을 채운다 — 값은 팀 공유, 리포에 없음.
   `.env`는 자동 로드되지 않는다 (collector는 `os.environ`만 읽음) —
   `set -a && source .env && set +a`로 export한 뒤 uvicorn을 실행할 것.
+- **배포된 허브는 계약의 일부만 구현돼 있다** (2026-07-30 실측, `spacea.msalt.net`).
+  `/spaces`·`/spaces/{id}/tree`·`/issues`·`/spaces/{id}/members`는 200,
+  **`/reuse-events`·`/stats`·`/activity`·`/graph`는 404**. 그래서 실데이터에는 재사용이
+  0건이고 — 사람들이 안 해서가 아니다 — 재사용 피드·로비 ★·`tokens_saved_est`·방 칠판의
+  재사용 문장이 전부 더미 데모에서만 보인다. "재사용이 안 뜬다"를 디버깅하기 전에 이걸 볼 것.
+- **비멤버 공간의 `issues`·`members`는 403이다.** 허브는 "내 멤버십"을 알려주지 않으므로
+  미리 걸러낼 수 없다 — collector가 403·404를 30분간 기억해 건너뛴다(`_soft_get`).
+  건너뛰는 목록은 **내용이 바뀔 때만** 한 줄로 로그에 찍힌다. 500·타임아웃 같은 일시
+  오류는 캐시하지 않고 매번 재시도한다. 토큰을 바꾸면 캐시 키가 달라져 자동 무효화된다.
 - 배포형: `npm run build` → `frontend/dist`를 backend가 루트에서 정적 서빙.
 - 방 배치·footprint 기하는 ADR 0003(life-placement-geometry-v2)~0011에 규정돼 있다 —
   배치 로직을 수정하기 전에 해당 ADR을 먼저 읽을 것.

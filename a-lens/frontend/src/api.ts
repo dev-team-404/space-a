@@ -74,9 +74,9 @@ export type KnowledgeDoc = {
 
 export type SpaceHighlight = {
   text: string // 칠판에 분필로 적히는 한 줄
-  kind?: 'reuse' | 'issue' | string
-  doc_id?: string // kind=reuse — 재사용된 지식 문서
-  issue_id?: string // kind=issue — 해결된 이슈
+  kind?: 'reuse' | 'knowledge' | 'issue' | string
+  doc_id?: string // kind=reuse|knowledge — 재사용된/새로 등록된 지식 문서
+  issue_id?: string // kind=issue — 이슈
 }
 
 export type ReuseEvent = {

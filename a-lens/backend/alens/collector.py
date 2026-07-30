@@ -157,6 +157,70 @@ def _hub_get(client: httpx.Client, path: str) -> dict:
 # 개별 호출에서 "빈 값으로 강등" 처리할 예외 — HTTP 오류 + 비정상 JSON
 _DEGRADE = (httpx.HTTPError, ValueError)
 
+# ── 안 되는 호출 기억 ────────────────────────────────────────
+#
+# 폴링마다 같은 실패를 되풀이하던 두 부류를 기억해두고 한동안 건너뛴다.
+#   403/401 — 허브의 issues·members는 멤버십이 필요한데 /spaces는 멤버십 정보를 안 주고
+#             ("내 멤버십" 엔드포인트도 없다) 비멤버 공간을 미리 걸러낼 방법이 없다.
+#   404     — 배포된 허브에 아직 없는 엔드포인트(계약엔 있음). 예: /reuse-events
+# 둘 다 상태가 아니라 사실이므로 재시도해도 답이 같다 — 실측 폴링 1회당 헛요청 11건이었다.
+_SOFT_FAIL_TTL = 1800  # 30분 뒤 재시도 — 멤버 추가·허브 배포가 있어도 결국 반영된다
+_SOFT_FAIL_STATUS = (401, 403, 404)
+_soft_failed: dict[str, float] = {}
+
+
+def _auth_fp(cfg: dict) -> str:
+    """자격증명 지문 — 토큰이 바뀌면 권한 캐시가 자연히 무효화된다(새 토큰은 권한이 다르다)."""
+    raw = f"{cfg.get('work_token', '')}|{cfg.get('work_api_key', '')}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:8]
+
+
+def _soft_get(client: httpx.Client, path: str, key: str, what: str, ctx: str = "") -> dict | None:
+    """실패를 기억하는 GET. 권한 없음·엔드포인트 없음은 TTL 동안 다시 묻지 않는다.
+
+    None을 주면 호출부가 빈 값으로 강등한다 — 비멤버 공간도 층 목록엔 남고 공개 지식은 보인다."""
+    until = _soft_failed.get(key)
+    if until is not None:
+        if time.monotonic() < until:
+            return None
+        del _soft_failed[key]  # TTL 만료 — 이번엔 다시 물어본다
+    try:
+        return _hub_get(client, path)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code in _SOFT_FAIL_STATUS:
+            # 개별 로그는 안 찍는다 — 스냅숏 끝에서 _note_skips가 한 줄로 요약한다.
+            _soft_failed[key] = time.monotonic() + _SOFT_FAIL_TTL
+            return None
+        log.warning("%s 수집 실패%s: %s", what, ctx, e)
+        return None
+    except _DEGRADE as e:
+        log.warning("%s 수집 실패%s: %s", what, ctx, e)
+        return None
+
+
+_last_skip_note = ""
+
+
+def _note_skips(auth_fp: str) -> None:
+    """건너뛴 호출을 한 줄로 요약. 내용이 바뀔 때만 찍는다 — 폴링마다 같은 줄을 반복하지 않되,
+    "이 방은 왜 이슈가 0건인가"를 로그에서 알 수 있게 남긴다."""
+    global _last_skip_note
+    prefix = auth_fp + ":"
+    items = sorted(k[len(prefix) :] for k in _soft_failed if k.startswith(prefix))
+    note = ", ".join(items)
+    if note == _last_skip_note:
+        return
+    if note:
+        log.warning(
+            "권한 없음·미배포로 건너뛰는 호출 %d건: %s (%d분마다 재시도)",
+            len(items),
+            note,
+            _SOFT_FAIL_TTL // 60,
+        )
+    else:
+        log.warning("건너뛰던 호출이 모두 복구됐습니다")
+    _last_skip_note = note
+
 # 공간 이름 오버라이드 — 허브 원문이 mojibake(복구 불가)인 경우 표시용으로 교정한다.
 _NAME_OVERRIDES = {"sw-innov": "S/W 혁신팀"}
 
@@ -489,6 +553,7 @@ def _hub_snapshot() -> dict:
     headers = {"Authorization": f"Bearer {cfg['work_token']}"} if cfg["work_token"] else {}
     if cfg["work_api_key"]:
         headers["x-api-key"] = cfg["work_api_key"]
+    auth_fp = _auth_fp(cfg)  # 권한 캐시 키에 섞는다 — 토큰이 바뀌면 캐시가 무효화된다
     floors: list[dict] = []
     details: dict[str, dict] = {}
     all_pages: list[dict] = []
@@ -501,11 +566,8 @@ def _hub_snapshot() -> dict:
 
         # 재사용(북극성 지표) — 허브의 GET /reuse-events. 구버전 허브엔 없으므로 강등 처리.
         # 한 번만 받아 space별로 집계한다(공간마다 재호출하지 않는다).
-        try:
-            hub_reuse = _hub_get(client, "/reuse-events?limit=200").get("reuse_events", [])
-        except _DEGRADE as e:
-            log.warning("reuse-events 수집 실패(구버전 허브면 정상): %s", e)
-            hub_reuse = []
+        reuse_res = _soft_get(client, "/reuse-events?limit=200", f"{auth_fp}:reuse-events", "reuse-events")
+        hub_reuse = (reuse_res or {}).get("reuse_events", [])
         space_reuse_counts: dict[str, int] = {}
         for ev in hub_reuse:
             sid_ = ev.get("space_id")
@@ -524,21 +586,13 @@ def _hub_snapshot() -> dict:
                 continue
             sname = _space_name(sid, s.get("name"))
             # 비멤버 공간·권한 부족·깨진 응답은 빈 목록으로 강등 (전체 스냅숏은 살린다)
-            try:
-                pages = _flatten_tree(_hub_get(client, f"/spaces/{sid}/tree").get("tree", []))
-            except _DEGRADE as e:
-                log.warning("tree 수집 실패 (%s): %s", sid, e)
-                pages = []
-            try:
-                issues = _hub_get(client, f"/issues?space_id={sid}").get("issues", [])
-            except _DEGRADE as e:
-                log.warning("issues 수집 실패 (%s): %s", sid, e)
-                issues = []
-            try:
-                members = _hub_get(client, f"/spaces/{sid}/members").get("members", [])
-            except _DEGRADE as e:
-                log.warning("members 수집 실패 (%s): %s", sid, e)
-                members = []
+            where = f" ({sid})"
+            tree = _soft_get(client, f"/spaces/{sid}/tree", f"{auth_fp}:tree:{sid}", "tree", where)
+            pages = _flatten_tree((tree or {}).get("tree", []))
+            issues_res = _soft_get(client, f"/issues?space_id={sid}", f"{auth_fp}:issues:{sid}", "issues", where)
+            issues = (issues_res or {}).get("issues", [])
+            members_res = _soft_get(client, f"/spaces/{sid}/members", f"{auth_fp}:members:{sid}", "members", where)
+            members = (members_res or {}).get("members", [])
             # agent_id → 사람이 읽을 name. Page 작성자(author_agent)·이슈 opened_by 표시에 공용으로 쓴다.
             member_name = {m["agent_id"]: m.get("name", m["agent_id"]) for m in members}
 
@@ -626,26 +680,39 @@ def _hub_snapshot() -> dict:
             for p in pages:
                 all_pages.append({**p, "space_id": sid, "space_name": sname})
 
+    _note_skips(auth_fp)
+
     # 활동 피드 합성: knowledge_created만 (타임스탬프·재사용 피드는 #40·후속 대기).
     # 서사 문장은 구조 필드로 소비자가 조합 — 계약 consumerAutonomy가 허용하는 방식.
     all_pages.sort(key=lambda p: _id_seq(p["page_id"]), reverse=True)
     page_title = {p["page_id"]: p.get("title", p["page_id"]) for p in all_pages}
+    # 문서 → 저자 표시명·원천 방. 칠판 하이라이트가 사람을 주인공으로 세울 재료
+    # (specs/2026-07-30-room-board-highlight.md §3). _page_doc이 이미 표시명을 풀어놨다.
+    doc_author = {d["doc_id"]: d.get("author_agent", "") for det in details.values() for d in det["knowledge"]}
+    doc_space = {d["doc_id"]: det["space_id"] for det in details.values() for d in det["knowledge"]}
     events = [
         {
             "type": "knowledge_created",
             "doc_id": p["page_id"],
             "space_id": p["space_id"],
+            "actor": doc_author.get(p["page_id"], ""),
+            "title": _display_title(p.get("title", p["page_id"])),
             "summary": f"『{p.get('title', p['page_id'])}』 지식이 {p['space_name']}에 등록되었습니다",
         }
         for p in all_pages
     ]
     # 재사용 이벤트 — 로비 하이라이트는 reused를 knowledge_created보다 위에 랭크한다(pipeline).
     # 실데이터에서도 하이라이트가 뜨려면 여기서 실제 이벤트를 넣어줘야 한다.
+    # source/consumer 방을 나눠 실는다: 허브는 재사용이 '일어난' 방(space_id)만 주므로
+    # 원천 방은 문서 소유 방에서 유도한다 — 이게 있어야 (1) 방 사이드바 '지식 재사용' 필터가
+    # 걸리고 (2) pipeline의 크로스팀 가점이 실데이터에서도 작동한다.
     reuse_events = [
         {
             "reuse_id": ev.get("reuse_id"),
             "doc_id": ev.get("page_id"),
             "space_id": ev.get("space_id"),
+            "source_space": doc_space.get(ev.get("page_id")),
+            "consumer_space": ev.get("space_id"),
             "by": ev.get("cited_by_name") or ev.get("cited_by"),
             "cross_team": bool(ev.get("cross_team")),
             "at": ev.get("created_at"),
@@ -660,6 +727,11 @@ def _hub_snapshot() -> dict:
                 "type": "reused",
                 "doc_id": ev["doc_id"],
                 "space_id": ev["space_id"],
+                "source_space": ev["source_space"],
+                "consumer_space": ev["consumer_space"],
+                "actor": doc_author.get(ev["doc_id"], ""),  # 재사용된 지식을 '쓴' 사람
+                "by": ev["by"],  # 재사용'한' 사람
+                "title": title,
                 "at": ev["at"],
                 "summary": f"{ev['by']}님의 에이전트가 {scope} 지식 『{title}』을 재사용했습니다",
             }
@@ -699,9 +771,6 @@ def _dummy_snapshot() -> dict:
         raw = json.loads(f.read_text(encoding="utf-8"))
         sp = raw["space"]
         sid = sp["space_id"]
-        # 하이라이트: 방 상세엔 구조체(kind+참조 id — 칠판 클릭 연동), 층 목록엔 문자열만
-        hl = raw.get("highlight")
-        hl_text = hl.get("text") if isinstance(hl, dict) else hl
         member_name = {m["agent_id"]: m["name"] for m in raw.get("members", [])}
 
         agents = []
@@ -761,12 +830,18 @@ def _dummy_snapshot() -> dict:
                     "type": "knowledge_created",
                     "doc_id": d["doc_id"],
                     "space_id": sid,
+                    "actor": d.get("author", ""),
+                    "title": d["title"],
                     "at": ago(d.get("created_min_ago", 0)).isoformat(),
                     "summary": f"『{d['title']}』 지식이 {sp['name']}에 등록되었습니다",
                     "demo": True,
                 }
             )
 
+        # 재사용된 지식의 저자 — 칠판 문장의 주인공. 재사용 이벤트는 이 팀 문서에서만
+        # 생성되므로(_generate.gen_reuse_events) 같은 파일의 knowledge에서 찾으면 된다.
+        author_of = {d["doc_id"]: d.get("author", "") for d in raw.get("knowledge", [])}
+        title_of = {d["doc_id"]: d["title"] for d in raw.get("knowledge", [])}
         for r in raw.get("reuse_events", []):
             at = ago(r.get("min_ago", 0)).isoformat()
             reuse_events.append({**{k: v for k, v in r.items() if k != "min_ago"}, "at": at, "demo": True})
@@ -775,6 +850,10 @@ def _dummy_snapshot() -> dict:
                     "type": "reused",
                     "doc_id": r.get("doc_id"),
                     "space_id": r.get("consumer_space"),
+                    "source_space": r.get("source_space") or sid,
+                    "consumer_space": r.get("consumer_space"),
+                    "actor": author_of.get(r.get("doc_id"), ""),
+                    "title": title_of.get(r.get("doc_id"), ""),
                     "at": at,
                     "summary": r.get("summary", ""),
                     "demo": True,
@@ -796,7 +875,7 @@ def _dummy_snapshot() -> dict:
                 "floor": i + 1,
                 "activity": activity,
                 "stats": {"knowledge": len(docs), "resolved": resolved, "reuse": reuses},
-                "highlight": hl_text,
+                "highlight": None,  # 칠판·hover 카드 문장은 pipeline이 이벤트 풀에서 선정한다
                 "demo": True,
             }
         )
@@ -806,8 +885,6 @@ def _dummy_snapshot() -> dict:
             "issues": issues,
             "knowledge": docs,
             "visits": raw.get("visits"),
-            # 오늘의 하이라이트 — 방 칠판 표시 + 클릭 시 사이드바 관련 항목 연동
-            "highlight": hl,
             "demo": True,
         }
 
@@ -850,6 +927,14 @@ def _merged_snapshot() -> dict:
 def _fixture_snapshot() -> dict:
     spaces = _fixture("spaces.json")["spaces"]
     stats = _fixture("stats.json")
+    reuse = _fixture("reuse-events.json")["events"]
+    # 활동 피드의 reused 이벤트엔 원천/소비 방이 없다(space_id = 재사용이 일어난 방뿐).
+    # 재사용 피드에서 doc_id로 이어 붙여야 방 칠판의 관점·크로스팀 가점이 픽스처에서도 작동한다.
+    reuse_by_doc = {r["doc_id"]: r for r in reuse if r.get("doc_id")}
+    events = []
+    for e in _fixture("activity.json")["events"]:
+        r = reuse_by_doc.get(e.get("doc_id")) if e.get("type") == "reused" else None
+        events.append({**e, "source_space": r["source_space"], "consumer_space": r["consumer_space"]} if r else e)
     return {
         "source": "fixtures",
         "floors": [
@@ -866,8 +951,8 @@ def _fixture_snapshot() -> dict:
         "details": None,  # 픽스처 상세는 space_detail()에서 tier별 파일로
         "totals": stats.get("totals", {}),
         "tokens_saved_est": stats.get("tokens_saved_est"),
-        "events": _fixture("activity.json")["events"],
-        "reuse_events": _fixture("reuse-events.json")["events"],
+        "events": events,
+        "reuse_events": reuse,
     }
 
 
