@@ -492,3 +492,42 @@ def test_daily_line_is_room_level_and_survives_owner_leaving():
     service.set_daily_line(visitor_token, "나도 한마디")
     assert service.life_state(owner_life.id)["owner_daily_line"] == ""
     assert service.life_state(visitor_life.id)["owner_daily_line"] == "나도 한마디"
+
+
+def test_daily_cut_requires_png_and_dedups(tmp_path):
+    """O1 — 대문사진: PNG 시그니처·5 MiB 검증, 같은 sha면 쓰기 생략, 방 레벨 해시 노출."""
+    from life_server.store import SqliteStore
+
+    service = LifeService(store=SqliteStore(str(tmp_path / "cut.db")))
+    agent, token, created_life = service.register("cut-owner")
+    _, other_token, _ = service.register("other")
+    png = b"\x89PNG\r\n\x1a\nfront-door-cut"
+
+    assert service.life_state(created_life.id)["owner_daily_cut_sha256"] is None
+
+    saved = service.set_daily_cut(token, png)
+    assert saved["size"] == len(png)
+    assert service.life_state(created_life.id)["owner_daily_cut_sha256"] == saved["sha256"]
+    # 방문객이 주인의 대문사진을 가져온다
+    assert service.daily_cut(other_token, agent.agent_id) == (png, saved["sha256"])
+
+    # 같은 바이트 재업로드는 같은 해시 (쓰기 생략 경로도 응답은 동일)
+    assert service.set_daily_cut(token, png)["sha256"] == saved["sha256"]
+
+    with pytest.raises(errors.InvalidRequest):
+        service.set_daily_cut(token, b"not-a-png")
+    with pytest.raises(errors.InvalidRequest):
+        service.set_daily_cut(token, b"\x89PNG\r\n\x1a\n" + b"x" * (5 * 1024 * 1024))
+    with pytest.raises(errors.NotFound):
+        service.daily_cut(token, "ragt_nope")
+
+    # 마스코트 이미지와 다른 슬롯이다 — 컷을 올려도 방 안 로봇 렌더용 해시는 그대로 None
+    assert service.life_state(created_life.id)["owner_mascot_image_sha256"] is None
+
+
+def test_daily_cut_missing_is_not_found():
+    """O1 — 컷을 안 올린 사람의 대문사진 조회는 404 (클라이언트는 마스코트 이미지로 폴백)."""
+    service = LifeService()
+    agent, token, _ = service.register("no-cut")
+    with pytest.raises(errors.NotFound):
+        service.daily_cut(token, agent.agent_id)

@@ -136,11 +136,13 @@ class LifeService:
         self._diaries: dict[tuple[str, str], dict] = {}
         self._guestbook: list[dict] = []
         self._mascot_image_hashes: dict[str, str] = {}
+        self._daily_cut_hashes: dict[str, str] = {}
         self._visits: list[dict] = []
         if store is not None:
             self._life, self._agents, self._tokens = store.load()
             self._friends, self._content_visibility, self._diaries, self._guestbook = store.load_social()
             self._mascot_image_hashes = store.load_mascot_image_hashes()
+            self._daily_cut_hashes = store.load_daily_cut_hashes()
             self._visits = store.load_visits()
             # protocol v2에서는 창문 회전이 자유값이었다. v3부터 벽이 방향의 단일 원천이다.
             # protocol v4에서는 앞쪽 절반을 버린다. 창문 회전 보정과 함께 한 번에 영속화한다.
@@ -280,6 +282,7 @@ class LifeService:
                 "owner_mascot_image_sha256": self._mascot_image_hashes.get(life.owner_agent_id),
                 # O1 대문 — 방 레벨. 주인이 남의 방에 가 있어도 대문은 이 방에 걸려 있다.
                 "owner_daily_line": owner.daily_line if owner else "",
+                "owner_daily_cut_sha256": self._daily_cut_hashes.get(life.owner_agent_id),
                 "grid": {"w": GRID_W, "h": GRID_H},
                 "design": {
                     "wallpaper": life.design.wallpaper,
@@ -441,6 +444,37 @@ class LifeService:
             row = self._store.mascot_image(agent_id) if self._store else None
             if row is None:
                 raise errors.NotFound("mascot image not found")
+            return row
+
+    def set_daily_cut(self, token: str | None, png: bytes) -> dict:
+        """O1 — 대문사진 게시 (set_mascot_image와 동일 규율). 같은 sha면 쓰기를 생략한다.
+
+        마스코트 이미지와 **다른 슬롯**이어야 한다 — mascot_images는 방 안 점유자 로봇 렌더에도
+        쓰이므로, 컷을 그 슬롯에 넣으면 방 안 로봇이 컷 그림으로 바뀐다 (ADR 0026)."""
+        me = self._authed(token)
+        if not png.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise errors.InvalidRequest("daily cut must be a PNG")
+        if len(png) > 5 * 1024 * 1024:
+            raise errors.InvalidRequest("daily cut exceeds 5 MiB")
+        digest = hashlib.sha256(png).hexdigest()
+        with self._lock:
+            if not self._store:
+                raise errors.InvalidRequest("daily cut storage is unavailable")
+            current = self._store.daily_cut(me.agent_id)
+            if current is None or current[1] != digest:
+                self._store.save_daily_cut(me.agent_id, png, digest, datetime.now(timezone.utc).isoformat())
+                self._daily_cut_hashes[me.agent_id] = digest
+        return {"sha256": digest, "size": len(png)}
+
+    def daily_cut(self, token: str | None, agent_id: str) -> tuple[bytes, str]:
+        """O1 — 방문객이 방 주인의 대문사진을 가져온다. 없으면 404 (클라이언트가 폴백)."""
+        self._authed(token)
+        with self._lock:
+            if agent_id not in self._agents:
+                raise errors.NotFound(f"agent '{agent_id}' not found")
+            row = self._store.daily_cut(agent_id) if self._store else None
+            if row is None:
+                raise errors.NotFound("daily cut not found")
             return row
 
     def share_diary(self, token: str | None, date: str, body: str, visibility: str) -> dict:

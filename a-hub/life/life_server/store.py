@@ -69,6 +69,12 @@ CREATE TABLE IF NOT EXISTS mascot_images (
   sha256      TEXT NOT NULL,
   updated_at  TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS daily_cuts (
+  agent_id    TEXT PRIMARY KEY,
+  png         BLOB NOT NULL,
+  sha256      TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS shared_diaries (
   life_id    TEXT NOT NULL,
   diary_date TEXT NOT NULL,
@@ -270,6 +276,23 @@ class SqliteStore:
 
     def load_mascot_image_hashes(self) -> dict[str, str]:
         return dict(self._conn.execute("SELECT agent_id, sha256 FROM mascot_images"))
+
+    # O1 대문사진 — mascot_images와 동형(BLOB은 별 테이블). 마스코트 이미지와 슬롯이 달라야
+    # 한다: mascot_images는 방 안 점유자 로봇 렌더에도 쓰이기 때문이다 (ADR 0026).
+    def save_daily_cut(self, agent_id: str, png: bytes, sha256: str, updated_at: str) -> None:
+        self._conn.execute(
+            "INSERT INTO daily_cuts VALUES (?, ?, ?, ?) ON CONFLICT(agent_id) DO UPDATE SET "
+            "png = excluded.png, sha256 = excluded.sha256, updated_at = excluded.updated_at",
+            (agent_id, png, sha256, updated_at),
+        )
+        self._conn.commit()
+
+    def daily_cut(self, agent_id: str) -> tuple[bytes, str] | None:
+        row = self._conn.execute("SELECT png, sha256 FROM daily_cuts WHERE agent_id = ?", (agent_id,)).fetchone()
+        return (bytes(row[0]), row[1]) if row else None
+
+    def load_daily_cut_hashes(self) -> dict[str, str]:
+        return dict(self._conn.execute("SELECT agent_id, sha256 FROM daily_cuts"))
 
     def save_shared_diary(self, life_id: str, date: str, body: str, visibility: str) -> None:
         self._conn.execute(

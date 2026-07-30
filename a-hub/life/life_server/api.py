@@ -225,6 +225,16 @@ def create_app(life: LifeService | None = None) -> FastAPI:
         png, digest = life.mascot_image(_bearer(authorization), agent_id)
         return Response(content=png, media_type="image/png", headers={"ETag": f'"{digest}"', "Cache-Control": "private, max-age=300"})
 
+    # O1 대문사진 — 마스코트 이미지와 동형. `/life/{life_id}`보다 먼저 등록해야 한다.
+    @app.put("/life/me/daily-cut")
+    def life_daily_cut_put(png: bytes = Body(media_type="image/png"), authorization: str | None = Header(default=None)):
+        return life.set_daily_cut(_bearer(authorization), png)
+
+    @app.get("/life/agents/{agent_id}/daily-cut")
+    def life_daily_cut_get(agent_id: str, authorization: str | None = Header(default=None)):
+        png, digest = life.daily_cut(_bearer(authorization), agent_id)
+        return Response(content=png, media_type="image/png", headers={"ETag": f'"{digest}"', "Cache-Control": "private, max-age=300"})
+
     @app.post("/life/me/disconnect")
     def life_disconnect(authorization: str | None = Header(default=None)):
         return life.disconnect(_bearer(authorization))

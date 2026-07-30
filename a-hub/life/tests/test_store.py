@@ -319,3 +319,16 @@ def test_old_db_without_daily_line_column_migrates(tmp_path):
     assert LifeService(store=SqliteStore(db)).life_state("life_old")["owner_daily_line"] == (
         "마이그레이션 후에도 걸린다"
     )
+
+
+def test_daily_cut_png_survives_restart(tmp_path):
+    """O1 — 대문사진 PNG와 방 레벨 해시가 재시작을 견딘다."""
+    db = str(tmp_path / "life-daily-cut.db")
+    service = LifeService(store=SqliteStore(db))
+    agent, token, created_life = service.register("cut-owner")
+    png = b"\x89PNG\r\n\x1a\nrestart-me"
+    saved = service.set_daily_cut(token, png)
+
+    restarted = LifeService(store=SqliteStore(db))
+    assert restarted.daily_cut(token, agent.agent_id)[0] == png
+    assert restarted.life_state(created_life.id)["owner_daily_cut_sha256"] == saved["sha256"]
