@@ -82,6 +82,9 @@ class LifeAgent:
     owner_full_name: str = ""  # 주인 풀네임 (사람이 서로를 알아보는 라벨)
     hub_user_id: str = ""  # work 허브 계정 id — a-lens가 Hub 활동을 붙일 때 쓰는 정답 키
     bubble: str = ""
+    # O1 대문 아웃바운드 — 대문에 걸린 오늘의 한마디. 저장은 agent 키, 노출은 방 레벨
+    # (owner_mascot_image_sha256 선례 — 주인이 자리를 비워도 대문은 걸려 있어야 한다).
+    daily_line: str = ""
     connected: bool = True
 
 
@@ -275,6 +278,8 @@ class LifeService:
                 # 주인이 다른 방에 가 있어도 방문자가 주인의 로봇(미니홈피 프로필)을 그릴 수 있게
                 "owner_mascot_seed": owner.mascot_seed if owner else "",
                 "owner_mascot_image_sha256": self._mascot_image_hashes.get(life.owner_agent_id),
+                # O1 대문 — 방 레벨. 주인이 남의 방에 가 있어도 대문은 이 방에 걸려 있다.
+                "owner_daily_line": owner.daily_line if owner else "",
                 "grid": {"w": GRID_W, "h": GRID_H},
                 "design": {
                     "wallpaper": life.design.wallpaper,
@@ -545,6 +550,21 @@ class LifeService:
             if self._store:
                 self._store.save_agent(agent)
         return {"bubble": body}
+
+    def set_daily_line(self, token: str | None, body: str) -> dict:
+        """O1 — 대문에 걸린 오늘의 한마디. 빈 문자열은 지움 (set_bubble과 동일 규율).
+
+        값의 해석(캡션 우선·"오늘" 판정)은 전부 클라이언트가 한다 — 서버는 주인의 시간대를
+        모르므로 문자열을 보관·반환만 하고, 방문객은 주인 화면과 같은 문장을 본다."""
+        agent = self._authed(token)
+        body = body.strip()
+        if len(body) > 120:
+            raise errors.InvalidRequest("대문 한마디는 120자 이하여야 함")
+        with self._lock:
+            agent.daily_line = body
+            if self._store:
+                self._store.save_agent(agent)
+        return {"daily_line": body}
 
     def disconnect(self, token: str | None) -> dict:
         agent = self._authed(token)

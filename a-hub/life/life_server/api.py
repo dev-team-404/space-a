@@ -211,6 +211,11 @@ def create_app(life: LifeService | None = None) -> FastAPI:
     def life_bubble(body: TextBody, authorization: str | None = Header(default=None)):
         return life.set_bubble(_bearer(authorization), body.body)
 
+    @app.patch("/life/me/daily-line")
+    def life_daily_line(body: TextBody, authorization: str | None = Header(default=None)):
+        # O1 대문 — 노출은 GET /life/{id}의 owner_daily_line (방 레벨, ADR 0026)
+        return life.set_daily_line(_bearer(authorization), body.body)
+
     @app.put("/life/me/mascot-image")
     def life_mascot_image_put(png: bytes = Body(media_type="image/png"), authorization: str | None = Header(default=None)):
         return life.set_mascot_image(_bearer(authorization), png)

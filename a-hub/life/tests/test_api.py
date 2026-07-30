@@ -255,3 +255,20 @@ def test_admin_key_can_link_others(monkeypatch):
         headers={"Authorization": f"Bearer {a['token']}", "x-api-key": "adminkey"},
     )
     assert r.status_code == 200 and r.json()["hub_user_id"] == "palen"
+
+
+def test_daily_line_patch_echoes_trims_and_limits(client):
+    """O1 — PATCH /life/me/daily-line: 에코 + strip + 120자 상한 + 무토큰 401."""
+    a = _register(client, "front-door")
+    h = {"Authorization": f"Bearer {a['token']}"}
+
+    r = client.patch("/life/me/daily-line", json={"body": "  오늘도 묵묵히  "}, headers=h)
+    assert r.status_code == 200
+    assert r.json() == {"daily_line": "오늘도 묵묵히"}
+    assert client.get(f"/life/{a['life_id']}").json()["owner_daily_line"] == "오늘도 묵묵히"
+
+    over = client.patch("/life/me/daily-line", json={"body": "가" * 121}, headers=h)
+    assert over.status_code == 400
+    assert over.json()["error"]["code"] == "invalid_request"
+
+    assert client.patch("/life/me/daily-line", json={"body": "무토큰"}).status_code == 401

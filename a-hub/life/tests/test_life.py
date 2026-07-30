@@ -465,3 +465,30 @@ def test_guestbook_author_kind_rejects_unknown_value():
     _, visitor_token, _ = service.register("visitor-bot")
     with pytest.raises(errors.InvalidRequest):
         service.add_guestbook(visitor_token, owner_life.id, "이상값", author_kind="alien")
+
+
+def test_daily_line_is_room_level_and_survives_owner_leaving():
+    """O1 — 대문 한마디는 방 레벨이다. 주인이 남의 방에 가 있어도 그 방 대문에 걸려 있어야 한다."""
+    service = LifeService()
+    _, owner_token, owner_life = service.register("owner")
+    _, visitor_token, visitor_life = service.register("visitor")
+
+    assert service.life_state(owner_life.id)["owner_daily_line"] == ""
+
+    assert service.set_daily_line(owner_token, "  밤샘 끝, 뿌듯  ") == {"daily_line": "밤샘 끝, 뿌듯"}
+    assert service.life_state(owner_life.id)["owner_daily_line"] == "밤샘 끝, 뿌듯"
+
+    # 주인이 방문자의 방으로 이동 — 자기 방 대문은 그대로 걸려 있다
+    service.enter(owner_token, visitor_life.id, None)
+    assert service.life_state(owner_life.id)["owner_daily_line"] == "밤샘 끝, 뿌듯"
+
+    # 빈 문자열은 지움
+    assert service.set_daily_line(owner_token, "   ") == {"daily_line": ""}
+    assert service.life_state(owner_life.id)["owner_daily_line"] == ""
+
+    with pytest.raises(errors.InvalidRequest):
+        service.set_daily_line(owner_token, "가" * 121)
+    # 남의 대문은 건드릴 수 없다 — 토큰이 곧 대상이므로 방문자 토큰은 자기 것만 바꾼다
+    service.set_daily_line(visitor_token, "나도 한마디")
+    assert service.life_state(owner_life.id)["owner_daily_line"] == ""
+    assert service.life_state(visitor_life.id)["owner_daily_line"] == "나도 한마디"

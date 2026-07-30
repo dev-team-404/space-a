@@ -278,3 +278,44 @@ def test_old_db_without_identity_columns_migrates(tmp_path):
     # 마이그레이션 후 지정도 된다
     service.set_hub_user("tok-old", "ragt_old", "palen")
     assert LifeService(store=SqliteStore(db)).me("tok-old")["identity"]["hub_user_id"] == "palen"
+
+
+def test_daily_line_survives_restart(tmp_path):
+    """O1 — 대문 한마디는 agents 컬럼에 영속된다."""
+    db = str(tmp_path / "life-daily-line.db")
+    service = LifeService(store=SqliteStore(db))
+    _, token, created_life = service.register("front-door-owner")
+    service.set_daily_line(token, "오늘도 묵묵히")
+
+    restarted = LifeService(store=SqliteStore(db))
+    assert restarted.life_state(created_life.id)["owner_daily_line"] == "오늘도 묵묵히"
+
+
+def test_old_db_without_daily_line_column_migrates(tmp_path):
+    """O1 — daily_line 컬럼이 없던 DB(팀 서버 현행)를 열어도 가산 마이그레이션되고 게시가 된다."""
+    db = str(tmp_path / "life-no-daily-line.db")
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        """
+        CREATE TABLE life (life_id TEXT PRIMARY KEY, owner_agent_id TEXT NOT NULL,
+          owner_name TEXT NOT NULL, wallpaper TEXT NOT NULL DEFAULT '', floor TEXT NOT NULL DEFAULT '');
+        CREATE TABLE agents (agent_id TEXT PRIMARY KEY, name TEXT NOT NULL, life_id TEXT NOT NULL,
+          at_life TEXT NOT NULL, x INTEGER NOT NULL, y INTEGER NOT NULL,
+          mascot_seed TEXT NOT NULL DEFAULT '', org TEXT NOT NULL DEFAULT '',
+          agent_uuid TEXT NOT NULL DEFAULT '', bubble TEXT NOT NULL DEFAULT '',
+          connected INTEGER NOT NULL DEFAULT 1);
+        CREATE TABLE tokens (token TEXT PRIMARY KEY, agent_id TEXT NOT NULL);
+        INSERT INTO life VALUES ('life_old', 'ragt_old', '돌쇠', '', '');
+        INSERT INTO agents VALUES ('ragt_old', '돌쇠', 'life_old', 'life_old', 3, 4, 'seed', '', 'uuid-old', '', 1);
+        INSERT INTO tokens VALUES ('tok-old', 'ragt_old');
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    service = LifeService(store=SqliteStore(db))
+    assert service.life_state("life_old")["owner_daily_line"] == ""  # 새 컬럼은 빈 값으로 시작
+    service.set_daily_line("tok-old", "마이그레이션 후에도 걸린다")
+    assert LifeService(store=SqliteStore(db)).life_state("life_old")["owner_daily_line"] == (
+        "마이그레이션 후에도 걸린다"
+    )

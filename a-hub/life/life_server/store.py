@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS agents (
   owner_full_name TEXT NOT NULL DEFAULT '',
   hub_user_id     TEXT NOT NULL DEFAULT '',
   bubble      TEXT NOT NULL DEFAULT '',
+  daily_line  TEXT NOT NULL DEFAULT '',
   connected   INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS tokens (
@@ -118,6 +119,9 @@ class SqliteStore:
         for col in ("owner_os_user", "owner_full_name", "hub_user_id"):
             if col not in agent_columns:
                 self._conn.execute(f"ALTER TABLE agents ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+        # O1 대문 아웃바운드 — 대문에 걸린 오늘의 한마디 (노출은 방 레벨, ADR 0026)
+        if "daily_line" not in agent_columns:
+            self._conn.execute("ALTER TABLE agents ADD COLUMN daily_line TEXT NOT NULL DEFAULT ''")
         guestbook_columns = {row[1] for row in self._conn.execute("PRAGMA table_info(guestbook)")}
         if "parent_id" not in guestbook_columns:
             self._conn.execute("ALTER TABLE guestbook ADD COLUMN parent_id TEXT")
@@ -181,12 +185,13 @@ class SqliteStore:
                 agent_id=agent_id, name=name, life_id=life_id, at_life=at_life,
                 cell=(x, y), mascot_seed=mascot_seed, org=org, agent_uuid=agent_uuid,
                 owner_os_user=owner_os_user, owner_full_name=owner_full_name,
-                hub_user_id=hub_user_id, bubble=bubble, connected=bool(connected),
+                hub_user_id=hub_user_id, bubble=bubble, daily_line=daily_line,
+                connected=bool(connected),
             )
             for (agent_id, name, life_id, at_life, x, y, mascot_seed, org, agent_uuid,
-                 owner_os_user, owner_full_name, hub_user_id, bubble, connected) in c.execute(
+                 owner_os_user, owner_full_name, hub_user_id, bubble, daily_line, connected) in c.execute(
                 "SELECT agent_id, name, life_id, at_life, x, y, mascot_seed, org, agent_uuid, "
-                "owner_os_user, owner_full_name, hub_user_id, bubble, connected FROM agents"
+                "owner_os_user, owner_full_name, hub_user_id, bubble, daily_line, connected FROM agents"
             )
         }
         tokens = dict(c.execute("SELECT token, agent_id FROM tokens"))
@@ -350,18 +355,18 @@ class SqliteStore:
     def _save_agent_row(self, agent: LifeAgent) -> None:
         self._conn.execute(
             "INSERT INTO agents (agent_id, name, life_id, at_life, x, y, mascot_seed, org, agent_uuid, "
-            "owner_os_user, owner_full_name, hub_user_id, bubble, connected) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "owner_os_user, owner_full_name, hub_user_id, bubble, daily_line, connected) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(agent_id) DO UPDATE SET "
             "name = excluded.name, at_life = excluded.at_life, x = excluded.x, y = excluded.y, "
             "mascot_seed = excluded.mascot_seed, org = excluded.org, agent_uuid = excluded.agent_uuid, "
             "owner_os_user = excluded.owner_os_user, owner_full_name = excluded.owner_full_name, "
             "hub_user_id = excluded.hub_user_id, "
-            "bubble = excluded.bubble, connected = excluded.connected",
+            "bubble = excluded.bubble, daily_line = excluded.daily_line, connected = excluded.connected",
             (
                 agent.agent_id, agent.name, agent.life_id, agent.at_life,
                 agent.cell[0], agent.cell[1], agent.mascot_seed, agent.org, agent.agent_uuid,
                 agent.owner_os_user, agent.owner_full_name, agent.hub_user_id,
-                agent.bubble, int(agent.connected),
+                agent.bubble, agent.daily_line, int(agent.connected),
             ),
         )
