@@ -14,7 +14,8 @@
   import {
     getSummary, getDailyLine, getDailyCut, listFindings, onScanDone, onGotoTab, onDailyCutReady,
     onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, onUpdateCheckRequested,
-    onLifeVisit, onGuestbookNew, noticesReady, lifeContentAccess, lifeGoto, lifeGuestbook, lifeView,
+    onLifeVisit, onGuestbookNew, noticesReady, lifeContentAccess, lifeGoto, lifeGuestbook,
+    lifeSetDailyLine, lifeSyncDailyCut, lifeView,
     type Summary,
   } from './lib/api';
   import {
@@ -56,6 +57,7 @@
   let canViewDiary=$state(true);
   let diaryCatchUpStarted = false;
   let gbBootstrapped = false;
+  let cutSyncBootstrapped = false; // O1 — 대문사진 게시는 앱 실행당 1회 + 컷 생성 시마다
   const currentDiaryVisibility = () => diaryVisibility(localStorage.getItem('life-diary-visibility'));
   // 창(App) 레벨에서 직접 폴링 — 어느 탭에 있든 방 이동을 감지해 방문 모드로 전환
   $effect(() => {
@@ -84,6 +86,12 @@
           lifeGuestbook(myLifeId)
             .then(({ entries }) => observeGuestbook(entries))
             .catch(() => { gbBootstrapped = false; });
+        }
+        // O1 — 앱이 꺼진 동안의 미게시분·구서버→신서버 전환을 메운다. refresh()에 얹으면
+        // scan:done마다 PNG를 올리게 되므로 일회성 가드로 둔다(실패 시 다음 tick 재시도).
+        if (!cutSyncBootstrapped) {
+          cutSyncBootstrapped = true;
+          lifeSyncDailyCut().catch(() => { cutSyncBootstrapped = false; });
         }
         const next = resolveTabAfterLifeChange(lifeChanged, pendingTab, tab);
         tab = next.tab;
@@ -132,14 +140,27 @@
     if (at && (!gbMaxSeenAt || at > gbMaxSeenAt)) gbMaxSeenAt = at;
   }
 
+  // O1 — 첫 조회가 끝나기 전에는 대문을 게시하지 않는다. 초기값이 둘 다 null이라
+  // 가드 없이 게시하면 앱 실행마다 서버 문장이 빈 문자열로 지워진다(refresh 실패 시 영구히).
+  let homeLoaded = $state(false);
+
   async function refresh() {
     summary = await getSummary().catch(() => null);
     activeCount = (await listFindings(false).catch(() => [])).length;
     dailyLine = await getDailyLine().catch(() => null);
     cutCaption = (await getDailyCut())?.caption || null;
+    homeLoaded = true;
   }
   refresh();
   onScanDone(() => refresh());
+
+  // O1 대문 게시 — 내 화면에 걸린 문장을 그대로 올린다(빈 문자열 = 지움).
+  // visiting을 절대 참조하지 않는다 — 참조하면 남의 방에 들어간 순간 내 대문이 지워진다.
+  const publishLine = $derived(cutCaption || dailyLine || '');
+  $effect(() => {
+    if (!homeLoaded) return;
+    lifeSetDailyLine(publishLine).catch(() => {});
+  });
 
   // 자동 업데이트: 시작 시 조용히 1회 체크 + 트레이 "업데이트 확인" 수동 트리거
   runCheck(false);
@@ -183,7 +204,10 @@
         observeGuestbook(rows);
       }),
       onDailyLine((text) => { dailyLine = text; }),
-      onDailyCutReady(() => { getDailyCut().then((c) => (cutCaption = c?.caption || null)); }),
+      onDailyCutReady(() => {
+        getDailyCut().then((c) => (cutCaption = c?.caption || null));
+        lifeSyncDailyCut().catch(() => {}); // O1 — 새 컷을 서버 대문에도 게시
+      }),
     ];
     // 등록이 전부 끝난 뒤에 신고 — listen()은 비동기라 배열 생성만으로는 아직 수신 준비가 아니다.
     // 이 신고 전까지 백엔드는 인바운드 폴링을 보류한다(수신자 없는 emit = 소식 영구 유실).

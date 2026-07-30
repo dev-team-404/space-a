@@ -155,6 +155,9 @@ export interface LifeState {
   owner_name: string;
   owner_mascot_seed: string; // 주인이 방을 비워도 프로필 로봇을 그릴 수 있게 서버가 항상 준다
   owner_mascot_image_sha256?: string | null;
+  // O1 대문 — 구서버는 두 필드를 보내지 않으므로 optional. 없으면 방문 시 현행(숨김)으로 폴백.
+  owner_daily_line?: string;
+  owner_daily_cut_sha256?: string | null;
   grid: { w: number; h: number };
   design: { wallpaper: string; floor: string; objects: LifeObject[] };
   occupants: LifeOccupant[];
@@ -235,6 +238,12 @@ export const lifeDeleteGuestbook = (entryId: string) => invoke('life_delete_gues
 export const lifeSetBubble = (body: string) => invoke<{bubble:string}>('life_set_bubble', { body }).then((v)=>{invalidateLifeView();return v});
 export const lifeSyncMascotImage = () => invoke<boolean>('life_sync_mascot_image');
 export const lifeMascotImage = (agentId: string) => invoke<string | null>('life_mascot_image', { agentId });
+/** O1 — 대문에 걸린 오늘의 한마디 게시. 자동 경로라 미연결·구서버에서도 reject하지 않고 false. */
+export const lifeSetDailyLine = (body: string) => invoke<boolean>('life_set_daily_line', { body });
+/** O1 — 캐시된 대문사진을 서버에 게시. 컷·연결이 없으면 false. */
+export const lifeSyncDailyCut = () => invoke<boolean>('life_sync_daily_cut');
+/** O1 — 방문 중인 방 주인의 대문사진 base64. 없으면 null(마스코트 이미지로 폴백). */
+export const lifeDailyCut = (agentId: string) => invoke<string | null>('life_daily_cut', { agentId });
 export const robotSpecForSeed = (seed: string) => invoke<RobotSpec>('robot_spec_for_seed', { seed });
 // 마스코트 창 확장/복귀 — 위치+크기를 네이티브에서 한 번에 적용 (중간 프레임 깜빡임 방지)
 export const mascotSetExpanded = (expanded: boolean) =>
