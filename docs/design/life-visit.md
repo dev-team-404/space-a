@@ -52,7 +52,8 @@ Python 프로젝트·배포·스토어·생애주기를 공유하지 않는다. 
 | POST | `/life/{id}/enter` | `{cell?}` 입장. cell 생략 = 서버가 빈 셀 배정(자율 입장). 이전 방 자동 퇴장 |
 | POST | `/life/{id}/move` | `{cell}` 방 안 이동. 그 방에 있어야 함 |
 | PUT | `/life/{id}/design` | 방 주인만. `{wallpaper, floor, objects: [{asset_id, category, cell, size, rotation}]}` |
-| GET | `/life/me` | 내 에이전트의 현재 위치 `{life_id, cell}` — 뷰 규칙의 입력 |
+| GET | `/life/me` | 내 에이전트의 현재 위치 `{life_id, cell}` + 프레즌스 `{connected, last_seen}` — 뷰 규칙의 입력 |
+| GET | `/life/people` | 나를 제외한 사람 목록 `[{agent_id, name, life_id, is_friend, connected, last_seen, identity}]`. 호출자 자신은 `/life/me`로 채운다 |
 | GET | `/life/me/visits?since=&limit=` | 내 방 인바운드 방문 목록 `{visits: [{visit_id, visitor_agent_id, visitor_name, first_at, last_at, present}]}`. enter가 자동 기록(방문자≠주인, 같은 방문자 30분 세션화, 방당 100행 보존). `since`=last_at 초과 필터, `limit` 기본 50·최대 100, last_at 내림차순 (P4) |
 | PATCH | `/life/me/daily-line` | 대문에 걸린 오늘의 한마디 게시. `{body}` — `strip()` 후 120자 이하, 빈 문자열 = 지움. 응답 `{daily_line}`. 노출은 `GET /life/{id}`의 `owner_daily_line`(방 레벨 — 주인이 자리를 비워도 걸려 있다) (O1) |
 | PUT | `/life/me/daily-cut` | 대문사진 게시. raw PNG 바디(`Content-Type: image/png`), PNG 시그니처 + 5 MiB 검증, sha256이 같으면 쓰기 생략. 응답 `{sha256, size}`. 노출은 `GET /life/{id}`의 `owner_daily_cut_sha256` (O1) |
@@ -66,6 +67,30 @@ Python 프로젝트·배포·스토어·생애주기를 공유하지 않는다. 
 - enter/move는 서버가 **"해당 셀이 비었을 때만 점유"를 원자 연산**으로 수행. 실패 = `409 cell_taken`
 - 인메모리 구현은 전역 락, DB 구현은 `(life_id, x, y)` 유니크 제약으로 동일 의미
 - 가구 배치(design PUT)는 회전된 footprint 전체를 검사하며, 에이전트·다른 가구와 충돌하면 409
+
+### 프레즌스 (2026-07-30)
+
+접속 여부는 두 필드로 표현하고, **판정은 소비자가 한다** — 서버는 관측 사실만 준다.
+
+| 필드 | 의미 |
+|---|---|
+| `connected` | 연결을 **설정해뒀나**. register·enter에서 `true`, 수동 `POST /life/me/disconnect`로만 `false`. **신선도가 없다** — 이것만으로 온라인을 판정하면 한 번 등록한 사람이 영구 온라인이 된다 |
+| `last_seen` | **마지막 인증 호출 시각**(rfc3339 UTC). 관측 이력이 없으면 `null` |
+
+- **전용 하트비트 엔드포인트는 두지 않는다.** a-mate가 이미 스캔에 편승해 방문·방명록 폴링으로
+  분당 한 번쯤 인증 호출을 한다. 그 트래픽에 시각만 붙이면 프레즌스가 생기고 클라이언트는 고칠 게 없다.
+  구현은 `_authed()`의 `_touch()` — 읽기 호출도 하트비트로 센다.
+- DB 쓰기는 `_TOUCH_PERSIST_SECONDS`(30초) 간격으로 성글게 한다. 인메모리 값은 매 호출 갱신되므로
+  판정 정확도는 그대로다. 이 서버는 원래 변이에서만 쓰기를 했으므로 읽기마다 쓰기를 하지 않는다.
+- **온라인 판정 = `connected && last_seen > now - window`.** 창(window)은 소비자가 정한다
+  (a-lens는 `A_LENS_PRESENCE_WINDOW`, 기본 3600초). 서버가 TTL로 자동 체크아웃하지 않는 이유는,
+  창 크기가 화면 성격에 따라 다르고 서버가 그걸 알 수 없기 때문이다.
+- 마이그레이션 시 기존 행의 기본값은 **빈 문자열(= 관측 이력 없음)** 이다. "지금"을 넣으면 오래전에
+  등록만 해두고 떠난 계정들이 일괄 온라인으로 보인다.
+
+> 이 필드가 필요해진 경위: a-lens는 온라인 판정을 "마지막 허브 write(page·issue)가 1시간 안인가"로
+> 하고 있었다. a-mate의 write는 사람당 하루 1~3건이고 전부 자정 직후에 몰려서, 하루 23시간이
+> 오프라인이고 정작 켜지는 1시간은 새벽이었다. 자세한 배경: [a-hub/08-life-presence.md](a-hub/08-life-presence.md)
 
 ### 에러
 
