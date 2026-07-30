@@ -266,15 +266,37 @@ def _bump_activity(
         activity[agent_id] = {"at": dt, "kind": kind, "title": title, "ref_id": ref_id}
 
 
-def _life_only_agents(life_people: list[dict], used: set[str]) -> list[dict]:
+def _presence_status(person: dict | None, seen: dict | None, online_cutoff: float) -> str:
+    """온라인 판정 — Life의 `last_seen`을 1순위로, 없으면 종전처럼 허브 write 시각을 쓴다.
+
+    **왜 Life가 1순위인가**: 허브 write(page·issue)는 사람당 하루 1~3건뿐이고 a-mate가 자정
+    직후에 몰아서 발행한다. 판정 창이 1시간(`A_LENS_PRESENCE_WINDOW`)이므로, write만 보면
+    하루 23시간을 offline으로, 그리고 정작 켜지는 1시간은 새벽으로 표시했다(2026-07-30 확인).
+    Life 쪽은 a-mate가 스캔마다(≈분당 1회) 인증 호출을 하므로 분 단위로 신선하다.
+
+    `connected`만으로는 판정하지 않는다 — 그 값은 register/enter에서 True가 되고 수동
+    disconnect로만 False가 되므로, 한 번 등록한 사람은 영구히 online으로 보인다.
+
+    `last_seen` 키가 아예 없으면 구버전 Life 서버다 — 조용히 종전 방식으로 강등한다.
+    """
+    if person is not None and "last_seen" in person:
+        if not person.get("connected", True):
+            return "idle"  # 사용자가 명시적으로 연결을 끊었다
+        last_seen = _parse_ts(person.get("last_seen"))
+        return "working" if last_seen is not None and last_seen.timestamp() >= online_cutoff else "idle"
+    return "working" if seen is not None and seen["at"].timestamp() >= online_cutoff else "idle"
+
+
+def _life_only_agents(life_people: list[dict], used: set[str], online_cutoff: float) -> list[dict]:
     """Hub 계정과 못 이은 Life 사람 — 이름·마스코트만 있고 활동 정보는 빈 카드로 붙인다.
 
-    사람을 화면에서 지우지 않는다: '연결 안 됨'은 데이터 상태이지 그 사람이 없는 게 아니다(§3.1 ④)."""
+    사람을 화면에서 지우지 않는다: '연결 안 됨'은 데이터 상태이지 그 사람이 없는 게 아니다(§3.1 ④).
+    허브 활동은 없어도 **접속 여부는 Life가 알고 있다** — 그건 채워준다."""
     return [
         {
             "agent_id": f"life:{person['agent_id']}",
             "name": person.get("name", person["agent_id"]),
-            "status": "idle",
+            "status": _presence_status(person, None, online_cutoff),
             "last_active_at": None,
             "recent_activity": None,
             "life_agent_id": person["agent_id"],
@@ -633,20 +655,20 @@ def _hub_snapshot() -> dict:
             )
             def _agent(m: dict) -> dict:
                 seen = last_write.get(m["agent_id"])
-                online = seen is not None and seen["at"].timestamp() >= online_cutoff
-                out = {
-                    "agent_id": m["agent_id"],
-                    "name": m.get("name", m["agent_id"]),
-                    "status": "working" if online else "idle",
-                    "last_active_at": seen["at"].isoformat() if seen else None,
-                    # 사람이 읽을 최근 활동 문장 (말풍선=brief, 상세=detail). 번역은 _humanize_activity.
-                    "recent_activity": _humanize_activity(seen) if seen else None,
-                }
                 # 공통 신원 — Life에 같은 사람이 있으면 그 사람의 이름·마스코트로 보여준다.
                 # 매칭 못 해도 Hub 정보는 그대로 남는다(§3.1 실패는 오류가 아니다).
                 person = life_index.get(life_client.normalize(m["agent_id"])) or life_index.get(
                     life_client.normalize(m.get("name", ""))
                 )
+                out = {
+                    "agent_id": m["agent_id"],
+                    "name": m.get("name", m["agent_id"]),
+                    "status": _presence_status(person, seen, online_cutoff),
+                    # 접속 여부와 별개인 "마지막으로 무엇을 했나" — 허브 write가 정답이다.
+                    "last_active_at": seen["at"].isoformat() if seen else None,
+                    # 사람이 읽을 최근 활동 문장 (말풍선=brief, 상세=detail). 번역은 _humanize_activity.
+                    "recent_activity": _humanize_activity(seen) if seen else None,
+                }
                 if person:
                     life_used.add(person["agent_id"])
                     out["life_agent_id"] = person["agent_id"]
@@ -673,7 +695,7 @@ def _hub_snapshot() -> dict:
 
             details[sid] = {
                 "space_id": sid,
-                "agents": agents + _life_only_agents(life_people, life_used),
+                "agents": agents + _life_only_agents(life_people, life_used, online_cutoff),
                 "issues": [_issue_doc(it, member_name) for it in issues],
                 "knowledge": knowledge_docs,
             }

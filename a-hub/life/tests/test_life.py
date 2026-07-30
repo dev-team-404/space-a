@@ -531,3 +531,48 @@ def test_daily_cut_missing_is_not_found():
     agent, token, _ = service.register("no-cut")
     with pytest.raises(errors.NotFound):
         service.daily_cut(token, agent.agent_id)
+
+
+# ── 프레즌스 last_seen (2026-07-30) ─────────────────────────────
+#
+# `connected`만으로는 "연결을 설정해뒀나"밖에 알 수 없다 — register/enter에서 True가 되고
+# 수동 disconnect로만 False가 된다. 신선도의 근거는 `last_seen` 하나뿐이다.
+
+
+def test_authed_call_refreshes_last_seen_and_is_exposed():
+    """인증된 호출이면 무엇이든(읽기 포함) last_seen이 갱신된다 — 전용 하트비트가 필요 없다."""
+    service = LifeService()
+    _, token, _ = service.register("presence-bot")
+
+    first = service.me(token)["last_seen"]
+    assert first is not None, "register 직후 인증 호출로 관측 이력이 생긴다"
+
+    # 읽기 전용 호출도 하트비트다 (a-mate가 스캔마다 하는 게 바로 이 부류)
+    service.people(token)
+    second = service.me(token)["last_seen"]
+    assert second >= first
+
+
+def test_last_seen_visible_to_others_in_people():
+    """남의 프레즌스도 보여야 한다 — a-lens가 팀 전체 온라인/오프라인을 그리는 재료."""
+    service = LifeService()
+    _, me_token, _ = service.register("viewer")
+    other, other_token, _ = service.register("worker")
+    service.me(other_token)  # worker가 활동
+
+    row = next(p for p in service.people(me_token) if p["agent_id"] == other.agent_id)
+    assert row["connected"] is True
+    assert row["last_seen"] is not None
+
+
+def test_disconnect_keeps_last_seen_but_clears_connected():
+    """수동 연결 끊기는 connected만 내린다 — 마지막 관측 시각은 사실이므로 지우지 않는다."""
+    service = LifeService()
+    _, token, _ = service.register("leaver")
+    seen_before = service.me(token)["last_seen"]
+
+    service.disconnect(token)
+    # disconnect 자체가 인증 호출이라 last_seen은 갱신되지만, connected는 False로 남는다.
+    agent = service._agents[service._tokens[token]]
+    assert agent.connected is False
+    assert agent.last_seen >= seen_before
