@@ -1661,11 +1661,23 @@ impl SqliteStore {
     /// 세션 회고(스펙 2026-07-19): "고생 끝 해결" 후보 세션.
     /// 조건: 종료(last_ts < settled_before) ∧ 오류(error+denied) ≥ min_errors ∧ 규모 ≥ min_events.
     /// 회복 여부(last_result_ok)는 호출자가 필터 — 실패로 끝난 세션은 지식이 아니라 백로그감.
+    /// "고생 끝 해결" 후보 세션.
+    ///
+    /// 종료 판정은 **둘 중 하나**만 만족하면 된다 (2026-07-30 개정):
+    /// - `settled_before`: 마지막 활동이 이보다 오래됐다 = 세션이 조용해졌다 (원안).
+    /// - `interval_closed_before`: 세션이 이보다 먼저 **시작**됐다 = 닫힌 날짜 구간이 있다.
+    ///
+    /// 후자를 더한 이유: 세션을 끄지 않고 며칠씩 이어 쓰는 사용자는 `last_ts`가 계속 갱신돼
+    /// 원안만으로는 **영구히 후보가 되지 않았다**(실측 최장 232시간 세션).
+    ///
+    /// 구간 기준을 끄려면 `interval_closed_before`에 [`INTERVAL_CRITERION_OFF`]를 준다.
+    /// 두 값을 같게 주는 것으로는 안 꺼진다 — `first_ts <= last_ts`이므로 조건이 오히려 넓어진다.
     pub fn struggle_sessions(
         &self,
         min_errors: u64,
         min_events: u64,
         settled_before: &str,
+        interval_closed_before: &str,
     ) -> Result<Vec<StruggleSession>> {
         let mut stmt = self.conn.prepare(
             "SELECT s.session_id, s.host, s.project_id, s.first_prompt_preview, s.first_ts, s.last_ts,
@@ -1675,19 +1687,23 @@ impl SqliteStore {
                     (SELECT e.result_status FROM events e WHERE e.session_id=s.session_id
                        AND e.kind='tool_result' ORDER BY e.id DESC LIMIT 1) AS last_status
              FROM sessions s
-             WHERE s.last_ts IS NOT NULL AND s.last_ts < ?3
+             WHERE s.last_ts IS NOT NULL
+               AND (s.last_ts < ?3 OR (s.first_ts IS NOT NULL AND s.first_ts < ?4))
                AND (SELECT COUNT(*) FROM events e WHERE e.session_id=s.session_id
                       AND e.result_status IN ('error','denied')) >= ?1
                AND (SELECT COUNT(*) FROM events e WHERE e.session_id=s.session_id) >= ?2
              ORDER BY s.last_ts DESC",
         )?;
-        let rows = stmt.query_map(params![min_errors as i64, min_events as i64, settled_before], |r| {
-            Ok((
-                r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?, r.get::<_, Option<String>>(2)?,
-                r.get::<_, Option<String>>(3)?, r.get::<_, Option<String>>(4)?, r.get::<_, Option<String>>(5)?,
-                r.get::<_, i64>(6)?, r.get::<_, i64>(7)?, r.get::<_, Option<String>>(8)?,
-            ))
-        })?;
+        let rows = stmt.query_map(
+            params![min_errors as i64, min_events as i64, settled_before, interval_closed_before],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?, r.get::<_, Option<String>>(2)?,
+                    r.get::<_, Option<String>>(3)?, r.get::<_, Option<String>>(4)?, r.get::<_, Option<String>>(5)?,
+                    r.get::<_, i64>(6)?, r.get::<_, i64>(7)?, r.get::<_, Option<String>>(8)?,
+                ))
+            },
+        )?;
         let mut out = Vec::new();
         for row in rows {
             let (session_id, host, project_id, preview, first_ts, last_ts, errs, total, last_status) = row?;
@@ -2070,6 +2086,10 @@ pub struct ContentRow {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub personal: Option<String>,
 }
+
+/// `struggle_sessions`의 `interval_closed_before`에 주면 "닫힌 날짜 구간" 기준을 끈다 —
+/// 어떤 타임스탬프도 빈 문자열보다 작지 않으므로 조건이 항상 거짓이 된다.
+pub const INTERVAL_CRITERION_OFF: &str = "";
 
 /// "고생 끝 해결" 후보 세션 (세션 회고 스펙 2026-07-19).
 #[derive(Debug, Clone)]

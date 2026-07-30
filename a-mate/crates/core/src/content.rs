@@ -599,7 +599,9 @@ pub fn personal_lessons(
         .map(|d| (d - chrono::Duration::days(1)).format("%Y-%m-%d").to_string());
 
     // ① 시행착오 세션 — 오류 반복 후 회복한 최근 세션 (hub 회고와 같은 신호, 코칭 프레임)
-    if let Ok(sessions) = store.struggle_sessions(3, 20, "9999-12-31T00:00:00Z") {
+    if let Ok(sessions) =
+        store.struggle_sessions(3, 20, "9999-12-31T00:00:00Z", crate::store::INTERVAL_CRITERION_OFF)
+    {
         if let Some(s) = sessions
             .iter()
             .find(|s| {
