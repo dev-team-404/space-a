@@ -29,6 +29,7 @@
   import { isTab, resolveTabAfterLifeChange, type Tab } from './lib/ui/tab-routing';
   import { normalizeGroup, type SettingsGroup } from './lib/ui/settings/groups';
   import { diaryVisibility, syncAllSharedDiaries, syncSharedDiary } from './lib/diary-sharing';
+  import { resolveHomeLine } from './lib/home-line';
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'home', label: '홈' },
@@ -53,6 +54,8 @@
   let lifeOwner = $state('');
   let ownerSeed = $state(''); // 방문 중인 방 주인의 마스코트 시드 (없으면 이름 폴백)
   let ownerAgentId = $state(''), ownerImageVersion = $state('');
+  // O1 — 방문 중인 방 주인의 대문(문장·사진 버전). 기존 2초 폴링이 채우므로 추가 조회가 없다.
+  let ownerDailyLine = $state(''), ownerCutVersion = $state('');
   let currentLifeId=$state(''),myLifeId=$state(''),meId=$state('');
   let canViewDiary=$state(true);
   let diaryCatchUpStarted = false;
@@ -73,6 +76,8 @@
         ownerSeed = v.life.owner_mascot_seed || v.life.owner_name;
         ownerAgentId = v.life.owner_agent_id;
         ownerImageVersion = v.life.owner_mascot_image_sha256 || '';
+        ownerDailyLine = v.life.owner_daily_line ?? '';
+        ownerCutVersion = v.life.owner_daily_cut_sha256 || '';
         currentLifeId=v.life.life_id;myLifeId=v.me.my_life_id;meId=v.me.agent_id;
         if (!diaryCatchUpStarted) {
           diaryCatchUpStarted = true;
@@ -104,6 +109,8 @@
         visiting = false;
         lifeOwner = '';
         ownerSeed = '';
+        ownerDailyLine = '';
+        ownerCutVersion = '';
       } finally {
         ticking = false;
       }
@@ -119,6 +126,8 @@
   let dailyLine = $state<string | null>(null);
   // H2 — 컷 캡션. 있으면 한마디 카드에 캡션을 우선 표시 (그림을 아는 텍스트가 이김, 컷 밑 별도 텍스트 없음)
   let cutCaption = $state<string | null>(null);
+  // O1 — 카드에 그릴 문장. 방문 중이면 주인 게시분, 내 방이면 캡션 우선.
+  const homeLine = $derived(resolveHomeLine({ visiting, ownerLine: ownerDailyLine, cutCaption, dailyLine }));
   let activeCount = $state(0);
   let coachFocus = $state<string | null>(null);
   let diaryFocus = $state<string | null>(null);
@@ -274,12 +283,14 @@
     </header>
     <div class="body">
       <aside class="profile">
-        <!-- 프로필 = 지금 보는 미니홈피의 주인. 방문 중이면 그 방 주인의 로봇 -->
-        <RobotPortrait seed={visiting ? ownerSeed : null} agentId={visiting ? ownerAgentId : null} imageVersion={visiting ? ownerImageVersion : null} />
-        {#if (cutCaption || dailyLine) && !visiting}
+        <!-- 프로필 = 지금 보는 미니홈피의 주인. 방문 중이면 그 방 주인의 대문사진·로봇 -->
+        <RobotPortrait seed={visiting ? ownerSeed : null} agentId={visiting ? ownerAgentId : null}
+          imageVersion={visiting ? ownerImageVersion : null}
+          cutAgentId={visiting ? ownerAgentId : null} cutVersion={visiting ? ownerCutVersion : null} />
+        {#if homeLine}
           <div class="daily">
             <span class="cap">💬 오늘의 한마디</span>
-            <span class="daily-line">{cutCaption || dailyLine}</span>
+            <span class="daily-line">{homeLine}</span>
           </div>
         {/if}
         <!-- 프로필 하단 도크: a-lens 링크 → 미니홈피 이동 순서로 붙인다.
