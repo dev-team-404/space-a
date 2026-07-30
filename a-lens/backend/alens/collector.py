@@ -157,6 +157,70 @@ def _hub_get(client: httpx.Client, path: str) -> dict:
 # 개별 호출에서 "빈 값으로 강등" 처리할 예외 — HTTP 오류 + 비정상 JSON
 _DEGRADE = (httpx.HTTPError, ValueError)
 
+# ── 안 되는 호출 기억 ────────────────────────────────────────
+#
+# 폴링마다 같은 실패를 되풀이하던 두 부류를 기억해두고 한동안 건너뛴다.
+#   403/401 — 허브의 issues·members는 멤버십이 필요한데 /spaces는 멤버십 정보를 안 주고
+#             ("내 멤버십" 엔드포인트도 없다) 비멤버 공간을 미리 걸러낼 방법이 없다.
+#   404     — 배포된 허브에 아직 없는 엔드포인트(계약엔 있음). 예: /reuse-events
+# 둘 다 상태가 아니라 사실이므로 재시도해도 답이 같다 — 실측 폴링 1회당 헛요청 11건이었다.
+_SOFT_FAIL_TTL = 1800  # 30분 뒤 재시도 — 멤버 추가·허브 배포가 있어도 결국 반영된다
+_SOFT_FAIL_STATUS = (401, 403, 404)
+_soft_failed: dict[str, float] = {}
+
+
+def _auth_fp(cfg: dict) -> str:
+    """자격증명 지문 — 토큰이 바뀌면 권한 캐시가 자연히 무효화된다(새 토큰은 권한이 다르다)."""
+    raw = f"{cfg.get('work_token', '')}|{cfg.get('work_api_key', '')}"
+    return hashlib.sha256(raw.encode()).hexdigest()[:8]
+
+
+def _soft_get(client: httpx.Client, path: str, key: str, what: str, ctx: str = "") -> dict | None:
+    """실패를 기억하는 GET. 권한 없음·엔드포인트 없음은 TTL 동안 다시 묻지 않는다.
+
+    None을 주면 호출부가 빈 값으로 강등한다 — 비멤버 공간도 층 목록엔 남고 공개 지식은 보인다."""
+    until = _soft_failed.get(key)
+    if until is not None:
+        if time.monotonic() < until:
+            return None
+        del _soft_failed[key]  # TTL 만료 — 이번엔 다시 물어본다
+    try:
+        return _hub_get(client, path)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code in _SOFT_FAIL_STATUS:
+            # 개별 로그는 안 찍는다 — 스냅숏 끝에서 _note_skips가 한 줄로 요약한다.
+            _soft_failed[key] = time.monotonic() + _SOFT_FAIL_TTL
+            return None
+        log.warning("%s 수집 실패%s: %s", what, ctx, e)
+        return None
+    except _DEGRADE as e:
+        log.warning("%s 수집 실패%s: %s", what, ctx, e)
+        return None
+
+
+_last_skip_note = ""
+
+
+def _note_skips(auth_fp: str) -> None:
+    """건너뛴 호출을 한 줄로 요약. 내용이 바뀔 때만 찍는다 — 폴링마다 같은 줄을 반복하지 않되,
+    "이 방은 왜 이슈가 0건인가"를 로그에서 알 수 있게 남긴다."""
+    global _last_skip_note
+    prefix = auth_fp + ":"
+    items = sorted(k[len(prefix) :] for k in _soft_failed if k.startswith(prefix))
+    note = ", ".join(items)
+    if note == _last_skip_note:
+        return
+    if note:
+        log.warning(
+            "권한 없음·미배포로 건너뛰는 호출 %d건: %s (%d분마다 재시도)",
+            len(items),
+            note,
+            _SOFT_FAIL_TTL // 60,
+        )
+    else:
+        log.warning("건너뛰던 호출이 모두 복구됐습니다")
+    _last_skip_note = note
+
 # 공간 이름 오버라이드 — 허브 원문이 mojibake(복구 불가)인 경우 표시용으로 교정한다.
 _NAME_OVERRIDES = {"sw-innov": "S/W 혁신팀"}
 
@@ -489,6 +553,7 @@ def _hub_snapshot() -> dict:
     headers = {"Authorization": f"Bearer {cfg['work_token']}"} if cfg["work_token"] else {}
     if cfg["work_api_key"]:
         headers["x-api-key"] = cfg["work_api_key"]
+    auth_fp = _auth_fp(cfg)  # 권한 캐시 키에 섞는다 — 토큰이 바뀌면 캐시가 무효화된다
     floors: list[dict] = []
     details: dict[str, dict] = {}
     all_pages: list[dict] = []
@@ -501,11 +566,8 @@ def _hub_snapshot() -> dict:
 
         # 재사용(북극성 지표) — 허브의 GET /reuse-events. 구버전 허브엔 없으므로 강등 처리.
         # 한 번만 받아 space별로 집계한다(공간마다 재호출하지 않는다).
-        try:
-            hub_reuse = _hub_get(client, "/reuse-events?limit=200").get("reuse_events", [])
-        except _DEGRADE as e:
-            log.warning("reuse-events 수집 실패(구버전 허브면 정상): %s", e)
-            hub_reuse = []
+        reuse_res = _soft_get(client, "/reuse-events?limit=200", f"{auth_fp}:reuse-events", "reuse-events")
+        hub_reuse = (reuse_res or {}).get("reuse_events", [])
         space_reuse_counts: dict[str, int] = {}
         for ev in hub_reuse:
             sid_ = ev.get("space_id")
@@ -524,21 +586,13 @@ def _hub_snapshot() -> dict:
                 continue
             sname = _space_name(sid, s.get("name"))
             # 비멤버 공간·권한 부족·깨진 응답은 빈 목록으로 강등 (전체 스냅숏은 살린다)
-            try:
-                pages = _flatten_tree(_hub_get(client, f"/spaces/{sid}/tree").get("tree", []))
-            except _DEGRADE as e:
-                log.warning("tree 수집 실패 (%s): %s", sid, e)
-                pages = []
-            try:
-                issues = _hub_get(client, f"/issues?space_id={sid}").get("issues", [])
-            except _DEGRADE as e:
-                log.warning("issues 수집 실패 (%s): %s", sid, e)
-                issues = []
-            try:
-                members = _hub_get(client, f"/spaces/{sid}/members").get("members", [])
-            except _DEGRADE as e:
-                log.warning("members 수집 실패 (%s): %s", sid, e)
-                members = []
+            where = f" ({sid})"
+            tree = _soft_get(client, f"/spaces/{sid}/tree", f"{auth_fp}:tree:{sid}", "tree", where)
+            pages = _flatten_tree((tree or {}).get("tree", []))
+            issues_res = _soft_get(client, f"/issues?space_id={sid}", f"{auth_fp}:issues:{sid}", "issues", where)
+            issues = (issues_res or {}).get("issues", [])
+            members_res = _soft_get(client, f"/spaces/{sid}/members", f"{auth_fp}:members:{sid}", "members", where)
+            members = (members_res or {}).get("members", [])
             # agent_id → 사람이 읽을 name. Page 작성자(author_agent)·이슈 opened_by 표시에 공용으로 쓴다.
             member_name = {m["agent_id"]: m.get("name", m["agent_id"]) for m in members}
 
@@ -625,6 +679,8 @@ def _hub_snapshot() -> dict:
             }
             for p in pages:
                 all_pages.append({**p, "space_id": sid, "space_name": sname})
+
+    _note_skips(auth_fp)
 
     # 활동 피드 합성: knowledge_created만 (타임스탬프·재사용 피드는 #40·후속 대기).
     # 서사 문장은 구조 필드로 소비자가 조합 — 계약 consumerAutonomy가 허용하는 방식.
