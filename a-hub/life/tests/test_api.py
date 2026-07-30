@@ -4,11 +4,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 from life_server.api import create_app
+from life_server.life import LifeService
+from life_server.store import SqliteStore
 
 
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(create_app())
+
+
+@pytest.fixture
+def db_client(tmp_path) -> TestClient:
+    """PNG 저장이 필요한 엔드포인트용 — store 없는 인메모리 서비스는 400을 낸다."""
+    return TestClient(create_app(LifeService(store=SqliteStore(str(tmp_path / "api.db")))))
 
 
 def _register(client, name):
@@ -255,3 +263,50 @@ def test_admin_key_can_link_others(monkeypatch):
         headers={"Authorization": f"Bearer {a['token']}", "x-api-key": "adminkey"},
     )
     assert r.status_code == 200 and r.json()["hub_user_id"] == "palen"
+
+
+def test_daily_line_patch_echoes_trims_and_limits(client):
+    """O1 — PATCH /life/me/daily-line: 에코 + strip + 120자 상한 + 무토큰 401."""
+    a = _register(client, "front-door")
+    h = {"Authorization": f"Bearer {a['token']}"}
+
+    r = client.patch("/life/me/daily-line", json={"body": "  오늘도 묵묵히  "}, headers=h)
+    assert r.status_code == 200
+    assert r.json() == {"daily_line": "오늘도 묵묵히"}
+    assert client.get(f"/life/{a['life_id']}").json()["owner_daily_line"] == "오늘도 묵묵히"
+
+    over = client.patch("/life/me/daily-line", json={"body": "가" * 121}, headers=h)
+    assert over.status_code == 400
+    assert over.json()["error"]["code"] == "invalid_request"
+
+    assert client.patch("/life/me/daily-line", json={"body": "무토큰"}).status_code == 401
+
+
+def test_daily_cut_put_and_get_with_etag(db_client):
+    """O1 — PUT은 raw PNG, GET은 image/png + ETag. 무토큰 GET은 401, 미업로드는 404."""
+    a = _register(db_client, "cut-a")
+    b = _register(db_client, "cut-b")
+    ha = {"Authorization": f"Bearer {a['token']}"}
+    hb = {"Authorization": f"Bearer {b['token']}"}
+    png = b"\x89PNG\r\n\x1a\napi-cut"
+
+    put = db_client.put("/life/me/daily-cut", content=png,
+                        headers={**ha, "Content-Type": "image/png"})
+    assert put.status_code == 200
+    assert put.json()["size"] == len(png)
+    sha = put.json()["sha256"]
+    assert db_client.get(f"/life/{a['life_id']}").json()["owner_daily_cut_sha256"] == sha
+
+    # 방문객(b)이 주인(a)의 대문사진을 가져온다
+    got = db_client.get(f"/life/agents/{a['agent_id']}/daily-cut", headers=hb)
+    assert got.status_code == 200
+    assert got.headers["content-type"] == "image/png"
+    assert got.headers["etag"] == f'"{sha}"'
+    assert got.content == png
+
+    assert db_client.get(f"/life/agents/{a['agent_id']}/daily-cut").status_code == 401
+    assert db_client.get(f"/life/agents/{b['agent_id']}/daily-cut", headers=ha).status_code == 404
+
+    bad = db_client.put("/life/me/daily-cut", content=b"nope",
+                        headers={**ha, "Content-Type": "image/png"})
+    assert bad.status_code == 400

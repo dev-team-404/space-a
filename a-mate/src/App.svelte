@@ -14,7 +14,8 @@
   import {
     getSummary, getDailyLine, getDailyCut, listFindings, onScanDone, onGotoTab, onDailyCutReady,
     onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, onUpdateCheckRequested,
-    onLifeVisit, onGuestbookNew, noticesReady, lifeContentAccess, lifeGoto, lifeGuestbook, lifeView,
+    onLifeVisit, onGuestbookNew, noticesReady, lifeContentAccess, lifeGoto, lifeGuestbook,
+    lifeSetDailyLine, lifeSyncDailyCut, lifeView,
     type Summary,
   } from './lib/api';
   import {
@@ -28,6 +29,8 @@
   import { isTab, resolveTabAfterLifeChange, type Tab } from './lib/ui/tab-routing';
   import { normalizeGroup, type SettingsGroup } from './lib/ui/settings/groups';
   import { diaryVisibility, syncAllSharedDiaries, syncSharedDiary } from './lib/diary-sharing';
+  import { resolveHomeLine } from './lib/home-line';
+  import { isPermanentLifeError } from './lib/life-sync';
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'home', label: '홈' },
@@ -52,10 +55,16 @@
   let lifeOwner = $state('');
   let ownerSeed = $state(''); // 방문 중인 방 주인의 마스코트 시드 (없으면 이름 폴백)
   let ownerAgentId = $state(''), ownerImageVersion = $state('');
+  // O1 — 방문 중인 방 주인의 대문(문장·사진 버전). 기존 2초 폴링이 채우므로 추가 조회가 없다.
+  let ownerDailyLine = $state(''), ownerCutVersion = $state('');
   let currentLifeId=$state(''),myLifeId=$state(''),meId=$state('');
   let canViewDiary=$state(true);
   let diaryCatchUpStarted = false;
   let gbBootstrapped = false;
+  // O1 대문사진 게시 상태 — 폴링(2초)에 얹어 올리므로 재시도 조건을 좁게 잡아야 한다.
+  let cutSyncPending = true;    // 올릴 컷이 남았나 (연결 확보·새 컷·서버 전환에 다시 선다)
+  let cutSyncBlocked = false;   // 서버가 대문사진을 받지 않는다 → 이 앱 실행 동안 포기
+  let cutSyncedLifeId = '';     // 마지막으로 게시한 내 방 (서버·계정 전환 감지)
   const currentDiaryVisibility = () => diaryVisibility(localStorage.getItem('life-diary-visibility'));
   // 창(App) 레벨에서 직접 폴링 — 어느 탭에 있든 방 이동을 감지해 방문 모드로 전환
   $effect(() => {
@@ -71,6 +80,8 @@
         ownerSeed = v.life.owner_mascot_seed || v.life.owner_name;
         ownerAgentId = v.life.owner_agent_id;
         ownerImageVersion = v.life.owner_mascot_image_sha256 || '';
+        ownerDailyLine = v.life.owner_daily_line ?? '';
+        ownerCutVersion = v.life.owner_daily_cut_sha256 || '';
         currentLifeId=v.life.life_id;myLifeId=v.me.my_life_id;meId=v.me.agent_id;
         if (!diaryCatchUpStarted) {
           diaryCatchUpStarted = true;
@@ -85,6 +96,24 @@
             .then(({ entries }) => observeGuestbook(entries))
             .catch(() => { gbBootstrapped = false; });
         }
+        // O1 — 대문사진 게시. 앱이 꺼진 동안의 미게시분을 메우고, 새 컷·서버 전환에도 다시 선다.
+        // refresh()에 얹으면 scan:done마다 PNG를 올리므로 여기(폴링)에 둔다.
+        // 일시 실패는 다음 tick 재시도, **4xx는 포기** — 구서버·저장소 없는 서버에 붙어 있으면
+        // 거부된 PNG를 2초마다 영구 재전송하게 된다(maybe_reply_guestbook의 비활성 래치 선례).
+        if (myLifeId && cutSyncedLifeId && cutSyncedLifeId !== myLifeId) {
+          cutSyncPending = true;
+          cutSyncBlocked = false; // 다른 서버는 지원할 수 있다
+        }
+        if (cutSyncPending && !cutSyncBlocked && myLifeId) {
+          cutSyncPending = false;
+          const target = myLifeId;
+          lifeSyncDailyCut()
+            .then(() => { cutSyncedLifeId = target; })
+            .catch((e) => {
+              if (isPermanentLifeError(e)) cutSyncBlocked = true;
+              else cutSyncPending = true;
+            });
+        }
         const next = resolveTabAfterLifeChange(lifeChanged, pendingTab, tab);
         tab = next.tab;
         pendingTab = next.pendingTab;
@@ -96,6 +125,8 @@
         visiting = false;
         lifeOwner = '';
         ownerSeed = '';
+        ownerDailyLine = '';
+        ownerCutVersion = '';
       } finally {
         ticking = false;
       }
@@ -111,6 +142,8 @@
   let dailyLine = $state<string | null>(null);
   // H2 — 컷 캡션. 있으면 한마디 카드에 캡션을 우선 표시 (그림을 아는 텍스트가 이김, 컷 밑 별도 텍스트 없음)
   let cutCaption = $state<string | null>(null);
+  // O1 — 카드에 그릴 문장. 방문 중이면 주인 게시분, 내 방이면 캡션 우선.
+  const homeLine = $derived(resolveHomeLine({ visiting, ownerLine: ownerDailyLine, cutCaption, dailyLine }));
   let activeCount = $state(0);
   let coachFocus = $state<string | null>(null);
   let diaryFocus = $state<string | null>(null);
@@ -132,14 +165,34 @@
     if (at && (!gbMaxSeenAt || at > gbMaxSeenAt)) gbMaxSeenAt = at;
   }
 
+  // O1 — 대문 게시 게이트: 로컬 조회가 **성공한** 사이클에만 열린다.
+  // getDailyLine은 실패를 던지고 호출부가 null로 뭉개므로, 성공 여부를 따로 들고 있지 않으면
+  // 일시 장애가 "빈 문자열 게시" = 서버의 정상 문장 삭제로 이어진다.
+  let homeReadOk = $state(false);
+
   async function refresh() {
     summary = await getSummary().catch(() => null);
     activeCount = (await listFindings(false).catch(() => [])).length;
-    dailyLine = await getDailyLine().catch(() => null);
+    // 조회 **전에** 게이트를 닫는다 — 두 조회 사이의 await에서 effect가 flush되면 아직 갱신되지
+    // 않은 중간값(캡션만 비운 빈 문자열 등)이 게시돼 서버의 정상 문장을 지운다.
+    homeReadOk = false;
+    let readOk = true;
+    dailyLine = await getDailyLine().catch(() => { readOk = false; return null; });
     cutCaption = (await getDailyCut())?.caption || null;
+    homeReadOk = readOk;
   }
   refresh();
   onScanDone(() => refresh());
+
+  // O1 대문 게시 — 내 화면에 걸린 문장을 그대로 올린다(빈 문자열 = 지움).
+  // visiting을 절대 참조하지 않는다 — 참조하면 남의 방에 들어간 순간 내 대문이 지워진다.
+  // myLifeId를 의존에 넣는 이유: life 연결 확보(미연결 부팅 뒤 나중에 연결)와 서버·계정 전환을
+  // 재게시 신호로 쓴다. 같은 값 재대입은 무효화되지 않으므로 2초 폴링이 게시를 반복하지 않는다.
+  const publishLine = $derived(cutCaption || dailyLine || '');
+  $effect(() => {
+    if (!homeReadOk || !myLifeId) return;
+    lifeSetDailyLine(publishLine).catch(() => {});
+  });
 
   // 자동 업데이트: 시작 시 조용히 1회 체크 + 트레이 "업데이트 확인" 수동 트리거
   runCheck(false);
@@ -183,7 +236,11 @@
         observeGuestbook(rows);
       }),
       onDailyLine((text) => { dailyLine = text; }),
-      onDailyCutReady(() => { getDailyCut().then((c) => (cutCaption = c?.caption || null)); }),
+      onDailyCutReady(() => {
+        getDailyCut().then((c) => (cutCaption = c?.caption || null));
+        // O1 — 게시는 폴링에 맡긴다(직접 호출하면 실패해도 재시도 경로가 없다)
+        cutSyncPending = true;
+      }),
     ];
     // 등록이 전부 끝난 뒤에 신고 — listen()은 비동기라 배열 생성만으로는 아직 수신 준비가 아니다.
     // 이 신고 전까지 백엔드는 인바운드 폴링을 보류한다(수신자 없는 emit = 소식 영구 유실).
@@ -250,12 +307,14 @@
     </header>
     <div class="body">
       <aside class="profile">
-        <!-- 프로필 = 지금 보는 미니홈피의 주인. 방문 중이면 그 방 주인의 로봇 -->
-        <RobotPortrait seed={visiting ? ownerSeed : null} agentId={visiting ? ownerAgentId : null} imageVersion={visiting ? ownerImageVersion : null} />
-        {#if (cutCaption || dailyLine) && !visiting}
+        <!-- 프로필 = 지금 보는 미니홈피의 주인. 방문 중이면 그 방 주인의 대문사진·로봇 -->
+        <RobotPortrait seed={visiting ? ownerSeed : null} agentId={visiting ? ownerAgentId : null}
+          imageVersion={visiting ? ownerImageVersion : null}
+          cutAgentId={visiting ? ownerAgentId : null} cutVersion={visiting ? ownerCutVersion : null} />
+        {#if homeLine}
           <div class="daily">
             <span class="cap">💬 오늘의 한마디</span>
-            <span class="daily-line">{cutCaption || dailyLine}</span>
+            <span class="daily-line">{homeLine}</span>
           </div>
         {/if}
         <!-- 프로필 하단 도크: a-lens 링크 → 미니홈피 이동 순서로 붙인다.
