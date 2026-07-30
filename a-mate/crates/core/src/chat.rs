@@ -292,8 +292,11 @@ pub fn assemble_coaching_brief(store: &crate::store::SqliteStore) -> anyhow::Res
         .collect();
     // "고생 끝 해결" 세션 수 (오류≥3 ∧ 규모≥20 ∧ 회복으로 끝)
     let now = chrono::Utc::now().to_rfc3339();
-    let struggle_count =
-        store.struggle_sessions(3, 20, &now)?.iter().filter(|s| s.last_result_ok).count() as u64;
+    let struggle_count = store
+        .struggle_sessions(3, 20, &now, crate::store::INTERVAL_CRITERION_OFF)?
+        .iter()
+        .filter(|s| s.last_result_ok)
+        .count() as u64;
     let model_mix = store.model_mix_for_range(Some(&d(6)), &d(0))?;
     let memories = store.list_memories()?.into_iter().map(|m| m.text).collect();
     let honorific = store

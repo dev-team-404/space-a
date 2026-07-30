@@ -746,7 +746,34 @@ mod runtime {
             }
             Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
         };
-        if candidates.is_empty() { return; }
+        // 신규 후보가 없어도 미완 재개는 해야 한다 — 재개 경로가 없으면 pending이 재선별에서
+        // 빠져 그 세션이 영구 미발행이 된다(2026-07-30 발견).
+        // 짧은 락으로 (pending, 그 세션들) 을 함께 떠온다 — 네트워크는 락 밖에서.
+        let resumables: Vec<(String, String, agent_mentor::store::StruggleSession)> =
+            match store_mutex.lock() {
+                Ok(store) => {
+                    let pendings = hub::retro_pendings(&store).unwrap_or_default();
+                    if pendings.is_empty() {
+                        Vec::new()
+                    } else {
+                        // 문턱·정착 조건을 풀고 전 세션 — 이미 발행 대상으로 판정된 건들이다.
+                        let all = store
+                            .struggle_sessions(0, 0, hub::FAR_FUTURE, hub::FAR_FUTURE)
+                            .unwrap_or_default();
+                        pendings
+                            .into_iter()
+                            .filter_map(|(k, iss)| {
+                                let sid = k.trim_start_matches("retro|").to_string();
+                                all.iter()
+                                    .find(|s| s.session_id == sid)
+                                    .map(|s| (k, iss, s.clone()))
+                            })
+                            .collect()
+                    }
+                }
+                Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
+            };
+        if candidates.is_empty() && resumables.is_empty() { return; }
         let Some(engine) = engine else { return };   // Engine 없으면 보류 (품질 > 정시성)
         // 부트스트랩(2026-07-19): 회고도 자체 register — 공유 발견 유무와 독립
         let token = match token_opt {
@@ -766,7 +793,34 @@ mod runtime {
         let client = HubClient { base_url: cfg.base_url.clone(), api_key: cfg.api_key.clone(), token };
         let now = chrono::Utc::now().to_rfc3339();
 
-        // ② 락 밖: Engine 요약 → issue→resolve
+        // ② 락 밖: 미완 재개 — 이슈는 이미 열려 있으니 resolve만 다시. 요약은 저장하지 않으므로
+        //    Engine을 다시 부른다(결정론 폴백 없음 — 스펙 §3).
+        for (key, issue_id, s) in resumables {
+            let (system, user) = hub::retro_prompt(&s);
+            let reply = match engine.generate(&system, &user) {
+                Ok(o) => o.text,
+                Err(e) => { log::warn!("retro resume engine 실패(다음 스캔 재개): {e}"); continue; }
+            };
+            let Some((_title, summary)) = hub::parse_retro_reply(&reply) else {
+                log::warn!("retro resume 응답 파싱 실패(다음 스캔 재개)");
+                continue;
+            };
+            match client.resolve_issue(&issue_id, &summary, &hub::retro_steps(&s)) {
+                Ok(Some(page_id)) => {
+                    if let Ok(store) = store_mutex.lock() {
+                        let _ = store.hub_mark_published(&key, &page_id, &now);
+                    }
+                    log::info!(
+                        "세션 회고 재개 발행: {} → {page_id}",
+                        &s.session_id[..8.min(s.session_id.len())]
+                    );
+                }
+                Ok(None) => log::warn!("retro resume: resolve 응답에 page_id 없음 ({key})"),
+                Err(e) => log::warn!("retro resume resolve 실패(다음 스캔 재개): {e}"),
+            }
+        }
+
+        // ③ 락 밖: Engine 요약 → issue→resolve
         for (key, s) in candidates {
             let (system, user) = hub::retro_prompt(&s);
             let reply = match engine.generate(&system, &user) {

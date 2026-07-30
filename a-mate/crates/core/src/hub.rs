@@ -707,8 +707,14 @@ pub fn run_telemetry_push(
 // 허브 글쓰기 단일 창구 = a-mate: 세션 속 에이전트는 재사용 가치를 모른다(사후 조망 필요).
 // ─────────────────────────────────────────────────────────────────────────
 
-/// 하루 상한 — 허브도 나깅 방지 대상.
-pub const RETRO_DAILY_CAP: u64 = 2;
+/// 하루 상한 — 기본은 **무제한**(사용자 지시, 2026-07-30). 스펙 2026-07-19의 "하루 2건"은
+/// 나깅 방지용이었지만, 상한 때문에 후보가 하루 2건씩만 빠져나가 오래된 세션은 사실상 영구
+/// 미발행이 됐다(`select_retros`가 `last_ts DESC`로 최신부터 집어가므로). 나깅 방지의 실질은
+/// **세션당 평생 1회**(`retro|{session_id}` dedup)가 담당하고, 그건 그대로 남는다.
+/// 다시 조이고 싶으면 `SPACE_A_RETRO_DAILY_CAP`으로 건다.
+pub fn retro_daily_cap() -> Option<u64> {
+    std::env::var("SPACE_A_RETRO_DAILY_CAP").ok().and_then(|v| v.parse().ok())
+}
 pub const RETRO_MIN_ERRORS_DEFAULT: u64 = 3;
 pub const RETRO_MIN_EVENTS_DEFAULT: u64 = 20;
 /// 세션 "종료" 판정 — 마지막 활동 후 이 시간 조용하면 끝난 세션.
@@ -739,19 +745,44 @@ fn minutes_between(a: Option<&str>, b: Option<&str>) -> i64 {
     }
 }
 
+/// 저장된 타임스탬프와 같은 모양(`...Z`)으로 포맷 — SQL이 문자열 비교를 하므로 오프셋 표기가
+/// 섞이면 (`+09:00` vs `Z`) 같은 시각이 다르게 정렬된다.
+fn ts_key(dt: chrono::DateTime<chrono::Utc>) -> String {
+    dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+}
+
+/// 로컬 자정(오늘 00:00)을 UTC 키로. 이 시각보다 먼저 시작된 세션은 **닫힌 날짜 구간**을 가진다.
+fn today_start_key(now_utc: chrono::DateTime<chrono::Utc>) -> Option<String> {
+    use chrono::TimeZone as _;
+    let local_now = now_utc.with_timezone(&chrono::Local);
+    let midnight = local_now.date_naive().and_hms_opt(0, 0, 0)?;
+    let local_midnight = chrono::Local.from_local_datetime(&midnight).single()?;
+    Some(ts_key(local_midnight.with_timezone(&chrono::Utc)))
+}
+
 /// 회고 후보 선별 — store 읽기만 (락 규율: 호출자가 짧은 락 안에서 부른다).
-/// 반환: (state_key, 세션). 회복(last ok) ∧ 미발행 ∧ 하루 상한 이내.
+/// 반환: (state_key, 세션). 회복(last ok) ∧ 미발행. 하루 상한은 기본 없음(`retro_daily_cap`).
+///
+/// 종료 판정은 "30분 조용" **또는** "닫힌 날짜 구간 보유"다 — 후자가 없으면 세션을 끄지 않는
+/// 사용자는 영구히 후보가 되지 않는다(2026-07-30 개정, 스펙 §2).
 pub fn select_retros(
     store: &crate::store::SqliteStore,
     now_utc: chrono::DateTime<chrono::Utc>,
 ) -> Result<Vec<(String, crate::store::StruggleSession)>> {
-    let cutoff = (now_utc - chrono::Duration::minutes(RETRO_SETTLE_MINUTES)).to_rfc3339();
-    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let cutoff = ts_key(now_utc - chrono::Duration::minutes(RETRO_SETTLE_MINUTES));
+    // 자정 계산이 실패하면(DST 경계 등) 구간 기준을 끄고 원안대로만 판정한다 — 무해한 폴백.
+    let day_start = today_start_key(now_utc).unwrap_or_else(|| cutoff.clone());
     let already = store.hub_shared_or_pending_keys()?;
-    let used_today = store.hub_share_count_on("retro|", &today)?;
-    let remaining = RETRO_DAILY_CAP.saturating_sub(used_today) as usize;
+    // 상한이 걸려 있을 때만 오늘 사용량을 센다 — 무제한이면 이 쿼리도 필요 없다.
+    let remaining = match retro_daily_cap() {
+        Some(cap) => {
+            let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+            cap.saturating_sub(store.hub_share_count_on("retro|", &today)?) as usize
+        }
+        None => usize::MAX,
+    };
     let out = store
-        .struggle_sessions(retro_min_errors(), retro_min_events(), &cutoff)?
+        .struggle_sessions(retro_min_errors(), retro_min_events(), &cutoff, &day_start)?
         .into_iter()
         .filter(|s| s.last_result_ok)
         .map(|s| (retro_state_key(&s.session_id), s))
@@ -815,6 +846,72 @@ pub fn retro_steps(s: &crate::store::StruggleSession) -> Vec<String> {
     ]
 }
 
+/// 문턱·정착 조건을 모두 통과시키는 상한값 — 재개 시 전 세션을 훑을 때 쓴다.
+pub const FAR_FUTURE: &str = "9999-12-31T00:00:00.000Z";
+
+/// `retro|` 접두의 미완(open됐으나 resolve 안 된) 건 — 재개 대상.
+pub fn retro_pendings(store: &crate::store::SqliteStore) -> Result<Vec<(String, String)>> {
+    Ok(store
+        .hub_share_pending()?
+        .into_iter()
+        .filter(|(k, _)| k.starts_with("retro|"))
+        .collect())
+}
+
+/// 미완 회고 재개 — `open_issue`는 성공했지만 `resolve_issue`가 실패한 건을 다시 발행한다.
+///
+/// **왜 필요한가**: pending도 `hub_shared_or_pending_keys`에 잡혀 `select_retros`의 재선별에서
+/// 빠진다. 즉 재개 경로가 없으면 그 세션은 **영구 미발행**이 된다(2026-07-30 발견).
+/// finding 공유(`run_share` ②)에는 있던 규율이 회고에만 없었다.
+///
+/// 요약 텍스트는 어디에도 저장하지 않으므로 Engine을 다시 호출한다 — 결정론 폴백 발행은
+/// 두지 않는다(스펙 §3: 원문 요약 없는 회고는 재사용 가치가 낮다). 이슈는 다시 열지 않으므로
+/// 중복 이슈가 생기지 않는다.
+pub fn resume_retro_pendings(
+    store: &crate::store::SqliteStore,
+    client: &HubClient,
+    engine: &dyn crate::diary::engine::Engine,
+) -> Result<Vec<(String, String)>> {
+    let mut out = Vec::new();
+    let pendings = retro_pendings(store)?;
+    if pendings.is_empty() {
+        return Ok(out);
+    }
+    let now = chrono::Utc::now().to_rfc3339();
+    // 문턱·정착 조건을 풀고 전 세션을 훑는다 — 이미 한 번 발행 대상으로 판정된 건들이라
+    // 지금 문턱을 다시 통과하는지는 볼 필요가 없다(그 사이 이벤트가 늘어 탈락할 수도 없지만,
+    // 세션이 다시 활동해 정착 조건에서 빠지는 경우는 실제로 생긴다).
+    let all = store.struggle_sessions(0, 0, FAR_FUTURE, FAR_FUTURE)?;
+    for (key, issue_id) in pendings {
+        let sid = key.trim_start_matches("retro|");
+        let Some(s) = all.iter().find(|s| s.session_id == sid) else {
+            log::warn!("retro resume: 세션을 찾을 수 없음 ({key}) — 건너뜀");
+            continue;
+        };
+        let (system, user) = retro_prompt(s);
+        let reply = match engine.generate(&system, &user) {
+            Ok(o) => o.text,
+            Err(e) => {
+                log::warn!("retro resume engine 실패(다음 스캔 재개): {e}");
+                continue;
+            }
+        };
+        let Some((_title, summary)) = parse_retro_reply(&reply) else {
+            log::warn!("retro resume 응답 파싱 실패(다음 스캔 재개)");
+            continue;
+        };
+        match client.resolve_issue(&issue_id, &summary, &retro_steps(s)) {
+            Ok(Some(page_id)) => {
+                store.hub_mark_published(&key, &page_id, &now)?;
+                out.push((s.session_id.clone(), page_id));
+            }
+            Ok(None) => log::warn!("retro resume: resolve 응답에 page_id 없음 ({key})"),
+            Err(e) => log::warn!("retro resume resolve 실패(다음 스캔 재개): {e}"),
+        }
+    }
+    Ok(out)
+}
+
 /// CLI·단일 스레드용 전 과정. Engine 없으면 발행 보류(품질 > 정시성).
 pub fn run_retro_push(
     store: &crate::store::SqliteStore,
@@ -826,7 +923,8 @@ pub fn run_retro_push(
         return Ok(published);
     }
     let candidates = select_retros(store, chrono::Utc::now())?;
-    if candidates.is_empty() {
+    // 신규 후보가 없어도 미완 재개는 해야 한다 — 그게 영구 미발행의 원인이었다.
+    if candidates.is_empty() && retro_pendings(store)?.is_empty() {
         return Ok(published);
     }
     let token = match cfg.token.clone().or(store.get_setting("knowledge_hub_token")?) {
@@ -843,6 +941,10 @@ pub fn run_retro_push(
         api_key: cfg.api_key.clone(),
         token,
     };
+    // ① 미완 재개 (중복 이슈 방지 — finding 공유와 같은 규율)
+    published.extend(resume_retro_pendings(store, &client, engine)?);
+
+    // ② 신규 발행
     let now = chrono::Utc::now().to_rfc3339();
     for (key, s) in candidates {
         let (system, user) = retro_prompt(&s);
@@ -1256,15 +1358,29 @@ mod tests {
     // ── 세션 회고 — 선별 조건·스크럽·파싱 ──
 
     fn seed_session(store: &crate::store::SqliteStore, sess: &str, n_err: u64, last_ok: bool, n_pad: u64) {
+        seed_session_at(store, sess, n_err, last_ok, n_pad, "2026-07-01T10:00:00Z", 0);
+    }
+
+    /// `ts`·`off_base`를 지정하는 변형 — 같은 세션을 두 번 시드해 "오래 전에 시작했고 지금도
+    /// 활동 중"인 세션(구간 종료 판정 대상)을 만들 때 쓴다.
+    fn seed_session_at(
+        store: &crate::store::SqliteStore,
+        sess: &str,
+        n_err: u64,
+        last_ok: bool,
+        n_pad: u64,
+        ts: &str,
+        off_base: u64,
+    ) {
         use crate::model::{EventKind, NormModel, NormalizedEvent, ResultStatus, TokenUsage, ToolKind};
         let mut evs = Vec::new();
-        let mut off = 0u64;
+        let mut off = off_base;
         let mut push = |kind: EventKind, off: &mut u64| {
             evs.push(NormalizedEvent {
                 source_agent: "claude-code".into(), schema_version: "t".into(),
                 host: "Windows".into(), project_id: "c--users-secret".into(),
                 session_id: sess.into(), uuid: Some(format!("{sess}-u{off}")), parent_uuid: None,
-                is_sidechain: false, ts: Some("2026-07-01T10:00:00Z".into()),
+                is_sidechain: false, ts: Some(ts.into()),
                 source_file: "s.jsonl".into(), source_offset: *off,
                 msg_id: None,
                 kind,
@@ -1319,14 +1435,87 @@ mod tests {
         assert!(!steps.contains("sA"));
     }
 
+    /// 기본은 무제한 — 오늘 이미 여러 건 발행했어도 남은 후보를 계속 집어야 한다.
+    /// (상한이 있던 시절엔 후보가 하루 2건씩만 빠져 오래된 세션이 영구 미발행이었다.)
     #[test]
-    fn retro_daily_cap_blocks_further_posts() {
+    fn retro_has_no_daily_cap_by_default() {
+        std::env::remove_var("SPACE_A_RETRO_DAILY_CAP");
         let store = crate::store::SqliteStore::open_in_memory().unwrap();
         seed_session(&store, "sA", 4, true, 20);
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
         store.hub_mark_published("retro|x1", "p1", &format!("{today}T01:00:00Z")).unwrap();
         store.hub_mark_published("retro|x2", "p2", &format!("{today}T02:00:00Z")).unwrap();
-        assert!(select_retros(&store, chrono::Utc::now()).unwrap().is_empty(), "하루 2건 상한");
+        let picked = select_retros(&store, chrono::Utc::now()).unwrap();
+        assert_eq!(picked.len(), 1, "상한 없음 — 오늘 발행량과 무관하게 후보를 집는다");
+        assert_eq!(picked[0].1.session_id, "sA");
+    }
+
+    /// 세션을 끄지 않고 계속 쓰는 사용자 — `last_ts`가 계속 갱신돼 "30분 조용" 판정에는
+    /// 영구히 안 걸린다. 어제 이전에 **시작**했으면 닫힌 구간이 있으므로 후보가 돼야 한다.
+    #[test]
+    fn retro_selects_still_active_session_that_started_before_today() {
+        std::env::remove_var("SPACE_A_RETRO_DAILY_CAP");
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        // 어제 이전에 시작 (고생 신호는 여기서 충족)
+        seed_session_at(&store, "sLong", 4, true, 20, "2026-07-01T10:00:00Z", 0);
+        // 지금도 활동 중 — last_ts를 현재로 끌어올린다
+        let now = chrono::Utc::now();
+        seed_session_at(&store, "sLong", 0, true, 1, &ts_key(now), 1000);
+
+        let picked = select_retros(&store, now).unwrap();
+        assert_eq!(picked.len(), 1, "닫힌 날짜 구간이 있으면 활동 중이어도 후보가 된다");
+        assert_eq!(picked[0].1.session_id, "sLong");
+    }
+
+    /// 반대편 — 오늘 시작해서 아직 활동 중인 세션은 여전히 제외(30분 룰만 적용).
+    #[test]
+    fn retro_skips_session_started_today_and_still_active() {
+        std::env::remove_var("SPACE_A_RETRO_DAILY_CAP");
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        let now = chrono::Utc::now();
+        // 오늘 로컬 자정 이후에 시작했다고 보장하기 위해 "지금"으로 시드한다.
+        seed_session_at(&store, "sToday", 4, true, 20, &ts_key(now), 0);
+        assert!(
+            select_retros(&store, now).unwrap().is_empty(),
+            "오늘 시작해 아직 활동 중인 세션은 세션 중 발행 금지 규칙이 그대로 적용된다"
+        );
+    }
+
+    /// 회귀(2026-07-30): pending(open됐으나 resolve 실패)은 재선별에서 빠진다. 그래서
+    /// 재개 경로가 없으면 그 세션은 영구 미발행이 됐다. `retro_pendings`가 재개 대상으로
+    /// 집어내는지 — 그리고 finding 공유의 pending은 섞이지 않는지 — 확인한다.
+    #[test]
+    fn retro_pending_is_excluded_from_selection_but_listed_for_resume() {
+        std::env::remove_var("SPACE_A_RETRO_DAILY_CAP");
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        seed_session(&store, "sA", 4, true, 20);
+        store.hub_mark_issue("retro|sA", "iss_1", "2026-07-30T00:00:00Z").unwrap();
+        // finding 공유 쪽 pending — 회고 재개가 이걸 건드리면 안 된다.
+        store.hub_mark_issue("R8|somekey", "iss_2", "2026-07-30T00:00:00Z").unwrap();
+
+        assert!(
+            select_retros(&store, chrono::Utc::now()).unwrap().is_empty(),
+            "pending은 재선별 대상이 아니다 — 그래서 재개 경로가 필요하다"
+        );
+        let p = retro_pendings(&store).unwrap();
+        assert_eq!(p, vec![("retro|sA".to_string(), "iss_1".to_string())]);
+
+        // 발행이 완료되면 재개 대상에서도 빠진다.
+        store.hub_mark_published("retro|sA", "page_1", "2026-07-30T00:10:00Z").unwrap();
+        assert!(retro_pendings(&store).unwrap().is_empty());
+    }
+
+    /// 세션당 평생 1회 dedup은 상한 제거와 무관하게 남는다 — 나깅 방지의 실질.
+    #[test]
+    fn retro_never_reposts_the_same_session() {
+        std::env::remove_var("SPACE_A_RETRO_DAILY_CAP");
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        seed_session(&store, "sA", 4, true, 20);
+        store.hub_mark_published("retro|sA", "p1", "2026-01-01T00:00:00Z").unwrap();
+        assert!(
+            select_retros(&store, chrono::Utc::now()).unwrap().is_empty(),
+            "이미 발행한 세션은 다시 올리지 않는다"
+        );
     }
 
     #[test]
