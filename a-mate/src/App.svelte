@@ -30,6 +30,7 @@
   import { normalizeGroup, type SettingsGroup } from './lib/ui/settings/groups';
   import { diaryVisibility, syncAllSharedDiaries, syncSharedDiary } from './lib/diary-sharing';
   import { resolveHomeLine } from './lib/home-line';
+  import { isPermanentLifeError } from './lib/life-sync';
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'home', label: '홈' },
@@ -60,7 +61,10 @@
   let canViewDiary=$state(true);
   let diaryCatchUpStarted = false;
   let gbBootstrapped = false;
-  let cutSyncBootstrapped = false; // O1 — 대문사진 게시는 앱 실행당 1회 + 컷 생성 시마다
+  // O1 대문사진 게시 상태 — 폴링(2초)에 얹어 올리므로 재시도 조건을 좁게 잡아야 한다.
+  let cutSyncPending = true;    // 올릴 컷이 남았나 (연결 확보·새 컷·서버 전환에 다시 선다)
+  let cutSyncBlocked = false;   // 서버가 대문사진을 받지 않는다 → 이 앱 실행 동안 포기
+  let cutSyncedLifeId = '';     // 마지막으로 게시한 내 방 (서버·계정 전환 감지)
   const currentDiaryVisibility = () => diaryVisibility(localStorage.getItem('life-diary-visibility'));
   // 창(App) 레벨에서 직접 폴링 — 어느 탭에 있든 방 이동을 감지해 방문 모드로 전환
   $effect(() => {
@@ -92,11 +96,23 @@
             .then(({ entries }) => observeGuestbook(entries))
             .catch(() => { gbBootstrapped = false; });
         }
-        // O1 — 앱이 꺼진 동안의 미게시분·구서버→신서버 전환을 메운다. refresh()에 얹으면
-        // scan:done마다 PNG를 올리게 되므로 일회성 가드로 둔다(실패 시 다음 tick 재시도).
-        if (!cutSyncBootstrapped) {
-          cutSyncBootstrapped = true;
-          lifeSyncDailyCut().catch(() => { cutSyncBootstrapped = false; });
+        // O1 — 대문사진 게시. 앱이 꺼진 동안의 미게시분을 메우고, 새 컷·서버 전환에도 다시 선다.
+        // refresh()에 얹으면 scan:done마다 PNG를 올리므로 여기(폴링)에 둔다.
+        // 일시 실패는 다음 tick 재시도, **4xx는 포기** — 구서버·저장소 없는 서버에 붙어 있으면
+        // 거부된 PNG를 2초마다 영구 재전송하게 된다(maybe_reply_guestbook의 비활성 래치 선례).
+        if (myLifeId && cutSyncedLifeId && cutSyncedLifeId !== myLifeId) {
+          cutSyncPending = true;
+          cutSyncBlocked = false; // 다른 서버는 지원할 수 있다
+        }
+        if (cutSyncPending && !cutSyncBlocked && myLifeId) {
+          cutSyncPending = false;
+          const target = myLifeId;
+          lifeSyncDailyCut()
+            .then(() => { cutSyncedLifeId = target; })
+            .catch((e) => {
+              if (isPermanentLifeError(e)) cutSyncBlocked = true;
+              else cutSyncPending = true;
+            });
         }
         const next = resolveTabAfterLifeChange(lifeChanged, pendingTab, tab);
         tab = next.tab;
@@ -149,25 +165,32 @@
     if (at && (!gbMaxSeenAt || at > gbMaxSeenAt)) gbMaxSeenAt = at;
   }
 
-  // O1 — 첫 조회가 끝나기 전에는 대문을 게시하지 않는다. 초기값이 둘 다 null이라
-  // 가드 없이 게시하면 앱 실행마다 서버 문장이 빈 문자열로 지워진다(refresh 실패 시 영구히).
-  let homeLoaded = $state(false);
+  // O1 — 대문 게시 게이트: 로컬 조회가 **성공한** 사이클에만 열린다.
+  // getDailyLine은 실패를 던지고 호출부가 null로 뭉개므로, 성공 여부를 따로 들고 있지 않으면
+  // 일시 장애가 "빈 문자열 게시" = 서버의 정상 문장 삭제로 이어진다.
+  let homeReadOk = $state(false);
 
   async function refresh() {
     summary = await getSummary().catch(() => null);
     activeCount = (await listFindings(false).catch(() => [])).length;
-    dailyLine = await getDailyLine().catch(() => null);
+    // 조회 **전에** 게이트를 닫는다 — 두 조회 사이의 await에서 effect가 flush되면 아직 갱신되지
+    // 않은 중간값(캡션만 비운 빈 문자열 등)이 게시돼 서버의 정상 문장을 지운다.
+    homeReadOk = false;
+    let readOk = true;
+    dailyLine = await getDailyLine().catch(() => { readOk = false; return null; });
     cutCaption = (await getDailyCut())?.caption || null;
-    homeLoaded = true;
+    homeReadOk = readOk;
   }
   refresh();
   onScanDone(() => refresh());
 
   // O1 대문 게시 — 내 화면에 걸린 문장을 그대로 올린다(빈 문자열 = 지움).
   // visiting을 절대 참조하지 않는다 — 참조하면 남의 방에 들어간 순간 내 대문이 지워진다.
+  // myLifeId를 의존에 넣는 이유: life 연결 확보(미연결 부팅 뒤 나중에 연결)와 서버·계정 전환을
+  // 재게시 신호로 쓴다. 같은 값 재대입은 무효화되지 않으므로 2초 폴링이 게시를 반복하지 않는다.
   const publishLine = $derived(cutCaption || dailyLine || '');
   $effect(() => {
-    if (!homeLoaded) return;
+    if (!homeReadOk || !myLifeId) return;
     lifeSetDailyLine(publishLine).catch(() => {});
   });
 
@@ -215,7 +238,8 @@
       onDailyLine((text) => { dailyLine = text; }),
       onDailyCutReady(() => {
         getDailyCut().then((c) => (cutCaption = c?.caption || null));
-        lifeSyncDailyCut().catch(() => {}); // O1 — 새 컷을 서버 대문에도 게시
+        // O1 — 게시는 폴링에 맡긴다(직접 호출하면 실패해도 재시도 경로가 없다)
+        cutSyncPending = true;
       }),
     ];
     // 등록이 전부 끝난 뒤에 신고 — listen()은 비동기라 배열 생성만으로는 아직 수신 준비가 아니다.
