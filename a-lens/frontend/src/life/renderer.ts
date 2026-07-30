@@ -54,7 +54,7 @@ export const PREVIEW_DATA: LifeSceneData = {
 }
 
 // Life 마스코트 이미지를 캐릭터로 쓸 때의 목표 높이(px) — 원본은 1000px 급이라 축소한다.
-const MASCOT_H = 58
+const MASCOT_H = 74
 
 /** 씬별 캐릭터 표시 요소 — 경량 폴링(이름·아이콘만 갱신)이 씬을 다시 그리지 않도록 잡아둔다. */
 type AgentView = { robot: Container; nameTag: Text; namePill: Graphics; mascotUrl: string }
@@ -492,7 +492,7 @@ export function buildLifeScene(
     fontFamily: '"Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif',
     dropShadow: { color: 0x000000, alpha: 0.8, blur: 2, distance: 0, angle: 0 },
   })
-  const CHAR_SCALE = 1.0 // kitPieceScale 위에 곱하는 배수 — 책상(1.7배)과 어울리게, 의자에 앉은 크기
+  const CHAR_SCALE = 1.28 // kitPieceScale 위에 곱하는 배수 — 책상(1.7배)과 어울리게, 의자에 앉은 크기
   // 말풍선은 캐릭터의 자식으로 두면 앞줄 책상·캐릭터가 뒷줄 말풍선을 덮는다(깊이 정렬의 부작용).
   // 전용 오버레이 레이어에 모아 항상 맨 위에 그리고, 캐릭터의 흔들림만 따라가게 한다.
   const bubbleLayer = new Container()
