@@ -1363,7 +1363,7 @@ pub(crate) fn generate_daily_cut_core(
 
     // ① 짧은 락: 재료 읽기 → 즉시 해제 (네트워크 전 해제 규율)
     let (engine, cfg, identity, raw_uuid, mbti, date, diary) = {
-        let store = state.store.lock().map_err(|_| "store lock poisoned".to_string())?;
+        let store = state.lock_store().map_err(|_| "store lock poisoned".to_string())?;
         let Some(engine) = crate::resolve_engine(&store) else {
             return Err("텍스트 엔진이 설정되지 않았어요 — 설정 → 연결 → 텍스트 엔진을 확인해주세요".into());
         };

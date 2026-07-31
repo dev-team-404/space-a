@@ -10,7 +10,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "열기", true, None::<&str>)?;
     let mascot_on = {
         let state = app.state::<AppState>();
-        let guard = state.store.lock().ok();
+        let guard = state.lock_store().ok();
         guard
             .and_then(|s| s.get_setting("mascot_visible").ok().flatten())
             .map(|v| v == "true")
@@ -20,7 +20,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let reset_mascot = MenuItem::with_id(app, "reset_mascot", "마스코트 위치 초기화", true, None::<&str>)?;
     let realtime_on = {
         let state = app.state::<AppState>();
-        let guard = state.store.lock().ok();
+        let guard = state.lock_store().ok();
         guard
             .and_then(|s| s.get_setting("realtime_advice").ok().flatten())
             .map(|v| v == "on")
@@ -29,7 +29,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let realtime = CheckMenuItem::with_id(app, "realtime", "실시간 조언", true, realtime_on, None::<&str>)?;
     let protect_on = {
         let state = app.state::<AppState>();
-        let guard = state.store.lock().ok();
+        let guard = state.lock_store().ok();
         guard
             .and_then(|s| s.get_setting("content_protected").ok().flatten())
             .map(|v| v == "true")
@@ -38,7 +38,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let protect = CheckMenuItem::with_id(app, "protect", "화면 캡처 보호", true, protect_on, None::<&str>)?;
     let chatter_level = {
         let state = app.state::<AppState>();
-        let guard = state.store.lock().ok();
+        let guard = state.lock_store().ok();
         let raw = guard
             .and_then(|s| s.get_setting("chatter_level").ok().flatten())
             .unwrap_or_else(|| "low".into());
@@ -93,7 +93,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                         crate::show_mascot(app, false);
                     }
                     let _ = mascot_item.set_checked(!was_visible);
-                    if let Ok(store) = app.state::<AppState>().store.lock() {
+                    if let Ok(store) = app.state::<AppState>().lock_store() {
                         let _ = store.set_setting("mascot_visible", if was_visible { "false" } else { "true" });
                     }
                 }
@@ -101,7 +101,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             "reset_mascot" => {
                 crate::show_mascot(app, true);
                 let _ = mascot_item.set_checked(true);
-                if let Ok(store) = app.state::<AppState>().store.lock() {
+                if let Ok(store) = app.state::<AppState>().lock_store() {
                     let _ = store.set_setting("mascot_visible", "true");
                 }
             }
@@ -109,7 +109,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 use tauri::Emitter;
                 // 주의: muda CheckMenuItem은 클릭 시 checked를 자동 토글하므로
                 // is_checked()는 이미 새 값 — 설정(store)을 소스오브트루스로 파생한다.
-                if let Ok(store) = app.state::<AppState>().store.lock() {
+                if let Ok(store) = app.state::<AppState>().lock_store() {
                     let cur = store
                         .get_setting("realtime_advice")
                         .ok()
@@ -126,7 +126,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                 // muda CheckMenuItem은 클릭 시 checked 자동 토글 — store를 소스오브트루스로.
                 let next = {
                     let state = app.state::<AppState>();
-                    let Ok(store) = state.store.lock() else { return };
+                    let Ok(store) = state.lock_store() else { return };
                     let cur = store
                         .get_setting("content_protected")
                         .ok()
@@ -147,7 +147,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     "chatter_off" => "off",
                     _ => "low",
                 };
-                if let Ok(store) = app.state::<AppState>().store.lock() {
+                if let Ok(store) = app.state::<AppState>().lock_store() {
                     let _ = store.set_setting("chatter_level", level);
                 }
                 // 수동 라디오: muda 자동 토글을 덮어써 선택 항목만 체크 (store가 소스오브트루스)

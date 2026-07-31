@@ -29,6 +29,24 @@ pub struct AppState {
     pub store_waiters: std::sync::atomic::AtomicUsize,
 }
 
+impl AppState {
+    /// 스토어 락을 잡되 **기다린다는 사실을 신고**한다 — 스캔이 청크 사이에서 이걸 보고 양보한다
+    /// (`pipeline::runtime::hand_off`). **사용자 개시 경로는 전부 이걸 써야 한다**:
+    /// 커맨드(`commands::lock`)·트레이 메뉴·마스코트 배치·`generate_daily_cut_core`.
+    /// `store.lock()`을 직접 부르면 신고가 없어 스캔이 그 대기자를 못 보고 연속 청크를 통과해,
+    /// 그 경로만 청킹 이전 수준의 대기에 노출된다.
+    ///
+    /// **스캔 자신은 쓰지 않는다** — 보유자는 대기자가 아니고, 자기에게 양보할 이유도 없다.
+    /// 스캔과 같은 스레드에서 도는 후처리(`maybe_*`)도 스캔과 경합하지 않으므로 대상이 아니다.
+    pub fn lock_store(&self) -> std::sync::LockResult<std::sync::MutexGuard<'_, SqliteStore>> {
+        use std::sync::atomic::Ordering;
+        self.store_waiters.fetch_add(1, Ordering::AcqRel);
+        let guard = self.store.lock();
+        self.store_waiters.fetch_sub(1, Ordering::AcqRel);
+        guard
+    }
+}
+
 /// 마스코트 창 논리 크기(px). 창은 이 크기로 **상시 고정** — 확장/접힘을 리사이즈로
 /// 구현하면 창 원점 이동 + WebView 비동기 리페인트 때문에 로봇이 튀어 보이는
 /// 깜빡임이 생긴다. 접힘 상태의 여백은 클릭 통과로 처리한다.
@@ -78,8 +96,7 @@ pub(crate) fn place_mascot(app: &tauri::AppHandle, force_default: bool) -> anyho
     let (saved_pos, saved_layout) = {
         let state = app.state::<AppState>();
         let store = state
-            .store
-            .lock()
+            .lock_store()
             .map_err(|_| anyhow::anyhow!("store lock"))?;
         (
             store.get_setting("mascot_pos")?,
@@ -120,8 +137,7 @@ pub(crate) fn place_mascot(app: &tauri::AppHandle, force_default: bool) -> anyho
     window.set_position(tauri::PhysicalPosition::new(position.0, position.1))?;
     let state = app.state::<AppState>();
     let store = state
-        .store
-        .lock()
+        .lock_store()
         .map_err(|_| anyhow::anyhow!("store lock"))?;
     store.set_setting("mascot_pos", &format!("{},{}", position.0, position.1))?;
     store.set_setting("mascot_display_layout", &layout)?;
@@ -263,7 +279,7 @@ pub fn run() {
                 // (서버는 마지막 위치를 기억하지만, 세션 시작의 기본값은 내 방 — 설계 §3)
                 {
                     let state = app.state::<AppState>();
-                    let cfg = state.store.lock().ok().map(|s| {
+                    let cfg = state.lock_store().ok().map(|s| {
                         let get = |k: &str| s.get_setting(k).ok().flatten().unwrap_or_default();
                         (
                             get("hub_url"),
@@ -299,8 +315,7 @@ pub fn run() {
                 {
                     let visible = app
                         .state::<AppState>()
-                        .store
-                        .lock()
+                        .lock_store()
                         .map_err(|_| anyhow::anyhow!("store lock"))?
                         .get_setting("mascot_visible")?
                         .map(|value| value == "true")
@@ -358,8 +373,7 @@ pub fn run() {
                 {
                     let state = app.state::<AppState>();
                     let on = state
-                        .store
-                        .lock()
+                        .lock_store()
                         .ok()
                         .and_then(|store| store.get_setting("content_protected").ok().flatten())
                         .map(|v| v == "true")

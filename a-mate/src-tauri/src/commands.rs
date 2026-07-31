@@ -263,14 +263,10 @@ pub fn coaching_brief_inner(store: &SqliteStore) -> anyhow::Result<agent_mentor:
     agent_mentor::chat::assemble_coaching_brief(store)
 }
 
+/// 커맨드용 스토어 락. `AppState::lock_store`를 거치므로 대기가 스캔에 신고된다 —
+/// `state.store.lock()`을 직접 부르면 그 신고가 빠져 스캔이 연속 청크를 통과한다(X1 실측 898ms).
 fn lock<'a>(state: &'a State<AppState>) -> Result<std::sync::MutexGuard<'a, SqliteStore>, String> {
-    use std::sync::atomic::Ordering;
-    // 스캔이 단계 사이에 재획득을 미루도록 "기다리는 중"을 알린다 (pipeline::runtime::hand_off).
-    // 이 두 줄이 없으면 스캔이 락을 놓아도 커맨드가 못 끼어든다 — X1 실측 898ms.
-    state.store_waiters.fetch_add(1, Ordering::AcqRel);
-    let guard = state.store.lock().map_err(|e| e.to_string());
-    state.store_waiters.fetch_sub(1, Ordering::AcqRel);
-    guard
+    state.lock_store().map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]
