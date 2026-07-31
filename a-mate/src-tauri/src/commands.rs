@@ -1,7 +1,8 @@
 use crate::AppState;
 use agent_mentor::diary::engine::{ChatMessage, Engine, OpenAiCompatEngine};
+use agent_mentor::diary::{collect_tool_usage, ToolUsage};
 use agent_mentor::mascot::{robot_spec_for, stable_identity, RobotSpec};
-use agent_mentor::store::SqliteStore;
+use agent_mentor::store::{DaySession, DaySummary, SqliteStore};
 use serde::Serialize;
 use std::collections::HashMap;
 use tauri::State;
@@ -282,6 +283,29 @@ pub fn list_findings(state: State<AppState>, include_hidden: Option<bool>) -> Re
 pub fn sessions_ctx(state: State<AppState>, ids: Vec<String>) -> Result<Vec<SessionCtxItem>, String> {
     let guard = lock(&state)?;
     sessions_ctx_inner(&*guard, &ids).map_err(|e| e.to_string())
+}
+
+/// 다이어리 일별 활동 패널 — 요약·도구 집계·세션 목록을 한 왕복으로.
+#[derive(Debug, Serialize)]
+pub struct DayActivity {
+    pub summary: DaySummary,
+    pub tools: ToolUsage,
+    pub sessions: Vec<DaySession>,
+}
+
+pub fn day_activity_inner(store: &SqliteStore, date: &str) -> anyhow::Result<DayActivity> {
+    Ok(DayActivity {
+        summary: store.summary_for_date(date)?,
+        // 쿼리 실패는 빈 집계로 흡수된다(원래 계약) — 패널이 통째로 사라지지 않게
+        tools: collect_tool_usage(store, date),
+        sessions: store.sessions_for_date(date)?,
+    })
+}
+
+#[tauri::command(async)]
+pub fn day_activity(state: State<AppState>, date: String) -> Result<DayActivity, String> {
+    let guard = lock(&state)?;
+    day_activity_inner(&*guard, &date).map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]

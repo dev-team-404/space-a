@@ -526,7 +526,7 @@ pub(crate) fn cap_chars(s: &str, max: usize) -> String {
 
 /// 그날 (host,date)의 도구 호출을 집계한다. tool_kind별 카운트 + distinct 스킬/서버.
 /// 실패(쿼리 오류)는 빈 집계로 처리 — 브리프 조립을 막지 않는다.
-fn collect_tool_usage(store: &SqliteStore, date: &str) -> ToolUsage {
+pub fn collect_tool_usage(store: &SqliteStore, date: &str) -> ToolUsage {
     let by_kind: Vec<(String, u64)> = store
         .conn
         .prepare(

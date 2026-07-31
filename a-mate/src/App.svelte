@@ -332,7 +332,10 @@
           <LifeNavigator {myLifeId} currentLifeId={currentLifeId} />
         </div>
       </aside>
-      <main class="content">
+      <!-- 다이어리는 좌우(달력·활동 / 일기)가 각자 스크롤하므로 바깥 스크롤을 끈다 —
+           켜두면 스크롤 컨테이너가 둘로 겹쳐 어느 쪽이 움직이는지 알 수 없고,
+           좌우 높이가 서로 무관하게 늘어나 비대칭이 된다. -->
+      <main class="content" class:fixed={tab === 'diary'}>
         {#if tab === 'home'}
           <HomeTab {summary} {visiting} onGotoCoach={gotoCoach} onGotoNotice={gotoDest} />
         {:else if tab === 'coach'}
@@ -369,7 +372,8 @@
     font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
     font-size: 14px;
   }
-  .wall { height: 100vh; padding: 18px 34px 18px 18px; box-sizing: border-box; }
+  /* 우측 패딩 = 좌측과 같은 여백(18) + 프레임 밖으로 걸치는 세로 탭(right:-30px) */
+  .wall { height: 100vh; padding: 18px 48px 18px 18px; box-sizing: border-box; }
   .homepy {
     height: 100%; display: flex; flex-direction: column;
     background: var(--frame-2);
@@ -422,6 +426,7 @@
   }
   /* margin-right: 스크롤바를 프레임 가장자리(우측 세로 탭이 걸치는 곳)에서 안쪽으로 밀어냄 */
   .content { flex: 1; min-width: 0; overflow-y: auto; display: flex; flex-direction: column; margin-right: 10px; }
+  .content.fixed { overflow: hidden; }
   .tabs {
     position: absolute; right: -30px; top: 24px;
     display: flex; flex-direction: column; gap: 6px;
