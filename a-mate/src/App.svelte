@@ -24,7 +24,7 @@
   } from './lib/notices';
   import {
     addDiaryDate, clearDiaryDates, clearGuestbookSeen, loadUnseen, maxCreatedAt, newGuestbookIds,
-    saveUnseen,
+    saveUnseen, seedGuestbookSeen,
   } from './lib/unseen';
   import { isTab, resolveTabAfterLifeChange, type Tab } from './lib/ui/tab-routing';
   import { normalizeGroup, type SettingsGroup } from './lib/ui/settings/groups';
@@ -93,7 +93,7 @@
         if (!gbBootstrapped && myLifeId && meId) {
           gbBootstrapped = true;
           lifeGuestbook(myLifeId)
-            .then(({ entries }) => observeGuestbook(entries))
+            .then(({ entries }) => { observeGuestbook(entries); seedGuestbookIfNeeded(entries); })
             .catch(() => { gbBootstrapped = false; });
         }
         // O1 — 대문사진 게시. 앱이 꺼진 동안의 미게시분을 메우고, 새 컷·서버 전환에도 다시 선다.
@@ -162,12 +162,15 @@
     if (fresh.length) gbUnseenIds = new Set([...gbUnseenIds, ...fresh]);
     const at = maxCreatedAt(rows, meId);
     if (at && (!gbMaxSeenAt || at > gbMaxSeenAt)) gbMaxSeenAt = at;
-    // 최초 시드 — 첫 성공 조회의 서버 시각으로 워터마크를 세운다("이미 있는 건 다 본 것").
-    // 글이 없으면 세울 값이 없으므로 미시드로 남고, 다음 첫 글이 정상적으로 신규가 된다.
-    if (unseen.guestbookLastSeen === null && at) {
-      unseen = clearGuestbookSeen(unseen, at);
-      saveUnseen(unseen);
-    }
+  }
+
+  // 최초 시드는 **부트스트랩 경로 전용**이다 — 이벤트에서 시드하면 그 글 자신의 시각이 워터마크가 돼
+  // 방금 온 글을 읽음 처리한다(빈 부트스트랩 뒤 첫 글이 사라지던 경로).
+  function seedGuestbookIfNeeded(rows: { author_agent_id: string; created_at: string }[]) {
+    const next = seedGuestbookSeen(unseen, rows, meId);
+    if (next === unseen) return;
+    unseen = next;
+    saveUnseen(unseen);
   }
 
   // O1 — 대문 게시 게이트: 로컬 조회가 **성공한** 사이클에만 열린다.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addDiaryDate, clearDiaryDates, clearGuestbookSeen, maxCreatedAt, newGuestbookIds, parseUnseen,
+  seedGuestbookSeen,
 } from './unseen';
 
 const NOW = '2026-07-29T10:00:00+00:00';
@@ -51,6 +52,28 @@ describe('guestbook unseen', () => {
   it('클리어 = lastSeen 갱신', () => {
     const s = clearGuestbookSeen(parseUnseen(null), '2026-07-30T00:00:00+00:00');
     expect(s.guestbookLastSeen).toBe('2026-07-30T00:00:00+00:00');
+  });
+});
+
+describe('seedGuestbookSeen — 부트스트랩 전용 시드', () => {
+  const e = (id: string, author: string, at: string) => ({ entry_id: id, author_agent_id: author, created_at: at });
+  it('타인 글이 있으면 그 최신 서버 시각으로 시드', () => {
+    const s = seedGuestbookSeen(parseUnseen(null), [e('a', 'other', '2026-07-29T00:00:00+00:00')], 'me');
+    expect(s.guestbookLastSeen).toBe('2026-07-29T00:00:00+00:00');
+  });
+  it('빈 방명록·내 글만이면 최소 워터마크로 시드 — 다음 글부터 신규로 잡히게', () => {
+    expect(seedGuestbookSeen(parseUnseen(null), [], 'me').guestbookLastSeen).toBe('');
+    expect(seedGuestbookSeen(parseUnseen(null), [e('c', 'me', '2026-07-30T00:00:00+00:00')], 'me')
+      .guestbookLastSeen).toBe('');
+  });
+  it('이미 시드됐으면 건드리지 않는다', () => {
+    const seeded = clearGuestbookSeen(parseUnseen(null), '2026-07-01T00:00:00+00:00');
+    expect(seedGuestbookSeen(seeded, [e('a', 'other', '2026-07-29T00:00:00+00:00')], 'me')).toBe(seeded);
+  });
+  it('빈 부트스트랩 후 도착한 첫 글은 신규로 잡힌다 (Codex P2 회귀)', () => {
+    const s = seedGuestbookSeen(parseUnseen(null), [], 'me');
+    const ids = newGuestbookIds([e('first', 'other', '2026-07-31T00:00:00+00:00')], 'me', s.guestbookLastSeen);
+    expect(ids).toEqual(['first']);
   });
   it('maxCreatedAt: 타인 글의 최신 서버 시각 — 내 글 제외, 없으면 null', () => {
     expect(maxCreatedAt(

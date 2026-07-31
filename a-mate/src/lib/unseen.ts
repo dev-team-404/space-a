@@ -47,6 +47,20 @@ export function clearGuestbookSeen(s: UnseenState, atIso: string): UnseenState {
   return { ...s, guestbookLastSeen: atIso };
 }
 
+/** 부트스트랩(첫 서버 조회) 전용 시드 — **성공한 조회는 반드시 시드한다.**
+ *  글이 있으면 최신 서버 시각("이미 있는 건 다 본 것"), 없으면 `''`(최소 워터마크).
+ *  빈 방명록에서 미시드로 남기면 이후 `newGuestbookIds`가 계속 0건을 반환해
+ *  **첫 새 글이 조용히 읽음 처리된다** — `''`면 모든 ISO 시각이 그보다 커서 정상적으로 신규가 된다.
+ *  이벤트 경로에서 부르면 안 된다: 그 글 자신의 시각으로 시드해 자기를 읽음 처리한다. */
+export function seedGuestbookSeen(
+  s: UnseenState,
+  entries: { author_agent_id: string; created_at: string }[],
+  myAgentId: string,
+): UnseenState {
+  if (s.guestbookLastSeen !== null) return s;
+  return { ...s, guestbookLastSeen: maxCreatedAt(entries, myAgentId) ?? '' };
+}
+
 /** 관측한 타인 글의 최신 created_at (없으면 null) — 워터마크를 서버 시각으로 올리기 위한 후보. */
 export function maxCreatedAt(
   entries: { author_agent_id: string; created_at: string }[],
