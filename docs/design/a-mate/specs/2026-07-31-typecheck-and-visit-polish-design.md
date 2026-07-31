@@ -63,7 +63,7 @@ Q3를 먼저 두는 이유는 순서 취향이 아니다. Q1은 `UnseenState.gue
 // a-mate/package.json
 "devDependencies": {
   "svelte-check": "^4",
-  "@types/node": "^22"
+  "@types/node": "^24"   // 런타임 메이저에 맞춤 — 이 환경은 Node v24.11.0
 },
 "scripts": {
   "check": "svelte-check --threshold error",
