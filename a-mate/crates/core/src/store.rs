@@ -818,6 +818,33 @@ impl SqliteStore {
         Ok(row)
     }
 
+    /// 그날(로컬 날짜) 시작한 세션 목록 — `first_ts` 오름차순.
+    /// 날짜 버킷 규약은 나머지 일별 집계와 동일한 `date(...,'localtime')`이다
+    /// (다르게 하면 요약의 세션 수와 이 목록의 길이가 어긋난다).
+    pub fn sessions_for_date(&self, date: &str) -> Result<Vec<DaySession>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT session_id, project_id, cwd, first_ts, first_prompt_preview
+               FROM sessions
+              WHERE date(first_ts,'localtime')=?1
+              ORDER BY first_ts",
+        )?;
+        let rows = stmt.query_map(params![date], |r| {
+            let project_id: String = r.get(1)?;
+            let cwd: Option<String> = r.get(2)?;
+            Ok(DaySession {
+                session_id: r.get(0)?,
+                project: cwd
+                    .as_deref()
+                    .map(crate::hosts::path_basename)
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(project_id),
+                first_ts: r.get(3)?,
+                first_prompt: r.get(4)?,
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
     pub fn total_sessions(&self) -> Result<u64> {
         let n: i64 = self.conn.query_row("SELECT COUNT(*) FROM sessions", [], |r| r.get(0))?;
         Ok(n as u64)
@@ -2049,6 +2076,17 @@ pub struct DaySummary {
     pub tok_output: u64,
     pub tok_cache_read: u64,
     pub tok_cache_create: u64,
+}
+
+/// 그날 시작한 세션 1건 — 다이어리 일별 활동 패널용.
+/// `project`는 **표시명**이다(`cwd`의 basename, 없으면 `project_id` 폴백) —
+/// `project_id`는 `win:d:\project\space-a` 형태의 정규화 키라 그대로 보여줄 값이 아니다.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DaySession {
+    pub session_id: String,
+    pub project: String,
+    pub first_ts: String,
+    pub first_prompt: Option<String>,
 }
 
 /// E — work-kind 판정 대기 세션 (pending_work_kind_sessions 반환 행).
@@ -4547,5 +4585,83 @@ mod tests {
         let store = SqliteStore::open_in_memory().unwrap();
         assert!(store.add_memory("   ", "chat").is_err());
         assert_eq!(store.count_memories().unwrap(), 0);
+    }
+
+    #[test]
+    fn sessions_for_date_buckets_by_local_date_and_names_by_cwd_basename() {
+        use crate::model::*;
+        let store = SqliteStore::open_in_memory().unwrap();
+        let now = chrono::Local::now();
+        let today = now.format("%Y-%m-%d").to_string();
+        let ts = now.to_rfc3339();
+
+        let ev = |sid: &str, off: u64, ts: &str, kind: EventKind| NormalizedEvent {
+            source_agent: "claude-code".into(),
+            schema_version: "t".into(),
+            host: "Windows".into(),
+            project_id: "win:d:\\project\\space-a".into(),
+            session_id: sid.into(),
+            uuid: Some(format!("{sid}-{off}")),
+            parent_uuid: None,
+            is_sidechain: false,
+            ts: Some(ts.into()),
+            source_file: "C:\\proj\\s.jsonl".into(),
+            source_offset: off,
+            msg_id: None,
+            kind,
+        };
+
+        store
+            .upsert_events(&[
+                // cwd 있는 세션 — 표시명은 basename
+                ev(
+                    "s1",
+                    0,
+                    &ts,
+                    EventKind::SessionMeta { cwd: "D:\\Project\\space-a".into(), git_branch: None },
+                ),
+                ev(
+                    "s1",
+                    10,
+                    &ts,
+                    EventKind::UserPrompt {
+                        preview: "PR138까지 머지했다".into(),
+                        is_command: false,
+                    },
+                ),
+                // cwd 없는 세션 — project_id로 폴백. 프롬프트도 없음
+                ev(
+                    "s2",
+                    0,
+                    &ts,
+                    EventKind::AssistantTurn {
+                        model: NormModel::from_raw_id("claude-opus-4-8"),
+                        usage: TokenUsage::default(),
+                        web_search: 0,
+                        web_fetch: 0,
+                    },
+                ),
+                // 다른 날짜 세션 — 오늘 버킷에 안 잡혀야 한다
+                ev(
+                    "s3",
+                    0,
+                    "2026-01-02T03:04:05Z",
+                    EventKind::SessionMeta { cwd: "D:\\Project\\other".into(), git_branch: None },
+                ),
+            ])
+            .unwrap();
+
+        let rows = store.sessions_for_date(&today).unwrap();
+        let ids: Vec<&str> = rows.iter().map(|r| r.session_id.as_str()).collect();
+        assert!(ids.contains(&"s1") && ids.contains(&"s2"), "오늘 세션 2건: {ids:?}");
+        assert!(!ids.contains(&"s3"), "다른 날짜 세션이 섞였다: {ids:?}");
+
+        let s1 = rows.iter().find(|r| r.session_id == "s1").unwrap();
+        assert_eq!(s1.project, "space-a", "cwd basename을 표시명으로");
+        assert_eq!(s1.first_prompt.as_deref(), Some("PR138까지 머지했다"));
+
+        let s2 = rows.iter().find(|r| r.session_id == "s2").unwrap();
+        assert_eq!(s2.project, "win:d:\\project\\space-a", "cwd 없으면 project_id 폴백");
+        assert!(s2.first_prompt.is_none());
     }
 }
