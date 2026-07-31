@@ -26,10 +26,16 @@ a-mate 회고문은 LLM이 쓴 2~3문장이라 어휘가 비슷하게 수렴한�
 | 위치 | 내용 |
 |---|---|
 | `a-mate/crates/core/src/hosts.rs` `project_identity(host, cwd) -> (key, name)` | cwd → 정규화 키 + **표시 이름 = `path_basename(cwd)`**. WSL 직접 세션과 Windows UNC 경로 세션을 **같은 프로젝트로 통합**까지 해둠 |
-| `a-mate/crates/core/src/store.rs` `StruggleSession` | 회고 발행이 쓰는 구조체. **`project_id` 필드가 이미 있다**(위 key). `host`도 있다 |
+| `a-mate/crates/core/src/diary/mod.rs` `git_commits_for(host, cwd, ...)` | 세션 cwd에서 **git을 이미 돌린다**(WSL이면 `wsl -d <distro> -- git`). 저장소 루트를 묻는 것도 같은 방식 |
 | `a-mate/src-tauri/src/commands.rs` `SessionCtx`/`session_ctx()` | `cwd`·`git_branch`(`EventKind::SessionMeta`)까지 파싱·저장하고 있다 |
 
 즉 **새로 수집할 것은 없다.** 발행 경로에서 빠지고 있을 뿐이다.
+
+> **정정 (구현 중 확인)** — `StruggleSession.project_id`는 `project_identity`의 키가 **아니다**.
+> Claude 로그 디렉터리명(`-home-kimmy-core-space-a`)을 `decode_project_id`로 정규화한 값이라
+> 구분자가 전부 `-`로 뭉개져 있어 basename을 되살릴 수 없다(`space-a` → `a`).
+> 그래서 `struggle_sessions` 조회에 **`cwd`를 실어 온다**(cwd 없는 옛 세션은 같은
+> `(host, project_id)`를 cwd와 함께 기록한 세션에서 빌려온다 — 일기와 같은 규율).
 
 ## 2. 실을 자리 — 제목뿐이다
 
@@ -55,8 +61,14 @@ work 허브(`spacea.msalt.net`)는 **재배포 불가**다([[space-a-hub-work-no
 
 ## 3. 규칙 (결정된 것)
 
-1. **전체 경로 금지, basename만.** `project_id`는 `wsl:ubuntu:/home/kimmy/core/space-a`처럼
-   홈 경로를 품는다. 그대로 보내면 팀 공간에 개인 경로가 남는다 — a-mate 회고 프롬프트도
+0. **프로젝트 = git 저장소 루트의 이름** (2026-07-31 결정). cwd basename으로는 같은 프로젝트가
+   사람마다 갈린다 — `space-a/`에서 일한 사람은 `space-a`, `space-a/a-mate/`에서 일한 사람은
+   `a-mate`가 된다. `git rev-parse --path-format=absolute --git-common-dir`로 루트를 찾고
+   그 basename을 쓴다. 공용 디렉터리를 보므로 **worktree도 본 저장소로 합쳐진다**.
+   서브모듈(`.git/modules/…`)은 합치지 않고 `--show-toplevel`로 폴백한다. git이 없거나
+   저장소가 아니면 cwd basename으로 폴백 — best-effort다.
+1. **전체 경로 금지, basename만.** 저장소 루트 경로는 `/home/kimmy/core/space-a`처럼 홈 경로를
+   품는다. 그대로 보내면 팀 공간에 개인 경로가 남는다 — a-mate 회고 프롬프트도
    "회사·개인 식별 정보는 넣지 않는다"고 못박고 있다. `space-a`만 보낸다.
 2. **슬러그 정제**: 소문자, `[a-z0-9._-]`만 남기고 나머지는 `-`, 연속 `-` 축약, 32자 제한.
    비면 마커를 아예 붙이지 않는다(빈 마커 금지).
@@ -69,10 +81,15 @@ work 허브(`spacea.msalt.net`)는 **재배포 불가**다([[space-a-hub-work-no
 
 ### 4.1 a-mate (Rust)
 
-| 파일 | 작업 |
-|---|---|
-| `crates/core/src/hub.rs` | `pub fn project_slug(project_id: &str) -> Option<String>` — key에서 basename 추출(`wsl:<distro>:<linux>` / `win:<path>` 양쪽, `/`·`\` 모두) 후 §3.2 정제. `pub fn project_marker(slug: &str) -> String` → `[a-mate:proj={slug}]`. 단위 테스트: WSL/Windows/UNC 키, 이상 문자, 빈 값 |
-| `src-tauri/src/pipeline.rs` | 회고 발행 **두 곳**(신규 루프 + resume 루프)에서 이슈 제목과 요약 앞에 마커 부착. 신규: `open_issue(space, "[a-mate 회고]{marker} {title}")`, `resolve_issue(issue_id, "{marker} {summary}", steps)` |
+| 파일 | 작업 | 상태 |
+|---|---|---|
+| `crates/core/src/store.rs` | `StruggleSession.cwd` 추가 + `struggle_sessions` 조회에 cwd(옛 세션은 같은 프로젝트의 다른 세션에서 보충) | ✅ |
+| `crates/core/src/hosts.rs` | `git_repo_root(host, cwd)` — WSL/네이티브 양쪽에서 `git rev-parse`. 순수부 `repo_root_from_common_dir`는 따로 떼어 테스트 | ✅ |
+| `crates/core/src/hub.rs` | `project_slug(host, dir)`(순수·§3.2 정제) · `project_marker(slug)` · `retro_project_marker(session)`(git 호출) · `retro_issue_title` · `retro_page_summary`(둘 다 순수) | ✅ |
+| 발행 경로 **네 곳** | `src-tauri/src/pipeline.rs`(신규·resume) + `crates/core/src/hub.rs`의 `run_retro_push`·`resume_retro_pendings`(CLI 경로). 마커는 세션당 한 번만 계산해 돌려 쓴다 | ✅ |
+
+- 마커는 `[a-mate 회고]`보다 **앞**에 붙인다: `[a-mate:proj=space-a][a-mate 회고] {title}`.
+  a-lens의 기존 제거 규칙이 **문두만** 보기 때문에, 뒤에 두면 구버전 화면에서 마커가 그대로 뜬다.
 
 - 빌드·실행은 **네이티브 Windows PowerShell**에서(`npm run tauri dev`). WSL 금지 — a-mate/CLAUDE.md 제약.
 - 허브 푸시는 dev 빌드 + `.env`에서만 켜진다([[a-mate-hub-push-enabled]] 메모리).
@@ -80,12 +97,12 @@ work 허브(`spacea.msalt.net`)는 **재배포 불가**다([[space-a-hub-work-no
 
 ### 4.2 a-lens (Python + TS)
 
-| 파일 | 작업 |
-|---|---|
-| `backend/alens/collector.py` | 마커 파서 `_parse_project(title) -> (project|None, 남은 제목)`. 페이지·이슈 양쪽에 적용. **번역(LLM) 입력과 표시 제목에서 마커 제거** — 지금 `_display_title`은 이벤트에만 쓰이고 `_page_doc`은 원제목을 그대로 번역에 넣는다. VM에 `project` 필드 추가 |
-| `backend/alens/collab.py` | `project` 있는 문서는 그 값으로, 없으면 지금처럼 주제어로. 프로젝트 노드/집계 산출 |
-| `frontend/src/api.ts`·`main.ts` | 프로젝트 축 표시. 사실(마커)과 추정(주제어)을 **시각적으로 구분** |
-| `contracts/` | 계약 변경 아님(허브 응답 모양 그대로). 문서만 |
+| 파일 | 작업 | 상태 |
+|---|---|---|
+| `backend/alens/collector.py` | 마커 파서 `_parse_project(title) -> (project|None, 남은 제목)`. 페이지·이슈 양쪽에 적용. **번역(LLM) 입력과 표시 제목에서 마커 제거** — 프로젝트는 캐시가 아니라 매번 원제목에서 읽는다(캐시에 굳는 title은 이미 마커를 뗀 것). 로비 피드 서사 문장도 표시 제목으로 교체(원제목을 쓰고 있었다) | ✅ |
+| `backend/alens/collab.py` | `_projects()` — **마커 있는 문서만** 프로젝트로 집계(주제어 추정으로 채우지 않는다). `graph.projects = {nodes:[{id, docs, people:[{id, docs}]}], unknown_docs}` | ✅ |
+| `frontend/src/api.ts`·`main.ts` | 프로젝트 축 표시. 사실(마커)과 추정(주제어)을 **시각적으로 구분** | ⏳ §4.3 확정 후 |
+| `contracts/` | 계약 변경 아님(허브 응답 모양 그대로). 문서만 | — |
 
 ### 4.3 화면 (초안 — 구현 전 확정할 것)
 
