@@ -513,6 +513,7 @@ async function renderHome() {
   modal.hidden = true
   hub.hidden = true
   hubOpen.hidden = true
+  hubActivity.hidden = true // 사이드바 밖으로 뺐으므로 홈으로 나갈 때 따로 숨긴다
   sceneHost.style.display = 'none'
 
   let floors: LobbyFloor[] = []
@@ -1322,6 +1323,8 @@ try {
 function applyHubCollapsed(inLife: boolean) {
   hub.hidden = !inLife || hubCollapsed
   hubOpen.hidden = !inLife || !hubCollapsed
+  // 팀 활동 카드는 사이드바 밖(왼쪽 아래)에 있다 — 방 안이면 접힘과 무관하게 계속 보인다
+  hubActivity.hidden = !inLife
   fitScene()
 }
 
