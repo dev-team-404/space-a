@@ -32,6 +32,7 @@ MIN_SCORE_RATIO = 1.0
 MAX_EDGES = 12          # 화면에 그릴 엣지 수 — 넘으면 weight 상위만 (잘린 수는 stats에)
 TOP_KEYWORDS = 5
 TOP_PAIRS = 3           # 엣지 하나당 근거로 보여줄 문서쌍 수 ("무엇이 통했나")
+POOL_PAIRS = 24         # 그중에서 고르기 위해 들고 있는 후보 수 (§4.3 다양성 선택)
 
 # ── 한국어 근사 토큰화 (스펙 §4.2) ───────────────────────────
 # 형태소 분석기를 안 쓴다: 새 의존성(JVM·사전)을 이 기능 하나로 들이지 않는다. 두 문서가
@@ -156,6 +157,30 @@ def _doc_text(d: dict) -> str:
     return f"{d.get('title', '')} {d.get('summary', '')} {body[:4000]}"
 
 
+def _diverse_pairs(pool: list[tuple[float, dict]]) -> list[dict]:
+    """근거로 보여줄 문서쌍 고르기 — 점수순으로 뽑되 **같은 문서를 두 번 쓰지 않는다**.
+
+    점수만으로 상위 3개를 뽑으면 인기 문서 하나가 세 쌍에 모두 끼어 같은 제목이 세 번 나온다
+    (실측: 한 사람의 문서 하나가 3쌍을 다 차지했다). 그러면 근거 3개가 사실상 1개다.
+    다양한 쌍이 모자라면 남은 것을 점수순으로 채운다 — 빈칸으로 두지는 않는다."""
+    ordered = sorted(pool, key=lambda r: -r[0])
+    out: list[dict] = []
+    used: set[str] = set()
+    for _, p in ordered:
+        if len(out) >= TOP_PAIRS:
+            break
+        if used.intersection(p["docs"]):
+            continue
+        used.update(p["docs"])
+        out.append(p)
+    for _, p in ordered:
+        if len(out) >= TOP_PAIRS:
+            break
+        if p not in out:
+            out.append(p)
+    return out
+
+
 def _topic_edges(docs: list[dict], author_of: dict[str, str]) -> tuple[list[dict], dict]:
     """주제 겹침(추정). 저자가 다른 문서쌍이 주제어를 충분히 공유하면 두 사람을 잇는다.
 
@@ -204,9 +229,9 @@ def _topic_edges(docs: list[dict], author_of: dict[str, str]) -> tuple[list[dict
                 },
             )
         )
-        if len(ranked) > TOP_PAIRS:
+        if len(ranked) > POOL_PAIRS:
             ranked.sort(key=lambda r: -r[0])
-            del ranked[TOP_PAIRS:]
+            del ranked[POOL_PAIRS:]
 
     edges = [
         {
@@ -216,7 +241,7 @@ def _topic_edges(docs: list[dict], author_of: dict[str, str]) -> tuple[list[dict
             "weight": w,
             "keywords": [t for t, _ in kw[(a, b)].most_common(TOP_KEYWORDS)],
             # 근거 문서쌍 — {docs: [a쪽, b쪽], keywords: 그 쌍이 공유한 말}
-            "doc_pairs": [p for _, p in sorted(sample[(a, b)], key=lambda r: -r[0])[:TOP_PAIRS]],
+            "doc_pairs": _diverse_pairs(sample[(a, b)]),
         }
         for (a, b), w in pairs.items()
     ]

@@ -1190,52 +1190,59 @@ function collabEvidenceHTML(e: CollabEdge, data: SpaceView, name: (id: string) =
     for (const pair of e.doc_pairs ?? []) {
       const [a, b] = [docTitle(pair.docs[0]), docTitle(pair.docs[1])]
       if (!a || !b) continue
-      // 쌍마다 그 쌍이 공유한 말을 붙인다 — 제목만 보면 왜 묶였는지 안 보이는 쌍이 많다
-      const kws = pair.keywords.map((k) => `<span class="collab-kw">${esc(k)}</span>`).join('')
+      // 쌍마다 그 쌍이 공유한 말을 붙인다 — 제목만 보면 왜 묶였는지 안 보이는 쌍이 많다.
+      // 여기선 알약(chip)이 아니라 흐린 한 줄로 — 근거 블록까지 알약이면 화면이 알약밭이 된다.
+      const kws = pair.keywords.join(' · ')
       rows.push(`
         <div class="collab-ev-pair">
           <div class="collab-ev-item" data-cdoc="${esc(a.doc_id)}">
-            <span class="collab-ev-who">${esc(name(e.source))}</span> 📄 ${esc(a.title)}</div>
+            <span class="collab-ev-who">${esc(name(e.source))}</span><span class="collab-ev-title">${esc(a.title)}</span></div>
           <div class="collab-ev-item" data-cdoc="${esc(b.doc_id)}">
-            <span class="collab-ev-who">${esc(name(e.target))}</span> 📄 ${esc(b.title)}</div>
-          ${kws ? `<div class="collab-kws">${kws}</div>` : ''}
+            <span class="collab-ev-who">${esc(name(e.target))}</span><span class="collab-ev-title">${esc(b.title)}</span></div>
+          ${kws ? `<div class="collab-ev-kw">${esc(kws)}</div>` : ''}
         </div>`)
     }
   } else if (e.type === 'reuse') {
     for (const id of e.doc_ids ?? []) {
       const d = docTitle(id)
-      if (d) rows.push(`<div class="collab-ev-item" data-cdoc="${esc(d.doc_id)}">📄 ${esc(d.title)}</div>`)
+      if (d) rows.push(`<div class="collab-ev-item" data-cdoc="${esc(d.doc_id)}"><span class="collab-ev-title">${esc(d.title)}</span></div>`)
     }
   } else {
     for (const id of e.issue_ids ?? []) {
       const i = data.issues.find((x) => x.issue_id === id)
-      if (i) rows.push(`<div class="collab-ev-item" data-cissue="${esc(i.issue_id)}">🔗 ${esc(i.title)}</div>`)
+      if (i) rows.push(`<div class="collab-ev-item" data-cissue="${esc(i.issue_id)}"><span class="collab-ev-title">${esc(i.title)}</span></div>`)
     }
   }
   const head =
-    e.type === 'topic' ? '이 문서들이 겹쳤어요' : e.type === 'reuse' ? '가져다 쓴 지식' : '넘겨받아 해결한 이슈'
+    e.type === 'topic' ? '겹친 문서' : e.type === 'reuse' ? '가져다 쓴 지식' : '넘겨받아 해결한 이슈'
   if (!rows.length) return '<div class="collab-evidence"><div class="muted small">근거 문서를 못 찾았어요</div></div>'
   return `<div class="collab-evidence"><div class="collab-ev-head">${head}</div>${rows.join('')}</div>`
 }
 
-/** 엣지 한 줄 — 무엇을 근거로 이어졌는지 사람 말로. 추정은 추정이라고 적는다. */
-function collabEdgeRow(e: CollabEdge, data: SpaceView, name: (id: string) => string): string {
+/** 엣지 한 줄.
+ *
+ *  문장을 걷어냈다: 목록이 대부분 같은 종류(주제 겹침)라 "주제 겹침 · 같은 주제를 다뤘어요"가
+ *  줄마다 반복되면서 정작 다른 정보(누구·얼마나·무슨 말)를 덮었다. 종류는 왼쪽 색 막대와
+ *  범례가 이미 말하고, 사실 엣지(인용·핸드오프)만 드물어서 이름표를 남긴다. 양은 숫자와
+ *  가로 막대로 — 눈으로 훑을 때 글자보다 길이가 빠르다. */
+function collabEdgeRow(e: CollabEdge, data: SpaceView, name: (id: string) => string, max: number): string {
   const style = EDGE_STYLE[e.type]
   const on = collabEdge === edgeKey(e)
-  const gist =
-    e.type === 'topic'
-      ? `같은 주제를 다뤘어요 · 문서 ${e.weight}쌍`
-      : e.type === 'reuse'
-        ? `지식을 가져다 썼어요 · ${e.weight}건`
-        : `이슈를 넘겨받아 해결했어요 · ${e.weight}건`
+  const unit = e.type === 'topic' ? `${e.weight}쌍` : `${e.weight}건`
   const arrow = e.type === 'topic' ? '↔' : '→'
-  const keys = (e.keywords ?? []).map((k) => `<span class="collab-kw">${esc(k)}</span>`).join('')
+  const keys = (e.keywords ?? []).slice(0, 4).map((k) => `<span class="collab-kw">${esc(k)}</span>`).join('')
+  const width = Math.max(6, Math.round((e.weight / Math.max(1, max)) * 100))
   return `
     <div class="collab-row ${on ? 'on' : ''}" data-cedge="${esc(edgeKey(e))}">
       <span class="collab-swatch" style="background:${style.color};${e.type === 'topic' ? 'opacity:.55' : ''}"></span>
       <div class="collab-row-main">
-        <div class="collab-row-who">${esc(name(e.source))} <span class="muted">${arrow}</span> ${esc(name(e.target))}</div>
-        <div class="muted small">${esc(style.label)} · ${esc(gist)}</div>
+        <div class="collab-row-head">
+          <span class="collab-row-who">${
+            e.type === 'topic' ? '' : `<span class="collab-tag" style="color:${style.color}">${esc(style.label)}</span>`
+          }${esc(name(e.source))} <span class="muted">${arrow}</span> ${esc(name(e.target))}</span>
+          <span class="collab-row-n">${unit}</span>
+        </div>
+        <div class="collab-bar"><i style="width:${width}%;background:${style.color}"></i></div>
         ${keys ? `<div class="collab-kws">${keys}</div>` : ''}
         ${on ? collabEvidenceHTML(e, data, name) : ''}
       </div>
@@ -1309,8 +1316,9 @@ function hubCollabHTML(data: SpaceView, focus?: string | null): string {
     </div>
     ${notes.length ? `<div class="muted small collab-notes">${esc(notes.join(' · '))}</div>` : ''}`
 
+  const max = Math.max(1, ...g.edges.map((e) => e.weight)) // 가로 막대 기준 = 이 목록의 최댓값
   const list = g.edges.length
-    ? g.edges.map((e) => collabEdgeRow(e, data, nameOf)).join('')
+    ? g.edges.map((e) => collabEdgeRow(e, data, nameOf, max)).join('')
     : `<p class="muted small">아직 이어진 선이 없어요 — 이 방 사람들은 각자 따로 일했어요</p>`
 
   return hubSection(title, 'Collaboration Map', legend + svg + summary + list)

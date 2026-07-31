@@ -759,8 +759,18 @@ button { font: inherit; cursor: pointer; }
 .collab-row:hover { background: #131a28; }
 .collab-row.on { background: #182036; }
 .collab-swatch { width: 3px; border-radius: 2px; flex: none; }
-.collab-row-main { min-width: 0; }
-.collab-row-who { font-size: 12.5px; color: #e8eaed; font-weight: 600; }
+.collab-row-main { min-width: 0; flex: 1; }
+/* 이름은 왼쪽, 양은 오른쪽 끝에 붙여 세로로 줄맞춤 — 훑을 때 숫자가 한 열에 모인다 */
+.collab-row-head { display: flex; align-items: baseline; gap: 8px; }
+.collab-row-who {
+  font-size: 12.5px; color: #e8eaed; font-weight: 600;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.collab-row-n { margin-left: auto; font-size: 11px; color: #98a1ae; font-variant-numeric: tabular-nums; }
+.collab-tag { font-size: 10.5px; font-weight: 700; margin-right: 5px; }
+/* 양을 길이로 — 8줄을 훑을 때 숫자를 읽는 것보다 막대 길이가 빠르다 */
+.collab-bar { height: 3px; border-radius: 2px; background: #2a3346; margin: 5px 0 5px; overflow: hidden; }
+.collab-bar i { display: block; height: 100%; border-radius: 2px; opacity: 0.75; }
 .collab-kws { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .collab-kw {
   background: #101624;
@@ -779,23 +789,33 @@ button { font: inherit; cursor: pointer; }
   display: grid;
   gap: 5px;
 }
-.collab-ev-head { font-size: 11px; color: #d9a441; }
+.collab-ev-head { font-size: 10.5px; color: #98a1ae; letter-spacing: 0.02em; }
 .collab-ev-pair {
   display: grid;
-  gap: 3px;
-  padding-bottom: 4px;
-  border-bottom: 1px dashed #232b3c;
+  gap: 2px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed #2a3346;
 }
 .collab-ev-pair:last-child { border-bottom: 0; padding-bottom: 0; }
+/* 제목은 한 줄로 자른다 — 두 줄까지 풀면 근거 블록이 목록만큼 길어져 원래 문제로 돌아간다 */
 .collab-ev-item {
   font-size: 12px;
   color: #dfe4ea;
-  line-height: 1.45;
+  line-height: 1.5;
   cursor: pointer;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
   overflow: hidden;
 }
 .collab-ev-item:hover { color: #7fb3d5; }
-.collab-ev-who { color: #98a1ae; font-size: 11px; margin-right: 4px; }
+/* 이름은 고정 폭으로 세워 두 줄의 제목 시작점을 맞춘다 */
+.collab-ev-who {
+  color: #98a1ae;
+  font-size: 11px;
+  flex: 0 0 52px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.collab-ev-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.collab-ev-kw { font-size: 10.5px; color: #949cab; margin: 1px 0 0 58px; }
