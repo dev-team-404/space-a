@@ -819,3 +819,36 @@ button { font: inherit; cursor: pointer; }
 }
 .collab-ev-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .collab-ev-kw { font-size: 10.5px; color: #949cab; margin: 1px 0 0 58px; }
+
+/* ── 협업 지도 선 클릭 시 뜨는 설명 카드 (지도 바로 왼쪽) ── */
+/* 지도와 목록이 세로로 떨어져 있어 그림에서 선을 골라도 설명을 찾아 스크롤해야 했다.
+   상세 패널(#panel)과 같은 자리 규칙 — 사이드바 왼쪽 바깥. 위치는 JS가 클릭한 선 높이로 잡는다. */
+#collab-pop {
+  position: fixed;
+  z-index: 12; /* Hub(10)보다 위 — 사이드바에 걸쳐도 카드가 보인다 */
+  width: 320px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 12px 14px 13px;
+  border: 1px solid #4a5361;
+  border-radius: 10px;
+  background: rgba(20, 26, 44, 0.97);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+}
+/* 오른쪽 가장자리에서 지도를 가리키는 삼각형 (테두리색 위에 배경색을 겹쳐 1px 선을 살린다) */
+#collab-pop::before,
+#collab-pop::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  border: 7px solid transparent;
+  transform: translateY(-50%);
+}
+#collab-pop::before { right: -15px; border-left-color: #4a5361; }
+#collab-pop::after { right: -13px; border-left-color: rgba(20, 26, 44, 0.97); }
+.collab-pop-close { position: absolute; top: 6px; right: 6px; font-size: 13px; }
+.collab-pop-who { font-size: 13.5px; font-weight: 700; color: #e8eaed; padding-right: 22px; }
+.collab-pop-meta { font-size: 11.5px; color: #98a1ae; margin-top: 2px; }
+#collab-pop .collab-kws { margin: 7px 0 2px; }
+#collab-pop .collab-evidence { margin-top: 8px; }

@@ -45,6 +45,7 @@ const hub = $('hub')
 const hubTabs = $('hub-tabs')
 const hubBody = $('hub-body')
 const hubActivity = $('hub-activity')
+const collabPop = $('collab-pop')
 const hubOpen = $('hub-open')
 
 function esc(s: string): string {
@@ -276,9 +277,16 @@ window.addEventListener('pointerdown', (e) => {
   if (!windowBubble.hidden && !(e.target as HTMLElement)?.closest('#scene')) hideWindowBubble()
 })
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') hideWindowBubble()
+  if (e.key === 'Escape') {
+    hideWindowBubble()
+    hideCollabPop()
+  }
 })
-window.addEventListener('resize', () => hideWindowBubble())
+// 창 크기가 바뀌면 카드가 가리키던 선의 좌표가 어긋난다 — 다시 계산하는 대신 닫는다
+window.addEventListener('resize', () => {
+  hideWindowBubble()
+  hideCollabPop()
+})
 
 function showAgentPanel(agent: SpaceAgent) {
   cancelTyping()
@@ -1249,6 +1257,62 @@ function collabEdgeRow(e: CollabEdge, data: SpaceView, name: (id: string) => str
     </div>`
 }
 
+// ── 지도에서 선을 클릭했을 때 뜨는 설명 카드 ──
+// 지도와 목록이 세로로 떨어져 있어서, 그림에서 선을 골라도 설명을 보려면 목록을 스크롤해
+// 찾아야 했다. 카드를 **지도 바로 왼쪽**(사이드바 밖, 상세 패널과 같은 자리 규칙)에 띄운다.
+
+function hideCollabPop() {
+  collabPop.hidden = true
+}
+
+/** id → 표시 이름. 지도·목록·설명 카드가 같은 이름을 쓰게 한 곳에서 만든다. */
+const collabNameOf = (data: SpaceView) => (id: string) =>
+  data.collab?.nodes.find((n) => n.id === id)?.name ?? id
+
+const edgeOf = (data: SpaceView, key: string) => data.collab?.edges.find((e) => edgeKey(e) === key)
+
+function showCollabPop(e: CollabEdge, data: SpaceView, name: (id: string) => string, path: Element) {
+  const style = EDGE_STYLE[e.type]
+  const unit = e.type === 'topic' ? `${e.weight}쌍` : `${e.weight}건`
+  const arrow = e.type === 'topic' ? '↔' : '→'
+  const keys = (e.keywords ?? []).map((k) => `<span class="collab-kw">${esc(k)}</span>`).join('')
+  collabPop.innerHTML = `
+    <button class="icon-btn collab-pop-close" title="닫기" aria-label="닫기">✕</button>
+    <div class="collab-pop-who">${esc(name(e.source))} <span class="muted">${arrow}</span> ${esc(name(e.target))}</div>
+    <div class="collab-pop-meta"><span style="color:${style.color}">${esc(style.label)}</span> · ${unit}</div>
+    ${keys ? `<div class="collab-kws">${keys}</div>` : ''}
+    ${collabEvidenceHTML(e, data, name)}`
+  collabPop.hidden = false
+
+  // 세로는 클릭한 선 높이에 맞추고(어느 선을 눌렀는지 눈이 따라간다), 가로는 지도 왼쪽 바깥.
+  // 화면 위아래로는 넘치지 않게 가둔다.
+  const svg = hubBody.querySelector('.collab-svg')
+  const box = path.getBoundingClientRect()
+  const anchor = (svg ?? path).getBoundingClientRect()
+  const height = collabPop.offsetHeight
+  const top = Math.min(window.innerHeight - height - 12, Math.max(64, box.top + box.height / 2 - height / 2))
+  collabPop.style.top = `${Math.max(12, top)}px`
+  collabPop.style.right = `${Math.max(12, window.innerWidth - anchor.left + 12)}px`
+
+  collabPop.querySelector('.collab-pop-close')?.addEventListener('click', () => {
+    collabEdge = null
+    renderHub(data) // 지도·목록의 강조도 함께 푼다
+  })
+  // 근거 줄 → 원문 모달 (목록 쪽과 같은 동선)
+  collabPop.querySelectorAll<HTMLElement>('[data-cdoc]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const doc = data.knowledge.find((d) => d.doc_id === el.dataset.cdoc)
+      if (doc) showModal(doc.title, docModalHTML(doc))
+    })
+  })
+  collabPop.querySelectorAll<HTMLElement>('[data-cissue]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const iss = data.issues.find((x) => x.issue_id === el.dataset.cissue)
+      if (iss) showModal(iss.title, issueModalHTML(iss))
+    })
+  })
+}
+
 /** 협업 지도 한 덩이. `focus`(사람 id)를 주면 그 사람에 걸린 선만 남긴다 —
  *  작업 기록에서 한 사람을 열었을 때 "이 사람이 누구와 이어졌나"만 보여주기 위해서. */
 function hubCollabHTML(data: SpaceView, focus?: string | null): string {
@@ -1343,6 +1407,7 @@ try {
 
 /** 방 화면에서만 호출 — 접힘 여부에 따라 사이드바/열기버튼 표시를 정하고 씬 폭을 재조정한다. */
 function applyHubCollapsed(inLife: boolean) {
+  if (!inLife || hubCollapsed) hideCollabPop() // 지도가 사라지면 그 옆 카드도 의미가 없다
   hub.hidden = !inLife || hubCollapsed
   hubOpen.hidden = !inLife || !hubCollapsed
   // 팀 활동 카드는 사이드바 밖(왼쪽 아래)에 있다 — 방 안이면 접힘과 무관하게 계속 보인다
@@ -1402,6 +1467,8 @@ hubResize.addEventListener('pointerdown', (e: PointerEvent) => {
 })
 
 function renderHub(data: SpaceView) {
+  // 다시 그리면 설명 카드가 가리키던 선이 사라질 수 있다 — 먼저 닫고, 지도 클릭이면 다시 연다
+  hideCollabPop()
   hubTabs.innerHTML = HUB_TABS.map(
     (t) => `<button class="hub-tab ${t.id === hubTab ? 'on' : ''}" data-tab="${t.id}">
       <span class="hub-tab-ico">${t.icon}</span><span>${t.label}</span></button>`,
@@ -1475,12 +1542,21 @@ function renderHub(data: SpaceView) {
   })
   // 협업 지도 — 선(그림·목록 어느 쪽을 눌러도) 선택 토글, 사람은 그 사람 작업 기록으로
   hubBody.querySelectorAll<SVGElement | HTMLElement>('[data-cedge]').forEach((el) => {
+    const fromMap = el.tagName.toLowerCase() === 'path' // 그림의 선인가, 아래 목록의 줄인가
     el.addEventListener('click', () => {
       const key = el.dataset.cedge ?? null
       collabEdge = collabEdge === key ? null : key
       renderHub(data)
-      // 그림에서 고른 선은 목록이 화면 밖일 수 있다 — 근거가 보이는 자리로 데려온다
-      if (collabEdge) hubBody.querySelector('.collab-row.on')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      if (!collabEdge) return
+      if (fromMap) {
+        // 지도에서 골랐으면 설명을 지도 옆에 띄운다 — 목록을 찾아 스크롤하지 않아도 되게.
+        // 다시 그린 뒤라 같은 선을 DOM에서 새로 집어야 한다.
+        const path = hubBody.querySelector(`path[data-cedge="${CSS.escape(collabEdge)}"]`)
+        const edge = edgeOf(data, collabEdge)
+        if (path && edge) showCollabPop(edge, data, collabNameOf(data), path)
+      } else {
+        hubBody.querySelector('.collab-row.on')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      }
     })
   })
   // 근거 줄 → 원문 모달. 줄 선택이 토글되지 않게 버블링을 끊는다.
