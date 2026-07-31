@@ -1681,6 +1681,11 @@ impl SqliteStore {
     ) -> Result<Vec<StruggleSession>> {
         let mut stmt = self.conn.prepare(
             "SELECT s.session_id, s.host, s.project_id, s.first_prompt_preview, s.first_ts, s.last_ts,
+                    -- cwd 없는 옛 세션 보완: 같은 (host, project_id)를 cwd와 함께 기록한 세션에서 빌려온다
+                    -- (일기 collect_work_log와 같은 규율).
+                    COALESCE(s.cwd, (SELECT o.cwd FROM sessions o
+                                      WHERE o.host=s.host AND o.project_id=s.project_id
+                                        AND o.cwd IS NOT NULL LIMIT 1)) AS cwd,
                     (SELECT COUNT(*) FROM events e WHERE e.session_id=s.session_id
                        AND e.result_status IN ('error','denied')) AS errs,
                     (SELECT COUNT(*) FROM events e WHERE e.session_id=s.session_id) AS total,
@@ -1700,13 +1705,15 @@ impl SqliteStore {
                 Ok((
                     r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?, r.get::<_, Option<String>>(2)?,
                     r.get::<_, Option<String>>(3)?, r.get::<_, Option<String>>(4)?, r.get::<_, Option<String>>(5)?,
-                    r.get::<_, i64>(6)?, r.get::<_, i64>(7)?, r.get::<_, Option<String>>(8)?,
+                    r.get::<_, Option<String>>(6)?,
+                    r.get::<_, i64>(7)?, r.get::<_, i64>(8)?, r.get::<_, Option<String>>(9)?,
                 ))
             },
         )?;
         let mut out = Vec::new();
         for row in rows {
-            let (session_id, host, project_id, preview, first_ts, last_ts, errs, total, last_status) = row?;
+            let (session_id, host, project_id, preview, first_ts, last_ts, cwd, errs, total, last_status) =
+                row?;
             // 오류가 난 도구들 (call↔result 조인, 결정론 식별)
             let mut tstmt = self.conn.prepare(
                 "SELECT COALESCE(c.raw_name, c.tool_kind, '?') AS t, COUNT(*) AS n
@@ -1726,6 +1733,7 @@ impl SqliteStore {
                 session_id,
                 host: host.unwrap_or_default(),
                 project_id: project_id.unwrap_or_default(),
+                cwd,
                 first_prompt_preview: preview,
                 first_ts,
                 last_ts,
@@ -2097,6 +2105,9 @@ pub struct StruggleSession {
     pub session_id: String,
     pub host: String,
     pub project_id: String,
+    /// 세션 작업 디렉터리 — 프로젝트 이름의 유일한 출처. `project_id`(로그 디렉터리명)는
+    /// 구분자가 전부 `-`로 뭉개져 basename을 되살릴 수 없다.
+    pub cwd: Option<String>,
     /// 원문 프로즈 — Engine(로컬 생성 요약)까지만 간다. 허브 본문 직행 금지.
     pub first_prompt_preview: Option<String>,
     pub first_ts: Option<String>,

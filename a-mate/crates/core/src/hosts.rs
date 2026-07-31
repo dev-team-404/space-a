@@ -154,6 +154,50 @@ pub fn project_identity(host: &str, cwd: &str) -> (String, String) {
     (format!("win:{}", cwd.to_lowercase()), path_basename(cwd))
 }
 
+/// `--git-common-dir` 출력에서 저장소 루트를 유도한다 (순수 — 실행은 `git_repo_root`).
+///
+/// 링크된 worktree도 공용 디렉터리는 **본 저장소의 `.git`** 이라 같은 루트로 합쳐진다.
+/// 서브모듈은 `<super>/.git/modules/<name>` 이 나오므로 합치지 않고 None — 호출부가
+/// `--show-toplevel`(서브모듈 자신)로 폴백한다.
+pub fn repo_root_from_common_dir(common_dir: &str) -> Option<String> {
+    let p = common_dir.trim();
+    let norm = p.replace('\\', "/");
+    if norm.contains("/.git/modules/") {
+        return None;
+    }
+    let root = norm.strip_suffix("/.git")?;
+    (!root.is_empty()).then(|| root.to_string())
+}
+
+/// (host, cwd)의 git 저장소 루트 경로. best-effort — git이 없거나 저장소가 아니면 None.
+///
+/// **프로젝트 이름의 기준**이다: 같은 저장소면 `space-a/`에서 일한 사람과 `space-a/a-mate/`에서
+/// 일한 사람이 한 프로젝트로 묶인다. cwd basename으로는 사람마다 다른 이름이 나온다.
+/// host가 `wsl:<distro>`면 일기의 커밋 수집과 같은 방식으로 WSL 안에서 실행한다.
+pub fn git_repo_root(host: &str, cwd: &str) -> Option<String> {
+    let run = |args: &[&str]| -> Option<String> {
+        let mut cmd = match host.strip_prefix("wsl:") {
+            Some(distro) => {
+                let mut c = std::process::Command::new("wsl");
+                c.args(["-d", distro, "--", "git"]);
+                c
+            }
+            None => std::process::Command::new("git"),
+        };
+        cmd.args(["-C", cwd])
+            .args(args)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+    // --path-format 은 git 2.31+ — 없으면 실패하고 아래 --show-toplevel 로 내려간다.
+    run(&["rev-parse", "--path-format=absolute", "--git-common-dir"])
+        .and_then(|d| repo_root_from_common_dir(&d))
+        .or_else(|| run(&["rev-parse", "--show-toplevel"]))
+}
+
 fn windows_claude_root() -> Option<PathBuf> {
     let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).ok()?;
     Some(PathBuf::from(home).join(".claude"))
@@ -339,6 +383,58 @@ mod tests {
         let (a, _) = project_identity("wsl:Ubuntu-22.04", "/home/jayb/work/agent-meter");
         let (b, _) = project_identity("wsl:Ubuntu-22.04", "/home/jayb/work/agenttoolbox");
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn repo_root_from_common_dir_strips_the_git_directory() {
+        assert_eq!(
+            repo_root_from_common_dir("/home/kimmy/core/space-a/.git\n"),
+            Some("/home/kimmy/core/space-a".to_string())
+        );
+        // 링크된 worktree도 공용 디렉터리는 본 저장소 것 — 같은 프로젝트로 합쳐진다.
+        assert_eq!(
+            repo_root_from_common_dir(r"D:\proj\space-a\.git"),
+            Some("D:/proj/space-a".to_string())
+        );
+        // 서브모듈은 합치지 않는다 — 호출부가 --show-toplevel 로 폴백한다.
+        assert_eq!(repo_root_from_common_dir("/home/k/super/.git/modules/lib"), None);
+        assert_eq!(repo_root_from_common_dir("/home/k/bare.git"), None);
+    }
+
+    #[test]
+    fn git_repo_root_is_the_same_from_any_subdirectory() {
+        use std::process::Command;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("space-a");
+        let sub = root.join("a-mate").join("crates");
+        std::fs::create_dir_all(&sub).unwrap();
+        let root_s = root.to_str().unwrap();
+        if !Command::new("git")
+            .args(["init", "-q", root_s])
+            .output()
+            .is_ok_and(|o| o.status.success())
+        {
+            return; // git 없는 환경에서는 건너뛴다 — best-effort 경로다
+        }
+
+        let from_root = git_repo_root("Windows", root_s);
+        let from_sub = git_repo_root("Windows", sub.to_str().unwrap());
+        assert_eq!(from_root, from_sub, "하위 디렉터리에서 일해도 같은 프로젝트여야 한다");
+        assert_eq!(
+            from_sub.as_deref().map(path_basename),
+            Some("space-a".to_string()),
+            "프로젝트 이름은 저장소 루트의 이름"
+        );
+    }
+
+    #[test]
+    fn git_repo_root_is_none_outside_a_repository() {
+        let tmp = tempfile::tempdir().unwrap();
+        // 임시 디렉터리가 어쩌다 어떤 저장소 안에 있으면(/tmp는 아니지만) 이 단언은 의미가 없다.
+        if git_repo_root("Windows", tmp.path().to_str().unwrap()).is_some() {
+            return;
+        }
+        assert_eq!(git_repo_root("Windows", tmp.path().to_str().unwrap()), None);
     }
 
     #[test]

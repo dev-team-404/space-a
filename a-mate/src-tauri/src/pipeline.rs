@@ -805,7 +805,12 @@ mod runtime {
                 log::warn!("retro resume 응답 파싱 실패(다음 스캔 재개)");
                 continue;
             };
-            match client.resolve_issue(&issue_id, &summary, &hub::retro_steps(&s)) {
+            let marker = hub::retro_project_marker(&s);
+            match client.resolve_issue(
+                &issue_id,
+                &hub::retro_page_summary(marker.as_deref(), &summary),
+                &hub::retro_steps(&s),
+            ) {
                 Ok(Some(page_id)) => {
                     if let Ok(store) = store_mutex.lock() {
                         let _ = store.hub_mark_published(&key, &page_id, &now);
@@ -831,14 +836,22 @@ mod runtime {
                 log::warn!("retro 응답 파싱 실패(보류)");
                 continue;
             };
-            let issue_id = match client.open_issue(&cfg.space_id, &format!("[a-mate 회고] {title}")) {
+            // 프로젝트 마커는 세션당 한 번만 — git을 부르는 경로다.
+            let marker = hub::retro_project_marker(&s);
+            let issue_id = match client
+                .open_issue(&cfg.space_id, &hub::retro_issue_title(marker.as_deref(), &title))
+            {
                 Ok(id) => id,
                 Err(e) => { log::warn!("retro open_issue 실패: {e}"); continue; }
             };
             if let Ok(store) = store_mutex.lock() {
                 let _ = store.hub_mark_issue(&key, &issue_id, &now);
             }
-            match client.resolve_issue(&issue_id, &summary, &hub::retro_steps(&s)) {
+            match client.resolve_issue(
+                &issue_id,
+                &hub::retro_page_summary(marker.as_deref(), &summary),
+                &hub::retro_steps(&s),
+            ) {
                 Ok(Some(page_id)) => {
                     if let Ok(store) = store_mutex.lock() {
                         let _ = store.hub_mark_published(&key, &page_id, &now);
