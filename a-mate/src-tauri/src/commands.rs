@@ -765,6 +765,16 @@ fn token_was_rejected(error: &str) -> bool {
     error.contains("HTTP 401") || error.contains("HTTP 403")
 }
 
+fn rename_is_unsupported(error: &str) -> bool {
+    error.contains("HTTP 404") || error.contains("HTTP 405")
+}
+
+fn same_life_server(left: &str, right: &str) -> bool {
+    left.trim().trim_end_matches('/').eq_ignore_ascii_case(
+        right.trim().trim_end_matches('/'),
+    )
+}
+
 fn hub_client(state: &State<AppState>) -> Result<Option<LifeClient>, String> {
     let guard = lock(state)?;
     let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
@@ -851,7 +861,7 @@ pub fn hub_connect(
         let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
         ((get("hub_url"), get("hub_token")), work_user_id(&guard))
     };
-    if !existing.1.is_empty() {
+    if !existing.1.is_empty() && same_life_server(&existing.0, &url) {
         let client = LifeClient { base_url: url.clone(), token: existing.1, api_key: key_opt.clone() };
         match client.rename(&user, &owner_os_user(), &full_name, &hub_user) {
             Ok(_) => {
@@ -866,6 +876,16 @@ pub fn hub_connect(
             }
             Err(error) => {
                 let message = error.to_string();
+                if rename_is_unsupported(&message) {
+                    log::warn!("Life server does not support rename; keeping the existing connection: {message}");
+                    let guard = lock(&state)?;
+                    guard.set_setting("hub_url", &url).map_err(|e| e.to_string())?;
+                    guard.set_setting("hub_user", &user).map_err(|e| e.to_string())?;
+                    guard.set_setting("hub_api_key", &api_key).map_err(|e| e.to_string())?;
+                    drop(guard);
+                    let _ = app.emit("settings:changed", ());
+                    return hub_settings_get(state);
+                }
                 if !token_was_rejected(&message) {
                     return Err(format!("기존 Life 연결 확인 실패: {message}"));
                 }
@@ -1021,7 +1041,11 @@ pub async fn life_save_design(
 pub async fn hub_disconnect(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<HubSettings, String> {
     use tauri::Emitter;
     if let Some(client) = hub_client(&state)? {
-        run_life_http("hub_disconnect", move || client.disconnect().map(|_| ()).map_err(|e| e.to_string())).await?;
+        if let Err(error) =
+            run_life_http("hub_disconnect", move || client.disconnect().map(|_| ()).map_err(|e| e.to_string())).await
+        {
+            log::warn!("Life server disconnect failed; clearing local connection state: {error}");
+        }
     }
     let guard = lock(&state)?;
     for key in ["hub_token", "hub_agent_id", "hub_life_id"] {
@@ -1235,6 +1259,21 @@ mod tests {
         assert!(token_was_rejected("forbidden (HTTP 403)"));
         assert!(!token_was_rejected("connection timed out"));
         assert!(!token_was_rejected("server error (HTTP 500)"));
+    }
+
+    #[test]
+    fn rename_unsupported_is_distinct_from_auth_and_server_failure() {
+        assert!(rename_is_unsupported("not found (HTTP 404)"));
+        assert!(rename_is_unsupported("method not allowed (HTTP 405)"));
+        assert!(!rename_is_unsupported("unauthorized (HTTP 401)"));
+        assert!(!rename_is_unsupported("server error (HTTP 500)"));
+    }
+
+    #[test]
+    fn life_server_comparison_normalizes_common_url_variations() {
+        assert!(same_life_server(" http://localhost:8001/ ", "http://localhost:8001"));
+        assert!(same_life_server("HTTP://LOCALHOST:8001", "http://localhost:8001/"));
+        assert!(!same_life_server("http://old-server:8001", "http://localhost:8001"));
     }
 
     #[test]
@@ -1966,13 +2005,6 @@ pub fn profile_set(
         let old = guard.get_setting("user_name").ok().flatten().unwrap_or_default();
         (old, self::owner_full_name(&guard), work_user_id(&guard))
     };
-    // 이름·풀네임 어느 쪽이 바뀌어도 rename으로 서버의 주인 식별자를 갱신한다 (G1 스펙 §B)
-    if name != old_name || full_name != old_full_name {
-        if let Some(client) = hub_client(&state)? {
-            client.rename(&name, &owner_os_user(), &full_name, &hub_user)
-                .map_err(|e| format!("Life 서버 이름 변경 실패: {e}"))?;
-        }
-    }
     {
         let guard = lock(&state)?;
         guard.set_setting("user_name", &name).map_err(|e| e.to_string())?;
@@ -1981,6 +2013,16 @@ pub fn profile_set(
         guard.set_setting("user_mbti", &mbti_norm).map_err(|e| e.to_string())?;
         guard.set_setting("owner_title", title).map_err(|e| e.to_string())?;
         guard.set_setting("owner_full_name", &full_name).map_err(|e| e.to_string())?;
+    }
+    // 로컬 프로필이 원본이다. 구버전 Life 서버의 rename 실패가 로컬 저장을 막지 않게 한다.
+    if name != old_name || full_name != old_full_name {
+        if let Some(client) = hub_client(&state)? {
+            if let Err(error) = client.rename(&name, &owner_os_user(), &full_name, &hub_user) {
+                log::warn!(
+                    "Life server profile sync failed; the local profile was saved: {error}"
+                );
+            }
+        }
     }
     profile_get(state)
 }
