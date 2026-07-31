@@ -236,6 +236,10 @@ pub fn run() {
                 }
             })
             .setup(|app| {
+                // X1 계측(임시) — setup이 초기 스캔과 락을 다투는 지점을 시간축에 올린다.
+                // setup은 메인 스레드라 여기서 막히면 이벤트 루프(=웹뷰)가 아예 안 돈다.
+                let x1_t0 = std::time::Instant::now();
+                log::info!("X1 setup: enter");
                 // 테스트용 오버라이드: 한 PC에서 두 인스턴스를 돌릴 때 데이터 디렉터리 분리
                 // (docs/design/life-visit.md §5) — 미설정이면 기존 경로 그대로.
                 let dir = match std::env::var("AGENT_MENTOR_DATA_DIR") {
@@ -252,11 +256,14 @@ pub fn run() {
                     notices_ready: std::sync::atomic::AtomicBool::new(false),
                 });
                 pipeline::start(app.handle().clone(), rx, tx);
+                log::info!("X1 setup: pipeline spawned at +{}ms", x1_t0.elapsed().as_millis());
                 tray::setup_tray(app.handle())?;
+                log::info!("X1 setup: tray ready at +{}ms", x1_t0.elapsed().as_millis());
                 // 방 방문: 앱 시작 시 내 에이전트는 항상 자기 방에서 출발한다
                 // (서버는 마지막 위치를 기억하지만, 세션 시작의 기본값은 내 방 — 설계 §3)
                 {
                     let state = app.state::<AppState>();
+                    log::info!("X1 setup: hub-cfg lock wait begins at +{}ms", x1_t0.elapsed().as_millis());
                     let cfg = state.store.lock().ok().map(|s| {
                         let get = |k: &str| s.get_setting(k).ok().flatten().unwrap_or_default();
                         (
@@ -266,6 +273,7 @@ pub fn run() {
                             get("hub_api_key"),
                         )
                     });
+                    log::info!("X1 setup: hub-cfg lock done at +{}ms", x1_t0.elapsed().as_millis());
                     if let Some((url, token, life_id, api_key)) = cfg {
                         if !url.trim().is_empty() && !token.is_empty() && !life_id.is_empty() {
                             let api_key = {
@@ -291,6 +299,7 @@ pub fn run() {
                 }
                 // mascot 창: 설정을 보고 현재 디스플레이 구성에 맞게 위치 복원
                 {
+                    log::info!("X1 setup: mascot_visible lock wait begins at +{}ms", x1_t0.elapsed().as_millis());
                     let visible = app
                         .state::<AppState>()
                         .store
@@ -299,6 +308,7 @@ pub fn run() {
                         .get_setting("mascot_visible")?
                         .map(|value| value == "true")
                         .unwrap_or(true);
+                    log::info!("X1 setup: mascot_visible lock done at +{}ms", x1_t0.elapsed().as_millis());
                     if visible {
                         show_mascot(app.handle(), false);
                     } else if let Err(error) = place_mascot(app.handle(), false) {
@@ -351,6 +361,7 @@ pub fn run() {
                 // 설정 읽기 실패(락 poison·일시 잠금)로 시작이 죽지 않도록 안전 폴백 — 기본 미보호 (에러 철학 §9)
                 {
                     let state = app.state::<AppState>();
+                    log::info!("X1 setup: content_protected lock wait begins at +{}ms", x1_t0.elapsed().as_millis());
                     let on = state
                         .store
                         .lock()
@@ -358,11 +369,13 @@ pub fn run() {
                         .and_then(|store| store.get_setting("content_protected").ok().flatten())
                         .map(|v| v == "true")
                         .unwrap_or(false);
+                    log::info!("X1 setup: content_protected lock done at +{}ms", x1_t0.elapsed().as_millis());
                     if on {
                         apply_content_protection(app.handle(), true);
                     }
                 }
                 log::info!("Agent Mentor 시작 — 파이프라인·트레이 초기화 완료");
+                log::info!("X1 setup: returns at +{}ms", x1_t0.elapsed().as_millis());
                 Ok(())
             })
             .invoke_handler(tauri::generate_handler![

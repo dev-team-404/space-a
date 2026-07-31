@@ -26,6 +26,8 @@ pub fn run_ingest_with_progress(
     on_progress: &mut dyn FnMut(usize, usize),
 ) -> Result<IngestReport> {
     let mut report = IngestReport { files: 0, new_events: 0, warnings: Vec::new() };
+    // X1 계측(임시) — discover / 파일 수집 / rollup 재구축의 비중을 분리한다
+    let t_discover = std::time::Instant::now();
     // 1) 전 호스트 discover 먼저 — total을 알아야 진행률이 됨
     let mut work: Vec<(crate::adapter::ClaudeCodeAdapter, Vec<std::path::PathBuf>)> = Vec::new();
     for hs in enumerate_hosts() {
@@ -40,9 +42,18 @@ pub fn run_ingest_with_progress(
         report.files += files.len();
         work.push((adapter, files));
     }
+    let ms_discover = t_discover.elapsed().as_millis();
     // 2) 파일 단위 수집 + 진행 보고
+    let t_files = std::time::Instant::now();
     ingest_all(store, &work, &mut report, on_progress);
+    let ms_files = t_files.elapsed().as_millis();
+    let t_rollup = std::time::Instant::now();
     store.rebuild_rollup()?;
+    log::info!(
+        "X1 ingest: discover {ms_discover}ms ({} files) / read {ms_files}ms / rebuild_rollup {}ms",
+        report.files,
+        t_rollup.elapsed().as_millis()
+    );
     Ok(report)
 }
 

@@ -263,8 +263,18 @@ pub fn coaching_brief_inner(store: &SqliteStore) -> anyhow::Result<agent_mentor:
     agent_mentor::chat::assemble_coaching_brief(store)
 }
 
+// X1 계측(임시) — 락 대기가 유의미할 때만 호출자 위치와 함께 남긴다.
+// #[track_caller]는 중간 헬퍼(hub_client)에도 붙여야 헬퍼가 아니라 실제 커맨드가 찍힌다.
+#[track_caller]
 fn lock<'a>(state: &'a State<AppState>) -> Result<std::sync::MutexGuard<'a, SqliteStore>, String> {
-    state.store.lock().map_err(|e| e.to_string())
+    let caller = std::panic::Location::caller();
+    let started = std::time::Instant::now();
+    let guard = state.store.lock().map_err(|e| e.to_string());
+    let ms = started.elapsed().as_millis();
+    if ms >= 20 {
+        log::info!("X1 cmd lock: waited {ms}ms (caller {}:{})", caller.file(), caller.line());
+    }
+    guard
 }
 
 #[tauri::command(async)]
@@ -799,6 +809,7 @@ fn same_life_server(left: &str, right: &str) -> bool {
     )
 }
 
+#[track_caller] // X1 계측(임시) — lock()이 실제 커맨드 위치를 찍게 한다
 fn hub_client(state: &State<AppState>) -> Result<Option<LifeClient>, String> {
     let guard = lock(state)?;
     let get = |k: &str| guard.get_setting(k).ok().flatten().unwrap_or_default();
@@ -969,6 +980,8 @@ where
         .await
         .map_err(|error| format!("{operation}_task_failed: {error}"))?;
     let elapsed = started.elapsed();
+    // X1 계측(임시) — hub 왕복을 전부 남긴다(기존 2초 경고는 유지)
+    log::info!("X1 http: {operation} took {}ms", elapsed.as_millis());
     if elapsed >= std::time::Duration::from_secs(2) {
         log::warn!("slow Life request: {operation} took {elapsed:?}");
     }

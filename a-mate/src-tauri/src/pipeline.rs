@@ -68,19 +68,34 @@ mod runtime {
         let scan_result = (|| -> anyhow::Result<String> {
             // ── 스캔·diff·emit: 락을 잡는 범위 ──────────────────────────────────
             let (now, _fresh_findings) = {
+                // X1 계측(임시) — 락 대기 / 보유 구간의 단계별 경과
+                let t_wait = std::time::Instant::now();
                 let mut store = state.store.lock()
                     .map_err(|_| anyhow::anyhow!("store lock poisoned"))?;
+                let ms_wait = t_wait.elapsed().as_millis();
+                let t_held = std::time::Instant::now();
+                log::info!("X1 scan: lock acquired (wait {ms_wait}ms)");
                 let before: HashMap<String, String> = store.finding_severities()?.into_iter().collect();
 
+                let t_ingest = std::time::Instant::now();
                 let report = agent_mentor::ops::run_ingest_with_progress(&store, &mut |done, total| {
                     // 파일 수천 개일 수 있어 5건 단위로만 emit (마지막은 항상)
                     if done == total || done % 5 == 0 {
                         let _ = app.emit("scan:progress", serde_json::json!({"done": done, "total": total}));
                     }
                 })?;
+                let ms_ingest = t_ingest.elapsed().as_millis();
                 for w in &report.warnings { log::warn!("{w}"); }
+                let t_inv = std::time::Instant::now();
                 for w in agent_mentor::ops::run_inventory(&mut store)? { log::warn!("{w}"); }
+                let ms_inventory = t_inv.elapsed().as_millis();
+                let t_rules = std::time::Instant::now();
                 agent_mentor::ops::run_rules(&store)?;
+                let ms_rules = t_rules.elapsed().as_millis();
+                log::info!(
+                    "X1 scan: ingest {ms_ingest}ms ({} files, {} new events) / inventory {ms_inventory}ms / rules {ms_rules}ms",
+                    report.files, report.new_events
+                );
 
                 let after = store.finding_severities()?;
                 let fresh = diff_findings(&before, &after);
@@ -92,6 +107,7 @@ mod runtime {
                         .filter(|f| fresh.contains(&f.dedup_key)).collect();
                     app.emit("coach:finding", &rows)?;
                 }
+                log::info!("X1 scan: releasing lock — total held {}ms", t_held.elapsed().as_millis());
                 (now, fresh)
                 // guard drops here — 다이어리 생성(LLM 네트워크 I/O) 전에 락 해제
             };
