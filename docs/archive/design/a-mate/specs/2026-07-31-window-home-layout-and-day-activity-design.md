@@ -7,7 +7,7 @@ archived: 2026-07-31
 
 - **날짜**: 2026-07-31
 - **컴포넌트**: a-mate (프론트 + Tauri 설정 + `crates/core` 조회 함수. a-hub·`contracts/` 미접촉)
-- **관계**: [Life 소셜·일기 통합 후속 로드맵](../../../../design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md) **5차 배치 D1** +
+- **관계**: [Life 소셜·일기 통합 후속 로드맵](../plans/2026-07-26-life-social-diary-followups-roadmap.md) **5차 배치 D1** +
   사용자 요청(창 크기 고정·홈 배치 싸이월드화, 2026-07-31 세션).
 - **목적**: 미니홈피의 화면 크기를 확정하고, 그 확정된 폭 위에서 홈 배치를 싸이월드 결에 맞게 재구성하며,
   다이어리 탭의 빈 좌측 하단을 그날의 활동 요약으로 채운다.

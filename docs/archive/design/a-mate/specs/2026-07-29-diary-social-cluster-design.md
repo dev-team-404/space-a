@@ -7,7 +7,7 @@ archived: 2026-07-29
 
 - **날짜**: 2026-07-29
 - **컴포넌트**: a-mate (a-hub 변경 없음 — 기존 Life API만 사용)
-- **로드맵**: [2026-07-26-life-social-diary-followups-roadmap.md](../../../../design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md) 묶음 ②
+- **로드맵**: [2026-07-26-life-social-diary-followups-roadmap.md](../plans/2026-07-26-life-social-diary-followups-roadmap.md) 묶음 ②
 - **선행**: P3 자동 방명록(PR #117, `maybe_sign_guestbook` 재사용 진입점) · 호칭·MBTI 배관(PR #104)
 - **전송 경계**: [ADR 0019](../../../../adr/0019-owner-memory-transmission-boundary.md) · [ADR 0024](../../../../adr/0024-image-engine-material-boundary.md) 위에 **신규 ADR 0025**
 

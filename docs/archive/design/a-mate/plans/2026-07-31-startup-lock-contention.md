@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-31
+---
+
 # X1 첫 로딩 지연(store 락 청킹) 구현 계획
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

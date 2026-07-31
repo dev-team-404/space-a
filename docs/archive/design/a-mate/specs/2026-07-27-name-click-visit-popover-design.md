@@ -7,7 +7,7 @@ archived: 2026-07-27
 
 - **날짜**: 2026-07-27
 - **컴포넌트**: a-mate (프론트 단독 — 서버·Rust 미접촉)
-- **로드맵**: [2026-07-26-life-social-diary-followups-roadmap.md](../../../../design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md) 2차 배치 G4 (백로그 5)
+- **로드맵**: [2026-07-26-life-social-diary-followups-roadmap.md](../plans/2026-07-26-life-social-diary-followups-roadmap.md) 2차 배치 G4 (백로그 5)
 - **선행**: G1(작성자 표기, PR #106) · G2(답글 스레드, PR #107) · G3(봇 자동 답글, PR #108) · G5(답글 품질·ADR 0022, PR #111) — 전부 main 머지 완료
 
 ## 1. 요구
