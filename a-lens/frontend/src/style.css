@@ -764,39 +764,56 @@ button { font: inherit; cursor: pointer; }
 .collab-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-  padding-top: 8px;
+  gap: 7px;
+  padding-top: 10px;
   border-top: 1px solid #2a3346;
 }
+/* 누를 수 있다는 게 먼저 보여야 한다 — 색 점이 프로젝트를 가리키고, 글자는 텍스트 색을
+   그대로 쓴다. 이름을 프로젝트 색으로 칠하면 색이 옅은 슬롯에서 읽기가 나빠지고, 색이
+   글자와 점 두 곳에서 경쟁한다. 식별은 점 하나가 맡는다. */
 .collab-tag {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 7px;
   max-width: 100%;
-  padding: 3px 8px;
+  padding: 6px 12px;
   border: 1px solid #38425a;
   border-radius: 999px;
   background: #141b2a;
   color: #c2cad6;
   font: inherit;
-  font-size: 11.5px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.45;
   cursor: pointer;
   overflow-wrap: anywhere;
-  transition: border-color 0.12s, background 0.12s, color 0.12s;
+  transition: border-color 0.12s, background 0.12s, color 0.12s, box-shadow 0.12s;
+}
+.collab-tag-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--proj, #8e98a8);
 }
 .collab-tag b {
   color: #8e98a8;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.collab-tag:hover { border-color: #5b7ea8; color: #e8eaed; }
-.collab-tag.on {
-  background: #1e2f45;
-  border-color: #7fb3d5;
-  color: #eaf2f9;
+/* hover·선택 모두 그 프로젝트 색으로 반응한다 — 어느 태그를 만지고 있는지가 색으로 온다.
+   배경은 color-mix로 아주 옅게만 깔아 글자 대비를 지킨다. */
+.collab-tag:hover {
+  border-color: var(--proj, #5b7ea8);
+  background: color-mix(in srgb, var(--proj, #5b7ea8) 14%, #141b2a);
+  color: #e8eaed;
 }
-.collab-tag.on b { color: #b8d4ea; }
+.collab-tag.on {
+  background: color-mix(in srgb, var(--proj, #7fb3d5) 22%, #141b2a);
+  border-color: var(--proj, #7fb3d5);
+  color: #eaf2f9;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--proj, #7fb3d5) 45%, transparent);
+}
+.collab-tag.on b { color: #d6dee8; }
 .collab-tag.none {
   cursor: default;
   border-style: dashed;
@@ -804,8 +821,13 @@ button { font: inherit; cursor: pointer; }
   color: #8e98a8;
   background: none;
 }
-.collab-tag.none:hover { border-color: #333c4e; color: #8e98a8; }
-.collab-tag-hint { display: block; margin-top: 5px; }
+.collab-tag.none .collab-tag-dot { background: none; border: 1px dashed #4a5468; }
+.collab-tag.none:hover {
+  border-color: #333c4e;
+  color: #8e98a8;
+  background: none;
+  box-shadow: none;
+}
 
 .collab-kws { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .collab-kw {

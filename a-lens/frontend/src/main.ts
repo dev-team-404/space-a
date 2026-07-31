@@ -1403,6 +1403,29 @@ function hubCollabHTML(data: SpaceView, focus?: string | null): string {
   return hubSection(title, 'Collaboration Map', legend + svg + summary + empty + tags)
 }
 
+/** 프로젝트 색 — 어두운 배경(#141b2a)에 맞춰 고른 범주형 8색을 **고정 순서로** 쓴다.
+ *  순서를 지키는 것이 검증 조건이다: 이 순서의 이웃 쌍은 색각 이상에서도 구분되지만(ΔE 8.4),
+ *  임의로 섞으면 그 보장이 깨진다. 그래서 칩도 이 순서대로 그린다(`_slotOf` 정렬).
+ *  9번째 색은 만들지 않는다 — 넘치면 회색 '기타'로 접는다. */
+const PROJECT_COLORS = [
+  '#3987e5', // blue
+  '#d95926', // orange
+  '#199e70', // aqua
+  '#c98500', // yellow
+  '#d55181', // magenta
+  '#008300', // green
+  '#9085e9', // violet
+  '#e66767', // red
+]
+
+/** 색은 **프로젝트에 붙지 순위에 붙지 않는다.** 문서 수로 정렬한 자리에 색을 주면 문서 한 건
+ *  차이로 어제와 다른 색이 되어, 색으로 프로젝트를 기억할 수 없다. id를 사전순으로 세워
+ *  그 자리를 쓴다 — 같은 프로젝트는 언제 봐도 같은 색이다. */
+function projectSlots(nodes: CollabProjects['nodes']): Map<string, number> {
+  const ids = nodes.map((p) => p.id).sort()
+  return new Map(ids.map((id, i) => [id, i]))
+}
+
 /** 지도 아래 프로젝트 태그 줄. 누르면 그 프로젝트만의 지도로 좁힌다(다시 누르면 해제).
  *
  *  프로젝트는 a-mate가 세션의 git 저장소 이름을 문서에 실어 보낸 **사실**이다. 주제어로
@@ -1412,25 +1435,27 @@ function collabTagsHTML(projects?: CollabProjects): string {
   if (!projects) return ''
   const { nodes, unknown_docs: unknown } = projects
   if (!nodes.length && !unknown) return ''
-  const chips = nodes
+  const slots = projectSlots(nodes)
+  const chips = [...nodes]
+    .sort((a, b) => (slots.get(a.id) ?? 0) - (slots.get(b.id) ?? 0))
     .map((p) => {
       const on = collabProject === p.id
       const who = p.people.length
+      const slot = slots.get(p.id) ?? 0
+      // 색이 모자라면 새 색을 만들지 않고 회색으로 접는다 — 억지로 만든 9번째 색은
+      // 옆 색과 구분이 안 돼 오히려 "다른 프로젝트인데 같은 색"이 된다.
+      const dot = slot < PROJECT_COLORS.length ? PROJECT_COLORS[slot] : '#8e98a8'
       return `<button class="collab-tag${on ? ' on' : ''}" data-cproj="${esc(p.id)}"
-        aria-pressed="${on}" title="문서 ${p.docs}건 · 사람 ${who}명">
-        ${esc(p.id)}<b>${p.docs}</b></button>`
+        style="--proj:${dot}" aria-pressed="${on}" title="문서 ${p.docs}건 · 사람 ${who}명">
+        <i class="collab-tag-dot"></i>${esc(p.id)}<b>${p.docs}</b></button>`
     })
     .join('')
   // 미분류는 버튼이 아니다 — 누를 수 있으면 "그런 프로젝트가 있다"는 뜻이 되어버린다.
   const rest = unknown
     ? `<span class="collab-tag none" title="a-mate가 프로젝트를 실어 보내기 전에 발행된 문서">분류 안 됨<b>${unknown}</b></span>`
     : ''
-  const hint = nodes.length
-    ? `<span class="muted small collab-tag-hint">${
-        collabProject ? '태그를 다시 누르면 방 전체로 돌아가요' : '태그를 누르면 그 프로젝트만 봐요'
-      }</span>`
-    : ''
-  return `<div class="collab-tags">${chips}${rest}</div>${hint}`
+  // 안내 문구는 두지 않는다 — 색과 눌린 상태가 이미 "누를 수 있다"를 말한다.
+  return `<div class="collab-tags">${chips}${rest}</div>`
 }
 
 function hubSection(title: string, sub: string, items: string): string {
