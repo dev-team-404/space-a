@@ -487,6 +487,12 @@ def _project_graph(
 _cache: dict[str, tuple[str, dict]] = {}
 
 
+def clear_cache() -> None:
+    """설정 변경 시 — 지문은 방 *내용*만 보므로 신원 매핑 변화를 스스로 알아채지 못한다.
+    Life 연결값·별칭이 바뀌면 같은 문서가 다른 사람에게 붙으므로 여기서 통째로 버린다."""
+    _cache.clear()
+
+
 def _fingerprint(space_id: str, docs: list[dict], issues: list[dict], reuse: list[dict]) -> str:
     """재계산이 필요한 변화만 잡는 지문. 스냅숏은 30초마다 갱신되지만 방 내용은 그대로일 때가
     대부분이라, 요청마다 O(D²)를 다시 돌지 않게 한다."""

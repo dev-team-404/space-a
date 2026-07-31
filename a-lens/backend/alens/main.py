@@ -10,7 +10,7 @@ import httpx
 from fastapi import Body, FastAPI, Header, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import collector, life_client, pipeline, room_chat, rooms, settings, store
+from . import collab, collector, life_client, pipeline, room_chat, rooms, settings, store
 
 _A_LENS = Path(__file__).resolve().parents[2]
 _FRONT_DIST = _A_LENS / "frontend" / "dist"
@@ -77,6 +77,7 @@ def create_app() -> FastAPI:
                 st.clear_translations()
         collector.clear_cache()  # 새 URL/토큰/원천/스타일을 다음 요청부터 즉시 반영
         life_client.clear_cache()  # Life 연결값·별칭 매핑도 즉시 반영
+        collab.clear_cache()  # 별칭이 바뀌면 같은 문서의 저자가 달라진다 — 지도도 다시 그린다
         return settings.public(cfg)
 
     @app.post("/api/settings/test")
