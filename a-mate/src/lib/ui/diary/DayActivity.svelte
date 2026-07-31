@@ -6,14 +6,23 @@
 
   let data = $state<DayActivityData | null>(null);
   let expanded = $state(false);
+  /** 전문을 펼친 세션들. 프롬프트는 한 줄로 잘리므로 클릭해 전체를 볼 수 있게 한다. */
+  let openPrompts = $state(new Set<string>());
   let loadSequence = 0;
 
   const SESSION_HEAD = 3;
+
+  function togglePrompt(id: string) {
+    const next = new Set(openPrompts);
+    if (!next.delete(id)) next.add(id);
+    openPrompts = next;
+  }
 
   $effect(() => {
     const sequence = ++loadSequence;
     const target = date;
     expanded = false;
+    openPrompts = new Set();
     data = null;
     dayActivity(target)
       .then((d) => { if (sequence === loadSequence) data = d; })
@@ -70,7 +79,14 @@
           <div class="session">
             <span class="when">{hhmm(s.first_ts)}</span>
             <span class="proj">{s.project}</span>
-            {#if s.first_prompt}<p class="prompt">{s.first_prompt}</p>{/if}
+            {#if s.first_prompt}
+              <button
+                class="prompt"
+                class:open={openPrompts.has(s.session_id)}
+                title={s.first_prompt}
+                onclick={() => togglePrompt(s.session_id)}
+              >{s.first_prompt}</button>
+            {/if}
           </div>
         {/each}
         {#if rest > 0 && !expanded}
@@ -107,9 +123,17 @@
   .session { margin-bottom: 6px; }
   .when { color: var(--ink-soft); margin-right: 5px; }
   .proj { font-weight: 600; }
+  /* 기본은 한 줄 요약, 클릭하면 전문. button이라 키보드로도 열린다. */
   .prompt {
-    margin: 1px 0 0; color: var(--ink-soft); overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap;
+    display: block; width: 100%; margin: 1px 0 0; padding: 0;
+    border: none; background: none; font: inherit; font-size: 11px; text-align: left;
+    color: var(--ink-soft); cursor: pointer;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .prompt:hover { color: var(--ink); }
+  .prompt.open {
+    white-space: normal; overflow: visible; word-break: keep-all; overflow-wrap: anywhere;
+    line-height: 1.5; color: var(--ink);
   }
   .more {
     border: none; background: none; font: inherit; font-size: 11px;
