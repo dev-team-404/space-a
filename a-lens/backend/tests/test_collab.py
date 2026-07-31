@@ -320,3 +320,82 @@ def test_term_index_covers_docs_without_a_known_author():
     g = collab.build(detail)
     assert g["stats"]["unlinked_docs"] == 1
     assert g["terms"].get("d1")
+
+
+# ── 프로젝트 축 (계획: docs/design/common/plans/2026-07-31-project-axis-from-cwd.md) ──
+
+
+def test_project_axis_counts_only_marked_docs():
+    """마커 있는 문서만 프로젝트로 센다. 나머지는 추정으로 채우지 않고 수만 보고한다."""
+    detail = _detail(
+        knowledge=[
+            {"doc_id": "d1", "title": "포트 충돌", "project": "space-a", "author_agent_id": "alice"},
+            {"doc_id": "d2", "title": "배포 정리", "project": "space-a", "author_agent_id": "bob"},
+            {"doc_id": "d3", "title": "미터 대시보드", "project": "agent-meter", "author_agent_id": "bob"},
+            {"doc_id": "d4", "title": "마커 없는 옛 문서", "author_agent_id": "alice"},
+        ]
+    )
+    projects = collab.build(detail)["projects"]
+    assert [(n["id"], n["docs"]) for n in projects["nodes"]] == [("space-a", 2), ("agent-meter", 1)]
+    assert projects["unknown_docs"] == 1  # 소급 적용이 없으므로 '모른다'가 정답이다
+
+    space_a = projects["nodes"][0]
+    assert sorted(p["id"] for p in space_a["people"]) == ["alice", "bob"]
+
+
+def test_project_axis_is_empty_before_any_marker_arrives():
+    """지금 실데이터가 그렇다 — 프로젝트 0건에 미분류 전부. 빈 축이 화면을 깨뜨리면 안 된다."""
+    detail = _detail(
+        knowledge=[{"doc_id": "d1", "title": "옛 문서", "author_agent_id": "alice"}]
+    )
+    projects = collab.build(detail)["projects"]
+    assert projects["nodes"] == []
+    assert projects["unknown_docs"] == 1
+
+
+def test_project_marker_is_parsed_and_removed_from_the_title():
+    """마커는 기계용이다 — 프로젝트로 읽어내고 제목에서는 지운다."""
+    from alens.collector import _parse_project
+
+    # 페이지 제목(= 회고 요약)
+    assert _parse_project("[a-mate:proj=space-a] 포트 충돌을 고쳤다") == (
+        "space-a",
+        "포트 충돌을 고쳤다",
+    )
+    # 이슈 제목 — 회고 접두와 붙어 나온다
+    assert _parse_project("[a-mate:proj=space-a][a-mate 회고] 포트 충돌") == (
+        "space-a",
+        "[a-mate 회고] 포트 충돌",
+    )
+    # 마커 없는 옛 문서는 제목 그대로, 프로젝트는 '모른다'
+    assert _parse_project("[a-mate 회고] 옛 문서") == (None, "[a-mate 회고] 옛 문서")
+    assert _parse_project("") == (None, "")
+    # 다른 a-mate 마커(R8 공유)를 프로젝트로 오독하지 않는다
+    assert _parse_project("[a-mate:R8:github] 대형 결과") == (None, "[a-mate:R8:github] 대형 결과")
+
+
+def test_project_graph_is_a_subset_of_the_room_graph():
+    """태그를 눌러 좁힌 지도에 방 지도엔 없던 선이 생기면 안 된다 — 같은 잣대를 써야 한다."""
+    detail = _detail(
+        knowledge=[
+            {"doc_id": "d1", "title": "playwright 스크린샷 파이프라인 도입", "project": "space-a",
+             "author_agent_id": "alice"},
+            {"doc_id": "d2", "title": "playwright 스크린샷 파이프라인 개선", "project": "space-a",
+             "author_agent_id": "bob"},
+            {"doc_id": "d3", "title": "회계 마감 절차 안내문", "project": "agent-meter",
+             "author_agent_id": "bob"},
+        ]
+    )
+    g = collab.build(detail)
+    room = {(e["type"], e["source"], e["target"]) for e in g["edges"]}
+    by_id = {p["id"]: p for p in g["projects"]["nodes"]}
+
+    space_a = by_id["space-a"]["graph"]
+    assert {(e["type"], e["source"], e["target"]) for e in space_a["edges"]} <= room
+    assert space_a["stats"]["docs"] == 2
+    assert sorted(n["id"] for n in space_a["nodes"]) == ["alice", "bob"]
+
+    # 문서가 하나뿐인 프로젝트는 선이 생길 수 없다 — 그래도 그 사람은 지도에 남는다(§7).
+    meter = by_id["agent-meter"]["graph"]
+    assert meter["edges"] == []
+    assert [n["id"] for n in meter["nodes"]] == ["bob"]

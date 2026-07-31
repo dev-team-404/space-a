@@ -15,6 +15,7 @@ import {
   type CollabEdge,
   type CollabGraph,
   type CollabNode,
+  type CollabProjects,
   type KnowledgeDoc,
   type LobbyFloor,
   type SpaceAgent,
@@ -1132,6 +1133,8 @@ const EDGE_STYLE: Record<CollabEdge['type'], { color: string; dash: string; labe
 }
 const edgeKey = (e: CollabEdge) => `${e.type}:${e.source}:${e.target}`
 let collabEdge: string | null = null // 선택된 엣지 — 목록과 그림을 같이 강조한다
+// 선택된 프로젝트 태그 — 누르면 그 프로젝트만의 지도로 바뀐다. null이면 방 전체.
+let collabProject: string | null = null
 
 const SVG_W = 300
 const SVG_H = 268
@@ -1317,23 +1320,28 @@ function showCollabPop(e: CollabEdge, data: SpaceView, name: (id: string) => str
 /** 협업 지도 한 덩이. `focus`(사람 id)를 주면 그 사람에 걸린 선만 남긴다 —
  *  작업 기록에서 한 사람을 열었을 때 "이 사람이 누구와 이어졌나"만 보여주기 위해서. */
 function hubCollabHTML(data: SpaceView, focus?: string | null): string {
-  const title = focus ? '이 사람과 이어진 선' : '협업 지도'
   const all: CollabGraph | null | undefined = data.collab
   if (!all) {
-    return hubSection(title, 'Collaboration Map', '<p class="muted small">아직 계산 전이에요</p>')
+    return hubSection('협업 지도', 'Collaboration Map', '<p class="muted small">아직 계산 전이에요</p>')
   }
-  // 초점이 있으면 그 사람에 걸린 선과 상대만. 없으면 방 전체.
-  const edges = focus ? all.edges.filter((e) => e.source === focus || e.target === focus) : all.edges
+  // 프로젝트 태그를 고르면 그 프로젝트만의 지도로 갈아 끼운다 (서버가 같은 잣대로 만든 부분집합).
+  // 사람 초점이 있을 때는 태그를 걸지 않는다 — 그 사람 얘기에 프로젝트 필터까지 겹치면 읽기 어렵다.
+  const projects = all.projects
+  const picked = focus ? null : projects?.nodes.find((p) => p.id === collabProject)
+  const base: CollabGraph = picked?.graph ? { ...all, ...picked.graph } : all
+  const title = focus ? '이 사람과 이어진 선' : picked ? `협업 지도 · ${picked.id}` : '협업 지도'
+  const tags = focus ? '' : collabTagsHTML(projects)
+  // 초점이 있으면 그 사람에 걸린 선과 상대만. 없으면 (프로젝트 범위의) 전체.
+  const edges = focus ? base.edges.filter((e) => e.source === focus || e.target === focus) : base.edges
   const keep = new Set(edges.flatMap((e) => [e.source, e.target]))
   if (focus) keep.add(focus)
-  const nodes = focus ? all.nodes.filter((n) => keep.has(n.id)) : all.nodes
-  const g: CollabGraph = { nodes, edges, stats: all.stats }
+  const nodes = focus ? base.nodes.filter((n) => keep.has(n.id)) : base.nodes
+  const g: CollabGraph = { nodes, edges, stats: base.stats }
   if (!nodes.length) {
-    return hubSection(
-      title,
-      'Collaboration Map',
-      '<p class="muted small">이 방에 활동 기록이 있는 사람이 아직 없어요</p>',
-    )
+    const msg = picked
+      ? '이 프로젝트에는 아직 지도에 그릴 사람이 없어요'
+      : '이 방에 활동 기록이 있는 사람이 아직 없어요'
+    return hubSection(title, 'Collaboration Map', `<p class="muted small">${msg}</p>${tags}`)
   }
   if (focus && edges.length === 0) {
     return hubSection(
@@ -1386,9 +1394,43 @@ function hubCollabHTML(data: SpaceView, focus?: string | null): string {
   // 선이 하나도 없을 때만 그 사실을 한 줄로 적는다 — 빈 지도는 오해를 부른다(§7).
   const empty = g.edges.length
     ? ''
-    : `<p class="muted small">아직 이어진 선이 없어요 — 이 방 사람들은 각자 따로 일했어요</p>`
+    : `<p class="muted small">${
+        picked
+          ? '이 프로젝트에서는 아직 이어진 선이 없어요 — 각자 따로 일했어요'
+          : '아직 이어진 선이 없어요 — 이 방 사람들은 각자 따로 일했어요'
+      }</p>`
 
-  return hubSection(title, 'Collaboration Map', legend + svg + summary + empty)
+  return hubSection(title, 'Collaboration Map', legend + svg + summary + empty + tags)
+}
+
+/** 지도 아래 프로젝트 태그 줄. 누르면 그 프로젝트만의 지도로 좁힌다(다시 누르면 해제).
+ *
+ *  프로젝트는 a-mate가 세션의 git 저장소 이름을 문서에 실어 보낸 **사실**이다. 주제어로
+ *  추측한 것이 아니므로 주제 겹침(점선)과 섞지 않는다. 마커가 없는 옛 문서는 태그를 만들지
+ *  않고 '분류 안 됨'으로 수만 적는다 — 소급 적용이 없어서지 프로젝트가 없어서가 아니다. */
+function collabTagsHTML(projects?: CollabProjects): string {
+  if (!projects) return ''
+  const { nodes, unknown_docs: unknown } = projects
+  if (!nodes.length && !unknown) return ''
+  const chips = nodes
+    .map((p) => {
+      const on = collabProject === p.id
+      const who = p.people.length
+      return `<button class="collab-tag${on ? ' on' : ''}" data-cproj="${esc(p.id)}"
+        aria-pressed="${on}" title="문서 ${p.docs}건 · 사람 ${who}명">
+        ${esc(p.id)}<b>${p.docs}</b></button>`
+    })
+    .join('')
+  // 미분류는 버튼이 아니다 — 누를 수 있으면 "그런 프로젝트가 있다"는 뜻이 되어버린다.
+  const rest = unknown
+    ? `<span class="collab-tag none" title="a-mate가 프로젝트를 실어 보내기 전에 발행된 문서">분류 안 됨<b>${unknown}</b></span>`
+    : ''
+  const hint = nodes.length
+    ? `<span class="muted small collab-tag-hint">${
+        collabProject ? '태그를 다시 누르면 방 전체로 돌아가요' : '태그를 누르면 그 프로젝트만 봐요'
+      }</span>`
+    : ''
+  return `<div class="collab-tags">${chips}${rest}</div>${hint}`
 }
 
 function hubSection(title: string, sub: string, items: string): string {
@@ -1572,6 +1614,16 @@ function renderHub(data: SpaceView) {
       ev.stopPropagation()
       const iss = data.issues.find((x) => x.issue_id === el.dataset.cissue)
       if (iss) showModal(iss.title, issueModalHTML(iss))
+    })
+  })
+  // 프로젝트 태그 → 그 프로젝트만의 지도 (같은 태그를 다시 누르면 방 전체로)
+  hubBody.querySelectorAll<HTMLElement>('[data-cproj]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.cproj ?? null
+      collabProject = collabProject === id ? null : id
+      collabEdge = null // 범위가 바뀌면 고른 선은 더 이상 그 지도의 선이 아니다
+      hideCollabPop()
+      renderHub(data)
     })
   })
   hubBody.querySelectorAll<SVGElement>('[data-cnode]').forEach((el) => {

@@ -223,16 +223,25 @@ def term_index(
 
 
 def _topic_edges(
-    docs: list[dict], author_of: dict[str, str], toks: dict[str, set[str]], idf: dict[str, float]
+    docs: list[dict],
+    author_of: dict[str, str],
+    toks: dict[str, set[str]],
+    idf: dict[str, float],
+    floor: float | None = None,
 ) -> tuple[list[dict], dict]:
     """주제 겹침(추정). 저자가 다른 문서쌍이 주제어를 충분히 공유하면 두 사람을 잇는다.
 
-    반환 엣지는 무방향 — 정렬한 (a, b) 쌍을 키로 쓴다. weight는 자격을 얻은 문서쌍 수다."""
+    반환 엣지는 무방향 — 정렬한 (a, b) 쌍을 키로 쓴다. weight는 자격을 얻은 문서쌍 수다.
+
+    `floor`를 넘기면 그 문턱을 그대로 쓴다 — 프로젝트별 부분 지도가 방 전체와 **같은 잣대**를
+    쓰게 하기 위해서다. 부분집합에서 다시 계산하면 문턱이 낮아져, 방 지도엔 없는 선이
+    프로젝트 지도에만 생긴다(같은 데이터인데 화면마다 다른 결론)."""
     n = len(docs)
     if n < 2 or not idf:
         return [], {"keywords": 0}
     kept = {d["doc_id"]: {t for t in toks.get(d["doc_id"], ()) if t in idf} for d in docs}
-    floor = MIN_SCORE_RATIO * math.log(n + 1)
+    if floor is None:
+        floor = MIN_SCORE_RATIO * math.log(n + 1)
 
     pairs: collections.Counter = collections.Counter()
     kw: dict[tuple[str, str], collections.Counter] = collections.defaultdict(collections.Counter)
@@ -341,6 +350,138 @@ def _handoff_edges(issues: list[dict], canon: dict[str, str]) -> tuple[list[dict
     return edges, self_resolved
 
 
+def _rank_edges(edges: list[dict]) -> tuple[list[dict], int]:
+    """사실 먼저, 그 안에서 굵은 것 먼저. 상한을 넘으면 자르고 **자른 수를 돌려준다**."""
+    ordered = sorted(edges, key=lambda e: (e["type"] == "topic", -e["weight"]))
+    return ordered[:MAX_EDGES], max(0, len(ordered) - MAX_EDGES)
+
+
+def _issues_by(issues: list[dict], canon: dict[str, str]) -> collections.Counter:
+    return collections.Counter(
+        w
+        for it in issues
+        if (w := _resolve(canon, it.get("opened_by"), (it.get("timeline") or [{}])[0].get("actor")))
+    )
+
+
+def _people_nodes(
+    agents: list[dict],
+    docs_by: collections.Counter,
+    issues_by: collections.Counter,
+    edges: list[dict],
+    externals: dict[str, dict],
+) -> list[dict]:
+    """지도에 세울 사람들.
+
+    남기는 기준은 **지도에 그릴 재료가 있는가**다: 문서를 썼거나(주제 겹침의 재료) 실제로
+    선에 걸린 사람. 엣지가 없어도 문서가 있으면 남긴다 — 혼자 일한 것은 지울 상태가 아니라
+    읽어야 할 정보다 (스펙 §7). 이슈만 몇 건 열고 문서가 없는 계정(실데이터의 `bot`·`reader`
+    같은 테스트 계정)은 원을 채우기만 하고 어떤 선도 만들지 못하므로 뺀다."""
+    used = {e["source"] for e in edges} | {e["target"] for e in edges}
+    nodes = [
+        {
+            "id": a["agent_id"],
+            "name": a.get("name") or a["agent_id"],
+            "status": a.get("status", "idle"),
+            "mascot_url": a.get("mascot_url"),
+            "docs": docs_by.get(a["agent_id"], 0),
+            "issues": issues_by.get(a["agent_id"], 0),
+            "external": False,
+        }
+        for a in agents
+        if docs_by.get(a["agent_id"]) or a["agent_id"] in used
+    ]
+    nodes.sort(key=lambda n: n["name"])
+    # 방 밖 사람은 엣지에 실제로 등장한 경우만, 바깥 고리에 뒤이어 붙인다
+    nodes += [
+        {**x, "status": "idle", "docs": 0, "issues": 0}
+        for k, x in sorted(externals.items())
+        if k in used
+    ]
+    return nodes
+
+
+def _projects(docs: list[dict], author_of: dict[str, str]) -> dict:
+    """프로젝트 축 — **a-mate 마커가 붙은 문서만** 센다.
+
+    주제어로 프로젝트를 추정하지 않는다: 실데이터 157건으로 시험해보니 `이벤트`·`구현`처럼
+    회고 요약체의 상용어가 프로젝트 행세를 했다(계획 §0). 마커는 세션 작업 디렉터리에서 온
+    사실이므로, 사실만 프로젝트로 세고 나머지는 **모른다고 수만 보고한다**(스펙 §7 정직성).
+
+    마커는 2026-07-31 이후 발행분에만 붙는다 — 그 이전 문서가 전부 `unknown_docs`로 잡히는
+    것은 정상이다(소급 적용 없음)."""
+    acc: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    docs_of: collections.Counter = collections.Counter()
+    unknown = 0
+    for d in docs:
+        proj = (d.get("project") or "").strip()
+        if not proj:
+            unknown += 1
+            continue
+        docs_of[proj] += 1
+        who = author_of.get(d["doc_id"])
+        if who:
+            acc[proj][who] += 1
+    nodes = [
+        {
+            "id": proj,
+            "docs": n,
+            # 같은 프로젝트에 문서를 남긴 사람들 — 사람×프로젝트 이분 그래프의 재료.
+            "people": [{"id": w, "docs": c} for w, c in acc[proj].most_common()],
+        }
+        for proj, n in docs_of.most_common()
+    ]
+    return {"nodes": nodes, "unknown_docs": unknown}
+
+
+def _project_graph(
+    proj: str,
+    knowledge: list[dict],
+    issues: list[dict],
+    reuse_events: list[dict],
+    agents: list[dict],
+    canon: dict[str, str],
+    author_of: dict[str, str],
+    toks: dict[str, set[str]],
+    idf: dict[str, float],
+    floor: float,
+) -> dict:
+    """프로젝트 하나만의 지도 — 태그를 누르면 이걸로 갈아 끼운다.
+
+    방 지도와 **같은 주제어 표·같은 문턱**을 쓴다. 부분집합에서 다시 재면 잣대가 헐거워져
+    방 지도엔 없는 선이 여기서만 생긴다 — 그러면 같은 데이터가 화면마다 다른 말을 한다.
+    그래서 이 지도는 언제나 방 지도의 부분집합이다."""
+    docs = [d for d in knowledge if (d.get("project") or "") == proj and d["doc_id"] in author_of]
+    doc_ids = {d["doc_id"] for d in docs}
+    iss = [it for it in issues if (it.get("project") or "") == proj]
+    externals: dict[str, dict] = {}
+    topic, _ = _topic_edges(docs, author_of, toks, idf, floor)
+    reuse = _reuse_edges(
+        [r for r in reuse_events if r.get("doc_id") in doc_ids], canon, author_of, externals
+    )
+    handoff, self_resolved = _handoff_edges(iss, canon)
+    edges, dropped = _rank_edges(reuse + handoff + topic)
+    docs_by = collections.Counter(author_of[d["doc_id"]] for d in docs)
+    nodes = _people_nodes(agents, docs_by, _issues_by(iss, canon), edges, externals)
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "stats": {
+            "reuse": sum(1 for e in edges if e["type"] == "reuse"),
+            "handoff": sum(1 for e in edges if e["type"] == "handoff"),
+            "topic": sum(1 for e in edges if e["type"] == "topic"),
+            "issues": len(iss),
+            "self_resolved": self_resolved,
+            "docs": len(docs),
+            "unlinked_docs": 0,  # 저자를 못 이은 문서는 프로젝트 지도에 들어오지 않는다
+            "quiet_people": 0,
+            "truncated_docs": 0,
+            "dropped_edges": dropped,
+            "keywords": 0,
+        },
+    }
+
+
 # ── 조립 ─────────────────────────────────────────────────────
 
 _cache: dict[str, tuple[str, dict]] = {}
@@ -409,45 +550,31 @@ def build(detail: dict, snapshot: dict | None = None) -> dict:
     terms = term_index(corpus, issues, toks, idf)
 
     externals: dict[str, dict] = {}
-    topic, topic_stats = _topic_edges(linked, author_of, toks, idf)
+    # 방 전체의 문턱 — 프로젝트별 부분 지도도 이 잣대를 그대로 쓴다.
+    floor = MIN_SCORE_RATIO * math.log(len(linked) + 1)
+    topic, topic_stats = _topic_edges(linked, author_of, toks, idf, floor)
     reuse = _reuse_edges(reuse_events, canon, author_of, externals)
     handoff, self_resolved = _handoff_edges(issues, canon)
 
-    edges = reuse + handoff + topic
-    edges.sort(key=lambda e: (e["type"] == "topic", -e["weight"]))  # 사실 먼저, 그 안에서 굵은 것 먼저
-    dropped = max(0, len(edges) - MAX_EDGES)
-    edges = edges[:MAX_EDGES]
-
+    edges, dropped = _rank_edges(reuse + handoff + topic)
     docs_by: collections.Counter = collections.Counter(author_of.values())
-    issues_by: collections.Counter = collections.Counter(
-        w for it in issues if (w := _resolve(canon, it.get("opened_by"), (it.get("timeline") or [{}])[0].get("actor")))
-    )
-    used = {e["source"] for e in edges} | {e["target"] for e in edges}
-    # 남기는 기준은 **지도에 그릴 재료가 있는가**다: 문서를 썼거나(주제 겹침의 재료) 실제로
-    # 선에 걸린 사람. 엣지가 없어도 문서가 있으면 남긴다 — 혼자 일한 것은 지울 상태가 아니라
-    # 읽어야 할 정보다 (스펙 §7).
-    # 이슈만 몇 건 열고 문서가 없는 계정(실데이터의 `bot`·`reader` 같은 테스트 계정)은 원을
-    # 채우기만 하고 어떤 선도 만들지 못하므로 뺀다. 뺀 수는 stats로 알린다.
-    active = [a for a in agents if docs_by.get(a["agent_id"]) or a["agent_id"] in used]
-    nodes = [
-        {
-            "id": a["agent_id"],
-            "name": a.get("name") or a["agent_id"],
-            "status": a.get("status", "idle"),
-            "mascot_url": a.get("mascot_url"),
-            "docs": docs_by.get(a["agent_id"], 0),
-            "issues": issues_by.get(a["agent_id"], 0),
-            "external": False,
-        }
-        for a in active
-    ]
-    nodes.sort(key=lambda n: n["name"])
-    # 방 밖 사람은 엣지에 실제로 등장한 경우만, 바깥 고리에 뒤이어 붙인다
-    nodes += [{**x, "status": "idle", "docs": 0, "issues": 0} for k, x in sorted(externals.items()) if k in used]
+    issues_by = _issues_by(issues, canon)
+    nodes = _people_nodes(agents, docs_by, issues_by, edges, externals)
+
+    # 프로젝트 태그 + 태그마다의 부분 지도. 태그의 문서 수는 방의 **모든** 문서를 센다
+    # (저자를 못 이은 것 포함 — 문서 축이므로). 지도는 그릴 수 있는 것만 그린다: 방 지도가
+    # `docs`와 `unlinked_docs`를 따로 알리는 것과 같은 규율이다.
+    projects = _projects(knowledge, author_of)
+    for p in projects["nodes"]:
+        p["graph"] = _project_graph(
+            p["id"], linked, issues, reuse_events, agents, canon, author_of, toks, idf, floor
+        )
 
     graph = {
         "nodes": nodes,
         "edges": edges,
+        # 프로젝트 축 — 사람 축과 별개다. 마커 있는 문서만 들어간다(추정 아님).
+        "projects": projects,
         # 항목별 주제어 — 사이드바 네 탭이 제목·요약에서 이 말들을 금색으로 짚는다
         "terms": terms,
         "stats": {
