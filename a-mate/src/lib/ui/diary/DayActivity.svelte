@@ -31,7 +31,17 @@
 
   const bars = $derived(data ? toolBars(data.tools.by_kind, 5) : []);
   const cache = $derived(data ? data.summary.tok_cache_read + data.summary.tok_cache_create : 0);
-  const chips = $derived(data ? [...data.tools.skills, ...data.tools.mcp_servers] : []);
+  // 키에 출처를 붙인다 — skills(tool_target)와 mcp_servers(tool_server)는 각자 distinct일 뿐
+  // 서로 겹칠 수 있고(네임스페이스 없는 개인 스킬 이름 = MCP 서버명), 이름만 키로 쓰면
+  // Svelte가 each_key_duplicate를 던져 패널이 통째로 렌더링되지 않는다.
+  const chips = $derived(
+    data
+      ? [
+          ...data.tools.skills.map((name) => ({ key: `skill:${name}`, name })),
+          ...data.tools.mcp_servers.map((name) => ({ key: `mcp:${name}`, name })),
+        ]
+      : [],
+  );
   const shown = $derived(
     !data ? [] : expanded ? data.sessions : data.sessions.slice(0, SESSION_HEAD),
   );
@@ -68,7 +78,7 @@
     {#if chips.length}
       <section>
         <h5>스킬 · MCP</h5>
-        <div class="chips">{#each chips as c (c)}<span class="chip">{c}</span>{/each}</div>
+        <div class="chips">{#each chips as c (c.key)}<span class="chip">{c.name}</span>{/each}</div>
       </section>
     {/if}
 
