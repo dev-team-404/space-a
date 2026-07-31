@@ -1179,11 +1179,14 @@ function collabEdgeSVG(e: CollabEdge, pts: Map<string, [number, number]>): strin
   const my = (a[1] + b[1]) / 2
   const qx = mx + (SVG_W / 2 - mx) * 0.35
   const qy = my + (SVG_H / 2 - 8 - my) * 0.35
-  const width = Math.min(4, 1 + Math.log(e.weight + 1))
+  const width = Math.min(6, 1.8 + 1.3 * Math.log(e.weight + 1))
   const on = collabEdge === edgeKey(e)
+  const d = `M${a[0].toFixed(1)},${a[1].toFixed(1)} Q${qx.toFixed(1)},${qy.toFixed(1)} ${b[0].toFixed(1)},${b[1].toFixed(1)}`
+  // 보이는 선 앞에 **투명한 두꺼운 선**을 깐다 — 얇은 선을 정확히 겨냥하지 않아도 잡힌다.
+  // (노드는 뒤에 그리므로 이 넓은 판정 영역보다 위에 있다 — 사람 클릭을 뺏지 않는다)
   return `
-    <path class="collab-edge ${on ? 'on' : ''}" data-cedge="${esc(edgeKey(e))}"
-      d="M${a[0].toFixed(1)},${a[1].toFixed(1)} Q${qx.toFixed(1)},${qy.toFixed(1)} ${b[0].toFixed(1)},${b[1].toFixed(1)}"
+    <path class="collab-hit" data-cedge="${esc(edgeKey(e))}" d="${d}" />
+    <path class="collab-edge ${on ? 'on' : ''}" data-cedge="${esc(edgeKey(e))}" d="${d}"
       stroke="${style.color}" stroke-width="${width.toFixed(2)}"
       ${style.dash ? `stroke-dasharray="${style.dash}"` : ''}
       ${e.type === 'topic' ? '' : 'marker-end="url(#collab-arrow)"'} />`
@@ -1227,35 +1230,6 @@ function collabEvidenceHTML(e: CollabEdge, data: SpaceView, name: (id: string) =
   return `<div class="collab-evidence"><div class="collab-ev-head">${head}</div>${rows.join('')}</div>`
 }
 
-/** 엣지 한 줄.
- *
- *  문장을 걷어냈다: 목록이 대부분 같은 종류(주제 겹침)라 "주제 겹침 · 같은 주제를 다뤘어요"가
- *  줄마다 반복되면서 정작 다른 정보(누구·얼마나·무슨 말)를 덮었다. 종류는 왼쪽 색 막대와
- *  범례가 이미 말하고, 사실 엣지(인용·핸드오프)만 드물어서 이름표를 남긴다. 양은 숫자와
- *  가로 막대로 — 눈으로 훑을 때 글자보다 길이가 빠르다. */
-function collabEdgeRow(e: CollabEdge, data: SpaceView, name: (id: string) => string, max: number): string {
-  const style = EDGE_STYLE[e.type]
-  const on = collabEdge === edgeKey(e)
-  const unit = e.type === 'topic' ? `${e.weight}쌍` : `${e.weight}건`
-  const arrow = e.type === 'topic' ? '↔' : '→'
-  const keys = (e.keywords ?? []).slice(0, 4).map((k) => `<span class="collab-kw">${esc(k)}</span>`).join('')
-  const width = Math.max(6, Math.round((e.weight / Math.max(1, max)) * 100))
-  return `
-    <div class="collab-row ${on ? 'on' : ''}" data-cedge="${esc(edgeKey(e))}">
-      <span class="collab-swatch" style="background:${style.color};${e.type === 'topic' ? 'opacity:.55' : ''}"></span>
-      <div class="collab-row-main">
-        <div class="collab-row-head">
-          <span class="collab-row-who">${
-            e.type === 'topic' ? '' : `<span class="collab-tag" style="color:${style.color}">${esc(style.label)}</span>`
-          }${esc(name(e.source))} <span class="muted">${arrow}</span> ${esc(name(e.target))}</span>
-          <span class="collab-row-n">${unit}</span>
-        </div>
-        <div class="collab-bar"><i style="width:${width}%;background:${style.color}"></i></div>
-        ${keys ? `<div class="collab-kws">${keys}</div>` : ''}
-        ${on ? collabEvidenceHTML(e, data, name) : ''}
-      </div>
-    </div>`
-}
 
 // ── 지도에서 선을 클릭했을 때 뜨는 설명 카드 ──
 // 지도와 목록이 세로로 떨어져 있어서, 그림에서 선을 골라도 설명을 보려면 목록을 스크롤해
@@ -1380,12 +1354,14 @@ function hubCollabHTML(data: SpaceView, focus?: string | null): string {
     </div>
     ${notes.length ? `<div class="muted small collab-notes">${esc(notes.join(' · '))}</div>` : ''}`
 
-  const max = Math.max(1, ...g.edges.map((e) => e.weight)) // 가로 막대 기준 = 이 목록의 최댓값
-  const list = g.edges.length
-    ? g.edges.map((e) => collabEdgeRow(e, data, nameOf, max)).join('')
+  // 엣지 목록은 두지 않는다 — 선을 클릭하면 지도 옆 카드가 같은 내용을 보여주므로, 아래에
+  // 다시 나열하면 같은 정보의 두 번째 표면이 되고 사이드바만 길어진다(§6.3).
+  // 선이 하나도 없을 때만 그 사실을 한 줄로 적는다 — 빈 지도는 오해를 부른다(§7).
+  const empty = g.edges.length
+    ? ''
     : `<p class="muted small">아직 이어진 선이 없어요 — 이 방 사람들은 각자 따로 일했어요</p>`
 
-  return hubSection(title, 'Collaboration Map', legend + svg + summary + list)
+  return hubSection(title, 'Collaboration Map', legend + svg + summary + empty)
 }
 
 function hubSection(title: string, sub: string, items: string): string {
@@ -1541,22 +1517,17 @@ function renderHub(data: SpaceView) {
     })
   })
   // 협업 지도 — 선(그림·목록 어느 쪽을 눌러도) 선택 토글, 사람은 그 사람 작업 기록으로
-  hubBody.querySelectorAll<SVGElement | HTMLElement>('[data-cedge]').forEach((el) => {
-    const fromMap = el.tagName.toLowerCase() === 'path' // 그림의 선인가, 아래 목록의 줄인가
+  // 지도의 선 클릭 → 지도 옆 설명 카드. 선택은 토글이고, 지도의 강조도 함께 움직인다.
+  hubBody.querySelectorAll<SVGElement>('[data-cedge]').forEach((el) => {
     el.addEventListener('click', () => {
       const key = el.dataset.cedge ?? null
       collabEdge = collabEdge === key ? null : key
       renderHub(data)
       if (!collabEdge) return
-      if (fromMap) {
-        // 지도에서 골랐으면 설명을 지도 옆에 띄운다 — 목록을 찾아 스크롤하지 않아도 되게.
-        // 다시 그린 뒤라 같은 선을 DOM에서 새로 집어야 한다.
-        const path = hubBody.querySelector(`path[data-cedge="${CSS.escape(collabEdge)}"]`)
-        const edge = edgeOf(data, collabEdge)
-        if (path && edge) showCollabPop(edge, data, collabNameOf(data), path)
-      } else {
-        hubBody.querySelector('.collab-row.on')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-      }
+      // 다시 그린 뒤라 같은 선을 DOM에서 새로 집어야 한다
+      const path = hubBody.querySelector(`path[data-cedge="${CSS.escape(collabEdge)}"]`)
+      const edge = edgeOf(data, collabEdge)
+      if (path && edge) showCollabPop(edge, data, collabNameOf(data), path)
     })
   })
   // 근거 줄 → 원문 모달. 줄 선택이 토글되지 않게 버블링을 끊는다.

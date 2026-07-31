@@ -718,12 +718,22 @@ button { font: inherit; cursor: pointer; }
 .collab-svg { width: 100%; height: auto; display: block; margin: 2px 0 8px; overflow: visible; }
 .collab-edge {
   fill: none;
-  opacity: 0.55;
+  opacity: 0.62;
   cursor: pointer;
   color: inherit;
   transition: opacity 0.12s;
+  pointer-events: stroke;
 }
-.collab-edge:hover { opacity: 0.9; }
+.collab-edge:hover { opacity: 0.95; }
+/* 클릭 판정용 투명 선 — 보이는 굵기와 무관하게 넉넉히 잡는다 (얇은 선을 겨냥하기 어렵다) */
+.collab-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16;
+  cursor: pointer;
+  pointer-events: stroke;
+}
+.collab-hit:hover + .collab-edge { opacity: 0.95; }
 .collab-edge.on { opacity: 1; filter: drop-shadow(0 0 4px currentColor); }
 
 .collab-node { cursor: pointer; }
@@ -749,28 +759,6 @@ button { font: inherit; cursor: pointer; }
 .collab-stats b { color: #e8eaed; font-variant-numeric: tabular-nums; }
 .collab-notes { margin-bottom: 8px; line-height: 1.5; }
 
-.collab-row {
-  display: flex;
-  gap: 8px;
-  padding: 7px 4px;
-  border-bottom: 1px solid #2a3346;
-  cursor: pointer;
-}
-.collab-row:hover { background: #131a28; }
-.collab-row.on { background: #182036; }
-.collab-swatch { width: 3px; border-radius: 2px; flex: none; }
-.collab-row-main { min-width: 0; flex: 1; }
-/* 이름은 왼쪽, 양은 오른쪽 끝에 붙여 세로로 줄맞춤 — 훑을 때 숫자가 한 열에 모인다 */
-.collab-row-head { display: flex; align-items: baseline; gap: 8px; }
-.collab-row-who {
-  font-size: 12.5px; color: #e8eaed; font-weight: 600;
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.collab-row-n { margin-left: auto; font-size: 11px; color: #98a1ae; font-variant-numeric: tabular-nums; }
-.collab-tag { font-size: 10.5px; font-weight: 700; margin-right: 5px; }
-/* 양을 길이로 — 8줄을 훑을 때 숫자를 읽는 것보다 막대 길이가 빠르다 */
-.collab-bar { height: 3px; border-radius: 2px; background: #2a3346; margin: 5px 0 5px; overflow: hidden; }
-.collab-bar i { display: block; height: 100%; border-radius: 2px; opacity: 0.75; }
 .collab-kws { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .collab-kw {
   background: #101624;
@@ -826,7 +814,7 @@ button { font: inherit; cursor: pointer; }
 #collab-pop {
   position: fixed;
   z-index: 12; /* Hub(10)보다 위 — 사이드바에 걸쳐도 카드가 보인다 */
-  width: 320px;
+  width: 380px;
   max-height: 60vh;
   overflow-y: auto;
   padding: 12px 14px 13px;
