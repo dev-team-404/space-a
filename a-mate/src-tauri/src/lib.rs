@@ -403,6 +403,7 @@ pub fn run() {
                 commands::get_today_occasions,
                 commands::get_session_transcript,
                 commands::sessions_ctx,
+                commands::day_activity,
                 commands::chat_status,
                 commands::chat_send,
                 commands::engine_settings_get,

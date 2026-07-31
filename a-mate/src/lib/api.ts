@@ -71,6 +71,32 @@ export interface SessionCtxItem {
   first_prompt: string | null;
 }
 
+/** 다이어리 일별 활동 패널의 세션 1건. `project`는 표시명(cwd basename, 폴백 project_id). */
+export interface DaySessionItem {
+  session_id: string;
+  project: string;
+  first_ts: string;
+  first_prompt: string | null;
+}
+
+export interface DayActivityData {
+  summary: {
+    session_count: number;
+    tok_input: number;
+    tok_output: number;
+    tok_cache_read: number;
+    tok_cache_create: number;
+  };
+  tools: {
+    total_calls: number;
+    /** Rust `Vec<(String, u64)>` — count 내림차순. JSON에선 배열의 배열. */
+    by_kind: [string, number][];
+    skills: string[];
+    mcp_servers: string[];
+  };
+  sessions: DaySessionItem[];
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -119,6 +145,7 @@ export const getDailyLine = () => invoke<string | null>('get_daily_line');
 export const getChatterPool = () => invoke<string[]>('get_chatter_pool');
 export const sessionsCtx = (ids: string[]) =>
   invoke<SessionCtxItem[]>('sessions_ctx', { ids });
+export const dayActivity = (date: string) => invoke<DayActivityData>('day_activity', { date });
 export const chatStatus = () => invoke<ChatStatus>('chat_status');
 export const chatSend = (messages: ChatMessage[]) => invoke<string>('chat_send', { messages });
 export const listContent = (includeHidden = false) =>
