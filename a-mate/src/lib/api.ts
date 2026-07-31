@@ -136,6 +136,7 @@ export const emitOccasionToday = (labels: string[]) => emit('occasion:today', la
 
 export interface HubSettings {
   url: string;
+  api_key: string;
   user: string;
   connected: boolean;
   life_id: string;
