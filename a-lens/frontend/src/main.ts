@@ -656,7 +656,7 @@ const HUB_TABS: { id: HubTab; label: string; icon: string }[] = [
   { id: 'reuse', label: '지식 재사용', icon: '📄' },
   { id: 'pages', label: '문서함', icon: '📑' },
 ]
-let hubTab: HubTab = 'issues'
+let hubTab: HubTab = 'trail' // 방 입장 기본 탭 (renderLife에서도 여기로 되돌린다)
 
 // ── 이슈 흐름 탭 — 최신순 고정 + 상태 필터 칩 + 사람 필터 + 시간 버킷 ──
 // 보기 "모드"는 화면을 통째로 재배열해 위치 감각을 잃게 한다 — 상태·사람은 필터로,
@@ -1081,6 +1081,7 @@ function agentRowHTML(a: SpaceAgent): string {
     <div class="agent-row clickable ${a.status === 'working' ? '' : 'off'}" data-person="${esc(a.agent_id)}">
       ${agentFaceHTML(a)}
       <span class="agent-name">${esc(a.name)}</span>
+      ${a.status === 'working' ? '<span class="live-dot" title="온라인"></span>' : ''}
       <span class="agent-status">${esc(status)}</span>
     </div>`
 }
@@ -1699,7 +1700,9 @@ async function renderLife(spaceId: string) {
   prefetchRoomChat('water', resolveLifeId(config.life), config.space_name ?? '')
 
   // 오른쪽 Collaboration Hub — 내용 채우고, 접힘 상태에 맞춰 표시 + 씬 폭 재조정(fitScene).
-  hubTab = 'issues'
+  // 방에 들어오면 '작업 기록'부터 — 사람 목록과 협업 지도가 이 방을 가장 먼저 설명한다.
+  hubTab = 'trail'
+  trailPerson = null // 앞서 보던 사람이 남아 있으면 방을 바꿔도 그 사람 화면이 열린다
   renderHub(data)
 }
 

@@ -171,6 +171,25 @@ button { font: inherit; cursor: pointer; }
   overflow: hidden;
 }
 .agent-face.on { border-color: #7fc99a; box-shadow: 0 0 6px #7fc99a55; }
+
+/* 온라인 표시 — 이름 옆 초록 점이 천천히 숨쉰다. 깜빡임은 시선을 뺏으므로 완전히 꺼지지
+   않고 밝기만 오간다. 움직임을 싫어하는 설정(prefers-reduced-motion)이면 켜둔 채로 멈춘다. */
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7fc99a;
+  flex: 0 0 auto;
+  box-shadow: 0 0 6px #7fc99aaa;
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 7px #7fc99acc; }
+  50% { opacity: 0.35; box-shadow: 0 0 2px #7fc99a44; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+}
 .agent-face .agent-mascot { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 0; }
 
 /* 팀 활동 줄의 Life 마스코트 아이콘 — 상태 점 자리를 대신한다 */
