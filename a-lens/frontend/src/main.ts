@@ -22,7 +22,7 @@ import {
   type SpaceView,
 } from './api'
 import { openBuilder } from './builder'
-import { resolveLifeId } from './life/catalog'
+import { characterForSeed, resolveLifeId } from './life/catalog'
 import { loadKit } from './life/kit'
 import { buildLifeScene, refreshAgentViews } from './life/renderer'
 import type { LifeConfig } from './life/types'
@@ -861,12 +861,9 @@ function trailPickerHTML(data: SpaceView): string {
   )
   const rows = people
     .map(({ a, n }) => {
-      const icon = a.mascot_url
-        ? `<img class="agent-mascot" src="${esc(a.mascot_url)}" alt="" loading="lazy" onerror="this.remove()" />`
-        : `<span class="agent-dot ${a.status === 'working' ? 'on' : ''}"></span>`
       return `
         <div class="agent-row trail-pick" data-person="${esc(a.agent_id)}">
-          ${icon}<span class="agent-name">${esc(a.name)}</span>
+          ${agentFaceHTML(a)}<span class="agent-name">${esc(a.name)}</span>
           <span class="agent-status">${n}건</span>
         </div>`
     })
@@ -1049,6 +1046,25 @@ function hubPagesHTML(data: SpaceView): string {
 type ActivityTab = 'online' | 'offline'
 let activityTab: ActivityTab = 'online'
 
+/** 마스코트가 없을 때 쓸 기본 얼굴 — **방 안에서 그 사람을 그리는 캐릭터 스프라이트**.
+ *  같은 seed는 늘 같은 캐릭터라(`characterForSeed`) 방과 사이드바의 얼굴이 일치한다. */
+function defaultFaceUrl(agentId: string): string {
+  return `/assets/kit/char-${characterForSeed(agentId)}.png`
+}
+
+/** 사람 아이콘 — 마스코트 사진, 없거나 못 받으면 기본 캐릭터로 떨어진다.
+ *
+ *  Life는 사람마다 마스코트 URL을 항상 주지만 이미지를 안 올린 사람은 404다(실제로 있다).
+ *  전에는 `onerror`로 img를 지우기만 해서 그 자리가 통째로 비었다 — 깨진 그림이 잠깐
+ *  보이고 이름만 밀려 보였다. */
+function agentFaceHTML(a: SpaceAgent): string {
+  const fallback = defaultFaceUrl(a.agent_id)
+  const src = a.mascot_url || fallback
+  return `<span class="agent-face ${a.status === 'working' ? 'on' : ''}">
+    <img class="agent-mascot" src="${esc(src)}" alt="" loading="lazy"
+      onerror="this.onerror=null;this.src='${esc(fallback)}'" /></span>`
+}
+
 function agentRowHTML(a: SpaceAgent): string {
   const at = kstTime(a.last_active_at)
   // Life 사람인데 Hub 활동이 없으면 '자리 비움'이 아니라 연결 상태를 알려준다.
@@ -1061,14 +1077,9 @@ function agentRowHTML(a: SpaceAgent): string {
         : a.via === 'life'
           ? '허브 활동 없음'
           : '자리 비움')
-  // 마스코트가 있으면 아이콘으로, 없으면 기존처럼 상태 점만.
-  const icon = a.mascot_url
-    ? `<img class="agent-mascot" src="${esc(a.mascot_url)}" alt="" loading="lazy"
-         onerror="this.remove()" />`
-    : `<span class="agent-dot ${a.status === 'working' ? 'on' : ''}"></span>`
   return `
     <div class="agent-row clickable ${a.status === 'working' ? '' : 'off'}" data-person="${esc(a.agent_id)}">
-      ${icon}
+      ${agentFaceHTML(a)}
       <span class="agent-name">${esc(a.name)}</span>
       <span class="agent-status">${esc(status)}</span>
     </div>`
@@ -1108,7 +1119,7 @@ function hubActivityHTML(data: SpaceView): string {
 const EDGE_STYLE: Record<CollabEdge['type'], { color: string; dash: string; label: string }> = {
   reuse: { color: '#d8a13a', dash: '', label: '인용' },
   handoff: { color: '#3fb6a8', dash: '', label: '핸드오프' },
-  topic: { color: '#8b93a1', dash: '4 3', label: '주제 겹침' },
+  topic: { color: '#9aa3b2', dash: '4 3', label: '주제 겹침' },
 }
 const edgeKey = (e: CollabEdge) => `${e.type}:${e.source}:${e.target}`
 let collabEdge: string | null = null // 선택된 엣지 — 목록과 그림을 같이 강조한다
@@ -1133,10 +1144,12 @@ function collabPoints(nodes: CollabNode[]): Map<string, [number, number]> {
 
 function collabNodeSVG(n: CollabNode, [x, y]: [number, number]): string {
   const short = n.name.length > 7 ? `${n.name.slice(0, 6)}…` : n.name
-  const face = n.mascot_url
-    ? `<image href="${esc(n.mascot_url)}" x="${-NODE_R}" y="${-NODE_R}" width="${NODE_R * 2}" height="${NODE_R * 2}"
-         clip-path="url(#collab-clip)" preserveAspectRatio="xMidYMid slice" />`
-    : `<text class="collab-initial" y="4">${esc(n.name.slice(0, 1))}</text>`
+  // 마스코트가 없거나 404여도 빈 동그라미가 되지 않게 기본 캐릭터로 떨어진다 (방 캐릭터와 동일).
+  // 방 밖 사람은 이 방 캐릭터가 없으므로 id를 그대로 seed로 쓴다.
+  const fallback = defaultFaceUrl(n.id)
+  const face = `<image href="${esc(n.mascot_url || fallback)}" x="${-NODE_R}" y="${-NODE_R}"
+      width="${NODE_R * 2}" height="${NODE_R * 2}" clip-path="url(#collab-clip)"
+      preserveAspectRatio="xMidYMid slice" onerror="this.onerror=null;this.setAttribute('href','${esc(fallback)}')" />`
   return `
     <g class="collab-node ${n.external ? 'ext' : ''} ${n.status === 'working' ? 'on' : ''}"
        transform="translate(${x.toFixed(1)},${y.toFixed(1)})" data-cnode="${esc(n.id)}">
