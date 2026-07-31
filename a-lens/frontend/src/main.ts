@@ -877,9 +877,12 @@ function trailPickerHTML(data: SpaceView): string {
         </div>`
     })
     .join('')
+  // 한 줄에 두 명 — 사람 수가 늘어도 목록이 세로로만 자라지 않게. 아래에 붙는 협업 지도가
+  // 스크롤 없이 같이 보이는 것이 이 탭의 요점이라, 세로를 아끼는 편이 맞다.
+  const grid = rows ? `<div class="trail-grid">${rows}</div>` : ''
   // 사람 목록 아래에 방 전체 협업 지도를 바로 붙인다 — 탭을 열면 클릭 없이 보이는 자리다.
   return (
-    hubSection('작업 기록', 'Work Trail', rows || '<p class="muted small">표시할 사람이 없어요</p>') +
+    hubSection('작업 기록', 'Work Trail', grid || '<p class="muted small">표시할 사람이 없어요</p>') +
     hubCollabHTML(data)
   )
 }

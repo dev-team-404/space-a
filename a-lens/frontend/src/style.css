@@ -416,6 +416,23 @@ button { font: inherit; cursor: pointer; }
   border-bottom: 1px solid #2a3346;
 }
 .agent-row.off { opacity: 0.55; }
+/* 작업 기록 사람 목록 — 두 칸. 사이드바는 드래그로 폭이 바뀌므로(HUB_MIN 300) 칸이
+   150px 아래로 좁아지면 auto-fit이 알아서 한 칸으로 되돌린다 — 미디어 쿼리로 박아두면
+   사이드바 폭이 아니라 창 폭을 보게 되어 어긋난다. */
+.trail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  column-gap: 10px;
+}
+/* grid 자식은 기본 min-width:auto라 긴 이름이 칸을 밀어낸다 — 줄이고 말줄임으로 자른다. */
+.trail-grid .agent-row { min-width: 0; }
+.trail-grid .agent-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trail-grid .agent-status { white-space: nowrap; }
 .agent-dot { width: 8px; height: 8px; border-radius: 50%; background: #4a5260; flex: none; }
 .agent-dot.on { background: #7fc99a; box-shadow: 0 0 6px #7fc99a88; }
 .agent-name { font-weight: 600; color: #e8eaed; }
