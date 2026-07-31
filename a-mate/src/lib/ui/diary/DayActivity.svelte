@@ -98,8 +98,11 @@
 {/if}
 
 <style>
+  /* 달력은 제자리에 두고 이 패널만 스크롤한다 — .side가 flex column이고 여기가 남은 높이를 받는다.
+     gap은 .side가 준다(margin-top을 쓰면 스크롤 높이 계산에 섞인다). */
   .activity {
-    margin-top: 12px; background: var(--frame-bg); border-radius: var(--radius-m);
+    flex: 1; min-height: 0; overflow-y: auto;
+    background: var(--frame-bg); border-radius: var(--radius-m);
     box-shadow: var(--shadow-soft); padding: 12px; font-size: 11px; color: var(--ink);
   }
   .activity h4 { margin: 0 0 6px; font-size: 12px; }
