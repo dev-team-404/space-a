@@ -1,8 +1,13 @@
+---
+status: done
+archived: 2026-07-31
+---
+
 # 묶음 ⑥ — 타입 체크 안전망 + 방문 소품 (Q3·Q2·Q1)
 
 - **날짜**: 2026-07-31
 - **컴포넌트**: a-mate (프론트엔드 전용 — Rust·a-hub 미접촉)
-- **관계**: [Life 소셜·일기 통합 후속 로드맵](../plans/2026-07-26-life-social-diary-followups-roadmap.md) **8차 배치 Q1–Q3**.
+- **관계**: [Life 소셜·일기 통합 후속 로드맵](../../../../design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md) **8차 배치 Q1–Q3**.
   묶음 ④(PR #132) 구현 중 식별했으나 의도적으로 범위 밖에 둔 잔여 후속 3건.
 - **목적**: 이 레포에 존재하지 않던 **타입 체크 단계를 도입**하고, 같은 프론트 영역의
   잔여 소품 2건을 한 브랜치에서 함께 정리한다.
@@ -183,7 +188,7 @@ case 'visit': return 'happy';   // ← 추가
 nullable 시드가 유일한 길임을 확인해 준다.
 
 서버에 시각을 직접 묻는 방법도 기각한다 — `/life/me`가 타임스탬프를 주지 않아
-**life 서버 계약 변경**([life-visit.md §4](../../life-visit.md)가 정본)이 필요하고, 이 소품에 비해 과대하다.
+**life 서버 계약 변경**([life-visit.md §4](../../../../design/life-visit.md)가 정본)이 필요하고, 이 소품에 비해 과대하다.
 
 ## 6. 검증
 

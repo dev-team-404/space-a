@@ -332,7 +332,7 @@
   (도입 PR에서 오류 개수부터 세고, 필요하면 `--threshold error`로 단계 도입).
 - **터치**: `package.json`(devDep + `check` 스크립트), 이후 DoD·리뷰 관행.
 
-**묶음 ⑥ 구현 결과(2026-07-31)** — 설계: [스펙](../specs/2026-07-31-typecheck-and-visit-polish-design.md) · [계획](2026-07-31-typecheck-and-visit-polish.md)
+**묶음 ⑥ 구현 결과(2026-07-31)** — 설계: [아카이브 스펙](../../../archive/design/a-mate/specs/2026-07-31-typecheck-and-visit-polish-design.md) · [아카이브 계획](../../../archive/design/a-mate/plans/2026-07-31-typecheck-and-visit-polish.md)
 
 - **Q3 — 실측이 계획을 바꿨다.** 총 **78 errors 중 71건이 라이브러리 `.d.ts`**(패키지 간 전역 타입
   충돌 — `svelte`↔`esrap`의 `Node` 중복 등)라 `skipLibCheck: true` 한 줄로 소거되고, 우리 코드는
