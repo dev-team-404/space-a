@@ -289,7 +289,7 @@
 > 묶음 ④(P4+N1, PR #132) 구현·Codex 리뷰 중 식별했으나 **의도적으로 범위 밖에 둔** 항목들.
 > 셋 다 단독 소품 수준이고 서로 의존 없음.
 
-**Q1 — 방명록 읽음 워터마크의 최초 시드를 서버 시각으로** (묶음 ④ 세션에서 식별, 의도적 미해결)
+**Q1 — 방명록 읽음 워터마크의 최초 시드를 서버 시각으로** (묶음 ④ 세션에서 식별, 의도적 미해결) — ✅ 완료(2026-07-31, 묶음 ⑥)
 
 - **증상**: `App.svelte`의 `loadUnseen(new Date().toISOString())` → `parseUnseen`이 저장분 없음·손상 시
   `guestbookLastSeen`을 **클라이언트 시계**로 초기화하고 곧바로 `saveUnseen`으로 고정한다.
@@ -311,7 +311,7 @@
   - 서버에 시각을 묻는 방법은 `/life/me`가 타임스탬프를 안 주므로 **life 서버 계약 변경**(`life-visit.md §4` 정본)이 필요 — 이 소품에 비해 과대.
 - **터치**: `unseen.ts`(타입 + `parseUnseen` + `newGuestbookIds` 분기), `unseen.test.ts`, `App.svelte`.
 
-**Q2 — 방문 말풍선의 마스코트 표정** *(소품)*
+**Q2 — 방문 말풍선의 마스코트 표정** *(소품)* — ✅ 완료(2026-07-31, 묶음 ⑥)
 
 - **증상**: `anim.ts`의 `resolveState`에 `visit` 분기가 없어 방문 말풍선이 `default`로 떨어진다 →
   낮엔 `idle`, **01~07시엔 `sleep`**. "○○님이 놀러왔어요!"를 자는 표정으로 말한다.
@@ -319,7 +319,7 @@
   묶음 ④ 스펙·플랜이 `anim.ts`를 범위에 넣지 않아 손대지 않았다.
 - **터치**: `anim.ts` + 해당 테스트.
 
-**Q3 — 타입 체크 단계 도입 (`svelte-check`)**
+**Q3 — 타입 체크 단계 도입 (`svelte-check`)** — ✅ 완료(2026-07-31, 묶음 ⑥)
 
 - **증상(실측 2026-07-29)**: 이 레포엔 타입 체크 단계가 **없다**. `package.json` 스크립트는
   `dev`/`build`/`tauri`/`test`뿐이고 `build` = `vite build`(transpile-only), `svelte-check`는 devDependency에 없고
@@ -331,6 +331,43 @@
 - **선행 조사**: 한 번도 타입 체크된 적이 없어 **기존 `.svelte`에 누적된 오류 규모 파악이 먼저**다
   (도입 PR에서 오류 개수부터 세고, 필요하면 `--threshold error`로 단계 도입).
 - **터치**: `package.json`(devDep + `check` 스크립트), 이후 DoD·리뷰 관행.
+
+**묶음 ⑥ 구현 결과(2026-07-31)** — 설계: [아카이브 스펙](../../../archive/design/a-mate/specs/2026-07-31-typecheck-and-visit-polish-design.md) · [아카이브 계획](../../../archive/design/a-mate/plans/2026-07-31-typecheck-and-visit-polish.md)
+
+- **Q3 — 실측이 계획을 바꿨다.** 총 **78 errors 중 71건이 라이브러리 `.d.ts`**(패키지 간 전역 타입
+  충돌 — `svelte`↔`esrap`의 `Node` 중복 등)라 `skipLibCheck: true` 한 줄로 소거되고, 우리 코드는
+  **원인 4종 / 진단 7건**뿐이었다. 위 항목이 대비했던 **단계 도입(`--threshold error`로 점진 축소)은
+  불필요**했다. `@types/node`는 **런타임 메이저에 맞춘다**(이 환경 Node v24.11.0 → `^24`).
+  게이트는 **`npm test` 편입**(`svelte-check --threshold error && vitest run`) — CI(`.github/workflows`)가
+  없는 레포에서 단독 스크립트는 사문화되기 때문. 단독 실행용 `check`도 함께 둔다.
+  경고는 출력에 남기되 실패로 치지 않는다(`LifeView` `<polygon>` a11y 6건 = 아이소메트릭 방 격자
+  키보드 대응이라 별도 UI 과제).
+- **드러난 실오류 중 `HubSettings.api_key` 누락은 진짜 드리프트였다** — 백엔드 `commands.rs:817`이
+  실제로 내려주고 설정 화면 `ConnectionGroup.svelte:18`이 읽는데 **TS 선언에만 없었다**(런타임 정상,
+  선언이 거짓). 타입 체크가 없어 드러나지 않던 종류다. `catalog.ts` 튜플 캐스팅은 `as unknown as`가
+  아니라 **`ground: number[]` 완화**로 처리 — 사용처가 전부 인덱스 접근이라 튜플이 불필요하고,
+  이중 캐스팅은 길이 3 배열도 통과시키는 거짓말이 남는다.
+- **Q3→Q1 순서의 효과가 실증됐다.** Q1이 `loadUnseen`의 인자를 없앴는데, `unseen.ts`만 고친 상태에서
+  `svelte-check`가 `App.svelte:152` `Expected 0 arguments, but got 1`을 잡았다. 타입 체크가 없었다면
+  **빌드·테스트 모두 통과한 채 런타임까지 갔을** 변경이다.
+- **Q1 — nullable 시드.** `guestbookLastSeen: string | null`(null = 미시드), 첫 성공 조회의
+  `max(created_at)`으로 시드("이미 있는 건 다 본 것"). 방명록이 비었으면 미시드로 남아 다음 첫 글이
+  정상적으로 신규가 된다. **`parseUnseen`이 저장된 `null`을 명시적으로 허용해야 한다** — 무효 분기로
+  뭉개면 `diaryDates`까지 함께 버려지는 회귀가 생긴다(수정 전 테스트가 실제로 실패해 확인).
+  `App.svelte`의 즉시 `saveUnseen` 제거로 `state_referenced_locally` 경고도 하나 사라졌다(13→12).
+- **Codex 리뷰 반영(P2 1건) — 스펙 §5.3-4가 뒤집혔다.** 시드 분기를 `observeGuestbook`(부트스트랩·
+  `guestbook:new` **공용**)에 둔 탓에, 빈 방명록(또는 내 글만)으로 부트스트랩한 뒤 도착한 **첫 글이
+  자기 시각으로 워터마크를 세워 스스로를 읽음 처리**했다 — 교체 대상이던 클라 시계 시드보다 나쁜 회귀.
+  "빈 방명록은 미시드로 남기고 다음 첫 글이 신규가 된다"는 스펙 의도가 배선에서 실현되지 않았다.
+  수정: 시드를 **부트스트랩 경로 전용** `seedGuestbookSeen`으로 분리하고, **성공한 부트스트랩은 반드시
+  시드**한다 — 글이 있으면 `max(created_at)`, 없으면 **`''`(최소 워터마크)**. 빈 방은 실제로 본 글이
+  없고 모든 ISO 시각이 `''`보다 크므로 다음 글이 정상적으로 신규가 된다. `null`의 의미는 이제
+  "아직 부트스트랩 안 됨" 하나뿐. 신규 테스트 4건(회귀 재현 포함) → 프론트 **216**.
+- **Q2** — `resolveState`에 `case 'visit': return 'happy'` 추가(3줄). 수정 전 테스트가
+  `expected 'sleep' to be 'happy'`로 실패해 새벽 버그를 재현했다.
+- **검증**: `npm test` = svelte-check 0 errors + vitest **216 passed**(신규 6) · `npm run build` exit 0 ·
+  `cargo test` exit 0(미접촉 확인). **실환경 스모크 불필요** — Q2 육안 확인만 PR 체크리스트의 선택 항목
+  (01\~07시 방문 알림이라 재현이 까다로워 단위 테스트로 덮음).
 
 ## 묶음 실행 계획 (2026-07-27 추가) — 남은 아이템 세션 통합
 
@@ -354,3 +391,7 @@
 **묶음 ④ 방문 인프라 구현 결과(2026-07-29, PR #132)**: **서버가 방문의 단일 원천** — life 서버 `enter()`가 같은 락 안에서 `visits` 행을 기록하므로 클라이언트 하트비트가 필요 없다(자기 방 입장은 미기록). 같은 (방, 방문자)의 **30분 세션화**(새 행 대신 `last_at` 연장 + 이름 재스냅샷)와 **방당 100행 prune**으로 들락날락 도배를 서버에서 억제하고, `GET /life/me/visits?since=&limit=`(본인 방 전용, `last_at` 내림차순, `present` 파생)로 노출한다. 클라이언트는 스캔 편승 `maybe_poll_inbound`가 settings 커서(`inbound_visits_cursor`/`inbound_guestbook_cursor`) 기준 diff — 방문은 `first_at > cursor`라 **세션 연장분이 재-emit되지 않고**, 첫 실행(커서 없음)은 emit 없이 커서만 초기화해 설치 직후 과거분 도배를 막는다. 방명록 diff는 타인 글만(`author_agent_id ≠ 나` — 내 봇 답글 제외). 구서버는 `visits` 404 → **방문 폴링만** 이번 실행 동안 비활성(`maybe_reply_guestbook` INCOMPATIBLE 선례), 방명록 알림은 계속 동작. 기존 `maybe_reply_guestbook`은 병렬 세션(②) 충돌 표면 최소화를 위해 **무수정**. 읽음 상태는 프론트 localStorage(`unseen.ts` — 다이어리는 날짜 set, 방명록은 `lastSeen` + 세션 내 `entry_id` set으로 부트스트랩·이벤트 중복 카운트 구조적 차단). **Codex 리뷰 반영(4건)**: ① `app.emit`은 수신자 0이어도 Ok라 리스너 등록 전 emit이 커서만 전진시켜 소식을 영구 유실 → `AppState.notices_ready` + `notices_ready` **커맨드** 게이트(이벤트로 하면 같은 레이스가 방향만 바뀜)와, `debounce_loop`이 주기 타이머 없는 순수 이벤트 구동이라 게이트만으론 파일 변경 전까지 폴링이 안 되므로 준비 신고가 `poll_inbound_now`로 1회 만회 폴링을 촉발. ② `GuestbookTab`이 `guestbook:new`를 구독해 재조회(안 보인 채 읽음 처리되던 문제). ③ 뱃지 부트스트랩을 2초 폴링 tick으로 이동(비반응 가드 탓에 실패 후 영구 비활성 — `diaryCatchUpStarted` 관용구). ④ 읽음 워터마크를 `maxCreatedAt`로 **서버 시각**에서만 상승(클라이언트 시계와 서버 `created_at`을 비교하던 문제). 테스트: pytest 81(신규 12) · cargo 581+45(신규 `inbound` 10) · 프론트 191(신규 11). `contracts/` 미접촉 — life 계약 정본은 [life-visit.md §4](../../life-visit.md). 설계: [스펙](../../../archive/design/a-mate/specs/2026-07-29-visit-infra-notices-design.md). **잔여 후속은 8차 배치 Q1–Q3.**
 
 **권장 순서**: ①(즉시, V1과 병렬) → ③ → V1·③ 머지 후 ②·④ 병렬 → ⑤ → X1은 측정 후. D1은 틈나는 대로 단독.
+
+**남은 항목(2026-07-31 기준)**: **D1**(다이어리 탭 일별 활동 시각화 — 언제든 단독)과
+**X1**(첫 로딩 지연 — 측정 선행, hub 연결된 사용자 환경 필요) **둘뿐**이다.
+①~⑥·G·H·V1·O1·N1은 전부 완료. 묶음 ②·④·O1의 **실환경 스모크는 life 서버 재배포 대기** 중.

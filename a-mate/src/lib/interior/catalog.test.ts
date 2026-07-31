@@ -149,7 +149,7 @@ describe('interior asset orientation contract', () => {
       const item = FURNITURE_BY_ID.get(assetId)!;
       for (const rotation of ROTATIONS) {
         const source = item.render.sources[rotation];
-        const axes = sourceAxes[source];
+        const axes = sourceAxes?.[source];
         if (!axes) continue;
         const [sourcePositive, sourceNegative] = axes;
         const mirrored = item.render.mirrorX[rotation];
@@ -166,7 +166,7 @@ describe('interior asset orientation contract', () => {
   });
 
   it('anchors every window at the transformed midpoint of its bottom frame', () => {
-    const metrics = assetMetricsJson as Record<string, { width: number; height: number; ground: [number, number] }>;
+    const metrics = assetMetricsJson as Record<string, { width: number; height: number; ground: number[] }>;
     for (const [assetId, sourceSlope] of Object.entries(WINDOW_SOURCE_EDGE_SLOPE_BY_ASSET)) {
       const window = FURNITURE_BY_ID.get(assetId)!;
       const id = assetId.slice('window.'.length);

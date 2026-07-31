@@ -14,7 +14,8 @@ export function resolveState(input: { bubbleKind: BubbleKind | null; hour: numbe
   switch (input.bubbleKind) {
     case 'finding': return 'alert';
     case 'diary':
-    case 'occasion': return 'happy';
+    case 'occasion':
+    case 'visit': return 'happy';
     case 'chatter': return 'talk';
     default: return input.hour >= 1 && input.hour < 7 ? 'sleep' : 'idle';
   }

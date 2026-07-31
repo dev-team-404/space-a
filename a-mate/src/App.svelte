@@ -24,7 +24,7 @@
   } from './lib/notices';
   import {
     addDiaryDate, clearDiaryDates, clearGuestbookSeen, loadUnseen, maxCreatedAt, newGuestbookIds,
-    saveUnseen,
+    saveUnseen, seedGuestbookSeen,
   } from './lib/unseen';
   import { isTab, resolveTabAfterLifeChange, type Tab } from './lib/ui/tab-routing';
   import { normalizeGroup, type SettingsGroup } from './lib/ui/settings/groups';
@@ -93,7 +93,7 @@
         if (!gbBootstrapped && myLifeId && meId) {
           gbBootstrapped = true;
           lifeGuestbook(myLifeId)
-            .then(({ entries }) => observeGuestbook(entries))
+            .then(({ entries }) => { observeGuestbook(entries); seedGuestbookIfNeeded(entries); })
             .catch(() => { gbBootstrapped = false; });
         }
         // O1 — 대문사진 게시. 앱이 꺼진 동안의 미게시분을 메우고, 새 컷·서버 전환에도 다시 선다.
@@ -149,8 +149,7 @@
   let diaryFocus = $state<string | null>(null);
   let notices = $state<Notice[]>(loadNotices());
   // N1 탭 뱃지 — 다이어리는 날짜 set(영속), 방명록은 entry_id set(세션) + lastSeen(영속)
-  let unseen = $state(loadUnseen(new Date().toISOString()));
-  saveUnseen(unseen); // 최초 실행: 초기 lastSeen을 고정해 재시작마다 리셋되지 않게
+  let unseen = $state(loadUnseen());
   let gbUnseenIds = $state(new Set<string>());
   // 관측한 타인 글의 최신 서버 시각 — 클리어 시 워터마크로 쓴다(클라이언트 시계 배제, 단조 증가)
   let gbMaxSeenAt = $state<string | null>(null);
@@ -163,6 +162,15 @@
     if (fresh.length) gbUnseenIds = new Set([...gbUnseenIds, ...fresh]);
     const at = maxCreatedAt(rows, meId);
     if (at && (!gbMaxSeenAt || at > gbMaxSeenAt)) gbMaxSeenAt = at;
+  }
+
+  // 최초 시드는 **부트스트랩 경로 전용**이다 — 이벤트에서 시드하면 그 글 자신의 시각이 워터마크가 돼
+  // 방금 온 글을 읽음 처리한다(빈 부트스트랩 뒤 첫 글이 사라지던 경로).
+  function seedGuestbookIfNeeded(rows: { author_agent_id: string; created_at: string }[]) {
+    const next = seedGuestbookSeen(unseen, rows, meId);
+    if (next === unseen) return;
+    unseen = next;
+    saveUnseen(unseen);
   }
 
   // O1 — 대문 게시 게이트: 로컬 조회가 **성공한** 사이클에만 열린다.

@@ -44,7 +44,7 @@ export function resolveTurnaroundView(spec: TurnaroundSpec, target: Direction): 
 }
 
 const spriteFiles = import.meta.glob<string>('../../assets/interior/furniture/**/*.png', { eager: true, query: '?url', import: 'default' });
-type AssetMetric = { width: number; height: number; ground: [number, number] };
+type AssetMetric = { width: number; height: number; ground: number[] };
 const assetMetrics = assetMetricsJson as Record<string, AssetMetric>;
 const masks: Record<string, string[]> = {
   'sofa.mint-loveseat':['1111','1111'], 'sofa.coral-two-seat':['1111','1111'], 'sofa.lavender-sectional':['11111','11111','00111'], 'sofa.wood-frame':['1111','1111'], 'sofa.navy-modern':['1111','1111'],
