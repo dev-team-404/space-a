@@ -282,6 +282,18 @@
     좌·우가 각자 영역 안에서 스크롤. 높이가 구조적으로 같아지고 세션을 다 펼쳐도 레이아웃이 안 무너진다.
   - **세션 프롬프트 생략**: 한 줄 ellipsis라 전문을 볼 방법이 없었다 → `<button>`으로 바꿔
     hover는 `title`, 클릭은 제자리 펼침(키보드로도 열린다).
+- **Codex 리뷰 반영(P2 2건) — 스펙의 날짜 규약 서술이 틀렸다.**
+  - 스펙은 "날짜 버킷은 기존과 같은 `date(...,'localtime')`"이라 했지만 **함수만 같고 컬럼이 달랐다** —
+    요약(`daily_rollup`)은 `COUNT(DISTINCT session_id) … date(ts,'localtime')`으로 **이벤트 발생일**
+    기준인데, `sessions_for_date`는 `date(first_ts,'localtime')` = **세션 시작일** 기준이었다.
+    양방향으로 어긋난다: ① 자정 넘긴 세션은 요약엔 잡히고 목록엔 없다 ② `SessionMeta`·`UserPrompt`만
+    있는 세션은 `events` 행이 없어(세션 단위 필드는 `sessions`로만 라우팅) 요약엔 없고 목록엔 있다.
+    → **events를 날짜로 조인**해 멤버십을 rollup과 구조적으로 일치시켰고, 테스트가 "요약 세션 수 ==
+    목록 길이"를 단언한다. `first_ts`의 의미도 **그날 첫 활동 시각**으로 바꿨다(자정 넘긴 세션이
+    어제 시각으로 표시되지 않게).
+  - 스킬·MCP 칩을 이름만으로 keying해, **동명이 있으면**(네임스페이스 없는 개인 스킬 = MCP 서버명)
+    Svelte `each_key_duplicate`로 **패널이 통째로 렌더링되지 않았다**. `skills`(`tool_target`)와
+    `mcp_servers`(`tool_server`)는 각자 distinct일 뿐 서로 겹칠 수 있다 → 키에 출처 접두를 붙였다.
 - **검증**: `npm test` = svelte-check 0 errors + vitest **224 passed** · `npm run build` exit 0 ·
   `cargo test` **586 + 45**(신규 1). 신규 프론트 테스트는 7건인데 총계가 8 늘어난 이유는
   `no-hardcoded-colors.test.ts`가 **`.svelte` 파일마다 테스트를 동적 생성**하기 때문(신규 컴포넌트분 +1,
