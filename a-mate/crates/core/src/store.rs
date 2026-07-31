@@ -818,15 +818,25 @@ impl SqliteStore {
         Ok(row)
     }
 
-    /// 그날(로컬 날짜) 시작한 세션 목록 — `first_ts` 오름차순.
-    /// 날짜 버킷 규약은 나머지 일별 집계와 동일한 `date(...,'localtime')`이다
-    /// (다르게 하면 요약의 세션 수와 이 목록의 길이가 어긋난다).
+    /// 그날(로컬 날짜) **이벤트가 발생한** 세션 목록 — 그날 첫 활동 시각 오름차순.
+    ///
+    /// 멤버십 정의를 `daily_rollup`과 일치시킨다 — 그쪽도
+    /// `COUNT(DISTINCT session_id) … GROUP BY date(ts,'localtime')`이다(`rebuild_rollup`).
+    /// `sessions.first_ts`(세션 시작일) 기준으로 뽑으면 두 방향으로 어긋난다:
+    /// ① 자정을 넘긴 세션은 요약엔 잡히는데 목록에선 빠지고,
+    /// ② `SessionMeta`·`UserPrompt`만 있는 세션은 `events` 행이 없어 요약엔 없는데 목록엔 남는다.
+    ///
+    /// `first_ts`는 세션 시작이 아니라 **그날 첫 활동 시각**이다(자정 넘긴 세션이 어제 시각으로
+    /// 표시되지 않게). 프롬프트는 세션의 정체성이므로 세션 전체의 첫 프롬프트를 그대로 쓴다.
     pub fn sessions_for_date(&self, date: &str) -> Result<Vec<DaySession>> {
         let mut stmt = self.conn.prepare(
-            "SELECT session_id, project_id, cwd, first_ts, first_prompt_preview
-               FROM sessions
-              WHERE date(first_ts,'localtime')=?1
-              ORDER BY first_ts",
+            "SELECT s.session_id, s.project_id, s.cwd, MIN(e.ts) AS day_first_ts,
+                    s.first_prompt_preview
+               FROM sessions s
+               JOIN events e ON e.session_id = s.session_id
+              WHERE date(e.ts,'localtime')=?1
+              GROUP BY s.session_id
+              ORDER BY day_first_ts",
         )?;
         let rows = stmt.query_map(params![date], |r| {
             let project_id: String = r.get(1)?;
@@ -2078,14 +2088,16 @@ pub struct DaySummary {
     pub tok_cache_create: u64,
 }
 
-/// 그날 시작한 세션 1건 — 다이어리 일별 활동 패널용.
+/// 그날 활동한 세션 1건 — 다이어리 일별 활동 패널용.
 /// `project`는 **표시명**이다(`cwd`의 basename, 없으면 `project_id` 폴백) —
 /// `project_id`는 `win:d:\project\space-a` 형태의 정규화 키라 그대로 보여줄 값이 아니다.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DaySession {
     pub session_id: String,
     pub project: String,
+    /// **그날의 첫 활동 시각**(세션 시작 시각이 아니다 — 자정을 넘긴 세션도 있다).
     pub first_ts: String,
+    /// 세션 전체의 첫 프롬프트(그날 첫 프롬프트가 아니다) — 세션의 정체성을 나타내므로.
     pub first_prompt: Option<String>,
 }
 
@@ -4588,7 +4600,7 @@ mod tests {
     }
 
     #[test]
-    fn sessions_for_date_buckets_by_local_date_and_names_by_cwd_basename() {
+    fn sessions_for_date_matches_rollup_membership_and_names_by_cwd_basename() {
         use crate::model::*;
         let store = SqliteStore::open_in_memory().unwrap();
         let now = chrono::Local::now();
@@ -4611,6 +4623,15 @@ mod tests {
             kind,
         };
 
+        let turn = || EventKind::AssistantTurn {
+            model: NormModel::from_raw_id("claude-opus-4-8"),
+            usage: TokenUsage::default(),
+            web_search: 0,
+            web_fetch: 0,
+        };
+        // 어제 시작 → 오늘도 활동한 세션(자정 넘김). 오늘 버킷에 **잡혀야** 한다.
+        let yesterday = (now - chrono::Duration::days(1)).to_rfc3339();
+
         store
             .upsert_events(&[
                 // cwd 있는 세션 — 표시명은 basename
@@ -4629,32 +4650,38 @@ mod tests {
                         is_command: false,
                     },
                 ),
+                ev("s1", 20, &ts, turn()),
                 // cwd 없는 세션 — project_id로 폴백. 프롬프트도 없음
+                ev("s2", 0, &ts, turn()),
+                // 다른 날짜 세션 — 오늘 버킷에 안 잡혀야 한다
+                ev("s3", 0, "2026-01-02T03:04:05Z", turn()),
+                // 이벤트가 없는(메타·프롬프트만) 세션 — daily_rollup에 안 잡히므로 목록에도 없어야 한다
                 ev(
-                    "s2",
+                    "s4",
                     0,
                     &ts,
-                    EventKind::AssistantTurn {
-                        model: NormModel::from_raw_id("claude-opus-4-8"),
-                        usage: TokenUsage::default(),
-                        web_search: 0,
-                        web_fetch: 0,
-                    },
+                    EventKind::SessionMeta { cwd: "D:\\Project\\meta-only".into(), git_branch: None },
                 ),
-                // 다른 날짜 세션 — 오늘 버킷에 안 잡혀야 한다
-                ev(
-                    "s3",
-                    0,
-                    "2026-01-02T03:04:05Z",
-                    EventKind::SessionMeta { cwd: "D:\\Project\\other".into(), git_branch: None },
-                ),
+                // 자정 넘긴 세션: 시작은 어제, 오늘도 활동
+                ev("s5", 0, &yesterday, turn()),
+                ev("s5", 10, &ts, turn()),
             ])
             .unwrap();
 
         let rows = store.sessions_for_date(&today).unwrap();
         let ids: Vec<&str> = rows.iter().map(|r| r.session_id.as_str()).collect();
-        assert!(ids.contains(&"s1") && ids.contains(&"s2"), "오늘 세션 2건: {ids:?}");
+        assert!(ids.contains(&"s1") && ids.contains(&"s2"), "오늘 세션: {ids:?}");
         assert!(!ids.contains(&"s3"), "다른 날짜 세션이 섞였다: {ids:?}");
+        assert!(!ids.contains(&"s4"), "이벤트 없는 세션은 요약에도 없으니 제외: {ids:?}");
+        assert!(ids.contains(&"s5"), "자정 넘긴 세션이 빠졌다: {ids:?}");
+
+        // 요약(daily_rollup)의 세션 수와 목록 길이가 일치해야 한다 — 같은 정의를 쓰므로.
+        store.rebuild_rollup().unwrap();
+        let summary = store.summary_for_date(&today).unwrap();
+        assert_eq!(
+            summary.session_count as usize, rows.len(),
+            "요약 세션 수와 목록 길이 불일치: {} vs {}", summary.session_count, rows.len()
+        );
 
         let s1 = rows.iter().find(|r| r.session_id == "s1").unwrap();
         assert_eq!(s1.project, "space-a", "cwd basename을 표시명으로");
@@ -4663,5 +4690,12 @@ mod tests {
         let s2 = rows.iter().find(|r| r.session_id == "s2").unwrap();
         assert_eq!(s2.project, "win:d:\\project\\space-a", "cwd 없으면 project_id 폴백");
         assert!(s2.first_prompt.is_none());
+
+        // 자정 넘긴 세션의 표시 시각은 **그날 첫 활동**이어야 한다(어제 23시가 아니라).
+        let s5 = rows.iter().find(|r| r.session_id == "s5").unwrap();
+        assert_eq!(
+            &s5.first_ts[..10], &today,
+            "그날 첫 활동 시각이어야 한다: {}", s5.first_ts
+        );
     }
 }
