@@ -15,7 +15,7 @@
         "label": "chat",
         "url": "chat.html",
         "title": "agent mentor",
-        "width": 960,
+        "width": 1180,
         "height": 820,
         "resizable": false,
         "visible": false
