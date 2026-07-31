@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-31
+---
+
 # 묶음 ⑦ — 창 고정 + 홈 재배치 + 일별 활동 패널 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
