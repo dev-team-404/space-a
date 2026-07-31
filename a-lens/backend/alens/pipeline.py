@@ -8,11 +8,13 @@
 스펙: docs/design/a-lens/specs/2026-07-30-room-board-highlight.md
 """
 
+import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
-from . import collector
+from . import collab, collector
 
+log = logging.getLogger("alens.pipeline")
 KST = timezone(timedelta(hours=9))
 
 # 하이라이트 결정론 랭킹 (04-data-mapping "하이라이트 선정 기준", 2026-07-14 결정)
@@ -257,6 +259,13 @@ def space_view(space_id: str, tier: str = "member") -> dict:
     """방 뷰모델 — work 상세. 프레즌스(online/offline)는 collector가 work의 최근 쓰기
     활동으로 이미 판정해 status·last_active_at에 채워둔다 (2026-07-19, life 프레즌스 대체)."""
     detail = collector.space_detail(space_id, tier)
+    snap = collector.snapshot()
     # 칠판 하이라이트는 소스가 준 값을 쓰지 않고 여기서 다시 뽑는다 — 소스별 규칙 불일치 제거(스펙 §6).
-    detail["highlight"] = _room_highlight(space_id, collector.snapshot(), tier)
+    detail["highlight"] = _room_highlight(space_id, snap, tier)
+    # 협업 지도 — 사람 노드 + 엣지 3종. 계산이 터져도 방은 열려야 하므로 빈 그래프로 강등한다.
+    try:
+        detail["collab"] = collab.build(detail, snap)
+    except Exception:  # noqa: BLE001
+        log.exception("협업 지도 계산 실패 (%s) — 빈 그래프로 강등", space_id)
+        detail["collab"] = None
     return detail

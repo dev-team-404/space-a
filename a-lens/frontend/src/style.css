@@ -31,7 +31,7 @@ button { font: inherit; cursor: pointer; }
 .primary-btn:disabled { opacity: 0.5; cursor: default; }
 .ghost-btn {
   background: transparent;
-  color: #aab2bd;
+  color: #d5dbe4;
   border: 1px solid #333a45;
   border-radius: 8px;
   padding: 10px 14px;
@@ -41,7 +41,7 @@ button { font: inherit; cursor: pointer; }
 .icon-btn {
   background: transparent;
   border: none;
-  color: #aab2bd;
+  color: #d5dbe4;
   font-size: 15px;
   padding: 4px 8px;
 }
@@ -57,18 +57,18 @@ button { font: inherit; cursor: pointer; }
 .home-wrap { max-width: 900px; margin: 0 auto; }
 .home-head { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
 .home-head h1 { font-size: 28px; letter-spacing: 1px; }
-.home-sub { color: #8b93a0; flex: 1; }
-.home-section { margin: 26px 0 12px; font-size: 14px; color: #c8cfd8; }
+.home-sub { color: #a2aab7; flex: 1; }
+.home-section { margin: 26px 0 12px; font-size: 14px; color: #dfe4ea; }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
 .life-card {
   background: #171d2b;
-  border: 1px solid #2b3345;
+  border: 1px solid #3a4459;
   border-radius: 12px;
   padding: 16px;
 }
 .life-card.dim { opacity: 0.75; }
 .life-card-name { font-weight: 700; margin-bottom: 6px; }
-.life-card-stats { font-size: 12px; color: #8b93a0; min-height: 18px; margin-bottom: 12px; }
+.life-card-stats { font-size: 12px; color: #a2aab7; min-height: 18px; margin-bottom: 12px; }
 .life-card-actions { display: flex; gap: 8px; }
 .error-note { color: #d08770; margin: 12px 0; font-size: 13px; }
 
@@ -80,8 +80,8 @@ button { font: inherit; cursor: pointer; }
   align-items: center;
   gap: 14px;
   padding: 12px 16px;
-  background: rgba(13, 18, 32, 0.85);
-  border-bottom: 1px solid #232c3e;
+  background: rgba(13, 18, 32, 0.93);
+  border-bottom: 1px solid #33405a;
   backdrop-filter: blur(4px);
 }
 #life-header .spacer { flex: 1; }
@@ -142,7 +142,7 @@ button { font: inherit; cursor: pointer; }
 .trail-who b { font-size: 14px; }
 .trail-stats {
   display: flex; flex-wrap: wrap; gap: 10px;
-  font-size: 12px; color: #aab2bd; margin-bottom: 8px;
+  font-size: 12px; color: #d5dbe4; margin-bottom: 8px;
 }
 .trail-stats b { color: #d9a441; }
 .trail-row {
@@ -151,10 +151,46 @@ button { font: inherit; cursor: pointer; }
 }
 .trail-row:hover { background: #222836; }
 .trail-row.doc { border-left-color: #7fb3d5; }
-.trail-head { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #767d87; }
+.trail-head { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #98a1ae; }
 .trail-kind { flex: 0 0 auto; }
 .trail-at { margin-left: auto; }
 .trail-title { font-size: 12.5px; line-height: 1.45; margin: 2px 0; color: #e4e9f0; }
+
+/* 사람 아이콘 — 마스코트 사진, 없으면 방에서 쓰는 캐릭터 스프라이트로 떨어진다.
+   Life가 URL은 주지만 이미지를 안 올린 사람(404)이 있어서, 실패해도 빈칸이 되지 않는다. */
+.agent-face {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  border: 1px solid #4a5361;
+  background: #222938;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.agent-face.on { border-color: #7fc99a; box-shadow: 0 0 6px #7fc99a55; }
+
+/* 온라인 표시 — 이름 옆 초록 점이 천천히 숨쉰다. 깜빡임은 시선을 뺏으므로 완전히 꺼지지
+   않고 밝기만 오간다. 움직임을 싫어하는 설정(prefers-reduced-motion)이면 켜둔 채로 멈춘다. */
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7fc99a;
+  flex: 0 0 auto;
+  box-shadow: 0 0 6px #7fc99aaa;
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 7px #7fc99acc; }
+  50% { opacity: 0.35; box-shadow: 0 0 2px #7fc99a44; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+}
+.agent-face .agent-mascot { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 0; }
 
 /* 팀 활동 줄의 Life 마스코트 아이콘 — 상태 점 자리를 대신한다 */
 .agent-mascot {
@@ -201,14 +237,14 @@ button { font: inherit; cursor: pointer; }
 .pixel-bubble::after { bottom: -15px; border-top-color: #1e232b; }
 .pixel-bubble .bubble-line + .bubble-line { margin-top: 2px; }
 /* 앞선 턴은 흐리게 — 지금 말하는 줄에 시선이 가게 */
-.pixel-bubble .bubble-line.past { color: #8b93a0; }
+.pixel-bubble .bubble-line.past { color: #a2aab7; }
 @keyframes bubble-pop {
   from { opacity: 0; transform: translate(-50%, calc(-100% + 6px)); }
   to { opacity: 1; transform: translate(-50%, -100%); }
 }
-#panel-body { font-size: 13px; line-height: 1.6; color: #aab2bd; }
+#panel-body { font-size: 13px; line-height: 1.6; color: #d5dbe4; }
 .panel-close { position: absolute; top: 8px; right: 8px; }
-.muted { color: #767d87; font-size: 12px; }
+.muted { color: #98a1ae; font-size: 12.5px; }
 .badge {
   display: inline-block;
   border: 1px solid;
@@ -217,11 +253,11 @@ button { font: inherit; cursor: pointer; }
   padding: 1px 8px;
   margin-right: 4px;
 }
-.issue-item { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #2b3345; }
+.issue-item { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid #3a4459; }
 .timeline { margin: 8px 0 0 16px; display: grid; gap: 6px; }
-.doc-item { padding: 10px; border: 1px solid #2b3345; border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
+.doc-item { padding: 10px; border: 1px solid #3a4459; border-radius: 8px; margin-bottom: 8px; cursor: pointer; }
 .doc-item:hover { border-color: #d9a441; }
-.doc-summary { margin-top: 6px; font-size: 12px; color: #98a0ab; }
+.doc-summary { margin-top: 6px; font-size: 12px; color: #b3bbc7; }
 
 /* ── 오른쪽 Collaboration Hub (상시 사이드바 + 탭) ── */
 #hub {
@@ -230,8 +266,8 @@ button { font: inherit; cursor: pointer; }
   width: var(--hub-w, 400px); /* 드래그로 조절 (main.ts). 기본 400px */
   display: flex;
   flex-direction: column;
-  background: rgba(15, 20, 34, 0.92);
-  border-left: 1px solid #232c3e;
+  background: rgba(15, 20, 34, 0.97);
+  border-left: 1px solid #33405a;
   backdrop-filter: blur(6px);
   z-index: 10;
 }
@@ -268,9 +304,9 @@ button { font: inherit; cursor: pointer; }
   right: 0;
   transform: translateY(-50%);
   z-index: 10;
-  background: rgba(24, 32, 54, 0.92);
-  color: #c8cfd8;
-  border: 1px solid #232c3e;
+  background: rgba(24, 32, 54, 0.96);
+  color: #dfe4ea;
+  border: 1px solid #33405a;
   border-right: none;
   border-radius: 8px 0 0 8px;
   padding: 12px 8px;
@@ -285,7 +321,7 @@ button { font: inherit; cursor: pointer; }
   display: flex;
   gap: 2px;
   padding: 0 12px 10px;
-  border-bottom: 1px solid #202839;
+  border-bottom: 1px solid #2e3850;
 }
 .hub-tab {
   flex: 1;
@@ -296,38 +332,55 @@ button { font: inherit; cursor: pointer; }
   background: transparent;
   border: none;
   border-radius: 8px;
-  color: #7a828e;
+  color: #99a2af;
   padding: 8px 4px;
   font-size: 11px;
 }
 .hub-tab-ico { font-size: 15px; line-height: 1; filter: grayscale(0.4); }
-.hub-tab:hover { color: #c8cfd8; background: #182036; }
+.hub-tab:hover { color: #dfe4ea; background: #182036; }
 .hub-tab.on { color: #7fb3d5; background: #182036; }
 .hub-tab.on .hub-tab-ico { filter: none; }
-/* 위 2/3: 선택 탭(이슈/지식) 내용 — 넘치면 스크롤 */
-#hub-body { flex: 2; min-height: 0; overflow-y: auto; padding: 14px; }
-/* 아래 1/3: 팀 활동 상시 표시. 헤더·서브탭은 고정, 명단만 스크롤 */
+/* 탭 내용이 사이드바 전체를 쓴다 — 팀 활동은 아래 왼쪽 카드로 빠졌다 */
+#hub-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; }
+
+/* ── 팀 활동 — 방 왼쪽 아래 작은 떠 있는 카드 ── */
+/* 사이드바 아래 1/3을 차지하던 것을 빼냈다: 탭 내용(작업 기록·협업 지도)이 세로를 다 쓰고,
+   "지금 누가 있나"는 방을 보면서 곁눈으로 확인하는 정보라 씬 위에 작게 얹는 편이 맞다.
+   Hub를 접어도 남는다 — 접힘은 '패널을 치운다'지 '사람을 숨긴다'가 아니다. */
 #hub-activity {
-  flex: 1;
-  min-height: 0;
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 9; /* Hub(10)보다 아래 — 사이드바를 넓히면 그 아래로 들어간다 */
+  width: clamp(280px, 26vw, 380px); /* 가로로 길게 — 이름과 상태가 한 줄에 들어가야 읽힌다 */
+  max-height: min(38vh, 320px);
   display: flex;
   flex-direction: column;
-  padding: 12px 14px 14px;
-  border-top: 1px solid #232c3e;
-  background: rgba(10, 14, 24, 0.4);
+  padding: 10px 12px 11px;
+  border: 1px solid #39435a;
+  border-radius: 10px;
+  background: rgba(17, 23, 40, 0.94);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
+#hub-activity .feed-head h3 { font-size: 12px; color: #dfe4ea; letter-spacing: 0.02em; }
+#hub-activity .feed-head { margin-bottom: 4px; }
+#hub-activity .agent-row { padding: 5px 2px; gap: 8px; }
+#hub-activity .agent-name { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#hub-activity .agent-status { font-size: 11px; white-space: nowrap; }
+#hub-activity .sub-tab { padding: 2px 10px; font-size: 11px; }
 .activity-feed { margin-bottom: 0; display: flex; flex-direction: column; min-height: 0; flex: 1; }
-.activity-subtabs { display: flex; gap: 6px; margin: 4px 0 8px; }
+.activity-subtabs { display: flex; gap: 5px; margin: 2px 0 6px; }
 .sub-tab {
   background: #151b2a;
   border: 1px solid #26304355;
-  color: #8a929e;
+  color: #a8b0bc;
   border-radius: 999px;
   padding: 3px 12px;
   font-size: 11px;
   font-weight: 600;
 }
-.sub-tab:hover { color: #c8cfd8; }
+.sub-tab:hover { color: #dfe4ea; }
 .sub-tab.on { color: #7fb3d5; border-color: #7fb3d5; background: #182036; }
 .activity-list { min-height: 0; overflow-y: auto; }
 
@@ -339,7 +392,7 @@ button { font: inherit; cursor: pointer; }
   margin-bottom: 8px;
 }
 .feed-head h3 { font-size: 13px; color: #dfe4ea; }
-.feed-sub { font-size: 11px; color: #6b727d; }
+.feed-sub { font-size: 11px; color: #949cab; }
 .feed-card {
   background: #151b2a;
   border: 1px solid #26304333;
@@ -348,11 +401,11 @@ button { font: inherit; cursor: pointer; }
   margin-bottom: 8px;
 }
 .fc-title { font-size: 13px; font-weight: 600; color: #e8eaed; margin-bottom: 6px; }
-.feed-card .timeline { margin: 0; padding-left: 8px; border-left: 2px solid #2b3345; display: grid; gap: 5px; }
-.tl-step { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: #c8cfd8; }
-.tl-actor { color: #767d87; font-size: 11px; }
-.tl-at { margin-left: auto; color: #6b727d; font-size: 11px; font-variant-numeric: tabular-nums; }
-.small { font-size: 12px; }
+.feed-card .timeline { margin: 0; padding-left: 8px; border-left: 2px solid #3a4459; display: grid; gap: 5px; }
+.tl-step { display: flex; align-items: baseline; gap: 6px; font-size: 12px; color: #dfe4ea; }
+.tl-actor { color: #98a1ae; font-size: 11px; }
+.tl-at { margin-left: auto; color: #949cab; font-size: 11px; font-variant-numeric: tabular-nums; }
+.small { font-size: 12.5px; }
 
 .agent-row {
   display: flex;
@@ -360,13 +413,13 @@ button { font: inherit; cursor: pointer; }
   gap: 8px;
   padding: 7px 4px;
   font-size: 12px;
-  border-bottom: 1px solid #1c2333;
+  border-bottom: 1px solid #2a3346;
 }
 .agent-row.off { opacity: 0.55; }
 .agent-dot { width: 8px; height: 8px; border-radius: 50%; background: #4a5260; flex: none; }
 .agent-dot.on { background: #7fc99a; box-shadow: 0 0 6px #7fc99a88; }
 .agent-name { font-weight: 600; color: #e8eaed; }
-.agent-status { margin-left: auto; color: #8a929e; font-size: 11px; text-align: right; }
+.agent-status { margin-left: auto; color: #a8b0bc; font-size: 11px; text-align: right; }
 
 /* ── 오버레이 (빌더·모달) ── */
 .overlay {
@@ -380,7 +433,7 @@ button { font: inherit; cursor: pointer; }
 }
 .builder-card, .modal-card {
   background: #161c29;
-  border: 1px solid #2b3345;
+  border: 1px solid #3a4459;
   border-radius: 14px;
   max-width: 880px;
   width: calc(100vw - 48px);
@@ -394,20 +447,20 @@ button { font: inherit; cursor: pointer; }
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  border-bottom: 1px solid #232c3e;
+  border-bottom: 1px solid #33405a;
 }
 .builder-head h2 { font-size: 16px; }
 .builder-body { display: flex; gap: 20px; padding: 18px; overflow-y: auto; }
 .builder-form { flex: 1; min-width: 260px; }
 .builder-preview { display: flex; flex-direction: column; gap: 10px; }
-#b-preview-canvas { border: 1px solid #2b3345; border-radius: 10px; overflow: hidden; line-height: 0; }
-.field-label { display: block; font-size: 12px; color: #8b93a0; margin: 14px 0 6px; }
+#b-preview-canvas { border: 1px solid #3a4459; border-radius: 10px; overflow: hidden; line-height: 0; }
+.field-label { display: block; font-size: 12px; color: #a2aab7; margin: 14px 0 6px; }
 .field-note { font-size: 12px; color: #d9a441; min-height: 16px; margin-top: 4px; }
 #b-space {
   width: 100%;
   background: #101624;
   color: #e8eaed;
-  border: 1px solid #2b3345;
+  border: 1px solid #3a4459;
   border-radius: 8px;
   padding: 8px 10px;
 }
@@ -417,8 +470,8 @@ button { font: inherit; cursor: pointer; }
   align-items: center;
   gap: 6px;
   background: #101624;
-  border: 1px solid #2b3345;
-  color: #aab2bd;
+  border: 1px solid #3a4459;
+  color: #d5dbe4;
   border-radius: 8px;
   padding: 6px 10px;
   font-size: 12px;
@@ -432,7 +485,7 @@ button { font: inherit; cursor: pointer; }
 .char-swatch {
   width: 64px; height: 76px;
   display: flex; align-items: flex-end; justify-content: center;
-  background: #101624; border: 2px solid #2b3345; border-radius: 10px;
+  background: #101624; border: 2px solid #3a4459; border-radius: 10px;
   padding: 4px; cursor: pointer;
 }
 .char-swatch img { max-height: 100%; width: auto; image-rendering: pixelated; }
@@ -444,7 +497,7 @@ button { font: inherit; cursor: pointer; }
   font-family: inherit;
   font-size: 13px;
   line-height: 1.7;
-  color: #c8cfd8;
+  color: #dfe4ea;
 }
 /* .md — create_page 원문을 marked로 렌더링한 실제 HTML. pre-wrap을 끄고
    태그별로 스타일을 입혀 나머지 UI(이슈 공유/지식 재사용)와 결을 맞춘다. */
@@ -462,12 +515,12 @@ button { font: inherit; cursor: pointer; }
   background: #1a2436; border-radius: 4px; padding: 1px 5px; font-size: 12px;
 }
 .doc-body.md pre {
-  background: #101624; border: 1px solid #2b3345; border-radius: 8px;
+  background: #101624; border: 1px solid #3a4459; border-radius: 8px;
   padding: 10px; overflow-x: auto;
 }
 .doc-body.md pre code { background: none; padding: 0; }
 .doc-body.md blockquote {
-  margin: 0 0 10px; padding: 2px 12px; border-left: 2px solid #2b3345; color: #98a0ab;
+  margin: 0 0 10px; padding: 2px 12px; border-left: 2px solid #3a4459; color: #b3bbc7;
 }
 /* 더미(fake) 데이터 구분 배지 — 실데이터와 섞여 표시될 때 오해 방지 */
 .demo-badge {
@@ -485,8 +538,8 @@ button { font: inherit; cursor: pointer; }
 .issue-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .issue-chip {
   background: #101624;
-  border: 1px solid #2b3345;
-  color: #aab2bd;
+  border: 1px solid #3a4459;
+  color: #d5dbe4;
   border-radius: 999px;
   padding: 3px 10px;
   font-size: 11px;
@@ -498,8 +551,8 @@ button { font: inherit; cursor: pointer; }
 .issue-person {
   flex: 1;
   background: #101624;
-  border: 1px solid #2b3345;
-  color: #c8cfd8;
+  border: 1px solid #3a4459;
+  color: #dfe4ea;
   border-radius: 8px;
   padding: 4px 8px;
   font-size: 12px;
@@ -514,10 +567,10 @@ button { font: inherit; cursor: pointer; }
   letter-spacing: 0.04em;
   color: #7d8590;
 }
-.bucket-head::after { content: ''; flex: 1; height: 1px; background: #2b3345; }
+.bucket-head::after { content: ''; flex: 1; height: 1px; background: #3a4459; }
 .issue-row {
   background: #101624;
-  border: 1px solid #2b3345;
+  border: 1px solid #3a4459;
   border-left: 3px solid #888;
   border-radius: 8px;
   padding: 8px 10px;
@@ -643,3 +696,162 @@ button { font: inherit; cursor: pointer; }
 .issue-detail-h { margin: 14px 0 6px; font-size: 12px; color: #d9a441; }
 .issue-timeline { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 7px; }
 .issue-timeline li { font-size: 12.5px; line-height: 1.5; color: #dfe4ec; }
+
+/* ── 협업 지도 (스펙: docs/design/a-lens/specs/2026-07-31-collab-graph.md) ── */
+/* 사실은 실선, 추정은 점선. 굵기·색으로 가르지 않는 이유는 스펙 §2 참고. */
+.collab-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11px;
+  color: #a8b0bc;
+  margin-bottom: 6px;
+}
+.collab-legend i.ln { display: inline-block; width: 14px; height: 2px; margin-right: 4px; vertical-align: 3px; }
+.collab-legend i.ln.dashed {
+  height: 0;
+  border-top: 2px dashed #9aa3b2;
+  background: none;
+}
+.collab-legend b { color: #b9c0cb; font-weight: 600; }
+
+.collab-svg { width: 100%; height: auto; display: block; margin: 2px 0 8px; overflow: visible; }
+.collab-edge {
+  fill: none;
+  opacity: 0.62;
+  cursor: pointer;
+  color: inherit;
+  transition: opacity 0.12s;
+  pointer-events: stroke;
+}
+.collab-edge:hover { opacity: 0.95; }
+/* 클릭 판정용 투명 선 — 보이는 굵기와 무관하게 넉넉히 잡는다 (얇은 선을 겨냥하기 어렵다) */
+.collab-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 16;
+  cursor: pointer;
+  pointer-events: stroke;
+}
+.collab-hit:hover + .collab-edge { opacity: 0.95; }
+.collab-edge.on { opacity: 1; filter: drop-shadow(0 0 4px currentColor); }
+
+.collab-node { cursor: pointer; }
+.collab-node .collab-disc { fill: #182031; stroke: #3a4457; stroke-width: 1.5; }
+.collab-node.on .collab-disc { stroke: #7fc99a; }
+.collab-node.ext .collab-disc { stroke-dasharray: 3 2; stroke: #949cab; }
+.collab-node:hover .collab-disc { stroke: #7fb3d5; }
+.collab-label {
+  text-anchor: middle;
+  font-size: 9.5px;
+  fill: #b3bbc7;
+}
+.collab-node.ext .collab-label { fill: #949cab; font-style: italic; }
+
+.collab-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #d5dbe4;
+  padding: 7px 0;
+  border-top: 1px solid #2a3346;
+}
+.collab-stats b { color: #e8eaed; font-variant-numeric: tabular-nums; }
+.collab-notes { margin-bottom: 8px; line-height: 1.5; }
+
+.collab-kws { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.collab-kw {
+  background: #101624;
+  border: 1px solid #3a4459;
+  color: #b3bbc7;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10.5px;
+}
+
+/* 선을 고르면 펼쳐지는 근거 — "무엇이 통했나"를 실제 문서 제목으로 */
+.collab-evidence {
+  min-width: 0; /* grid 자식은 기본 min-width:auto라 긴 제목이 카드를 밀어낸다 */
+  margin-top: 7px;
+  padding-left: 8px;
+  border-left: 2px solid #3a4459;
+  display: grid;
+  gap: 5px;
+}
+.collab-ev-head { font-size: 10.5px; color: #98a1ae; letter-spacing: 0.02em; }
+.collab-ev-pair {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding-bottom: 5px;
+  border-bottom: 1px dashed #2a3346;
+}
+.collab-ev-pair:last-child { border-bottom: 0; padding-bottom: 0; }
+/* 제목은 한 줄로 자른다 — 두 줄까지 풀면 근거 블록이 목록만큼 길어져 원래 문제로 돌아간다 */
+.collab-ev-item {
+  min-width: 0;
+  font-size: 12px;
+  color: #dfe4ea;
+  line-height: 1.5;
+  cursor: pointer;
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.collab-ev-item:hover { color: #7fb3d5; }
+/* 이름은 고정 폭으로 세워 두 줄의 제목 시작점을 맞춘다 */
+.collab-ev-who {
+  color: #98a1ae;
+  font-size: 11px;
+  flex: 0 0 52px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.collab-ev-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* 쌍이 공유한 말 — 제목 안 강조(.kw-hit)와 같은 금색. 주제어는 요약·본문에서도 뽑히므로
+   제목에 그대로 박히지 않는 경우가 절반쯤 된다(실측). 그때도 근거가 비지 않게 이 줄이 받는다. */
+.collab-ev-kw { font-size: 11px; color: #d9a441; margin: 1px 0 0 58px; }
+
+/* ── 협업 지도 선 클릭 시 뜨는 설명 카드 (지도 바로 왼쪽) ── */
+/* 지도와 목록이 세로로 떨어져 있어 그림에서 선을 골라도 설명을 찾아 스크롤해야 했다.
+   상세 패널(#panel)과 같은 자리 규칙 — 사이드바 왼쪽 바깥. 위치는 JS가 클릭한 선 높이로 잡는다. */
+#collab-pop {
+  position: fixed;
+  z-index: 12; /* Hub(10)보다 위 — 사이드바에 걸쳐도 카드가 보인다 */
+  width: 380px;
+  max-height: 60vh;
+  overflow-y: auto;
+  /* overflow-y만 주면 overflow-x는 visible이 아니라 auto로 계산돼 가로 스크롤바가 생긴다 */
+  overflow-x: hidden;
+  padding: 12px 14px 13px;
+  border: 1px solid #4a5361;
+  border-radius: 10px;
+  background: rgba(20, 26, 44, 0.97);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+}
+/* 오른쪽 가장자리에서 지도를 가리키는 삼각형 (테두리색 위에 배경색을 겹쳐 1px 선을 살린다) */
+#collab-pop::before,
+#collab-pop::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  border: 7px solid transparent;
+  transform: translateY(-50%);
+}
+#collab-pop::before { right: -15px; border-left-color: #4a5361; }
+#collab-pop::after { right: -13px; border-left-color: rgba(20, 26, 44, 0.97); }
+.collab-pop-close { position: absolute; top: 6px; right: 6px; font-size: 13px; }
+.collab-pop-who { font-size: 13.5px; font-weight: 700; color: #e8eaed; padding-right: 22px; }
+.collab-pop-meta { font-size: 11.5px; color: #98a1ae; margin-top: 2px; }
+#collab-pop .collab-kws { margin: 7px 0 2px; }
+#collab-pop .collab-evidence { margin-top: 8px; }
+
+/* 근거 제목 안에서 실제로 겹친 말 — 왜 같은 주제로 묶였는지 눈으로 짚게 한다.
+   배경을 깔지 않고 글자색만 바꾼다(형광펜은 어두운 배경에서 너무 튄다). */
+.kw-hit {
+  background: none;
+  color: #d9a441;
+  font-weight: 700;
+}
