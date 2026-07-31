@@ -902,6 +902,9 @@ def _dummy_snapshot() -> dict:
                 {
                     "issue_id": it["issue_id"],
                     "title": it["title"],
+                    # 더미는 필드로 직접 준다 — 허브 경로의 제목 마커는 필드를 못 늘리는
+                    # work 허브 사정에서 나온 우회이고, 여기선 그 제약이 없다.
+                    "project": it.get("project"),
                     "status": status,
                     "opened_by": it.get("opened_by", ""),
                     "timeline": [
@@ -922,6 +925,7 @@ def _dummy_snapshot() -> dict:
                 {
                     "doc_id": d["doc_id"],
                     "title": d["title"],
+                    "project": d.get("project"),
                     "author_agent": d.get("author", ""),
                     "visibility": d.get("visibility", "org"),
                     "summary": d.get("summary", (d.get("body") or "")[:120]),

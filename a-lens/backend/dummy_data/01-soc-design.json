@@ -123,6 +123,7 @@
   {
    "issue_id": "soc-design-issue-0001",
    "title": "NPU 텐서 DMA 시뮬레이션에서 ACE 프로토콜 위반 어설션 발화",
+   "project": "noc-router",
    "status": "resolved",
    "opened_by": "soc-design-jeon-harin",
    "updated_min_ago": 95716
@@ -130,6 +131,7 @@
   {
    "issue_id": "soc-design-issue-0002",
    "title": "HDMI 송신부 합성 후 latch 추론 경고 21건",
+   "project": "noc-router",
    "status": "knowledge_linked",
    "opened_by": "soc-design-jeon-harin",
    "updated_min_ago": 12289
@@ -137,6 +139,7 @@
   {
    "issue_id": "soc-design-issue-0003",
    "title": "eFuse 컨트롤러 저전력 모드 복귀 시 상태 유실 의심",
+   "project": "pmu-v2",
    "status": "open",
    "opened_by": "soc-design-jeon-harin",
    "updated_min_ago": 6234
@@ -144,6 +147,7 @@
   {
    "issue_id": "soc-design-issue-0004",
    "title": "DDR4 컨트롤러 FIFO 오버플로우 — 스트레스 시나리오에서 재현",
+   "project": "pmu-v2",
    "status": "knowledge_linked",
    "opened_by": "soc-design-hong-hyunwoo",
    "updated_min_ago": 13361
@@ -151,6 +155,7 @@
   {
    "issue_id": "soc-design-issue-0005",
    "title": "타이머/워치독와 PCIe Gen4 컨트롤러 어드레스 맵 충돌",
+   "project": "pmu-v2",
    "status": "resolved",
    "opened_by": "soc-design-hong-hyunwoo",
    "updated_min_ago": 92119
@@ -158,6 +163,7 @@
   {
    "issue_id": "soc-design-issue-0006",
    "title": "IP 벤더 QSPI 부트 컨트롤러 v4.4 errata 대응 필요",
+   "project": "mipi-csi2",
    "status": "open",
    "opened_by": "soc-design-hong-hyunwoo",
    "updated_min_ago": 16575
@@ -172,6 +178,7 @@
   {
    "issue_id": "soc-design-issue-0008",
    "title": "DMA 컨트롤러 클록 게이팅 셀 글리치 의심 파형",
+   "project": "mipi-csi2",
    "status": "open",
    "opened_by": "soc-design-yang-woojin",
    "updated_min_ago": 10718
@@ -179,6 +186,7 @@
   {
    "issue_id": "soc-design-issue-0009",
    "title": "이더넷 MAC 파라미터 기본값이 스펙과 불일치",
+   "project": "mipi-csi2",
    "status": "knowledge_linked",
    "opened_by": "soc-design-yang-woojin",
    "updated_min_ago": 196
@@ -186,6 +194,7 @@
   {
    "issue_id": "soc-design-issue-0010",
    "title": "QSPI 부트 컨트롤러 lint 위반 44건 정리 필요",
+   "project": "noc-router",
    "status": "resolved",
    "opened_by": "soc-design-yang-woojin",
    "updated_min_ago": 12265
@@ -200,6 +209,7 @@
   {
    "issue_id": "soc-design-issue-0012",
    "title": "PCIe Gen4 컨트롤러 합성 타이밍 위반 — 크리티컬 패스 재구성 검토",
+   "project": "noc-router",
    "status": "resolved",
    "opened_by": "soc-design-hong-seohyun",
    "updated_min_ago": 78194
@@ -207,6 +217,7 @@
   {
    "issue_id": "soc-design-issue-0013",
    "title": "이미지 전처리 파이프라인(ISP) 스펙 문서와 RTL 동작 불일치 (버스트 경계 처리)",
+   "project": "noc-router",
    "status": "resolved",
    "opened_by": "soc-design-hong-seohyun",
    "updated_min_ago": 53189
@@ -214,6 +225,7 @@
   {
    "issue_id": "soc-design-issue-0014",
    "title": "PCIe Gen4 컨트롤러 게이트 시뮬레이션 X 전파로 부트 실패",
+   "project": "pmu-v2",
    "status": "open",
    "opened_by": "soc-design-hong-seohyun",
    "updated_min_ago": 15984
@@ -221,6 +233,7 @@
   {
    "issue_id": "soc-design-issue-0015",
    "title": "regmap YAML 생성기 — 보안 부트 모듈 특수 필드 타입 미지원",
+   "project": "pmu-v2",
    "status": "resolved",
    "opened_by": "soc-design-moon-yejun",
    "updated_min_ago": 31908
@@ -228,6 +241,7 @@
   {
    "issue_id": "soc-design-issue-0016",
    "title": "DMA 컨트롤러 시뮬레이션에서 AXI4 프로토콜 위반 어설션 발화",
+   "project": "pmu-v2",
    "status": "open",
    "opened_by": "soc-design-moon-yejun",
    "updated_min_ago": 10914
@@ -235,6 +249,7 @@
   {
    "issue_id": "soc-design-issue-0017",
    "title": "HDMI 송신부 합성 후 latch 추론 경고 52건",
+   "project": "mipi-csi2",
    "status": "open",
    "opened_by": "soc-design-park-daeun",
    "updated_min_ago": 17924
@@ -242,6 +257,7 @@
   {
    "issue_id": "soc-design-issue-0018",
    "title": "DMA 컨트롤러 저전력 모드 복귀 시 상태 유실 의심",
+   "project": "mipi-csi2",
    "status": "open",
    "opened_by": "soc-design-park-daeun",
    "updated_min_ago": 11450
@@ -249,6 +265,7 @@
   {
    "issue_id": "soc-design-issue-0019",
    "title": "JTAG 디버그 브리지 FIFO 오버플로우 — 스트레스 시나리오에서 재현",
+   "project": "noc-router",
    "status": "knowledge_linked",
    "opened_by": "soc-design-sim-jaeyun",
    "updated_min_ago": 2071
@@ -256,6 +273,7 @@
   {
    "issue_id": "soc-design-issue-0020",
    "title": "QSPI 부트 컨트롤러와 이미지 전처리 파이프라인(ISP) 어드레스 맵 충돌",
+   "project": "noc-router",
    "status": "open",
    "opened_by": "soc-design-sim-jaeyun",
    "updated_min_ago": 9128
@@ -263,6 +281,7 @@
   {
    "issue_id": "soc-design-issue-0021",
    "title": "IP 벤더 인터럽트 컨트롤러(GIC) v3.8 errata 대응 필요",
+   "project": "pmu-v2",
    "status": "resolved",
    "opened_by": "soc-design-sim-jaeyun",
    "updated_min_ago": 48917
@@ -277,6 +296,7 @@
   {
    "issue_id": "soc-design-issue-0023",
    "title": "USB 3.1 컨트롤러 클록 게이팅 셀 글리치 의심 파형",
+   "project": "pmu-v2",
    "status": "resolved",
    "opened_by": "soc-design-yoon-seungmin",
    "updated_min_ago": 81436
@@ -284,6 +304,7 @@
   {
    "issue_id": "soc-design-issue-0024",
    "title": "DMA 컨트롤러 파라미터 기본값이 스펙과 불일치",
+   "project": "pmu-v2",
    "status": "knowledge_linked",
    "opened_by": "soc-design-yoon-seungmin",
    "updated_min_ago": 9311
@@ -291,6 +312,7 @@
   {
    "issue_id": "soc-design-issue-0025",
    "title": "NoC 라우터 lint 위반 42건 정리 필요",
+   "project": "mipi-csi2",
    "status": "open",
    "opened_by": "soc-design-yoon-seungmin",
    "updated_min_ago": 10912
@@ -305,6 +327,7 @@
   {
    "issue_id": "soc-design-issue-0027",
    "title": "USB 3.1 컨트롤러 합성 타이밍 위반 — 크리티컬 패스 재구성 검토",
+   "project": "mipi-csi2",
    "status": "resolved",
    "opened_by": "soc-design-yoo-siwoo",
    "updated_min_ago": 57854
@@ -312,6 +335,7 @@
   {
    "issue_id": "soc-design-issue-0028",
    "title": "eFuse 컨트롤러 스펙 문서와 RTL 동작 불일치 (버스트 경계 처리)",
+   "project": "mipi-csi2",
    "status": "knowledge_linked",
    "opened_by": "soc-design-yoo-siwoo",
    "updated_min_ago": 12094
@@ -319,6 +343,7 @@
   {
    "issue_id": "soc-design-issue-0029",
    "title": "이미지 전처리 파이프라인(ISP) 게이트 시뮬레이션 X 전파로 부트 실패",
+   "project": "noc-router",
    "status": "open",
    "opened_by": "soc-design-yoo-siwoo",
    "updated_min_ago": 18130
@@ -333,6 +358,7 @@
   {
    "issue_id": "soc-design-issue-0031",
    "title": "이미지 전처리 파이프라인(ISP) 시뮬레이션에서 AXI4 프로토콜 위반 어설션 발화",
+   "project": "noc-router",
    "status": "resolved",
    "opened_by": "soc-design-joo-somin",
    "updated_min_ago": 44898
@@ -340,6 +366,7 @@
   {
    "issue_id": "soc-design-issue-0032",
    "title": "SD/eMMC 호스트 합성 후 latch 추론 경고 59건",
+   "project": "noc-router",
    "status": "resolved",
    "opened_by": "soc-design-joo-somin",
    "updated_min_ago": 74338
@@ -347,6 +374,7 @@
   {
    "issue_id": "soc-design-issue-0033",
    "title": "PCIe Gen4 컨트롤러 저전력 모드 복귀 시 상태 유실 의심",
+   "project": "pmu-v2",
    "status": "resolved",
    "opened_by": "soc-design-joo-somin",
    "updated_min_ago": 97822
@@ -356,6 +384,7 @@
   {
    "doc_id": "soc-design-doc-0001",
    "title": "NoC 라우터 마이크로아키텍처 스펙 v1.2 요약",
+   "project": "noc-router",
    "author": "전하린",
    "visibility": "space",
    "reuse_count": 1,
@@ -369,6 +398,7 @@
   {
    "doc_id": "soc-design-doc-0002",
    "title": "전력 관리 유닛(PMU) RTL 코드 리뷰 지적사항 정리 (6월 1주)",
+   "project": "noc-router",
    "author": "전하린",
    "visibility": "org",
    "reuse_count": 0,
@@ -380,6 +410,7 @@
   {
    "doc_id": "soc-design-doc-0003",
    "title": "전력 관리 유닛(PMU) ACE 인터페이스 타이밍 노트",
+   "project": "pmu-v2",
    "author": "전하린",
    "visibility": "org",
    "reuse_count": 3,
@@ -395,6 +426,7 @@
   {
    "doc_id": "soc-design-doc-0004",
    "title": "JTAG 디버그 브리지 합성 QoR 1차 결과 분석",
+   "project": "pmu-v2",
    "author": "홍현우",
    "visibility": "space",
    "reuse_count": 0,
@@ -406,6 +438,7 @@
   {
    "doc_id": "soc-design-doc-0005",
    "title": "레지스터 맵 YAML 플로우 — 이미지 전처리 파이프라인(ISP) 적용기",
+   "project": "pmu-v2",
    "author": "홍현우",
    "visibility": "org",
    "reuse_count": 0,
@@ -417,6 +450,7 @@
   {
    "doc_id": "soc-design-doc-0006",
    "title": "NoC 라우터 클록 게이팅 적용 전후 전력 추정 비교",
+   "project": "mipi-csi2",
    "author": "홍현우",
    "visibility": "org",
    "reuse_count": 0,
@@ -442,6 +476,7 @@
   {
    "doc_id": "soc-design-doc-0008",
    "title": "QSPI 부트 컨트롤러 리셋 시퀀스 설계 노트",
+   "project": "pmu-v2",
    "author": "홍현우",
    "visibility": "space",
    "reuse_count": 2,
@@ -456,6 +491,7 @@
   {
    "doc_id": "soc-design-doc-0009",
    "title": "IP 벤더 MIPI CSI-2 수신부 릴리즈 노트 v2.8 diff 요약",
+   "project": "mipi-csi2",
    "author": "양우진",
    "visibility": "space",
    "reuse_count": 1,
@@ -469,6 +505,7 @@
   {
    "doc_id": "soc-design-doc-0010",
    "title": "이더넷 MAC 성능 모델 스프레드시트 사용법",
+   "project": "mipi-csi2",
    "author": "양우진",
    "visibility": "org",
    "reuse_count": 0,
@@ -480,6 +517,7 @@
   {
    "doc_id": "soc-design-doc-0011",
    "title": "MIPI CSI-2 수신부 ECO 대응 기록 (5월 3주)",
+   "project": "noc-router",
    "author": "양우진",
    "visibility": "org",
    "reuse_count": 3,
@@ -495,6 +533,7 @@
   {
    "doc_id": "soc-design-doc-0012",
    "title": "이더넷 MAC 스펙 Q&A 정리 (아키텍처 회의)",
+   "project": "noc-router",
    "author": "홍서현",
    "visibility": "org",
    "reuse_count": 0,
@@ -506,6 +545,7 @@
   {
    "doc_id": "soc-design-doc-0013",
    "title": "전력 관리 유닛(PMU) 마이크로아키텍처 스펙 v1.1 요약",
+   "project": "noc-router",
    "author": "홍서현",
    "visibility": "org",
    "reuse_count": 0,
@@ -517,6 +557,7 @@
   {
    "doc_id": "soc-design-doc-0014",
    "title": "오디오 I2S 브리지 RTL 코드 리뷰 지적사항 정리 (6월 2주)",
+   "project": "pmu-v2",
    "author": "홍서현",
    "visibility": "org",
    "reuse_count": 3,
@@ -532,6 +573,7 @@
   {
    "doc_id": "soc-design-doc-0015",
    "title": "오디오 I2S 브리지 AXI4-Lite 인터페이스 타이밍 노트",
+   "project": "pmu-v2",
    "author": "문예준",
    "visibility": "org",
    "reuse_count": 0,
@@ -543,6 +585,7 @@
   {
    "doc_id": "soc-design-doc-0016",
    "title": "PCIe Gen4 컨트롤러 합성 QoR 1차 결과 분석",
+   "project": "pmu-v2",
    "author": "문예준",
    "visibility": "org",
    "reuse_count": 2,
@@ -557,6 +600,7 @@
   {
    "doc_id": "soc-design-doc-0017",
    "title": "레지스터 맵 YAML 플로우 — 타이머/워치독 적용기",
+   "project": "mipi-csi2",
    "author": "문예준",
    "visibility": "space",
    "reuse_count": 2,
@@ -586,6 +630,7 @@
   {
    "doc_id": "soc-design-doc-0019",
    "title": "CDC SVA 템플릿 MIPI CSI-2 수신부 바인딩 가이드",
+   "project": "pmu-v2",
    "author": "문예준",
    "visibility": "org",
    "reuse_count": 0,
@@ -597,6 +642,7 @@
   {
    "doc_id": "soc-design-doc-0020",
    "title": "DDR4 컨트롤러 리셋 시퀀스 설계 노트",
+   "project": "mipi-csi2",
    "author": "박다은",
    "visibility": "space",
    "reuse_count": 0,
@@ -608,6 +654,7 @@
   {
    "doc_id": "soc-design-doc-0021",
    "title": "IP 벤더 L2 캐시 컨트롤러 릴리즈 노트 v4.1 diff 요약",
+   "project": "mipi-csi2",
    "author": "박다은",
    "visibility": "org",
    "reuse_count": 3,
@@ -623,6 +670,7 @@
   {
    "doc_id": "soc-design-doc-0022",
    "title": "NoC 라우터 성능 모델 스프레드시트 사용법",
+   "project": "noc-router",
    "author": "박다은",
    "visibility": "org",
    "reuse_count": 1,
@@ -649,6 +697,7 @@
   {
    "doc_id": "soc-design-doc-0024",
    "title": "PCIe Gen4 컨트롤러 스펙 Q&A 정리 (아키텍처 회의)",
+   "project": "mipi-csi2",
    "author": "박다은",
    "visibility": "org",
    "reuse_count": 0,
@@ -660,6 +709,7 @@
   {
    "doc_id": "soc-design-doc-0025",
    "title": "DMA 컨트롤러 마이크로아키텍처 스펙 v3.7 요약",
+   "project": "mipi-csi2",
    "author": "박다은",
    "visibility": "space",
    "reuse_count": 0,
@@ -671,6 +721,7 @@
   {
    "doc_id": "soc-design-doc-0026",
    "title": "HDMI 송신부 RTL 코드 리뷰 지적사항 정리 (6월 2주)",
+   "project": "noc-router",
    "author": "심재윤",
    "visibility": "org",
    "reuse_count": 2,
@@ -685,6 +736,7 @@
   {
    "doc_id": "soc-design-doc-0027",
    "title": "인터럽트 컨트롤러(GIC) AXI4 인터페이스 타이밍 노트",
+   "project": "noc-router",
    "author": "심재윤",
    "visibility": "org",
    "reuse_count": 0,
@@ -696,6 +748,7 @@
   {
    "doc_id": "soc-design-doc-0028",
    "title": "인터럽트 컨트롤러(GIC) 합성 QoR 1차 결과 분석",
+   "project": "pmu-v2",
    "author": "심재윤",
    "visibility": "space",
    "reuse_count": 1,
@@ -724,6 +777,7 @@
   {
    "doc_id": "soc-design-doc-0030",
    "title": "HDMI 송신부 클록 게이팅 적용 전후 전력 추정 비교",
+   "project": "noc-router",
    "author": "심재윤",
    "visibility": "org",
    "reuse_count": 3,
@@ -739,6 +793,7 @@
   {
    "doc_id": "soc-design-doc-0031",
    "title": "CDC SVA 템플릿 이더넷 MAC 바인딩 가이드",
+   "project": "noc-router",
    "author": "심재윤",
    "visibility": "org",
    "reuse_count": 0,
@@ -750,6 +805,7 @@
   {
    "doc_id": "soc-design-doc-0032",
    "title": "MIPI CSI-2 수신부 리셋 시퀀스 설계 노트",
+   "project": "pmu-v2",
    "author": "윤승민",
    "visibility": "space",
    "reuse_count": 2,
@@ -764,6 +820,7 @@
   {
    "doc_id": "soc-design-doc-0033",
    "title": "IP 벤더 전력 관리 유닛(PMU) 릴리즈 노트 v4.8 diff 요약",
+   "project": "pmu-v2",
    "author": "윤승민",
    "visibility": "org",
    "reuse_count": 15,
@@ -779,6 +836,7 @@
   {
    "doc_id": "soc-design-doc-0034",
    "title": "이미지 전처리 파이프라인(ISP) 성능 모델 스프레드시트 사용법",
+   "project": "mipi-csi2",
    "author": "윤승민",
    "visibility": "space",
    "reuse_count": 2,
@@ -793,6 +851,7 @@
   {
    "doc_id": "soc-design-doc-0035",
    "title": "L2 캐시 컨트롤러 ECO 대응 기록 (7월 3주)",
+   "project": "mipi-csi2",
    "author": "유시우",
    "visibility": "org",
    "reuse_count": 0,
@@ -804,6 +863,7 @@
   {
    "doc_id": "soc-design-doc-0036",
    "title": "NoC 라우터 스펙 Q&A 정리 (아키텍처 회의)",
+   "project": "mipi-csi2",
    "author": "유시우",
    "visibility": "space",
    "reuse_count": 0,
@@ -815,6 +875,7 @@
   {
    "doc_id": "soc-design-doc-0037",
    "title": "전력 관리 유닛(PMU) 마이크로아키텍처 스펙 v1.9 요약",
+   "project": "noc-router",
    "author": "유시우",
    "visibility": "org",
    "reuse_count": 0,
@@ -837,6 +898,7 @@
   {
    "doc_id": "soc-design-doc-0039",
    "title": "이더넷 MAC AXI4 인터페이스 타이밍 노트",
+   "project": "mipi-csi2",
    "author": "유시우",
    "visibility": "space",
    "reuse_count": 0,
@@ -848,6 +910,7 @@
   {
    "doc_id": "soc-design-doc-0040",
    "title": "L2 캐시 컨트롤러 합성 QoR 1차 결과 분석",
+   "project": "noc-router",
    "author": "주소민",
    "visibility": "org",
    "reuse_count": 2,
@@ -862,6 +925,7 @@
   {
    "doc_id": "soc-design-doc-0041",
    "title": "레지스터 맵 YAML 플로우 — eFuse 컨트롤러 적용기",
+   "project": "noc-router",
    "author": "주소민",
    "visibility": "org",
    "reuse_count": 2,
@@ -876,6 +940,7 @@
   {
    "doc_id": "soc-design-doc-0042",
    "title": "이미지 전처리 파이프라인(ISP) 클록 게이팅 적용 전후 전력 추정 비교",
+   "project": "pmu-v2",
    "author": "주소민",
    "visibility": "org",
    "reuse_count": 0,
@@ -901,6 +966,7 @@
   {
    "doc_id": "soc-design-doc-0044",
    "title": "타이머/워치독 리셋 시퀀스 설계 노트",
+   "project": "noc-router",
    "author": "주소민",
    "visibility": "space",
    "reuse_count": 8,
@@ -916,6 +982,7 @@
   {
    "doc_id": "soc-design-doc-0045",
    "title": "IP 벤더 NPU 텐서 DMA 릴리즈 노트 v4.6 diff 요약",
+   "project": "noc-router",
    "author": "주소민",
    "visibility": "space",
    "reuse_count": 2,
