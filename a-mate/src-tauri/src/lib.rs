@@ -22,6 +22,11 @@ pub struct AppState {
     /// 재조회 경로가 없는 일회성 소식이라, 리스너 등록 전에 emit하면(emit은 수신자 0이어도 Ok)
     /// 커서만 전진해 영구 유실된다. maybe_poll_inbound가 이 플래그를 켜질 때까지 기다린다.
     pub notices_ready: std::sync::atomic::AtomicBool,
+    /// 스토어 락을 **기다리는** 커맨드 수(획득하면 즉시 감소). 스캔이 단계 사이에 이 값을 보고
+    /// 재획득을 미룬다 — `std::sync::Mutex`는 공정하지 않아 `yield_now`만으로는 해제 직후
+    /// 재획득을 막지 못한다. 실측(X1): ingest가 짧은 웜 스캔에서 커맨드가 inventory+rules를
+    /// 통째로 기다려 898ms가 나왔다.
+    pub store_waiters: std::sync::atomic::AtomicUsize,
 }
 
 /// 마스코트 창 논리 크기(px). 창은 이 크기로 **상시 고정** — 확장/접힘을 리사이즈로
@@ -254,6 +259,7 @@ pub fn run() {
                     scan_tx: tx.clone(),
                     mascot_expanded: std::sync::atomic::AtomicBool::new(false),
                     notices_ready: std::sync::atomic::AtomicBool::new(false),
+                    store_waiters: std::sync::atomic::AtomicUsize::new(0),
                 });
                 pipeline::start(app.handle().clone(), rx, tx);
                 log::info!("X1 setup: pipeline spawned at +{}ms", x1_t0.elapsed().as_millis());

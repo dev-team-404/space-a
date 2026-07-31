@@ -267,9 +267,13 @@ pub fn coaching_brief_inner(store: &SqliteStore) -> anyhow::Result<agent_mentor:
 // #[track_caller]는 중간 헬퍼(hub_client)에도 붙여야 헬퍼가 아니라 실제 커맨드가 찍힌다.
 #[track_caller]
 fn lock<'a>(state: &'a State<AppState>) -> Result<std::sync::MutexGuard<'a, SqliteStore>, String> {
+    use std::sync::atomic::Ordering;
     let caller = std::panic::Location::caller();
     let started = std::time::Instant::now();
+    // 스캔이 단계 사이에 재획득을 미루도록 "기다리는 중"을 알린다 (pipeline::runtime::hand_off).
+    state.store_waiters.fetch_add(1, Ordering::AcqRel);
     let guard = state.store.lock().map_err(|e| e.to_string());
+    state.store_waiters.fetch_sub(1, Ordering::AcqRel);
     let ms = started.elapsed().as_millis();
     if ms >= 20 {
         log::info!("X1 cmd lock: waited {ms}ms (caller {}:{})", caller.file(), caller.line());

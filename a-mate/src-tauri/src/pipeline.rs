@@ -63,6 +63,21 @@ mod runtime {
         out
     }
 
+    /// 락을 놓은 뒤 대기 커맨드가 실제로 잡을 틈을 만든다. `yield_now`만으로는 부족했다 —
+    /// Windows `SwitchToThread`는 같은 프로세서의 ready 스레드에만 양보하므로 멀티코어에서는
+    /// 스캔 스레드가 그대로 재획득한다. 실측(X1): ingest가 짧은 웜 스캔에서 커맨드가
+    /// inventory+rules를 통째로 기다려 898ms가 나왔다. 상한을 둬서 커맨드가 끊이지 않을 때
+    /// (홈 탭 2초 폴링) 스캔이 굶지 않게 한다.
+    fn hand_off(state: &AppState) {
+        use std::sync::atomic::Ordering;
+        for _ in 0..2_000 {
+            if state.store_waiters.load(Ordering::Acquire) == 0 {
+                break;
+            }
+            std::thread::yield_now();
+        }
+    }
+
     /// 스캔 1회. 락을 **단계·파일 단위로** 잡는다 — 통짜로 쥐면 마이그레이션 후 전량 재수집
     /// (실측 16.7초) 동안 모든 커맨드가 막힌다(X1). 최장 연속 보유는 rules 블록이다.
     pub fn run_pipeline_once(app: &AppHandle) {
@@ -93,11 +108,11 @@ mod runtime {
                         let t = std::time::Instant::now();
                         let result = agent_mentor::store::ingest_file(&store, &w.adapter, f);
                         (t.elapsed(), result)
-                    }; // guard drops here — 다음 파일 전에 대기 커맨드가 끼어들 수 있다
+                    }; // guard drops here — 다음 파일 전에 대기 커맨드가 끼어든다
                     // std::sync::Mutex는 공정하지 않다. 해제 직후 이 스레드가 재획득하면
-                    // 청킹이 무효가 되므로 대기자에게 넘길 틈을 준다. sleep은 쓰지 않는다 —
+                    // 청킹이 무효가 되므로 대기자가 잡을 때까지 넘긴다. sleep은 쓰지 않는다 —
                     // Windows 타이머 해상도가 ~15ms라 파일당 sleep은 스캔에 수 초를 붙인다.
-                    std::thread::yield_now();
+                    hand_off(&state);
                     match result {
                         Ok(n) => new_events += n,
                         Err(e) => log::warn!("{} 수집 실패(건너뜀): {e}", f.display()),
@@ -128,7 +143,7 @@ mod runtime {
                 store.rebuild_rollup()?;
                 t.elapsed()
             };
-            std::thread::yield_now();
+            hand_off(&state);
             if rollup_held > longest_hold {
                 longest_hold = rollup_held;
             }
@@ -145,7 +160,7 @@ mod runtime {
                 }
                 t.elapsed()
             };
-            std::thread::yield_now();
+            hand_off(&state);
             if inventory_held > longest_hold {
                 longest_hold = inventory_held;
             }
