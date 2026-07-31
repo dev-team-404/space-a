@@ -355,9 +355,17 @@
   정상적으로 신규가 된다. **`parseUnseen`이 저장된 `null`을 명시적으로 허용해야 한다** — 무효 분기로
   뭉개면 `diaryDates`까지 함께 버려지는 회귀가 생긴다(수정 전 테스트가 실제로 실패해 확인).
   `App.svelte`의 즉시 `saveUnseen` 제거로 `state_referenced_locally` 경고도 하나 사라졌다(13→12).
+- **Codex 리뷰 반영(P2 1건) — 스펙 §5.3-4가 뒤집혔다.** 시드 분기를 `observeGuestbook`(부트스트랩·
+  `guestbook:new` **공용**)에 둔 탓에, 빈 방명록(또는 내 글만)으로 부트스트랩한 뒤 도착한 **첫 글이
+  자기 시각으로 워터마크를 세워 스스로를 읽음 처리**했다 — 교체 대상이던 클라 시계 시드보다 나쁜 회귀.
+  "빈 방명록은 미시드로 남기고 다음 첫 글이 신규가 된다"는 스펙 의도가 배선에서 실현되지 않았다.
+  수정: 시드를 **부트스트랩 경로 전용** `seedGuestbookSeen`으로 분리하고, **성공한 부트스트랩은 반드시
+  시드**한다 — 글이 있으면 `max(created_at)`, 없으면 **`''`(최소 워터마크)**. 빈 방은 실제로 본 글이
+  없고 모든 ISO 시각이 `''`보다 크므로 다음 글이 정상적으로 신규가 된다. `null`의 의미는 이제
+  "아직 부트스트랩 안 됨" 하나뿐. 신규 테스트 4건(회귀 재현 포함) → 프론트 **216**.
 - **Q2** — `resolveState`에 `case 'visit': return 'happy'` 추가(3줄). 수정 전 테스트가
   `expected 'sleep' to be 'happy'`로 실패해 새벽 버그를 재현했다.
-- **검증**: `npm test` = svelte-check 0 errors + vitest **212 passed**(신규 2) · `npm run build` exit 0 ·
+- **검증**: `npm test` = svelte-check 0 errors + vitest **216 passed**(신규 6) · `npm run build` exit 0 ·
   `cargo test` exit 0(미접촉 확인). **실환경 스모크 불필요** — Q2 육안 확인만 PR 체크리스트의 선택 항목
   (01\~07시 방문 알림이라 재현이 까다로워 단위 테스트로 덮음).
 
