@@ -322,7 +322,7 @@ def test_term_index_covers_docs_without_a_known_author():
     assert g["terms"].get("d1")
 
 
-# ── 프로젝트 축 (계획: docs/design/common/plans/2026-07-31-project-axis-from-cwd.md) ──
+# ── 프로젝트 축 (계획: docs/archive/design/common/plans/2026-07-31-project-axis-from-cwd.md) ──
 
 
 def test_project_axis_counts_only_marked_docs():

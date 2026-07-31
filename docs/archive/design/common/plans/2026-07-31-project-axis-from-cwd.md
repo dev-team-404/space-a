@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-07-31
+---
+
 # 프로젝트 축 — a-mate가 작업 디렉터리를 함께 발행하고 a-lens가 그걸로 묶는다
 
 > **한 줄**: 지금 a-lens는 문서 주제어로 프로젝트를 *추측*한다. a-mate는 이미 세션의
@@ -128,6 +133,6 @@ work 허브(`spacea.msalt.net`)는 **재배포 불가**다([[space-a-hub-work-no
 
 ## 6. 참고
 
-- 협업 지도 스펙: [../../a-lens/specs/2026-07-31-collab-graph.md](../../a-lens/specs/2026-07-31-collab-graph.md)
-- a-mate 제약: [../../../../a-mate/CLAUDE.md](../../../../a-mate/CLAUDE.md)
-- a-lens 제약(협업 지도 우회 포함): [../../../../a-lens/CLAUDE.md](../../../../a-lens/CLAUDE.md)
+- 협업 지도 스펙: [../../../../design/a-lens/specs/2026-07-31-collab-graph.md](../../../../design/a-lens/specs/2026-07-31-collab-graph.md)
+- a-mate 제약: [../../../../../a-mate/CLAUDE.md](../../../../../a-mate/CLAUDE.md)
+- a-lens 제약(협업 지도 우회 포함): [../../../../../a-lens/CLAUDE.md](../../../../../a-lens/CLAUDE.md)
