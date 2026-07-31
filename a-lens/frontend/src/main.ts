@@ -709,8 +709,8 @@ function issueRowHTML(i: SpaceIssue): string {
   const gist = i.narrative || i.summary || '' // LLM 요약(한 줄 서사 우선)
   return `
     <div class="issue-row ${i.status === 'resolved' ? 'done' : ''}" data-issue="${esc(i.issue_id)}" style="border-left-color:${color}">
-      <div class="issue-row-title">${catBadge(i.category)}${esc(i.title)}</div>
-      ${gist ? `<div class="doc-summary">${esc(gist)}</div>` : ''}
+      <div class="issue-row-title">${catBadge(i.category)}${mk(i.title, i.issue_id)}</div>
+      ${gist ? `<div class="doc-summary">${mk(gist, i.issue_id)}</div>` : ''}
       <div class="issue-row-meta"><span>👤 ${esc(issueActor(i))} · ${issueTimeLabel(issueAt(i))}</span>${statusBadge(i.status)}</div>
     </div>`
 }
@@ -729,7 +729,7 @@ function issueModalHTML(i: SpaceIssue): string {
   return `
     <div class="issue-detail">
       <div class="issue-detail-badges">${catBadge(i.category)}${statusBadge(i.status)}</div>
-      ${i.summary ? `<p class="doc-summary">${esc(i.summary)}</p>` : ''}
+      ${i.summary ? `<p class="doc-summary">${mk(i.summary, i.issue_id)}</p>` : ''}
       ${i.narrative && i.narrative !== i.summary ? `<p class="muted">${esc(i.narrative)}</p>` : ''}
       <div class="muted small">👤 ${esc(issueActor(i))}</div>
       <h4 class="issue-detail-h">진행 상태</h4>
@@ -745,7 +745,7 @@ function docModalHTML(d: KnowledgeDoc): string {
     <div class="doc-detail">
       <div class="issue-detail-badges">${catBadge(d.category)}<span class="badge">${vis}</span></div>
       <div class="muted small">👤 ${esc(d.author_agent || '작성자 미상')}</div>
-      ${d.summary ? `<p class="doc-summary">${esc(d.summary)}</p>` : ''}
+      ${d.summary ? `<p class="doc-summary">${mk(d.summary, d.doc_id)}</p>` : ''}
       <h4 class="issue-detail-h">원문</h4>
       <div class="doc-body md">${mdHTML(d.body)}</div>
     </div>`
@@ -838,8 +838,8 @@ function trailRowHTML(item: TrailItem): string {
       <div class="trail-row" data-issue="${esc(i.issue_id)}" style="border-left-color:${color}">
         <div class="trail-head"><span class="trail-kind">🔗 이슈</span>${statusBadge(i.status)}
           <span class="trail-at">${issueTimeLabel(issueAt(i))}</span></div>
-        <div class="trail-title">${catBadge(i.category)}${esc(i.title)}</div>
-        ${gist ? `<div class="doc-summary">${esc(gist)}</div>` : ''}
+        <div class="trail-title">${catBadge(i.category)}${mk(i.title, i.issue_id)}</div>
+        ${gist ? `<div class="doc-summary">${mk(gist, i.issue_id)}</div>` : ''}
       </div>`
   }
   const d = item.doc!
@@ -848,8 +848,8 @@ function trailRowHTML(item: TrailItem): string {
     <div class="trail-row doc" data-doc="${item.i}" data-docid="${esc(d.doc_id)}">
       <div class="trail-head"><span class="trail-kind">📄 문서</span>
         <span class="badge">${d.visibility === 'org' ? '조직 공개' : '방 전용'}</span></div>
-      <div class="trail-title">${catBadge(d.category)}${esc(d.title)}</div>
-      ${gist ? `<div class="doc-summary">${esc(gist)}</div>` : ''}
+      <div class="trail-title">${catBadge(d.category)}${mk(d.title, d.doc_id)}</div>
+      ${gist ? `<div class="doc-summary">${mk(gist, d.doc_id)}</div>` : ''}
     </div>`
 }
 
@@ -1007,9 +1007,9 @@ function hubReuseHTML(data: SpaceView): string {
         .map(
           ({ d, i }) => `
         <div class="doc-item" data-doc="${i}" data-docid="${esc(d.doc_id)}">
-          <b>${catBadge(d.category)}${esc(d.title)}</b>
+          <b>${catBadge(d.category)}${mk(d.title, d.doc_id)}</b>
           <div class="muted">👤 ${esc(d.author_agent || '작성자 미상')}${d.visibility === 'org' ? ' · 조직 공개' : ''} · 재사용 ${d.reuse_count ?? 0}</div>
-          <div class="doc-summary">${esc(d.summary)}</div>
+          <div class="doc-summary">${mk(d.summary, d.doc_id)}</div>
         </div>`,
         )
         .join('')
@@ -1041,9 +1041,9 @@ function hubPagesHTML(data: SpaceView): string {
         .map(
           ({ d, i }) => `
         <div class="doc-item" data-doc="${i}" data-docid="${esc(d.doc_id)}">
-          <b>${catBadge(d.category)}${esc(d.title)}</b>
+          <b>${catBadge(d.category)}${mk(d.title, d.doc_id)}</b>
           <div class="muted">👤 ${esc(d.author_agent || '작성자 미상')} · ${d.visibility === 'org' ? '조직 공개' : '방 전용'}</div>
-          <div class="doc-summary">${esc(d.summary)}</div>
+          <div class="doc-summary">${mk(d.summary, d.doc_id)}</div>
         </div>`,
         )
         .join('')
@@ -1194,6 +1194,33 @@ function collabEdgeSVG(e: CollabEdge, pts: Map<string, [number, number]>): strin
 
 /** 선을 고르면 펼쳐지는 근거 — **무엇이 통했는지** 실제 문서·이슈 제목으로 보여준다.
  *  키워드만으로는 "왜 이어졌지?"가 안 풀린다. 줄을 누르면 원문 모달까지 연다. */
+// 항목별 주제어 색인 — 서버가 협업 지도와 같은 IDF 표에서 뽑아준다(`collab.terms`).
+// 네 탭이 같은 기준으로 강조하도록 렌더 직전에 한 번 채운다.
+let termIndex: Record<string, string[]> = {}
+
+/** 제목·요약을 이스케이프하면서 그 항목의 주제어만 금색으로 짚는다.
+ *  id가 없거나 색인에 없으면 평범한 이스케이프와 똑같이 동작한다. */
+function mk(text: string, id?: string): string {
+  const terms = id ? termIndex[id] : undefined
+  return terms?.length ? markKeywords(text, terms) : esc(text)
+}
+
+/** 제목 안에서 **겹친 말**을 금색으로 칠한다 — 두 제목이 왜 같은 주제로 묶였는지 눈으로 짚게.
+ *
+ *  주제어는 조사·어미를 떼어낸 어간이라 제목의 활용형(`진행하며`)에 그대로 박혀 있지 않을 수
+ *  있다. 그래서 부분 일치로 찾고, 영문은 대소문자를 가리지 않는다(`Playwright`/`playwright`).
+ *  이스케이프한 뒤 센티넬로 감쌌다가 마지막에 태그로 바꾸는 건, 칠하는 중에 넣은 태그 문자열이
+ *  다음 주제어에 다시 걸리는 것을 막기 위해서다. */
+function markKeywords(title: string, keywords: string[]): string {
+  let out = esc(title)
+  // 긴 말부터 — 짧은 말이 긴 말 안에서 먼저 잡히면 강조가 조각난다
+  for (const word of [...keywords].filter(Boolean).sort((a, b) => b.length - a.length)) {
+    const pattern = esc(word).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    out = out.replace(new RegExp(pattern, 'gi'), (hit) => `\u0000${hit}\u0001`)
+  }
+  return out.replaceAll('\u0000', '<mark class="kw-hit">').replaceAll('\u0001', '</mark>')
+}
+
 function collabEvidenceHTML(e: CollabEdge, data: SpaceView, name: (id: string) => string): string {
   const docTitle = (id: string) => data.knowledge.find((d) => d.doc_id === id)
   const rows: string[] = []
@@ -1207,21 +1234,21 @@ function collabEvidenceHTML(e: CollabEdge, data: SpaceView, name: (id: string) =
       rows.push(`
         <div class="collab-ev-pair">
           <div class="collab-ev-item" data-cdoc="${esc(a.doc_id)}">
-            <span class="collab-ev-who">${esc(name(e.source))}</span><span class="collab-ev-title">${esc(a.title)}</span></div>
+            <span class="collab-ev-who">${esc(name(e.source))}</span><span class="collab-ev-title">${markKeywords(a.title, pair.keywords)}</span></div>
           <div class="collab-ev-item" data-cdoc="${esc(b.doc_id)}">
-            <span class="collab-ev-who">${esc(name(e.target))}</span><span class="collab-ev-title">${esc(b.title)}</span></div>
+            <span class="collab-ev-who">${esc(name(e.target))}</span><span class="collab-ev-title">${markKeywords(b.title, pair.keywords)}</span></div>
           ${kws ? `<div class="collab-ev-kw">${esc(kws)}</div>` : ''}
         </div>`)
     }
   } else if (e.type === 'reuse') {
     for (const id of e.doc_ids ?? []) {
       const d = docTitle(id)
-      if (d) rows.push(`<div class="collab-ev-item" data-cdoc="${esc(d.doc_id)}"><span class="collab-ev-title">${esc(d.title)}</span></div>`)
+      if (d) rows.push(`<div class="collab-ev-item" data-cdoc="${esc(d.doc_id)}"><span class="collab-ev-title">${mk(d.title, d.doc_id)}</span></div>`)
     }
   } else {
     for (const id of e.issue_ids ?? []) {
       const i = data.issues.find((x) => x.issue_id === id)
-      if (i) rows.push(`<div class="collab-ev-item" data-cissue="${esc(i.issue_id)}"><span class="collab-ev-title">${esc(i.title)}</span></div>`)
+      if (i) rows.push(`<div class="collab-ev-item" data-cissue="${esc(i.issue_id)}"><span class="collab-ev-title">${mk(i.title, i.issue_id)}</span></div>`)
     }
   }
   const head =
@@ -1445,6 +1472,8 @@ hubResize.addEventListener('pointerdown', (e: PointerEvent) => {
 function renderHub(data: SpaceView) {
   // 다시 그리면 설명 카드가 가리키던 선이 사라질 수 있다 — 먼저 닫고, 지도 클릭이면 다시 연다
   hideCollabPop()
+  // 네 탭이 같은 기준으로 주제어를 짚도록, 그리기 전에 색인을 갈아끼운다
+  termIndex = data.collab?.terms ?? {}
   hubTabs.innerHTML = HUB_TABS.map(
     (t) => `<button class="hub-tab ${t.id === hubTab ? 'on' : ''}" data-tab="${t.id}">
       <span class="hub-tab-ico">${t.icon}</span><span>${t.label}</span></button>`,

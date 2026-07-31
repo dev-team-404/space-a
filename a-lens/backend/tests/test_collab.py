@@ -291,3 +291,32 @@ def test_cache_recomputes_when_resolver_appears():
     assert collab.build(detail)["stats"]["handoff"] == 0
     detail2 = dict(detail, issues=[{"issue_id": "i1", "status": "resolved", "opened_by": "alice", "resolved_by": "bob"}])
     assert collab.build(detail2)["stats"]["handoff"] == 1
+
+
+def test_term_index_marks_distinctive_words():
+    """네 탭이 같은 기준으로 금색 강조를 하려면 항목별 주제어가 그래프와 같은 표에서 나와야 한다."""
+    detail = _detail(
+        knowledge=[
+            {"doc_id": "d1", "title": "playwright 스크린샷 파이프라인 도입", "author_agent_id": "alice"},
+            {"doc_id": "d2", "title": "playwright 스크린샷 파이프라인 개선", "author_agent_id": "bob"},
+            {"doc_id": "d3", "title": "회계 마감 절차 안내문", "author_agent_id": "bob"},
+        ],
+        issues=[{"issue_id": "i1", "title": "playwright 실행 실패", "status": "open", "opened_by": "alice"}],
+    )
+    terms = collab.build(detail)["terms"]
+    assert "playwright" in terms["d1"]
+    assert "playwright" in terms["i1"]  # 이슈는 본문이 없어 제목만 훑는다
+    assert "d3" not in terms or "playwright" not in terms["d3"]
+
+
+def test_term_index_covers_docs_without_a_known_author():
+    """강조는 사람과 무관하다 — 저자를 못 이은 문서도 주제어를 받는다."""
+    detail = _detail(
+        knowledge=[
+            {"doc_id": "d1", "title": "playwright 스크린샷 파이프라인", "author_agent": "정체불명"},
+            {"doc_id": "d2", "title": "playwright 스크린샷 도입", "author_agent_id": "alice"},
+        ]
+    )
+    g = collab.build(detail)
+    assert g["stats"]["unlinked_docs"] == 1
+    assert g["terms"].get("d1")

@@ -31,6 +31,7 @@ MIN_SHARED = 2          # 문서쌍이 공유해야 할 최소 주제어 수
 MIN_SCORE_RATIO = 1.0
 MAX_EDGES = 12          # 화면에 그릴 엣지 수 — 넘으면 weight 상위만 (잘린 수는 stats에)
 TOP_KEYWORDS = 5
+TOP_TERMS = 3           # 항목(문서·이슈) 하나에서 화면이 금색으로 짚을 말의 수
 TOP_PAIRS = 3           # 엣지 하나당 근거로 보여줄 문서쌍 수 ("무엇이 통했나")
 POOL_PAIRS = 24         # 그중에서 고르기 위해 들고 있는 후보 수 (§4.3 다양성 선택)
 
@@ -181,22 +182,56 @@ def _diverse_pairs(pool: list[tuple[float, dict]]) -> list[dict]:
     return out
 
 
-def _topic_edges(docs: list[dict], author_of: dict[str, str]) -> tuple[list[dict], dict]:
-    """주제 겹침(추정). 저자가 다른 문서쌍이 주제어를 충분히 공유하면 두 사람을 잇는다.
+def build_idf(docs: list[dict]) -> tuple[dict[str, set[str]], dict[str, float]]:
+    """방의 주제어 표 — 문서별 토큰 집합과 idf 가중치.
 
-    반환 엣지는 무방향 — 정렬한 (a, b) 쌍을 키로 쓴다. weight는 자격을 얻은 문서쌍 수다."""
+    협업 지도의 엣지 판정과 화면 전체의 주제어 강조가 **같은 표**를 쓰게 하려고 한곳에서
+    만든다. 기준이 갈리면 지도에서 근거로 나온 말이 목록에서는 안 짚어진다."""
     toks = {d["doc_id"]: tokens(_doc_text(d)) for d in docs}
     df: collections.Counter = collections.Counter()
     for s in toks.values():
         df.update(s)
     n = len(docs)
     if n < 2:
-        return [], {"keywords": 0}
+        return toks, {}
     cut = max(DF_MIN, int(n * DF_MAX_RATIO))
     # idf는 ln((N+1)/df)로 완만하게 — 문서가 2건인 방에서 ln(N/df)는 0이 되어 어떤 겹침도
     # 점수를 못 받는다. N이 크면 두 식의 차이는 무시할 수준이다.
-    idf = {t: math.log((n + 1) / c) for t, c in df.items() if DF_MIN <= c <= cut}
-    kept = {doc_id: {t for t in s if t in idf} for doc_id, s in toks.items()}
+    return toks, {t: math.log((n + 1) / c) for t, c in df.items() if DF_MIN <= c <= cut}
+
+
+def term_index(
+    docs: list[dict], issues: list[dict], toks: dict[str, set[str]], idf: dict[str, float]
+) -> dict[str, list[str]]:
+    """항목(문서·이슈) → 그 항목을 다른 항목과 구별해주는 말 몇 개.
+
+    화면 네 탭(작업 기록·이슈 공유·지식 재사용·문서함)이 이 색인으로 제목·요약의 같은 말을
+    금색으로 짚는다. 흔한 말은 idf 컷에서 이미 빠졌으니 남은 것 중 상위만 고르면 된다."""
+    out: dict[str, list[str]] = {}
+    for d in docs:
+        picked = sorted((t for t in toks.get(d["doc_id"], ()) if t in idf), key=lambda t: -idf[t])
+        if picked:
+            out[d["doc_id"]] = picked[:TOP_TERMS]
+    for it in issues:
+        if not it.get("issue_id"):
+            continue
+        # 이슈는 본문이 없다 — 제목만 같은 표로 훑는다
+        picked = sorted((t for t in tokens(it.get("title", "")) if t in idf), key=lambda t: -idf[t])
+        if picked:
+            out[it["issue_id"]] = picked[:TOP_TERMS]
+    return out
+
+
+def _topic_edges(
+    docs: list[dict], author_of: dict[str, str], toks: dict[str, set[str]], idf: dict[str, float]
+) -> tuple[list[dict], dict]:
+    """주제 겹침(추정). 저자가 다른 문서쌍이 주제어를 충분히 공유하면 두 사람을 잇는다.
+
+    반환 엣지는 무방향 — 정렬한 (a, b) 쌍을 키로 쓴다. weight는 자격을 얻은 문서쌍 수다."""
+    n = len(docs)
+    if n < 2 or not idf:
+        return [], {"keywords": 0}
+    kept = {d["doc_id"]: {t for t in toks.get(d["doc_id"], ()) if t in idf} for d in docs}
     floor = MIN_SCORE_RATIO * math.log(n + 1)
 
     pairs: collections.Counter = collections.Counter()
@@ -367,8 +402,14 @@ def build(detail: dict, snapshot: dict | None = None) -> dict:
         truncated = len(linked) - MAX_DOCS
         linked = linked[:MAX_DOCS]
 
+    # 주제어 표는 **저자를 못 이은 문서까지 포함해** 만든다 — 강조는 사람과 무관하고,
+    # 말뭉치가 넓을수록 흔한 말/드문 말 판정이 정확하다. 엣지는 저자가 있는 문서만 쓴다.
+    corpus = linked + [d for d in knowledge if d["doc_id"] not in author_of][: max(0, MAX_DOCS - len(linked))]
+    toks, idf = build_idf(corpus)
+    terms = term_index(corpus, issues, toks, idf)
+
     externals: dict[str, dict] = {}
-    topic, topic_stats = _topic_edges(linked, author_of)
+    topic, topic_stats = _topic_edges(linked, author_of, toks, idf)
     reuse = _reuse_edges(reuse_events, canon, author_of, externals)
     handoff, self_resolved = _handoff_edges(issues, canon)
 
@@ -407,6 +448,8 @@ def build(detail: dict, snapshot: dict | None = None) -> dict:
     graph = {
         "nodes": nodes,
         "edges": edges,
+        # 항목별 주제어 — 사이드바 네 탭이 제목·요약에서 이 말들을 금색으로 짚는다
+        "terms": terms,
         "stats": {
             "reuse": sum(1 for e in edges if e["type"] == "reuse"),
             "handoff": sum(1 for e in edges if e["type"] == "handoff"),

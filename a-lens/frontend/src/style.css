@@ -809,7 +809,9 @@ button { font: inherit; cursor: pointer; }
   text-overflow: ellipsis;
 }
 .collab-ev-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.collab-ev-kw { font-size: 10.5px; color: #949cab; margin: 1px 0 0 58px; }
+/* 쌍이 공유한 말 — 제목 안 강조(.kw-hit)와 같은 금색. 주제어는 요약·본문에서도 뽑히므로
+   제목에 그대로 박히지 않는 경우가 절반쯤 된다(실측). 그때도 근거가 비지 않게 이 줄이 받는다. */
+.collab-ev-kw { font-size: 11px; color: #d9a441; margin: 1px 0 0 58px; }
 
 /* ── 협업 지도 선 클릭 시 뜨는 설명 카드 (지도 바로 왼쪽) ── */
 /* 지도와 목록이 세로로 떨어져 있어 그림에서 선을 골라도 설명을 찾아 스크롤해야 했다.
@@ -845,3 +847,11 @@ button { font: inherit; cursor: pointer; }
 .collab-pop-meta { font-size: 11.5px; color: #98a1ae; margin-top: 2px; }
 #collab-pop .collab-kws { margin: 7px 0 2px; }
 #collab-pop .collab-evidence { margin-top: 8px; }
+
+/* 근거 제목 안에서 실제로 겹친 말 — 왜 같은 주제로 묶였는지 눈으로 짚게 한다.
+   배경을 깔지 않고 글자색만 바꾼다(형광펜은 어두운 배경에서 너무 튄다). */
+.kw-hit {
+  background: none;
+  color: #d9a441;
+  font-weight: 700;
+}

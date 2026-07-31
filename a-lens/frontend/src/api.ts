@@ -126,7 +126,13 @@ export type CollabStats = {
   keywords: number
 }
 
-export type CollabGraph = { nodes: CollabNode[]; edges: CollabEdge[]; stats: CollabStats }
+export type CollabGraph = {
+  nodes: CollabNode[]
+  edges: CollabEdge[]
+  stats: CollabStats
+  // 항목(doc_id·issue_id) → 그 항목을 구별해주는 말. 사이드바 네 탭이 금색으로 짚는다.
+  terms?: Record<string, string[]>
+}
 
 export type SpaceView = {
   space_id: string
