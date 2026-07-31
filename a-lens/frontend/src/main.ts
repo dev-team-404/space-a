@@ -1113,7 +1113,12 @@ function hubActivityHTML(data: SpaceView): string {
   const items = list.length ? list.map(agentRowHTML).join('') : '<p class="muted small">표시할 항목이 없어요</p>'
   return `
     <section class="feed activity-feed">
-      <div class="feed-head"><h3>팀 활동</h3></div>
+      <div class="feed-head">
+        <h3>팀 활동</h3>
+        <button id="activity-fold" class="activity-fold" type="button"
+          aria-expanded="${!activityFolded}" title="${activityFolded ? '펼치기' : '접기'}"
+        >${activityFolded ? '▴' : '▾'}</button>
+      </div>
       <div class="activity-subtabs">
         <button class="sub-tab ${activityTab === 'online' ? 'on' : ''}" data-atab="online">온라인 ${online.length}</button>
         <button class="sub-tab ${activityTab === 'offline' ? 'on' : ''}" data-atab="offline">오프라인 ${offline.length}</button>
@@ -1478,6 +1483,32 @@ try {
   console.warn('localStorage 읽기 실패 — 접힘 상태 기본값 사용', e)
 }
 
+// 팀 활동 카드 접힘 — 사이드바와 같은 규율(localStorage 유지, 접근 실패해도 앱은 산다).
+// 사이드바와 따로 두는 이유: 이 카드는 사이드바 밖(씬 위)에 떠 있어서, 방을 크게 보고 싶은
+// 것과 사람 목록을 치우고 싶은 것이 서로 다른 요구다.
+let activityFolded = false
+try {
+  activityFolded = localStorage.getItem('a-lens.activity.folded') === '1'
+} catch (e) {
+  console.warn('localStorage 읽기 실패 — 팀 활동 접힘 기본값 사용', e)
+}
+
+function toggleActivityFold(folded: boolean) {
+  activityFolded = folded
+  try {
+    localStorage.setItem('a-lens.activity.folded', folded ? '1' : '0')
+  } catch (e) {
+    console.warn('localStorage 쓰기 실패 — 팀 활동 접힘 저장 생략', e)
+  }
+  hubActivity.classList.toggle('folded', folded)
+  const btn = document.getElementById('activity-fold')
+  if (btn) {
+    btn.textContent = folded ? '▴' : '▾'
+    btn.setAttribute('aria-expanded', String(!folded))
+    btn.title = folded ? '펼치기' : '접기'
+  }
+}
+
 /** 방 화면에서만 호출 — 접힘 여부에 따라 사이드바/열기버튼 표시를 정하고 씬 폭을 재조정한다. */
 function applyHubCollapsed(inLife: boolean) {
   if (!inLife || hubCollapsed) hideCollabPop() // 지도가 사라지면 그 옆 카드도 의미가 없다
@@ -1683,6 +1714,11 @@ function flashRelated(selector: string) {
 
 function renderHubActivity(data: SpaceView) {
   hubActivity.innerHTML = hubActivityHTML(data)
+  // 카드는 폴링 때마다 통째로 다시 그려진다 — 접힘 클래스도 매번 다시 얹어야 펼쳐지지 않는다.
+  hubActivity.classList.toggle('folded', activityFolded)
+  document.getElementById('activity-fold')?.addEventListener('click', () => {
+    toggleActivityFold(!activityFolded)
+  })
   hubActivity.querySelectorAll<HTMLElement>('.sub-tab').forEach((btn) => {
     btn.addEventListener('click', () => {
       activityTab = btn.dataset.atab as ActivityTab
