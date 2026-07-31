@@ -88,6 +88,44 @@ export type ReuseEvent = {
   demo?: boolean
 }
 
+// ── 협업 지도 (스펙: docs/design/a-lens/specs/2026-07-31-collab-graph.md) ──
+// 사실(reuse·handoff)과 추정(topic)은 **엣지 종류로 분리해서** 온다. 화면에서 합치지 않는다.
+export type CollabNode = {
+  id: string
+  name: string
+  status: string
+  mascot_url?: string | null
+  docs: number
+  issues: number
+  external: boolean // 이 방 밖 사람 — 우리 지식을 가져간 쪽
+}
+
+export type CollabEdge = {
+  type: 'reuse' | 'handoff' | 'topic'
+  source: string
+  target: string
+  weight: number
+  keywords?: string[] // topic — 두 사람이 공유한 주제어
+  doc_ids?: string[]
+  issue_ids?: string[]
+}
+
+export type CollabStats = {
+  reuse: number
+  handoff: number
+  topic: number
+  issues: number
+  self_resolved: number // 자문자답(연 사람이 곧 해결한 사람) 건수
+  docs: number
+  unlinked_docs: number // 작성자를 사람으로 못 이은 문서
+  quiet_people: number // 이 방에서 활동 기록이 없어 지도에서 뺀 계정
+  truncated_docs: number
+  dropped_edges: number
+  keywords: number
+}
+
+export type CollabGraph = { nodes: CollabNode[]; edges: CollabEdge[]; stats: CollabStats }
+
 export type SpaceView = {
   space_id: string
   viewer_tier: string
@@ -97,6 +135,7 @@ export type SpaceView = {
   visits: { today: number; total: number } | null
   reuse_events?: ReuseEvent[] // 이 방이 원천/소비자인 재사용 이벤트 (Hub '지식 재사용' 탭)
   highlight?: SpaceHighlight | null // 오늘의 하이라이트 — 방 칠판 표시 + 클릭 시 관련 항목 연동
+  collab?: CollabGraph | null // 협업 지도 (계산 실패·로딩 전이면 null)
   demo?: boolean // 더미(fake) 스페이스 — 화면에서 FAKE 배지로 구분
 }
 

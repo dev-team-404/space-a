@@ -12,6 +12,9 @@ import {
   type RoomChatSpot,
   saveSettings,
   testConnections,
+  type CollabEdge,
+  type CollabGraph,
+  type CollabNode,
   type KnowledgeDoc,
   type LobbyFloor,
   type SpaceAgent,
@@ -645,12 +648,13 @@ function catBadge(cat?: string | null): string {
 // ── 오른쪽 Collaboration Hub (상시 사이드바) ──
 // a-lens는 사람이 보는 view — 캐릭터·Activity는 '사람'이다. 라벨도 사람/팀 관점.
 // 위 2/3 = 탭(이슈 공유 / 지식 재사용) 내용, 아래 1/3 = 팀 활동 상시 표시.
-type HubTab = 'trail' | 'issues' | 'reuse' | 'pages'
+type HubTab = 'trail' | 'issues' | 'reuse' | 'pages' | 'collab'
 const HUB_TABS: { id: HubTab; label: string; icon: string }[] = [
   { id: 'trail', label: '작업 기록', icon: '🧭' },
   { id: 'issues', label: '이슈 공유', icon: '🔗' },
   { id: 'reuse', label: '지식 재사용', icon: '📄' },
   { id: 'pages', label: '문서함', icon: '📑' },
+  { id: 'collab', label: '협업 지도', icon: '🕸️' },
 ]
 let hubTab: HubTab = 'issues'
 
@@ -1089,6 +1093,153 @@ function hubActivityHTML(data: SpaceView): string {
     </section>`
 }
 
+// ── 협업 지도 탭 ──
+// 스펙: docs/design/a-lens/specs/2026-07-31-collab-graph.md
+// 사람을 원 위에 세우고 관계를 선으로 잇는다. **사실(실선)과 추정(점선)을 절대 섞지 않는다** —
+// 굵기·색으로 가르면 "진한 선 = 확실한 사실"로 오독된다.
+// force 시뮬레이션을 쓰지 않는 이유: 볼 때마다 좌표가 흔들려 같은 방이 다른 그림이 된다.
+// 사람이 10명 안팎이므로 이름순 고정 원형이면 항상 같은 자리에 온다.
+
+const EDGE_STYLE: Record<CollabEdge['type'], { color: string; dash: string; label: string }> = {
+  reuse: { color: '#d8a13a', dash: '', label: '인용' },
+  handoff: { color: '#3fb6a8', dash: '', label: '핸드오프' },
+  topic: { color: '#8b93a1', dash: '4 3', label: '주제 겹침' },
+}
+const edgeKey = (e: CollabEdge) => `${e.type}:${e.source}:${e.target}`
+let collabEdge: string | null = null // 선택된 엣지 — 목록과 그림을 같이 강조한다
+
+const SVG_W = 300
+const SVG_H = 268
+const NODE_R = 15
+
+function collabPoints(nodes: CollabNode[]): Map<string, [number, number]> {
+  const cx = SVG_W / 2
+  const cy = SVG_H / 2 - 8
+  const radius = Math.min(cx, cy) - NODE_R - 22 // 이름표가 밖으로 나갈 자리를 남긴다
+  const out = new Map<string, [number, number]>()
+  nodes.forEach((n, i) => {
+    // 한 명이면 가운데. 여러 명이면 12시부터 시계방향 등간격.
+    if (nodes.length === 1) return out.set(n.id, [cx, cy])
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / nodes.length
+    out.set(n.id, [cx + radius * Math.cos(a), cy + radius * Math.sin(a)])
+  })
+  return out
+}
+
+function collabNodeSVG(n: CollabNode, [x, y]: [number, number]): string {
+  const short = n.name.length > 7 ? `${n.name.slice(0, 6)}…` : n.name
+  const face = n.mascot_url
+    ? `<image href="${esc(n.mascot_url)}" x="${-NODE_R}" y="${-NODE_R}" width="${NODE_R * 2}" height="${NODE_R * 2}"
+         clip-path="url(#collab-clip)" preserveAspectRatio="xMidYMid slice" />`
+    : `<text class="collab-initial" y="4">${esc(n.name.slice(0, 1))}</text>`
+  return `
+    <g class="collab-node ${n.external ? 'ext' : ''} ${n.status === 'working' ? 'on' : ''}"
+       transform="translate(${x.toFixed(1)},${y.toFixed(1)})" data-cnode="${esc(n.id)}">
+      <title>${esc(n.name)}${n.external ? ' · 다른 방 사람' : ` · 문서 ${n.docs} · 이슈 ${n.issues}`}</title>
+      <circle class="collab-disc" r="${NODE_R}" />
+      ${face}
+      <text class="collab-label" y="${NODE_R + 12}">${esc(short)}</text>
+    </g>`
+}
+
+function collabEdgeSVG(e: CollabEdge, pts: Map<string, [number, number]>): string {
+  const a = pts.get(e.source)
+  const b = pts.get(e.target)
+  if (!a || !b) return ''
+  const style = EDGE_STYLE[e.type]
+  // 가운데로 살짝 당긴 2차 베지어 — 직선이 겹치면 어느 쌍인지 못 읽는다
+  const mx = (a[0] + b[0]) / 2
+  const my = (a[1] + b[1]) / 2
+  const qx = mx + (SVG_W / 2 - mx) * 0.35
+  const qy = my + (SVG_H / 2 - 8 - my) * 0.35
+  const width = Math.min(4, 1 + Math.log(e.weight + 1))
+  const on = collabEdge === edgeKey(e)
+  return `
+    <path class="collab-edge ${on ? 'on' : ''}" data-cedge="${esc(edgeKey(e))}"
+      d="M${a[0].toFixed(1)},${a[1].toFixed(1)} Q${qx.toFixed(1)},${qy.toFixed(1)} ${b[0].toFixed(1)},${b[1].toFixed(1)}"
+      stroke="${style.color}" stroke-width="${width.toFixed(2)}"
+      ${style.dash ? `stroke-dasharray="${style.dash}"` : ''}
+      ${e.type === 'topic' ? '' : 'marker-end="url(#collab-arrow)"'} />`
+}
+
+/** 엣지 한 줄 — 무엇을 근거로 이어졌는지 사람 말로. 추정은 추정이라고 적는다. */
+function collabEdgeRow(e: CollabEdge, name: (id: string) => string): string {
+  const style = EDGE_STYLE[e.type]
+  const on = collabEdge === edgeKey(e)
+  const gist =
+    e.type === 'topic'
+      ? `같은 주제를 다뤘어요 · 문서 ${e.weight}쌍`
+      : e.type === 'reuse'
+        ? `지식을 가져다 썼어요 · ${e.weight}건`
+        : `이슈를 넘겨받아 해결했어요 · ${e.weight}건`
+  const arrow = e.type === 'topic' ? '↔' : '→'
+  const keys = (e.keywords ?? []).map((k) => `<span class="collab-kw">${esc(k)}</span>`).join('')
+  return `
+    <div class="collab-row ${on ? 'on' : ''}" data-cedge="${esc(edgeKey(e))}">
+      <span class="collab-swatch" style="background:${style.color};${e.type === 'topic' ? 'opacity:.55' : ''}"></span>
+      <div class="collab-row-main">
+        <div class="collab-row-who">${esc(name(e.source))} <span class="muted">${arrow}</span> ${esc(name(e.target))}</div>
+        <div class="muted small">${esc(style.label)} · ${esc(gist)}</div>
+        ${keys ? `<div class="collab-kws">${keys}</div>` : ''}
+      </div>
+    </div>`
+}
+
+function hubCollabHTML(data: SpaceView): string {
+  const g: CollabGraph | null | undefined = data.collab
+  if (!g) {
+    return hubSection('협업 지도', 'Collaboration Map', '<p class="muted small">아직 계산 전이에요</p>')
+  }
+  if (!g.nodes.length) {
+    return hubSection(
+      '협업 지도',
+      'Collaboration Map',
+      '<p class="muted small">이 방에 활동 기록이 있는 사람이 아직 없어요</p>',
+    )
+  }
+  const nameOf = (id: string) => g.nodes.find((n) => n.id === id)?.name ?? id
+  const pts = collabPoints(g.nodes)
+  const legend = `
+    <div class="collab-legend">
+      <span><i class="ln solid" style="background:${EDGE_STYLE.reuse.color}"></i>인용</span>
+      <span><i class="ln solid" style="background:${EDGE_STYLE.handoff.color}"></i>핸드오프</span>
+      <span><i class="ln dashed"></i>주제 겹침 <b>(추정)</b></span>
+    </div>`
+  const svg = `
+    <svg class="collab-svg" viewBox="0 0 ${SVG_W} ${SVG_H}" role="img" aria-label="협업 지도">
+      <defs>
+        <clipPath id="collab-clip"><circle r="${NODE_R}" /></clipPath>
+        <marker id="collab-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M0,1 L7,4 L0,7 z" fill="currentColor" />
+        </marker>
+      </defs>
+      ${g.edges.map((e) => collabEdgeSVG(e, pts)).join('')}
+      ${g.nodes.map((n) => collabNodeSVG(n, pts.get(n.id) ?? [SVG_W / 2, SVG_H / 2])).join('')}
+    </svg>`
+
+  // 정직성 줄 — 0을 감추지 않는다. 사실 엣지가 0인 것은 빈 화면이 아니라 읽어야 할 결과다.
+  const s = g.stats
+  const notes = [
+    s.self_resolved ? `이슈 ${s.issues}건 중 ${s.self_resolved}건을 스스로 해결` : '',
+    s.unlinked_docs ? `작성자 연결 못 함 ${s.unlinked_docs}건` : '',
+    s.quiet_people ? `활동 기록 없는 계정 ${s.quiet_people}명 제외` : '',
+    s.truncated_docs ? `문서 ${s.truncated_docs}건은 계산에서 제외(상한)` : '',
+    s.dropped_edges ? `약한 선 ${s.dropped_edges}개 생략` : '',
+  ].filter(Boolean)
+  const summary = `
+    <div class="collab-stats">
+      <span>인용 <b>${s.reuse}</b></span><span>핸드오프 <b>${s.handoff}</b></span>
+      <span>주제 겹침 <b>${s.topic}</b></span>
+    </div>
+    ${notes.length ? `<div class="muted small collab-notes">${esc(notes.join(' · '))}</div>` : ''}`
+
+  const list = g.edges.length
+    ? g.edges.map((e) => collabEdgeRow(e, nameOf)).join('')
+    : `<p class="muted small">아직 이어진 선이 없어요 — 이 방 사람들은 각자 따로 일했어요</p>`
+
+  return hubSection('협업 지도', 'Collaboration Map', legend + svg + summary + list)
+}
+
 function hubSection(title: string, sub: string, items: string): string {
   return `
     <section class="feed">
@@ -1184,7 +1335,9 @@ function renderHub(data: SpaceView) {
         ? hubIssuesHTML(data)
         : hubTab === 'reuse'
           ? hubReuseHTML(data)
-          : hubPagesHTML(data)
+          : hubTab === 'collab'
+            ? hubCollabHTML(data)
+            : hubPagesHTML(data)
   // 작업 기록 — 사람 선택/해제
   hubBody.querySelectorAll<HTMLElement>('[data-person]').forEach((el) => {
     el.addEventListener('click', () => {
@@ -1234,6 +1387,23 @@ function renderHub(data: SpaceView) {
     el.addEventListener('click', () => {
       const doc = data.knowledge[Number(el.dataset.doc)]
       if (doc) showModal(doc.title, docModalHTML(doc))
+    })
+  })
+  // 협업 지도 — 선(그림·목록 어느 쪽을 눌러도) 선택 토글, 사람은 그 사람 작업 기록으로
+  hubBody.querySelectorAll<SVGElement | HTMLElement>('[data-cedge]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const key = el.dataset.cedge ?? null
+      collabEdge = collabEdge === key ? null : key
+      renderHub(data)
+    })
+  })
+  hubBody.querySelectorAll<SVGElement>('[data-cnode]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.cnode
+      if (!id || id.startsWith('ext:')) return // 방 밖 사람은 여기 작업 기록이 없다
+      trailPerson = id
+      hubTab = 'trail'
+      renderHub(data)
     })
   })
   // 이슈 흐름의 행 클릭 → 이슈 상세 모달 (분류·요약·타임라인)

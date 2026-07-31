@@ -409,29 +409,82 @@ def _humanize_activity(item: dict | None) -> dict | None:
     return {"brief": brief, "detail": detail}
 
 
-def _issue_vm(issue: dict, member_name: dict[str, str]) -> dict:
+def _issue_resolvers(issues: list[dict], pages: list[dict]) -> dict[str, dict]:
+    """이슈 → 해결한 사람. 허브가 `page.issue_id`를 안 내려주는 동안의 대체 조인.
+
+    `resolve_issue`는 이슈와 파생 페이지에 **같은 타임스탬프**를 찍는다(a-hub services `_ts`).
+    그걸 조인 키로 쓴다 — 실측 156문서 중 142건이 이어졌고 모호는 0건이었다(스펙 §3).
+
+    **모호하면 잇지 않는다.** 같은 시각에 이슈가 둘 이상이거나 한 이슈에 페이지가 둘 이상
+    걸리면 그 조인은 버린다. 추측으로 남의 해결을 다른 사람에게 붙이는 것이 선을 안 긋는
+    것보다 나쁘다."""
+    by_ts: dict[str, list[dict]] = {}
+    for it in issues:
+        ts = it.get("updated_at")
+        if ts and it.get("issue_id"):
+            by_ts.setdefault(ts, []).append(it)
+    hits: dict[str, list[dict]] = {}
+    for p in pages:
+        group = by_ts.get(p.get("created_at") or "")
+        if not group or len(group) > 1 or not p.get("created_by"):
+            continue
+        hits.setdefault(group[0]["issue_id"], []).append(p)
+    return {
+        issue_id: {"agent_id": ps[0]["created_by"], "page_id": ps[0].get("page_id")}
+        for issue_id, ps in hits.items()
+        if len(ps) == 1
+    }
+
+
+def _issue_vm(issue: dict, member_name: dict[str, str], resolvers: dict[str, dict] | None = None) -> dict:
     status = issue.get("status", "open")
     opener = issue.get("opened_by")
+    resolved = (resolvers or {}).get(issue.get("issue_id", "")) or {}
+    resolver = resolved.get("agent_id")
+    name_of = lambda who: member_name.get(who, who or "")  # noqa: E731
+    timeline = [
+        {
+            "step": status,
+            "label": _ISSUE_STEP_LABEL.get(status, status),
+            "actor": name_of(opener),
+            "at": issue.get("updated_at") or issue.get("created_at"),
+            "note": "",
+        }
+    ]
+    # 남이 해결해준 이슈만 2단계로 편다. 한 줄짜리 타임라인에 opener를 '해결 완료' 행위자로
+    # 적으면 핸드오프가 생기는 순간 틀린 화면이 되기 때문 — 대신 `timeline[0]`은 항상 연 사람
+    # 자리로 남긴다(이슈 흐름·작업 기록이 그 자리를 사람 필터로 쓴다).
+    if status == "resolved" and resolver and resolver != opener:
+        timeline = [
+            {
+                "step": "open",
+                "label": _ISSUE_STEP_LABEL["open"],
+                "actor": name_of(opener),
+                "at": issue.get("created_at"),
+                "note": "",
+            },
+            {
+                "step": "resolved",
+                "label": _ISSUE_STEP_LABEL["resolved"],
+                "actor": name_of(resolver),
+                "at": issue.get("updated_at"),
+                "note": "",
+            },
+        ]
     return {
         "issue_id": issue.get("issue_id", ""),
         "title": issue.get("title", ""),
         "status": status,
         "opened_by": opener,
-        "timeline": [
-            {
-                "step": status,
-                "label": _ISSUE_STEP_LABEL.get(status, status),
-                "actor": member_name.get(opener, opener or ""),
-                "at": issue.get("updated_at") or issue.get("created_at"),
-                "note": "",
-            }
-        ],
+        "resolved_by": resolver,  # 협업 지도의 handoff 엣지 재료 (모호하면 없다)
+        "resolved_page_id": resolved.get("page_id"),
+        "timeline": timeline,
     }
 
 
-def _issue_doc(it: dict, member_name: dict[str, str]) -> dict:
+def _issue_doc(it: dict, member_name: dict[str, str], resolvers: dict[str, dict] | None = None) -> dict:
     """이슈 VM + 번역(분류·요약·서사). 제목이 그대로면 캐시 사용 — 상태 변화로는 재번역 안 함."""
-    vm = _issue_vm(it, member_name)
+    vm = _issue_vm(it, member_name, resolvers)
     title = it.get("title", "")
     st = store.get_store()
     row = st.get_issue(vm["issue_id"]) if st is not None else None
@@ -693,10 +746,13 @@ def _hub_snapshot() -> dict:
             # 지식 본문+번역: 페이지별 store 캐시. updated_at이 그대로면 허브 재조회·LLM 둘 다 스킵.
             knowledge_docs = [_page_doc(client, p, sid, member_name) for p in pages]
 
+            # 이슈 ↔ 파생 문서 조인 (스펙 §3) — "이 이슈를 누가 해결했나"의 유일한 경로다
+            resolvers = _issue_resolvers(issues, pages)
+
             details[sid] = {
                 "space_id": sid,
                 "agents": agents + _life_only_agents(life_people, life_used, online_cutoff),
-                "issues": [_issue_doc(it, member_name) for it in issues],
+                "issues": [_issue_doc(it, member_name, resolvers) for it in issues],
                 "knowledge": knowledge_docs,
             }
             for p in pages:

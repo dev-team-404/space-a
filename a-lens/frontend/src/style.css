@@ -643,3 +643,83 @@ button { font: inherit; cursor: pointer; }
 .issue-detail-h { margin: 14px 0 6px; font-size: 12px; color: #d9a441; }
 .issue-timeline { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 7px; }
 .issue-timeline li { font-size: 12.5px; line-height: 1.5; color: #dfe4ec; }
+
+/* ── 협업 지도 (스펙: docs/design/a-lens/specs/2026-07-31-collab-graph.md) ── */
+/* 사실은 실선, 추정은 점선. 굵기·색으로 가르지 않는 이유는 스펙 §2 참고. */
+.collab-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11px;
+  color: #8a929e;
+  margin-bottom: 6px;
+}
+.collab-legend i.ln { display: inline-block; width: 14px; height: 2px; margin-right: 4px; vertical-align: 3px; }
+.collab-legend i.ln.dashed {
+  height: 0;
+  border-top: 2px dashed #8b93a1;
+  background: none;
+}
+.collab-legend b { color: #b9c0cb; font-weight: 600; }
+
+.collab-svg { width: 100%; height: auto; display: block; margin: 2px 0 8px; overflow: visible; }
+.collab-edge {
+  fill: none;
+  opacity: 0.55;
+  cursor: pointer;
+  color: inherit;
+  transition: opacity 0.12s;
+}
+.collab-edge:hover { opacity: 0.9; }
+.collab-edge.on { opacity: 1; filter: drop-shadow(0 0 4px currentColor); }
+
+.collab-node { cursor: pointer; }
+.collab-node .collab-disc { fill: #182031; stroke: #3a4457; stroke-width: 1.5; }
+.collab-node.on .collab-disc { stroke: #7fc99a; }
+.collab-node.ext .collab-disc { stroke-dasharray: 3 2; stroke: #6b727d; }
+.collab-node:hover .collab-disc { stroke: #7fb3d5; }
+.collab-initial {
+  text-anchor: middle;
+  font-size: 12px;
+  font-weight: 700;
+  fill: #c8cfd8;
+}
+.collab-label {
+  text-anchor: middle;
+  font-size: 9.5px;
+  fill: #9aa2ae;
+}
+.collab-node.ext .collab-label { fill: #6b727d; font-style: italic; }
+
+.collab-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #aab2bd;
+  padding: 7px 0;
+  border-top: 1px solid #1c2333;
+}
+.collab-stats b { color: #e8eaed; font-variant-numeric: tabular-nums; }
+.collab-notes { margin-bottom: 8px; line-height: 1.5; }
+
+.collab-row {
+  display: flex;
+  gap: 8px;
+  padding: 7px 4px;
+  border-bottom: 1px solid #1c2333;
+  cursor: pointer;
+}
+.collab-row:hover { background: #131a28; }
+.collab-row.on { background: #182036; }
+.collab-swatch { width: 3px; border-radius: 2px; flex: none; }
+.collab-row-main { min-width: 0; }
+.collab-row-who { font-size: 12.5px; color: #e8eaed; font-weight: 600; }
+.collab-kws { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.collab-kw {
+  background: #101624;
+  border: 1px solid #2b3345;
+  color: #9aa2ae;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10.5px;
+}
