@@ -771,6 +771,7 @@ button { font: inherit; cursor: pointer; }
 
 /* 선을 고르면 펼쳐지는 근거 — "무엇이 통했나"를 실제 문서 제목으로 */
 .collab-evidence {
+  min-width: 0; /* grid 자식은 기본 min-width:auto라 긴 제목이 카드를 밀어낸다 */
   margin-top: 7px;
   padding-left: 8px;
   border-left: 2px solid #3a4459;
@@ -779,6 +780,7 @@ button { font: inherit; cursor: pointer; }
 }
 .collab-ev-head { font-size: 10.5px; color: #98a1ae; letter-spacing: 0.02em; }
 .collab-ev-pair {
+  min-width: 0;
   display: grid;
   gap: 2px;
   padding-bottom: 5px;
@@ -787,6 +789,7 @@ button { font: inherit; cursor: pointer; }
 .collab-ev-pair:last-child { border-bottom: 0; padding-bottom: 0; }
 /* 제목은 한 줄로 자른다 — 두 줄까지 풀면 근거 블록이 목록만큼 길어져 원래 문제로 돌아간다 */
 .collab-ev-item {
+  min-width: 0;
   font-size: 12px;
   color: #dfe4ea;
   line-height: 1.5;
@@ -817,6 +820,8 @@ button { font: inherit; cursor: pointer; }
   width: 380px;
   max-height: 60vh;
   overflow-y: auto;
+  /* overflow-y만 주면 overflow-x는 visible이 아니라 auto로 계산돼 가로 스크롤바가 생긴다 */
+  overflow-x: hidden;
   padding: 12px 14px 13px;
   border: 1px solid #4a5361;
   border-radius: 10px;
