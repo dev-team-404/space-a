@@ -181,12 +181,30 @@ PRAGMA를 전혀 설정하지 않아(기본 rollback journal) 두 번째 연결�
           diff → last_scan_ts → coach:finding   ┘
 ```
 
-**`before` 스냅샷을 스캔 맨 앞에서 `run_rules`와 같은 블록으로 옮긴다.** findings를 바꾸는 것은
-`run_rules`뿐이므로 의미는 같다. 옮기지 않으면 청킹이 **새 레이스를 만든다** — 스캔 중 사용자가
-`set_finding_status`로 카드를 처리하면 diff가 그것을 "새로 뜬 finding"으로 오판해 엉뚱한 `coach:finding`을
-띄운다. 옮기면 diff 원자성이 그대로 보존된다.
-
 **최장 연속 락 보유 = `run_rules` 블록 ≈ 510ms.**
+
+#### `before` 스냅샷 이동 — 버그 수정이 아니라 비용 0의 방어 *(2026-07-31 검증으로 근거 정정)*
+
+`before`/`after`/`diff`는 스캔에서 **두 읽기가 하나의 쓰기를 감싸야 의미가 생기는 유일한 지점**이다.
+청킹하면 그 사이에 락이 220번 열리므로 "그 틈에 누가 `findings`를 바꾸면 diff가 오판한다"고 우려했으나,
+**실제로는 지금 안전하다**:
+
+| 확인한 사실 | 근거 |
+|---|---|
+| `finding_severities()`는 `SELECT dedup_key, severity FROM findings` — **`status`를 보지 않는다** | `store.rs:1428` |
+| 커맨드 중 `findings`를 쓰는 것은 `set_finding_status` **하나뿐**이고 `status`만 바꾼다 | `commands.rs:322` → `store.rs:911` |
+| `run_scan_now`는 `PipelineMsg::RunNow`를 mpsc로 보낼 뿐 — 소비자는 파이프라인 스레드 하나라 **스캔은 겹치지 않는다** | `commands.rs:322` 인접, `pipeline.rs:31` |
+
+카드를 처리해도 `(dedup_key, severity)`가 불변이므로 `diff_findings`(`crates/core/src/pipeline.rs`)의
+판정은 달라지지 않는다. **즉 청킹은 diff 의미를 바꾸지 않는다.**
+
+그래도 옮기는 이유는 그 안전이 **다른 파일의 우연 두 개에 의존**한다는 것이다 — "스냅샷이 마침 `status`를
+안 본다"와 "쓰기 커맨드가 마침 하나뿐이고 마침 `status`만 바꾼다". 둘 중 하나라도 바뀌면(향후 커맨드가
+finding을 삽입하거나, 스냅샷이 `status`로 필터하게 되면) 락 틈으로 조용히 오작동이 들어온다 — 잘못 뜬
+`coach:finding` 토스트. 한 블록으로 묶으면 그 의존이 사라지고 불변식이 **국소적으로 보인다**.
+비용은 문장 하나의 이동이다.
+
+**이 항목은 선택적이다** — 빼도 정합성은 유지된다.
 
 ### §B. ops.rs — CLI 경로 불변
 
@@ -220,7 +238,10 @@ PRAGMA를 전혀 설정하지 않아(기본 rollback journal) 두 번째 연결�
 - 스캔 중 커맨드가 **부분 수집 상태**를 읽을 수 있다. 스캔 시작 전에 읽는 것과 같은 상태이고
   `scan:done`이 프론트 갱신을 촉발하므로 수용한다.
 - `ingest_state`는 파일마다 커밋되므로 중간에 죽어도 다음 스캔이 이어받는다 — 기존보다 개선.
-- diff 원자성은 §A로 보존된다.
+- **diff 의미는 청킹 자체로 이미 보존된다**(§A의 검증 표). `before` 이동은 그 보존을 미래 변경에도
+  붙잡아 두는 방어일 뿐이다.
+- **스캔은 서로 겹치지 않는다** — `run_scan_now`·파일 감시·시작 스캔이 모두 같은 mpsc 채널과
+  파이프라인 스레드 하나를 지나므로, 청킹이 스캔 대 스캔 경합을 새로 만들지 않는다.
 
 ### §F. 명시적 비목표
 
