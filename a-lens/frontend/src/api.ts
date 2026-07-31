@@ -106,8 +106,10 @@ export type CollabEdge = {
   target: string
   weight: number
   keywords?: string[] // topic — 두 사람이 공유한 주제어
-  doc_ids?: string[]
-  issue_ids?: string[]
+  // topic — 근거 문서쌍. docs=[source쪽, target쪽], keywords=그 쌍이 공유한 말
+  doc_pairs?: { docs: string[]; keywords: string[] }[]
+  doc_ids?: string[] // reuse — 재사용된 문서
+  issue_ids?: string[] // handoff — 넘겨받아 해결한 이슈
 }
 
 export type CollabStats = {

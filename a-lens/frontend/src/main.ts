@@ -648,13 +648,12 @@ function catBadge(cat?: string | null): string {
 // ── 오른쪽 Collaboration Hub (상시 사이드바) ──
 // a-lens는 사람이 보는 view — 캐릭터·Activity는 '사람'이다. 라벨도 사람/팀 관점.
 // 위 2/3 = 탭(이슈 공유 / 지식 재사용) 내용, 아래 1/3 = 팀 활동 상시 표시.
-type HubTab = 'trail' | 'issues' | 'reuse' | 'pages' | 'collab'
+type HubTab = 'trail' | 'issues' | 'reuse' | 'pages'
 const HUB_TABS: { id: HubTab; label: string; icon: string }[] = [
   { id: 'trail', label: '작업 기록', icon: '🧭' },
   { id: 'issues', label: '이슈 공유', icon: '🔗' },
   { id: 'reuse', label: '지식 재사용', icon: '📄' },
   { id: 'pages', label: '문서함', icon: '📑' },
-  { id: 'collab', label: '협업 지도', icon: '🕸️' },
 ]
 let hubTab: HubTab = 'issues'
 
@@ -871,7 +870,11 @@ function trailPickerHTML(data: SpaceView): string {
         </div>`
     })
     .join('')
-  return hubSection('작업 기록', 'Work Trail', rows || '<p class="muted small">표시할 사람이 없어요</p>')
+  // 사람 목록 아래에 방 전체 협업 지도를 바로 붙인다 — 탭을 열면 클릭 없이 보이는 자리다.
+  return (
+    hubSection('작업 기록', 'Work Trail', rows || '<p class="muted small">표시할 사람이 없어요</p>') +
+    hubCollabHTML(data)
+  )
 }
 
 function hubTrailHTML(data: SpaceView): string {
@@ -910,7 +913,8 @@ function hubTrailHTML(data: SpaceView): string {
     body += trailRowHTML(item)
   }
   if (!items.length) body = '<p class="muted small">아직 남긴 기록이 없어요</p>'
-  return hubSection('작업 기록', 'Work Trail', head + body)
+  // 한 사람을 열었으면 지도도 그 사람 기준으로 좁혀 붙인다 (누구와 이어졌나).
+  return hubSection('작업 기록', 'Work Trail', head + body) + hubCollabHTML(data, agent.agent_id)
 }
 
 // ── 지식 문서 필터 (지식 재사용 '책장' · 문서함 공용) ──
@@ -1162,8 +1166,45 @@ function collabEdgeSVG(e: CollabEdge, pts: Map<string, [number, number]>): strin
       ${e.type === 'topic' ? '' : 'marker-end="url(#collab-arrow)"'} />`
 }
 
+/** 선을 고르면 펼쳐지는 근거 — **무엇이 통했는지** 실제 문서·이슈 제목으로 보여준다.
+ *  키워드만으로는 "왜 이어졌지?"가 안 풀린다. 줄을 누르면 원문 모달까지 연다. */
+function collabEvidenceHTML(e: CollabEdge, data: SpaceView, name: (id: string) => string): string {
+  const docTitle = (id: string) => data.knowledge.find((d) => d.doc_id === id)
+  const rows: string[] = []
+  if (e.type === 'topic') {
+    for (const pair of e.doc_pairs ?? []) {
+      const [a, b] = [docTitle(pair.docs[0]), docTitle(pair.docs[1])]
+      if (!a || !b) continue
+      // 쌍마다 그 쌍이 공유한 말을 붙인다 — 제목만 보면 왜 묶였는지 안 보이는 쌍이 많다
+      const kws = pair.keywords.map((k) => `<span class="collab-kw">${esc(k)}</span>`).join('')
+      rows.push(`
+        <div class="collab-ev-pair">
+          <div class="collab-ev-item" data-cdoc="${esc(a.doc_id)}">
+            <span class="collab-ev-who">${esc(name(e.source))}</span> 📄 ${esc(a.title)}</div>
+          <div class="collab-ev-item" data-cdoc="${esc(b.doc_id)}">
+            <span class="collab-ev-who">${esc(name(e.target))}</span> 📄 ${esc(b.title)}</div>
+          ${kws ? `<div class="collab-kws">${kws}</div>` : ''}
+        </div>`)
+    }
+  } else if (e.type === 'reuse') {
+    for (const id of e.doc_ids ?? []) {
+      const d = docTitle(id)
+      if (d) rows.push(`<div class="collab-ev-item" data-cdoc="${esc(d.doc_id)}">📄 ${esc(d.title)}</div>`)
+    }
+  } else {
+    for (const id of e.issue_ids ?? []) {
+      const i = data.issues.find((x) => x.issue_id === id)
+      if (i) rows.push(`<div class="collab-ev-item" data-cissue="${esc(i.issue_id)}">🔗 ${esc(i.title)}</div>`)
+    }
+  }
+  const head =
+    e.type === 'topic' ? '이 문서들이 겹쳤어요' : e.type === 'reuse' ? '가져다 쓴 지식' : '넘겨받아 해결한 이슈'
+  if (!rows.length) return '<div class="collab-evidence"><div class="muted small">근거 문서를 못 찾았어요</div></div>'
+  return `<div class="collab-evidence"><div class="collab-ev-head">${head}</div>${rows.join('')}</div>`
+}
+
 /** 엣지 한 줄 — 무엇을 근거로 이어졌는지 사람 말로. 추정은 추정이라고 적는다. */
-function collabEdgeRow(e: CollabEdge, name: (id: string) => string): string {
+function collabEdgeRow(e: CollabEdge, data: SpaceView, name: (id: string) => string): string {
   const style = EDGE_STYLE[e.type]
   const on = collabEdge === edgeKey(e)
   const gist =
@@ -1181,23 +1222,40 @@ function collabEdgeRow(e: CollabEdge, name: (id: string) => string): string {
         <div class="collab-row-who">${esc(name(e.source))} <span class="muted">${arrow}</span> ${esc(name(e.target))}</div>
         <div class="muted small">${esc(style.label)} · ${esc(gist)}</div>
         ${keys ? `<div class="collab-kws">${keys}</div>` : ''}
+        ${on ? collabEvidenceHTML(e, data, name) : ''}
       </div>
     </div>`
 }
 
-function hubCollabHTML(data: SpaceView): string {
-  const g: CollabGraph | null | undefined = data.collab
-  if (!g) {
-    return hubSection('협업 지도', 'Collaboration Map', '<p class="muted small">아직 계산 전이에요</p>')
+/** 협업 지도 한 덩이. `focus`(사람 id)를 주면 그 사람에 걸린 선만 남긴다 —
+ *  작업 기록에서 한 사람을 열었을 때 "이 사람이 누구와 이어졌나"만 보여주기 위해서. */
+function hubCollabHTML(data: SpaceView, focus?: string | null): string {
+  const title = focus ? '이 사람과 이어진 선' : '협업 지도'
+  const all: CollabGraph | null | undefined = data.collab
+  if (!all) {
+    return hubSection(title, 'Collaboration Map', '<p class="muted small">아직 계산 전이에요</p>')
   }
-  if (!g.nodes.length) {
+  // 초점이 있으면 그 사람에 걸린 선과 상대만. 없으면 방 전체.
+  const edges = focus ? all.edges.filter((e) => e.source === focus || e.target === focus) : all.edges
+  const keep = new Set(edges.flatMap((e) => [e.source, e.target]))
+  if (focus) keep.add(focus)
+  const nodes = focus ? all.nodes.filter((n) => keep.has(n.id)) : all.nodes
+  const g: CollabGraph = { nodes, edges, stats: all.stats }
+  if (!nodes.length) {
     return hubSection(
-      '협업 지도',
+      title,
       'Collaboration Map',
       '<p class="muted small">이 방에 활동 기록이 있는 사람이 아직 없어요</p>',
     )
   }
-  const nameOf = (id: string) => g.nodes.find((n) => n.id === id)?.name ?? id
+  if (focus && edges.length === 0) {
+    return hubSection(
+      title,
+      'Collaboration Map',
+      '<p class="muted small">아직 이어진 선이 없어요 — 지금까지는 혼자 일했어요</p>',
+    )
+  }
+  const nameOf = (id: string) => all.nodes.find((n) => n.id === id)?.name ?? id
   const pts = collabPoints(g.nodes)
   const legend = `
     <div class="collab-legend">
@@ -1218,15 +1276,18 @@ function hubCollabHTML(data: SpaceView): string {
     </svg>`
 
   // 정직성 줄 — 0을 감추지 않는다. 사실 엣지가 0인 것은 빈 화면이 아니라 읽어야 할 결과다.
+  // (한 사람만 볼 때는 방 전체 집계를 붙이지 않는다 — 그 사람 얘기가 아니다.)
   const s = g.stats
   const notes = [
     s.self_resolved ? `이슈 ${s.issues}건 중 ${s.self_resolved}건을 스스로 해결` : '',
     s.unlinked_docs ? `작성자 연결 못 함 ${s.unlinked_docs}건` : '',
-    s.quiet_people ? `활동 기록 없는 계정 ${s.quiet_people}명 제외` : '',
+    s.quiet_people ? `지도에 그릴 기록이 없는 계정 ${s.quiet_people}명 제외` : '',
     s.truncated_docs ? `문서 ${s.truncated_docs}건은 계산에서 제외(상한)` : '',
     s.dropped_edges ? `약한 선 ${s.dropped_edges}개 생략` : '',
   ].filter(Boolean)
-  const summary = `
+  const summary = focus
+    ? ''
+    : `
     <div class="collab-stats">
       <span>인용 <b>${s.reuse}</b></span><span>핸드오프 <b>${s.handoff}</b></span>
       <span>주제 겹침 <b>${s.topic}</b></span>
@@ -1234,10 +1295,10 @@ function hubCollabHTML(data: SpaceView): string {
     ${notes.length ? `<div class="muted small collab-notes">${esc(notes.join(' · '))}</div>` : ''}`
 
   const list = g.edges.length
-    ? g.edges.map((e) => collabEdgeRow(e, nameOf)).join('')
+    ? g.edges.map((e) => collabEdgeRow(e, data, nameOf)).join('')
     : `<p class="muted small">아직 이어진 선이 없어요 — 이 방 사람들은 각자 따로 일했어요</p>`
 
-  return hubSection('협업 지도', 'Collaboration Map', legend + svg + summary + list)
+  return hubSection(title, 'Collaboration Map', legend + svg + summary + list)
 }
 
 function hubSection(title: string, sub: string, items: string): string {
@@ -1335,9 +1396,7 @@ function renderHub(data: SpaceView) {
         ? hubIssuesHTML(data)
         : hubTab === 'reuse'
           ? hubReuseHTML(data)
-          : hubTab === 'collab'
-            ? hubCollabHTML(data)
-            : hubPagesHTML(data)
+          : hubPagesHTML(data)
   // 작업 기록 — 사람 선택/해제
   hubBody.querySelectorAll<HTMLElement>('[data-person]').forEach((el) => {
     el.addEventListener('click', () => {
@@ -1395,6 +1454,23 @@ function renderHub(data: SpaceView) {
       const key = el.dataset.cedge ?? null
       collabEdge = collabEdge === key ? null : key
       renderHub(data)
+      // 그림에서 고른 선은 목록이 화면 밖일 수 있다 — 근거가 보이는 자리로 데려온다
+      if (collabEdge) hubBody.querySelector('.collab-row.on')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    })
+  })
+  // 근거 줄 → 원문 모달. 줄 선택이 토글되지 않게 버블링을 끊는다.
+  hubBody.querySelectorAll<HTMLElement>('[data-cdoc]').forEach((el) => {
+    el.addEventListener('click', (ev) => {
+      ev.stopPropagation()
+      const doc = data.knowledge.find((d) => d.doc_id === el.dataset.cdoc)
+      if (doc) showModal(doc.title, docModalHTML(doc))
+    })
+  })
+  hubBody.querySelectorAll<HTMLElement>('[data-cissue]').forEach((el) => {
+    el.addEventListener('click', (ev) => {
+      ev.stopPropagation()
+      const iss = data.issues.find((x) => x.issue_id === el.dataset.cissue)
+      if (iss) showModal(iss.title, issueModalHTML(iss))
     })
   })
   hubBody.querySelectorAll<SVGElement>('[data-cnode]').forEach((el) => {

@@ -31,6 +31,7 @@ MIN_SHARED = 2          # 문서쌍이 공유해야 할 최소 주제어 수
 MIN_SCORE_RATIO = 1.0
 MAX_EDGES = 12          # 화면에 그릴 엣지 수 — 넘으면 weight 상위만 (잘린 수는 stats에)
 TOP_KEYWORDS = 5
+TOP_PAIRS = 3           # 엣지 하나당 근거로 보여줄 문서쌍 수 ("무엇이 통했나")
 
 # ── 한국어 근사 토큰화 (스펙 §4.2) ───────────────────────────
 # 형태소 분석기를 안 쓴다: 새 의존성(JVM·사전)을 이 기능 하나로 들이지 않는다. 두 문서가
@@ -62,7 +63,8 @@ _STOP = set(
     번 중 시 분 초 오늘 어제 이날 동안 정상 완료 실패 성공 시작 종료 추가 수정 변경 사용자 유저
     세션 기록 요약 정리 이슈 문서 지식 여러 차례 다양 최종 회복 규모 어려움 마무리 시도 이상 이하
     부분 이유 과정 오류 도구 에러 실행 여부 필요 가능 지원 기능 대상 기준 관리 설정 같은 함께
-    하지 거쳐 최근 기존 상세 무사히 그러나 통한 위한 만큼 정도 이제 아직""".split()
+    하지 거쳐 최근 기존 상세 무사히 그러나 통한 위한 만큼 정도 이제 아직
+    방식 적용 개선 원인 파악 반영 목록 해결 작업물 정상적 관련해 대응 조치 검토 논의 요청""".split()
 )
 
 
@@ -174,7 +176,8 @@ def _topic_edges(docs: list[dict], author_of: dict[str, str]) -> tuple[list[dict
 
     pairs: collections.Counter = collections.Counter()
     kw: dict[tuple[str, str], collections.Counter] = collections.defaultdict(collections.Counter)
-    sample: dict[tuple[str, str], dict] = {}
+    # 근거로 보여줄 문서쌍 — "무엇이 통했나"에 답하는 재료다. 점수 상위 몇 개만 들고 있는다.
+    sample: dict[tuple[str, str], list[tuple[float, list[str]]]] = collections.defaultdict(list)
     for (d1, s1), (d2, s2) in itertools.combinations(kept.items(), 2):
         a1, a2 = author_of[d1], author_of[d2]
         if a1 == a2:
@@ -188,10 +191,22 @@ def _topic_edges(docs: list[dict], author_of: dict[str, str]) -> tuple[list[dict
         key = (a1, a2) if a1 < a2 else (a2, a1)
         pairs[key] += 1
         kw[key].update(shared)
-        # 대표 문서쌍은 점수가 가장 높은 것 — "왜 이어졌나"를 가장 잘 설명하는 쌍이다
-        best = sample.get(key)
-        if best is None or score > best["score"]:
-            sample[key] = {"score": score, "doc_ids": [d1, d2]}
+        # 점수 높은 쌍이 "왜 이어졌나"를 가장 잘 설명한다. 상위 몇 개만 남기고 버린다.
+        # 쌍마다 **그 쌍이 공유한 말**을 같이 든다 — 선 전체 집계 키워드로는 개별 쌍이 왜
+        # 묶였는지 설명이 안 된다(실데이터에서 제목만 보면 무관해 보이는 쌍이 나온다).
+        ranked = sample[key]
+        ranked.append(
+            (
+                score,
+                {
+                    "docs": [d1, d2] if a1 == key[0] else [d2, d1],  # 항상 (source쪽, target쪽)
+                    "keywords": sorted(shared, key=lambda t: -idf[t])[:TOP_KEYWORDS],
+                },
+            )
+        )
+        if len(ranked) > TOP_PAIRS:
+            ranked.sort(key=lambda r: -r[0])
+            del ranked[TOP_PAIRS:]
 
     edges = [
         {
@@ -200,7 +215,8 @@ def _topic_edges(docs: list[dict], author_of: dict[str, str]) -> tuple[list[dict
             "target": b,
             "weight": w,
             "keywords": [t for t, _ in kw[(a, b)].most_common(TOP_KEYWORDS)],
-            "doc_ids": sample[(a, b)]["doc_ids"],
+            # 근거 문서쌍 — {docs: [a쪽, b쪽], keywords: 그 쌍이 공유한 말}
+            "doc_pairs": [p for _, p in sorted(sample[(a, b)], key=lambda r: -r[0])[:TOP_PAIRS]],
         }
         for (a, b), w in pairs.items()
     ]
@@ -341,10 +357,12 @@ def build(detail: dict, snapshot: dict | None = None) -> dict:
         w for it in issues if (w := _resolve(canon, it.get("opened_by"), (it.get("timeline") or [{}])[0].get("actor")))
     )
     used = {e["source"] for e in edges} | {e["target"] for e in edges}
-    # 엣지가 없어도 **일한 사람은 남긴다** — 혼자 일한 것은 지울 상태가 아니라 읽어야 할
-    # 정보다 (스펙 §7). 반대로 이 방에서 아무것도 안 한 계정(테스트·봇 등록 계정이 실데이터에
-    # 6개 있다)은 원을 채우기만 하므로 빼고, 몇 명을 뺐는지 stats로 알린다.
-    active = [a for a in agents if docs_by.get(a["agent_id"]) or issues_by.get(a["agent_id"]) or a["agent_id"] in used]
+    # 남기는 기준은 **지도에 그릴 재료가 있는가**다: 문서를 썼거나(주제 겹침의 재료) 실제로
+    # 선에 걸린 사람. 엣지가 없어도 문서가 있으면 남긴다 — 혼자 일한 것은 지울 상태가 아니라
+    # 읽어야 할 정보다 (스펙 §7).
+    # 이슈만 몇 건 열고 문서가 없는 계정(실데이터의 `bot`·`reader` 같은 테스트 계정)은 원을
+    # 채우기만 하고 어떤 선도 만들지 못하므로 뺀다. 뺀 수는 stats로 알린다.
+    active = [a for a in agents if docs_by.get(a["agent_id"]) or a["agent_id"] in used]
     nodes = [
         {
             "id": a["agent_id"],

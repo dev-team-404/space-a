@@ -220,6 +220,42 @@ def test_people_with_no_activity_are_dropped_and_counted():
     assert g["stats"]["quiet_people"] == 1  # 밥은 기록이 없다
 
 
+def test_issue_only_account_without_edges_is_dropped():
+    """실데이터의 `bot`처럼 이슈만 몇 건 열고 문서가 없는 계정 — 어떤 선도 만들지 못한다."""
+    detail = _detail(
+        knowledge=[{"doc_id": "d1", "title": "t", "author_agent_id": "alice"}],
+        issues=[{"issue_id": "i1", "status": "resolved", "opened_by": "bob", "resolved_by": "bob"}],
+    )
+    g = collab.build(detail)
+    assert [n["id"] for n in g["nodes"]] == ["alice"]
+
+
+def test_issue_only_account_stays_when_it_has_an_edge():
+    """같은 계정이라도 실제로 선에 걸리면(남이 해결해줬다) 남는다."""
+    detail = _detail(
+        knowledge=[{"doc_id": "d1", "title": "t", "author_agent_id": "alice"}],
+        issues=[{"issue_id": "i1", "status": "resolved", "opened_by": "bob", "resolved_by": "alice"}],
+    )
+    g = collab.build(detail)
+    assert sorted(n["id"] for n in g["nodes"]) == ["alice", "bob"]
+
+
+def test_topic_edge_carries_document_pairs_as_evidence():
+    """"무엇이 통했나"에 답할 재료 — 근거 문서쌍이 (source쪽, target쪽) 순서로 온다."""
+    shared = "playwright 브라우저 자동화 스크린샷 파이프라인"
+    detail = _detail(
+        knowledge=[
+            {"doc_id": "d-alice", "title": f"{shared} 도입", "author_agent_id": "alice"},
+            {"doc_id": "d-bob", "title": f"{shared} 개선", "author_agent_id": "bob"},
+        ]
+    )
+    e = [x for x in collab.build(detail)["edges"] if x["type"] == "topic"][0]
+    first = e["doc_pairs"][0]
+    assert first["docs"] == (["d-alice", "d-bob"] if e["source"] == "alice" else ["d-bob", "d-alice"])
+    # 쌍마다 그 쌍이 공유한 말이 따로 붙는다 — 선 전체 집계로는 개별 쌍을 설명 못 한다
+    assert "playwright" in first["keywords"]
+
+
 def test_merged_accounts_are_one_node():
     detail = _detail(
         agents=[
