@@ -71,12 +71,6 @@
 </script>
 
 <section class="home">
-  {#if hubConnected || interiorPreview}
-    <LifeView />
-  {:else}
-    <MiniLife advice={topAdvice} {honorific} />
-  {/if}
-
   <!-- 아래는 전부 내 로컬 데이터 — 남의 방을 보는 동안엔 숨긴다 (남의 것으로 오독 방지) -->
   {#if !visiting}
   <div class="strip">
@@ -94,7 +88,16 @@
     <SaveTop3 {findings} onGoto={onGotoCoach} />
     <NoticeLog {notices} onGoto={onGotoNotice} />
   </div>
+  {/if}
 
+  <!-- 방은 조건 밖에 유지한다 — 방문 중엔 이것만 보인다 -->
+  {#if hubConnected || interiorPreview}
+    <LifeView />
+  {:else}
+    <MiniLife advice={topAdvice} {honorific} />
+  {/if}
+
+  {#if !visiting}
   <footer class="status">
     {#if scanning}
       <span class="scan-live">
