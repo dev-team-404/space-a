@@ -392,8 +392,9 @@ export function buildLifeScene(
     const hl = data.highlight?.trim()
     if (hl && lifeCal.backWall) {
       const [bx0, by0, bx1, by1] = lifeCal.backWall
-      // 칠판 나무 프레임 안쪽 여백 (이미지 px)
-      const PADX = 36
+      // 칠판 나무 프레임 안쪽 여백 (이미지 px). 가로 여백은 좁게 — 글씨를 키우기보다
+      // 한 줄에 더 담는 쪽이 읽기 좋다(줄이 적을수록 시선이 덜 튄다).
+      const PADX = 24
       const PADY = 26
       const boardX = (bx0 + PADX - cxI) * sx
       const boardY = (by0 + PADY - cyI) * sy
@@ -427,8 +428,13 @@ export function buildLifeScene(
       // 등비 축소 방식은 세로 초과 시 폭까지 좁아져 칠판 왼쪽만 쓰게 된다.
       const gapY = 10
       const totalH = () => header.height + gapY + body.height
-      let lo = 12
-      let hi = 44
+      // 세로만 맞추면 폰트가 칠판 높이까지 커져서 한 줄에 18자쯤만 들어간다 — 짧은 줄이
+      // 여러 개 쌓이고 칠판 오른쪽이 빈다. 그래서 **한 줄에 최소 몇 자**를 함께 요구한다.
+      // 한글은 대략 1em/자라 폭÷글자수가 폰트 상한이 된다. 화면이 커지면 칠판도 같이
+      // 커지므로 이 상한도 함께 올라간다(고정 px로 박으면 큰 화면에서 너무 작아진다).
+      const MIN_CHARS_PER_LINE = 34
+      let lo = 10
+      let hi = Math.max(lo, Math.floor(boardW / MIN_CHARS_PER_LINE))
       let best = lo
       while (lo <= hi) {
         const mid = Math.floor((lo + hi) / 2)
@@ -565,16 +571,29 @@ export function buildLifeScene(
       myBubble = { g: bubbleG, baseY: ry }
       bubbles.push(myBubble)
       if (brief) {
-        // 말풍선은 한 줄만 — 넘치면 '…'로 자른다 (Pixi Text엔 CSS ellipsis가 없어 직접 계산).
+        // 말풍선은 **두 줄까지** — 넘치면 '…'로 자른다 (Pixi Text엔 CSS ellipsis가 없어 직접 계산).
+        // 한 줄만 쓰던 때는 대부분의 문장이 앞부분만 남고 잘려서, 말풍선이 무슨 일을 하는
+        // 중인지 알려주지 못했다. 글씨를 줄이고 줄을 하나 더 주면 같은 폭에 두 배가 들어간다.
+        const FONT_SIZE = 11.5
+        const LINE_H = Math.round(FONT_SIZE * 1.3)
+        const MAX_LINES = 2
+        const MAX_W = 190
         const bubbleStyle = new TextStyle({
           fill: 0x241a0c, // 더 진한 먹색 — 방이 축소돼도 읽히게
-          fontSize: 14, // 11 → 14 (fitScene이 씬 전체를 축소하므로 작게 잡으면 뭉개진다)
+          fontSize: FONT_SIZE,
           fontWeight: '700',
+          lineHeight: LINE_H,
           fontFamily: '"Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif',
+          wordWrap: true,
+          wordWrapWidth: MAX_W,
+          breakWords: true, // 한국어 긴 제목도 폭에서 강제 줄바꿈
+          align: 'center',
         })
-        const MAX_W = 190
         const txt = new Text({ text: brief, style: bubbleStyle })
-        if (txt.width > MAX_W) {
+        // 높이로 줄 수를 판정한다 — Pixi는 실제 줄바꿈 결과를 알려주지 않으므로,
+        // '두 줄까지'는 '두 줄 높이까지'로 재는 것이 유일하게 정확하다.
+        const maxH = LINE_H * MAX_LINES + 1 // +1: 반올림 오차 여유
+        if (txt.height > maxH) {
           // 들어갈 최대 길이를 이진 탐색으로 — 한 글자씩 지우며 매번 측정하는 O(N)을 O(log N)으로.
           let low = 0
           let high = brief.length
@@ -582,7 +601,7 @@ export function buildLifeScene(
           while (low <= high) {
             const mid = Math.floor((low + high) / 2)
             txt.text = brief.slice(0, mid) + '…'
-            if (txt.width <= MAX_W) {
+            if (txt.height <= maxH) {
               best = txt.text
               low = mid + 1
             } else {
