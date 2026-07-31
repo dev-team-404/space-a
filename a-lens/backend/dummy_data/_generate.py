@@ -112,6 +112,10 @@ def soc_params():
 
 SOC = {
     "file": "01-soc-design.json", "space_id": "soc-design", "name": "SoC 설계팀",
+    # 프로젝트 축 데모는 이 팀에서만 — 다른 팀은 마커 이전 상태(전부 '분류 안 됨') 그대로
+    # 두어, 두 화면을 나란히 놓고 축이 있고 없고의 차이를 볼 수 있게 한다.
+    # 이름은 실데이터와 같은 규칙(git 저장소 basename 꼴: 소문자·`-`)을 따른다.
+    "projects": ["noc-router", "pmu-v2", "mipi-csi2"],
     "visits": (8, 20, 300, 600),
     "lead_role": "SoC 설계 팀장",
     "roles": ["RTL 설계", "마이크로아키텍처", "IP 통합", "인터커넥트 설계",
@@ -857,6 +861,29 @@ def gen_members(team: dict) -> list[dict]:
     return members
 
 
+def _project_of(team: dict, who: int, seq: int) -> str | None:
+    """데모용 프로젝트 배정 — 팀이 `projects`를 정의한 경우만.
+
+    실데이터에서 프로젝트는 a-mate가 세션의 git 저장소 이름을 실어 보낸 **사실**이고,
+    마커가 붙기 시작한 2026-07-31 이후 발행분에만 있다. 그 성질을 데모에서도 지킨다:
+    네 건에 한 건은 일부러 비워 **'분류 안 됨'이 있는 화면**을 만든다 — 전부 분류된
+    화면은 실제로 존재하지 않는 상태이고, 정직성 규칙(스펙 §7)이 보여주려는 것도 그 구분이다.
+
+    배정은 **사람 기준**이다: 각자 주 프로젝트가 있고 가끔 옆 프로젝트를 돕는다.
+    문서 순번으로만 돌리면 전원이 모든 프로젝트에 걸려 이분 그래프가 뭉개진다 —
+    프로젝트 축이 보여주려는 것은 '누가 어디에 모여 있나'이므로 쏠림이 있어야 읽힌다.
+    겸업하는 사람이 프로젝트 사이를 잇는 선의 재료가 된다.
+
+    rng를 쓰지 않는다 — 시드 스트림을 건드리면 다른 팀 파일까지 통째로 바뀐다."""
+    projects = team.get("projects")
+    if not projects:
+        return None
+    if seq % 4 == 3:
+        return None  # 분류 안 됨 (마커 이전 발행분에 해당)
+    shift = 1 if seq % 4 == 2 else 0  # 네 건 중 한 건은 옆 프로젝트를 돕는다
+    return projects[(who + shift) % len(projects)]
+
+
 def _unique_title(tpl: str, team: dict, seen: set) -> str:
     for _ in range(60):
         title = fill(tpl, team["params"]())
@@ -878,8 +905,8 @@ def gen_docs(team: dict, members: list[dict]) -> list[dict]:
     seen_titles: set[str] = set()
     other_teams = [t["space_id"] for t in TEAMS if t["space_id"] != team["space_id"]]
     idx = 0
-    for author in members:
-        for _ in range(rng.randint(*DOCS_PER_MEMBER)):
+    for who, author in enumerate(members):
+        for seq in range(rng.randint(*DOCS_PER_MEMBER)):
             tpl = team["docs"][idx % len(team["docs"])]
             params = team["params"]()
             title = _unique_title(tpl[0], team, seen_titles)
@@ -894,9 +921,13 @@ def gen_docs(team: dict, members: list[dict]) -> list[dict]:
             )
             # 최근 3일 30%, 나머지는 최대 ~4개월 분산
             created = rng.randint(60, 4320) if rng.random() < 0.3 else rng.randint(4321, 172800)
+            proj = _project_of(team, who, seq)
             docs.append({
                 "doc_id": f"{team['space_id']}-doc-{idx + 1:04d}",
                 "title": title,
+                # 프로젝트를 모르는 문서는 키 자체를 넣지 않는다 — `null`을 적어두면
+                # 프로젝트 축을 안 쓰는 팀 파일까지 전부 흔들려 diff가 읽히지 않는다.
+                **({"project": proj} if proj else {}),
                 "author": author["name"],
                 "visibility": "org" if rng.random() < 0.6 else "space",
                 "reuse_count": reuse,
@@ -914,17 +945,19 @@ def gen_issues(team: dict, members: list[dict]) -> list[dict]:
     issues = []
     seen_titles: set[str] = set()
     idx = 0
-    for opener in members:
-        for _ in range(rng.randint(*ISSUES_PER_MEMBER)):
+    for who, opener in enumerate(members):
+        for seq in range(rng.randint(*ISSUES_PER_MEMBER)):
             tpl = team["issues"][idx % len(team["issues"])]
             title = _unique_title(tpl, team, seen_titles)
             r = rng.random()
             status = "resolved" if r < 0.45 else ("open" if r < 0.75 else "knowledge_linked")
             # 해결된 이슈는 과거에, 열린 이슈는 최근에 몰리게
             updated = rng.randint(1440, 129600) if status == "resolved" else rng.randint(10, 20160)
+            proj = _project_of(team, who, seq)
             issues.append({
                 "issue_id": f"{team['space_id']}-issue-{idx + 1:04d}",
                 "title": title,
+                **({"project": proj} if proj else {}),
                 "status": status,
                 "opened_by": opener["agent_id"],
                 "updated_min_ago": updated,

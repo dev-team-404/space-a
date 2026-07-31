@@ -126,10 +126,26 @@ export type CollabStats = {
   keywords: number
 }
 
+// 프로젝트 축 — a-mate가 세션 작업 디렉터리(= git 저장소 이름)를 문서 제목에 실어 보낸 것.
+// **추정이 아니라 사실**이라 주제 겹침과 성격이 다르다. 마커가 없는 옛 문서는 unknown_docs로만 센다.
+export type CollabProject = {
+  id: string // 저장소 이름 슬러그 (예: space-a)
+  docs: number
+  people: { id: string; docs: number }[]
+  // 이 프로젝트만의 지도 — 방 지도와 같은 잣대로 만든 부분집합이다
+  graph?: { nodes: CollabNode[]; edges: CollabEdge[]; stats: CollabStats }
+}
+
+export type CollabProjects = {
+  nodes: CollabProject[]
+  unknown_docs: number // 마커가 없어 어느 프로젝트인지 모르는 문서 (소급 적용 없음)
+}
+
 export type CollabGraph = {
   nodes: CollabNode[]
   edges: CollabEdge[]
   stats: CollabStats
+  projects?: CollabProjects
   // 항목(doc_id·issue_id) → 그 항목을 구별해주는 말. 사이드바 네 탭이 금색으로 짚는다.
   terms?: Record<string, string[]>
 }

@@ -121,9 +121,16 @@ def _subj(word: str) -> str:
     return "이" if _has_final(word) else "가"
 
 
-# 칠판은 좁은 한 줄이다. 허브의 페이지 제목은 LLM이 만든 여러 문장짜리라 그대로 쓰면
-# 칠판을 덮는다 (실측 151자) — 줄 전체 예산에서 남는 폭만큼만 제목에 준다. 스펙 §3.
+# 허브의 페이지 제목은 LLM이 만든 여러 문장짜리라 그대로 쓰면 자리를 덮는다 (실측 151자)
+# — 줄 전체 예산에서 남는 폭만큼만 제목에 준다. 스펙 §3.
+#
+# 예산이 두 개인 이유: **같은 문장이 두 자리에 쓰인다.**
+#   · 로비 층 hover 카드 — 진짜 한 줄. 넘치면 카드가 깨지므로 좁게 유지한다.
+#   · 방 칠판 — 여러 줄로 줄바꿈되고 폰트가 자동으로 맞춰진다(renderer의 이진 탐색).
+#     칠판 안쪽은 342×138(이미지 px)로 한 줄 34자 기준 7줄이 들어간다. 48자는 그중 두 줄만
+#     쓰고 나머지를 비워둔 채 제목을 '도구…'처럼 잘라버렸다.
 _LINE_MAX = 48
+_BOARD_MAX = 120  # 칠판 전용 — 34자/줄이면 약 4줄. 용량(7줄)에 여유를 두고 잡았다
 _TITLE_MIN = 12  # 예산이 아무리 빡빡해도 제목은 이만큼은 보여준다
 
 
@@ -205,8 +212,11 @@ def _sentence(e: dict, space_id: str, name_of: dict[str, str], budget: int = _LI
     return _clip(e.get("summary", ""), budget)
 
 
-def _room_highlight(space_id: str, snap: dict, tier: str) -> dict | None:
-    """방 칠판 1건. 풀이 비면 None — 넓힐 대상이 없는 정직한 빈칸이므로 문구를 만들지 않는다."""
+def _room_highlight(space_id: str, snap: dict, tier: str, budget: int = _LINE_MAX) -> dict | None:
+    """방 칠판 1건. 풀이 비면 None — 넓힐 대상이 없는 정직한 빈칸이므로 문구를 만들지 않는다.
+
+    `budget`은 부르는 자리가 정한다 — 같은 문장이 칠판(여러 줄)과 로비 hover 카드(한 줄)
+    양쪽에 쓰이고, 들어갈 수 있는 길이가 서로 다르다. 기본값은 좁은 쪽이다."""
     cross_docs = _cross_team_docs(snap)
     pool = [e for e in _room_events(space_id, snap["events"]) if _visible(e, tier)]
     best = _best(pool, lambda e: _room_rank(e, space_id, cross_docs))
@@ -216,7 +226,7 @@ def _room_highlight(space_id: str, snap: dict, tier: str) -> dict | None:
     # 시간 접두도 같은 한 줄이므로 예산에서 먼저 뺀다 — 안 그러면 접두가 붙은 줄만 길어진다.
     prefix = _recency(best.get("at"), datetime.now(timezone.utc))
     lead = f"({prefix}) " if prefix else ""
-    text = _sentence(best, space_id, name_of, _LINE_MAX - len(lead))
+    text = _sentence(best, space_id, name_of, budget - len(lead))
     if not text:
         return None
     hl: dict = {"text": lead + text}
@@ -261,7 +271,7 @@ def space_view(space_id: str, tier: str = "member") -> dict:
     detail = collector.space_detail(space_id, tier)
     snap = collector.snapshot()
     # 칠판 하이라이트는 소스가 준 값을 쓰지 않고 여기서 다시 뽑는다 — 소스별 규칙 불일치 제거(스펙 §6).
-    detail["highlight"] = _room_highlight(space_id, snap, tier)
+    detail["highlight"] = _room_highlight(space_id, snap, tier, _BOARD_MAX)
     # 협업 지도 — 사람 노드 + 엣지 3종. 계산이 터져도 방은 열려야 하므로 빈 그래프로 강등한다.
     try:
         detail["collab"] = collab.build(detail, snap)

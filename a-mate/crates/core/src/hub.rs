@@ -368,6 +368,71 @@ pub fn share_marker(rule_id: &str, key: &str) -> String {
     format!("[a-mate:{rule_id}:{key}]")
 }
 
+/// 프로젝트 마커에 실을 슬러그 — 디렉터리의 **basename만**.
+///
+/// 전체 경로는 보내지 않는다. 경로에는 `/home/<사용자>/`가 들어 있고, 그대로 팀 공간에 남으면
+/// 개인 식별 정보가 된다(회고 프롬프트도 같은 금지).
+/// WSL 직접 세션과 Windows UNC 세션은 `project_identity`가 이미 하나로 통합해 두었으므로
+/// 그 표시 이름을 그대로 쓴다.
+///
+/// `dir`은 **저장소 루트**여야 한다(`retro_project_marker` 참고) — cwd를 그대로 주면
+/// 저장소 안 어디서 일했느냐에 따라 이름이 갈린다.
+///
+/// 정제: 소문자, `[a-z0-9._-]` 외는 `-`, 연속 `-` 축약, 앞뒤 `-` 제거, 32자 상한.
+/// 남는 게 없으면 `None` — 빈 마커는 붙이지 않는다.
+pub fn project_slug(host: &str, dir: &str) -> Option<String> {
+    let (_key, name) = crate::hosts::project_identity(host, dir);
+    let mut slug = String::with_capacity(name.len());
+    for ch in name.to_lowercase().chars() {
+        let keep = matches!(ch, 'a'..='z' | '0'..='9' | '.' | '_' | '-');
+        if keep {
+            slug.push(ch);
+        } else if !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    // 32자 상한은 자른 뒤 다시 다듬는다 — 경계에 `-`가 걸릴 수 있다.
+    let slug = slug.chars().take(32).collect::<String>();
+    let slug = slug.trim_matches(|c| c == '-' || c == '.').to_string();
+    (!slug.is_empty()).then_some(slug)
+}
+
+/// 프로젝트 기계 마커. 예: `[a-mate:proj=space-a]`.
+///
+/// `share_marker`와 같은 문법이라 a-lens의 기존 마커 제거 규칙(`^\[a-mate:...\]`)이
+/// 그대로 떼어낸다 — 구버전 화면도 깨지지 않는다.
+pub fn project_marker(slug: &str) -> String {
+    format!("[a-mate:proj={slug}]")
+}
+
+/// 세션에서 프로젝트 마커를 뽑는다. cwd가 없거나 슬러그가 비면 `None`(마커 생략).
+///
+/// 이름의 기준은 **git 저장소 루트**다 — `space-a/`에서 일한 사람과 `space-a/a-mate/`에서
+/// 일한 사람이 같은 프로젝트로 묶여야 하기 때문. 저장소가 아니거나 git이 없으면 cwd로 폴백한다.
+/// git을 부르므로 순수하지 않다 — 발행 한 건당 한 번만 호출하고 결과를 돌려 쓴다.
+pub fn retro_project_marker(s: &crate::store::StruggleSession) -> Option<String> {
+    let cwd = s.cwd.as_deref()?;
+    let dir = crate::hosts::git_repo_root(&s.host, cwd).unwrap_or_else(|| cwd.to_string());
+    project_slug(&s.host, &dir).map(|slug| project_marker(&slug))
+}
+
+/// 회고 이슈 제목. 마커를 **맨 앞**에 둔다 — 구버전 a-lens의 제거 규칙이 문두만 보기 때문.
+pub fn retro_issue_title(marker: Option<&str>, title: &str) -> String {
+    match marker {
+        Some(m) => format!("{m}[a-mate 회고] {title}"),
+        None => format!("[a-mate 회고] {title}"),
+    }
+}
+
+/// 회고 페이지 제목 — 허브가 `resolve_issue`의 summary로 페이지 제목을 만든다(§2).
+/// 그래서 프로젝트를 실을 자리도 여기다.
+pub fn retro_page_summary(marker: Option<&str>, summary: &str) -> String {
+    match marker {
+        Some(m) => format!("{m} {summary}"),
+        None => summary.to_string(),
+    }
+}
+
 /// 검색 결과에서 인용할 페이지를 고른다 (순수 함수).
 ///
 /// 규칙: 제목에 **마커가 포함**되고 **자기 글이 아닌** 첫 페이지.
@@ -900,7 +965,12 @@ pub fn resume_retro_pendings(
             log::warn!("retro resume 응답 파싱 실패(다음 스캔 재개)");
             continue;
         };
-        match client.resolve_issue(&issue_id, &summary, &retro_steps(s)) {
+        let marker = retro_project_marker(s);
+        match client.resolve_issue(
+            &issue_id,
+            &retro_page_summary(marker.as_deref(), &summary),
+            &retro_steps(s),
+        ) {
             Ok(Some(page_id)) => {
                 store.hub_mark_published(&key, &page_id, &now)?;
                 out.push((s.session_id.clone(), page_id));
@@ -959,9 +1029,15 @@ pub fn run_retro_push(
             eprintln!("[retro] 응답 파싱 실패(보류)");
             continue;
         };
-        let issue_id = client.open_issue(&cfg.space_id, &format!("[a-mate 회고] {title}"))?;
+        let marker = retro_project_marker(&s);
+        let issue_id =
+            client.open_issue(&cfg.space_id, &retro_issue_title(marker.as_deref(), &title))?;
         store.hub_mark_issue(&key, &issue_id, &now)?;
-        if let Some(page_id) = client.resolve_issue(&issue_id, &summary, &retro_steps(&s))? {
+        if let Some(page_id) = client.resolve_issue(
+            &issue_id,
+            &retro_page_summary(marker.as_deref(), &summary),
+            &retro_steps(&s),
+        )? {
             store.hub_mark_published(&key, &page_id, &now)?;
             published.push((s.session_id.clone(), page_id));
         }
@@ -1212,6 +1288,96 @@ mod tests {
         assert!(!blob.contains("c--users"), "프로젝트 경로 슬러그 유출");
         assert!(!blob.contains("secret"), "로컬 경로 유출");
         assert!(blob.contains("github") && blob.contains("12"), "핵심 근거는 남아야 한다");
+    }
+
+    /// 회고 세션 더미 — 프로젝트 마커 테스트는 host·cwd만 본다.
+    fn sess(host: &str, cwd: Option<&str>) -> crate::store::StruggleSession {
+        crate::store::StruggleSession {
+            session_id: "s1".into(),
+            host: host.into(),
+            project_id: "-home-kimmy-core-space-a".into(),
+            cwd: cwd.map(String::from),
+            first_prompt_preview: None,
+            first_ts: None,
+            last_ts: None,
+            error_count: 3,
+            total_events: 40,
+            error_tools: vec![],
+            last_result_ok: true,
+        }
+    }
+
+    #[test]
+    fn project_slug_sends_only_the_basename() {
+        // 홈 경로가 붙은 채로 나가면 팀 공간에 개인 정보가 남는다.
+        let s = project_slug("wsl:Ubuntu-22.04", "/home/kimmy/core/space-a").unwrap();
+        assert_eq!(s, "space-a");
+        assert!(!s.contains("kimmy") && !s.contains('/'));
+
+        assert_eq!(project_slug("Windows", r"D:\Project\space-a").unwrap(), "space-a");
+    }
+
+    #[test]
+    fn project_slug_unifies_wsl_direct_and_windows_unc() {
+        let a = project_slug("wsl:Ubuntu-22.04", "/home/jayb/work/agent-meter");
+        let b = project_slug("Windows", r"\\wsl.localhost\Ubuntu-22.04\home\jayb\work\agent-meter");
+        assert_eq!(a, b);
+        assert_eq!(a.unwrap(), "agent-meter");
+    }
+
+    #[test]
+    fn project_slug_scrubs_and_bounds() {
+        // 공백·한글·대문자 → 허용 문자만 남기고 `-`로, 연속 `-`는 하나로.
+        assert_eq!(project_slug("Windows", r"D:\My Proj (v2)").unwrap(), "my-proj-v2");
+        assert_eq!(project_slug("wsl:ubuntu", "/home/k/My__Proj").unwrap(), "my__proj");
+        // 32자 상한 — 자른 경계에 `-`가 걸려도 남기지 않는다.
+        let name = "a".repeat(31);
+        let long = project_slug("wsl:ubuntu", &format!("/home/k/{name} bbb")).unwrap();
+        assert_eq!(long, name);
+        let longer = project_slug("wsl:ubuntu", &format!("/home/k/{}", "b".repeat(40))).unwrap();
+        assert_eq!(longer.chars().count(), 32);
+        // 남는 게 없으면 마커를 아예 붙이지 않는다.
+        assert_eq!(project_slug("wsl:ubuntu", "/home/k/한글"), None);
+        assert_eq!(project_slug("wsl:ubuntu", "/"), None);
+    }
+
+    #[test]
+    fn retro_titles_carry_the_marker_at_the_front() {
+        let m = project_marker("space-a");
+        // 마커가 문두여야 a-lens의 기존 제거 규칙(`^\[a-mate:...\]`)이 떼어낸다.
+        assert_eq!(
+            retro_issue_title(Some(&m), "포트 충돌 해결"),
+            "[a-mate:proj=space-a][a-mate 회고] 포트 충돌 해결"
+        );
+        assert_eq!(retro_page_summary(Some(&m), "요약."), "[a-mate:proj=space-a] 요약.");
+        assert!(_machine_marker_head(&retro_page_summary(Some(&m), "요약.")));
+    }
+
+    #[test]
+    fn retro_titles_stay_unchanged_without_a_marker() {
+        // cwd 없는 옛 세션·슬러그가 비는 경로 → 마커 없이 지금 모양 그대로.
+        assert_eq!(retro_issue_title(None, "제목"), "[a-mate 회고] 제목");
+        assert_eq!(retro_page_summary(None, "요약."), "요약.");
+    }
+
+    #[test]
+    fn retro_project_marker_is_absent_without_a_usable_cwd() {
+        assert_eq!(retro_project_marker(&sess("wsl:Ubuntu-22.04", None)), None);
+    }
+
+    #[test]
+    fn project_name_comes_from_the_repo_root_not_the_working_subdirectory() {
+        // 같은 저장소의 서로 다른 하위 디렉터리에서 일해도 프로젝트는 하나여야 한다.
+        let root = "/home/kimmy/core/space-a";
+        assert_eq!(project_slug("wsl:ubuntu", root), project_slug("wsl:ubuntu", root));
+        // 저장소 루트를 못 찾았을 때만 하위 디렉터리 이름이 나온다(폴백).
+        assert_eq!(project_slug("wsl:ubuntu", "/home/kimmy/core/space-a/a-mate").unwrap(), "a-mate");
+    }
+
+    /// a-lens `_MACHINE_MARKER = ^\s*\[a-mate:[^\]]+\]\s*` 와 같은 판정.
+    fn _machine_marker_head(title: &str) -> bool {
+        let t = title.trim_start();
+        t.starts_with("[a-mate:") && t[1..].split(']').next().is_some_and(|s| !s.contains('['))
     }
 
     #[test]

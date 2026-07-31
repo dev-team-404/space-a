@@ -15,6 +15,7 @@ import {
   type CollabEdge,
   type CollabGraph,
   type CollabNode,
+  type CollabProjects,
   type KnowledgeDoc,
   type LobbyFloor,
   type SpaceAgent,
@@ -876,9 +877,12 @@ function trailPickerHTML(data: SpaceView): string {
         </div>`
     })
     .join('')
+  // 한 줄에 두 명 — 사람 수가 늘어도 목록이 세로로만 자라지 않게. 아래에 붙는 협업 지도가
+  // 스크롤 없이 같이 보이는 것이 이 탭의 요점이라, 세로를 아끼는 편이 맞다.
+  const grid = rows ? `<div class="trail-grid">${rows}</div>` : ''
   // 사람 목록 아래에 방 전체 협업 지도를 바로 붙인다 — 탭을 열면 클릭 없이 보이는 자리다.
   return (
-    hubSection('작업 기록', 'Work Trail', rows || '<p class="muted small">표시할 사람이 없어요</p>') +
+    hubSection('작업 기록', 'Work Trail', grid || '<p class="muted small">표시할 사람이 없어요</p>') +
     hubCollabHTML(data)
   )
 }
@@ -1109,7 +1113,12 @@ function hubActivityHTML(data: SpaceView): string {
   const items = list.length ? list.map(agentRowHTML).join('') : '<p class="muted small">표시할 항목이 없어요</p>'
   return `
     <section class="feed activity-feed">
-      <div class="feed-head"><h3>팀 활동</h3></div>
+      <div class="feed-head">
+        <h3>팀 활동</h3>
+        <button id="activity-fold" class="activity-fold" type="button"
+          aria-expanded="${!activityFolded}" title="${activityFolded ? '펼치기' : '접기'}"
+        >${activityFolded ? '▴' : '▾'}</button>
+      </div>
       <div class="activity-subtabs">
         <button class="sub-tab ${activityTab === 'online' ? 'on' : ''}" data-atab="online">온라인 ${online.length}</button>
         <button class="sub-tab ${activityTab === 'offline' ? 'on' : ''}" data-atab="offline">오프라인 ${offline.length}</button>
@@ -1132,6 +1141,8 @@ const EDGE_STYLE: Record<CollabEdge['type'], { color: string; dash: string; labe
 }
 const edgeKey = (e: CollabEdge) => `${e.type}:${e.source}:${e.target}`
 let collabEdge: string | null = null // 선택된 엣지 — 목록과 그림을 같이 강조한다
+// 선택된 프로젝트 태그 — 누르면 그 프로젝트만의 지도로 바뀐다. null이면 방 전체.
+let collabProject: string | null = null
 
 const SVG_W = 300
 const SVG_H = 268
@@ -1317,23 +1328,28 @@ function showCollabPop(e: CollabEdge, data: SpaceView, name: (id: string) => str
 /** 협업 지도 한 덩이. `focus`(사람 id)를 주면 그 사람에 걸린 선만 남긴다 —
  *  작업 기록에서 한 사람을 열었을 때 "이 사람이 누구와 이어졌나"만 보여주기 위해서. */
 function hubCollabHTML(data: SpaceView, focus?: string | null): string {
-  const title = focus ? '이 사람과 이어진 선' : '협업 지도'
   const all: CollabGraph | null | undefined = data.collab
   if (!all) {
-    return hubSection(title, 'Collaboration Map', '<p class="muted small">아직 계산 전이에요</p>')
+    return hubSection('협업 지도', 'Collaboration Map', '<p class="muted small">아직 계산 전이에요</p>')
   }
-  // 초점이 있으면 그 사람에 걸린 선과 상대만. 없으면 방 전체.
-  const edges = focus ? all.edges.filter((e) => e.source === focus || e.target === focus) : all.edges
+  // 프로젝트 태그를 고르면 그 프로젝트만의 지도로 갈아 끼운다 (서버가 같은 잣대로 만든 부분집합).
+  // 사람 초점이 있을 때는 태그를 걸지 않는다 — 그 사람 얘기에 프로젝트 필터까지 겹치면 읽기 어렵다.
+  const projects = all.projects
+  const picked = focus ? null : projects?.nodes.find((p) => p.id === collabProject)
+  const base: CollabGraph = picked?.graph ? { ...all, ...picked.graph } : all
+  const title = focus ? '이 사람과 이어진 선' : picked ? `협업 지도 · ${picked.id}` : '협업 지도'
+  const tags = focus ? '' : collabTagsHTML(projects)
+  // 초점이 있으면 그 사람에 걸린 선과 상대만. 없으면 (프로젝트 범위의) 전체.
+  const edges = focus ? base.edges.filter((e) => e.source === focus || e.target === focus) : base.edges
   const keep = new Set(edges.flatMap((e) => [e.source, e.target]))
   if (focus) keep.add(focus)
-  const nodes = focus ? all.nodes.filter((n) => keep.has(n.id)) : all.nodes
-  const g: CollabGraph = { nodes, edges, stats: all.stats }
+  const nodes = focus ? base.nodes.filter((n) => keep.has(n.id)) : base.nodes
+  const g: CollabGraph = { nodes, edges, stats: base.stats }
   if (!nodes.length) {
-    return hubSection(
-      title,
-      'Collaboration Map',
-      '<p class="muted small">이 방에 활동 기록이 있는 사람이 아직 없어요</p>',
-    )
+    const msg = picked
+      ? '이 프로젝트에는 아직 지도에 그릴 사람이 없어요'
+      : '이 방에 활동 기록이 있는 사람이 아직 없어요'
+    return hubSection(title, 'Collaboration Map', `<p class="muted small">${msg}</p>${tags}`)
   }
   if (focus && edges.length === 0) {
     return hubSection(
@@ -1386,9 +1402,68 @@ function hubCollabHTML(data: SpaceView, focus?: string | null): string {
   // 선이 하나도 없을 때만 그 사실을 한 줄로 적는다 — 빈 지도는 오해를 부른다(§7).
   const empty = g.edges.length
     ? ''
-    : `<p class="muted small">아직 이어진 선이 없어요 — 이 방 사람들은 각자 따로 일했어요</p>`
+    : `<p class="muted small">${
+        picked
+          ? '이 프로젝트에서는 아직 이어진 선이 없어요 — 각자 따로 일했어요'
+          : '아직 이어진 선이 없어요 — 이 방 사람들은 각자 따로 일했어요'
+      }</p>`
 
-  return hubSection(title, 'Collaboration Map', legend + svg + summary + empty)
+  return hubSection(title, 'Collaboration Map', legend + svg + summary + empty + tags)
+}
+
+/** 프로젝트 색 — 어두운 배경(#141b2a)에 맞춰 고른 범주형 8색을 **고정 순서로** 쓴다.
+ *  순서를 지키는 것이 검증 조건이다: 이 순서의 이웃 쌍은 색각 이상에서도 구분되지만(ΔE 8.4),
+ *  임의로 섞으면 그 보장이 깨진다. 그래서 칩도 이 순서대로 그린다(`_slotOf` 정렬).
+ *  9번째 색은 만들지 않는다 — 넘치면 회색 '기타'로 접는다. */
+const PROJECT_COLORS = [
+  '#3987e5', // blue
+  '#d95926', // orange
+  '#199e70', // aqua
+  '#c98500', // yellow
+  '#d55181', // magenta
+  '#008300', // green
+  '#9085e9', // violet
+  '#e66767', // red
+]
+
+/** 색은 **프로젝트에 붙지 순위에 붙지 않는다.** 문서 수로 정렬한 자리에 색을 주면 문서 한 건
+ *  차이로 어제와 다른 색이 되어, 색으로 프로젝트를 기억할 수 없다. id를 사전순으로 세워
+ *  그 자리를 쓴다 — 같은 프로젝트는 언제 봐도 같은 색이다. */
+function projectSlots(nodes: CollabProjects['nodes']): Map<string, number> {
+  const ids = nodes.map((p) => p.id).sort()
+  return new Map(ids.map((id, i) => [id, i]))
+}
+
+/** 지도 아래 프로젝트 태그 줄. 누르면 그 프로젝트만의 지도로 좁힌다(다시 누르면 해제).
+ *
+ *  프로젝트는 a-mate가 세션의 git 저장소 이름을 문서에 실어 보낸 **사실**이다. 주제어로
+ *  추측한 것이 아니므로 주제 겹침(점선)과 섞지 않는다. 마커가 없는 옛 문서는 태그를 만들지
+ *  않고 '분류 안 됨'으로 수만 적는다 — 소급 적용이 없어서지 프로젝트가 없어서가 아니다. */
+function collabTagsHTML(projects?: CollabProjects): string {
+  if (!projects) return ''
+  const { nodes, unknown_docs: unknown } = projects
+  if (!nodes.length && !unknown) return ''
+  const slots = projectSlots(nodes)
+  const chips = [...nodes]
+    .sort((a, b) => (slots.get(a.id) ?? 0) - (slots.get(b.id) ?? 0))
+    .map((p) => {
+      const on = collabProject === p.id
+      const who = p.people.length
+      const slot = slots.get(p.id) ?? 0
+      // 색이 모자라면 새 색을 만들지 않고 회색으로 접는다 — 억지로 만든 9번째 색은
+      // 옆 색과 구분이 안 돼 오히려 "다른 프로젝트인데 같은 색"이 된다.
+      const dot = slot < PROJECT_COLORS.length ? PROJECT_COLORS[slot] : '#8e98a8'
+      return `<button class="collab-tag${on ? ' on' : ''}" data-cproj="${esc(p.id)}"
+        style="--proj:${dot}" aria-pressed="${on}" title="문서 ${p.docs}건 · 사람 ${who}명">
+        <i class="collab-tag-dot"></i>${esc(p.id)}<b>${p.docs}</b></button>`
+    })
+    .join('')
+  // 미분류는 버튼이 아니다 — 누를 수 있으면 "그런 프로젝트가 있다"는 뜻이 되어버린다.
+  const rest = unknown
+    ? `<span class="collab-tag none" title="a-mate가 프로젝트를 실어 보내기 전에 발행된 문서">분류 안 됨<b>${unknown}</b></span>`
+    : ''
+  // 안내 문구는 두지 않는다 — 색과 눌린 상태가 이미 "누를 수 있다"를 말한다.
+  return `<div class="collab-tags">${chips}${rest}</div>`
 }
 
 function hubSection(title: string, sub: string, items: string): string {
@@ -1406,6 +1481,32 @@ try {
   hubCollapsed = localStorage.getItem('a-lens.hub.collapsed') === '1'
 } catch (e) {
   console.warn('localStorage 읽기 실패 — 접힘 상태 기본값 사용', e)
+}
+
+// 팀 활동 카드 접힘 — 사이드바와 같은 규율(localStorage 유지, 접근 실패해도 앱은 산다).
+// 사이드바와 따로 두는 이유: 이 카드는 사이드바 밖(씬 위)에 떠 있어서, 방을 크게 보고 싶은
+// 것과 사람 목록을 치우고 싶은 것이 서로 다른 요구다.
+let activityFolded = false
+try {
+  activityFolded = localStorage.getItem('a-lens.activity.folded') === '1'
+} catch (e) {
+  console.warn('localStorage 읽기 실패 — 팀 활동 접힘 기본값 사용', e)
+}
+
+function toggleActivityFold(folded: boolean) {
+  activityFolded = folded
+  try {
+    localStorage.setItem('a-lens.activity.folded', folded ? '1' : '0')
+  } catch (e) {
+    console.warn('localStorage 쓰기 실패 — 팀 활동 접힘 저장 생략', e)
+  }
+  hubActivity.classList.toggle('folded', folded)
+  const btn = document.getElementById('activity-fold')
+  if (btn) {
+    btn.textContent = folded ? '▴' : '▾'
+    btn.setAttribute('aria-expanded', String(!folded))
+    btn.title = folded ? '펼치기' : '접기'
+  }
 }
 
 /** 방 화면에서만 호출 — 접힘 여부에 따라 사이드바/열기버튼 표시를 정하고 씬 폭을 재조정한다. */
@@ -1574,6 +1675,16 @@ function renderHub(data: SpaceView) {
       if (iss) showModal(iss.title, issueModalHTML(iss))
     })
   })
+  // 프로젝트 태그 → 그 프로젝트만의 지도 (같은 태그를 다시 누르면 방 전체로)
+  hubBody.querySelectorAll<HTMLElement>('[data-cproj]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.cproj ?? null
+      collabProject = collabProject === id ? null : id
+      collabEdge = null // 범위가 바뀌면 고른 선은 더 이상 그 지도의 선이 아니다
+      hideCollabPop()
+      renderHub(data)
+    })
+  })
   hubBody.querySelectorAll<SVGElement>('[data-cnode]').forEach((el) => {
     el.addEventListener('click', () => {
       const id = el.dataset.cnode
@@ -1603,6 +1714,11 @@ function flashRelated(selector: string) {
 
 function renderHubActivity(data: SpaceView) {
   hubActivity.innerHTML = hubActivityHTML(data)
+  // 카드는 폴링 때마다 통째로 다시 그려진다 — 접힘 클래스도 매번 다시 얹어야 펼쳐지지 않는다.
+  hubActivity.classList.toggle('folded', activityFolded)
+  document.getElementById('activity-fold')?.addEventListener('click', () => {
+    toggleActivityFold(!activityFolded)
+  })
   hubActivity.querySelectorAll<HTMLElement>('.sub-tab').forEach((btn) => {
     btn.addEventListener('click', () => {
       activityTab = btn.dataset.atab as ActivityTab

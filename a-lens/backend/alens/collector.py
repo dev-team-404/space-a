@@ -142,9 +142,26 @@ def _fixture(name: str) -> dict:
 # 사람이 보는 화면에서는 지운다 — 판별에는 필요하지만 읽는 사람에겐 노이즈다.
 _MACHINE_MARKER = re.compile(r"^\s*\[a-mate:[^\]]+\]\s*")
 
+# 프로젝트 마커(예: `[a-mate:proj=space-a]`) — a-mate가 세션 작업 디렉터리 이름을 실어 보낸다.
+# 문서가 **어느 프로젝트의 것인지 추측하지 않고 아는** 유일한 경로다(주제어 추정과 구분).
+# 문두가 원칙이지만 어디에 있어도 읽는다 — a-mate가 다른 마커와 붙여 쓸 수 있기 때문.
+_PROJECT_MARKER = re.compile(r"\[a-mate:proj=([a-z0-9._-]{1,32})\]")
+
 
 def _display_title(title: str) -> str:
     return _MACHINE_MARKER.sub("", title or "")
+
+
+def _parse_project(title: str) -> tuple[str | None, str]:
+    """제목 → (프로젝트 슬러그 또는 None, 마커를 뗀 제목).
+
+    마커는 기계용이므로 화면·LLM 입력 어디에도 남기지 않는다. 마커가 없는 문서(2026-07-31
+    이전 발행분 전부)는 None — 소급 적용이 없으므로 '모른다'가 정답이다."""
+    text = title or ""
+    m = _PROJECT_MARKER.search(text)
+    if not m:
+        return None, text
+    return m.group(1), (text[: m.start()] + text[m.end() :]).strip()
 
 
 def _hub_get(client: httpx.Client, path: str) -> dict:
@@ -471,9 +488,11 @@ def _issue_vm(issue: dict, member_name: dict[str, str], resolvers: dict[str, dic
                 "note": "",
             },
         ]
+    project, title = _parse_project(issue.get("title", ""))
     return {
         "issue_id": issue.get("issue_id", ""),
-        "title": issue.get("title", ""),
+        "title": title,
+        "project": project,
         "status": status,
         "opened_by": opener,
         "resolved_by": resolver,  # 협업 지도의 handoff 엣지 재료 (모호하면 없다)
@@ -485,7 +504,7 @@ def _issue_vm(issue: dict, member_name: dict[str, str], resolvers: dict[str, dic
 def _issue_doc(it: dict, member_name: dict[str, str], resolvers: dict[str, dict] | None = None) -> dict:
     """이슈 VM + 번역(분류·요약·서사). 제목이 그대로면 캐시 사용 — 상태 변화로는 재번역 안 함."""
     vm = _issue_vm(it, member_name, resolvers)
-    title = it.get("title", "")
+    title = vm["title"]  # 마커를 뗀 제목 — 캐시 키·LLM 입력 모두 이걸로 통일한다
     st = store.get_store()
     row = st.get_issue(vm["issue_id"]) if st is not None else None
     if row and row.get("title") == title and row.get("summary"):
@@ -530,7 +549,16 @@ def _page_doc(client: httpx.Client, node: dict, space_id: str, member_name: dict
     본문만 캐시에 없고(구 스키마 등) 번역은 있으면, 본문만 한 번 받아 채우고 LLM은 스킵한다."""
     page_id = node["page_id"]
     updated_at = node.get("updated_at") or node.get("created_at") or ""
-    doc = {"doc_id": page_id, "title": node.get("title", ""), "reuse_count": 0, "cited_by": []}
+    # 프로젝트는 캐시가 아니라 **매번 원제목에서** 읽는다 — 트리 응답은 항상 원제목을 주고,
+    # 캐시에 굳는 title은 이미 마커를 뗀 것이라 나중에 되살릴 수 없다.
+    project, node_title = _parse_project(node.get("title", ""))
+    doc = {
+        "doc_id": page_id,
+        "title": node_title,
+        "project": project,
+        "reuse_count": 0,
+        "cited_by": [],
+    }
 
     st = store.get_store()
     row = st.get(page_id) if st is not None else None
@@ -580,14 +608,12 @@ def _page_doc(client: httpx.Client, node: dict, space_id: str, member_name: dict
     doc["author_agent_id"] = creator
 
     if fresh:  # 번역은 이미 있으니 LLM 스킵, 본문만 채워 캐시 보강
-        title_out = row.get("title") or node.get("title", "")
+        title_out = row.get("title") or node_title
         category, summary, narrative = row.get("category"), row.get("summary"), row.get("narrative")
         model = row.get("model") or "cache"
-    else:  # 새/변경 문서만 LLM(또는 규칙)로 번역
-        res, model = translator.translate_text(
-            node.get("title", ""), body, node.get("source", "authored")
-        )
-        title_out = res.get("title") or node.get("title", "")
+    else:  # 새/변경 문서만 LLM(또는 규칙)로 번역 — 기계 마커는 넣지 않는다(모델이 문장에 섞는다)
+        res, model = translator.translate_text(node_title, body, node.get("source", "authored"))
+        title_out = res.get("title") or node_title
         category, summary, narrative = res["category"], res["summary"], res.get("narrative")
 
     doc["title"] = title_out
@@ -774,8 +800,9 @@ def _hub_snapshot() -> dict:
             "doc_id": p["page_id"],
             "space_id": p["space_id"],
             "actor": doc_author.get(p["page_id"], ""),
-            "title": _display_title(p.get("title", p["page_id"])),
-            "summary": f"『{p.get('title', p['page_id'])}』 지식이 {p['space_name']}에 등록되었습니다",
+            "title": (t := _display_title(p.get("title", p["page_id"]))),
+            # 서사 문장도 표시 제목을 쓴다 — 원제목을 넣으면 기계 마커가 로비 피드에 그대로 뜬다
+            "summary": f"『{t}』 지식이 {p['space_name']}에 등록되었습니다",
         }
         for p in all_pages
     ]
@@ -875,6 +902,9 @@ def _dummy_snapshot() -> dict:
                 {
                     "issue_id": it["issue_id"],
                     "title": it["title"],
+                    # 더미는 필드로 직접 준다 — 허브 경로의 제목 마커는 필드를 못 늘리는
+                    # work 허브 사정에서 나온 우회이고, 여기선 그 제약이 없다.
+                    "project": it.get("project"),
                     "status": status,
                     "opened_by": it.get("opened_by", ""),
                     "timeline": [
@@ -895,6 +925,7 @@ def _dummy_snapshot() -> dict:
                 {
                     "doc_id": d["doc_id"],
                     "title": d["title"],
+                    "project": d.get("project"),
                     "author_agent": d.get("author", ""),
                     "visibility": d.get("visibility", "org"),
                     "summary": d.get("summary", (d.get("body") or "")[:120]),

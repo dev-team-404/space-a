@@ -352,7 +352,9 @@ button { font: inherit; cursor: pointer; }
   left: 16px;
   bottom: 16px;
   z-index: 9; /* Hub(10)보다 아래 — 사이드바를 넓히면 그 아래로 들어간다 */
-  width: clamp(280px, 26vw, 380px); /* 가로로 길게 — 이름과 상태가 한 줄에 들어가야 읽힌다 */
+  /* 이전 clamp(280px, 26vw, 380px)의 2/3 — 방(씬)을 덜 가리는 쪽을 택했다.
+     좁아진 만큼 이름·상태 줄은 ellipsis로 잘린다(아래 규칙에 이미 있음). */
+  width: clamp(187px, 17.3vw, 253px);
   max-height: min(38vh, 320px);
   display: flex;
   flex-direction: column;
@@ -364,7 +366,30 @@ button { font: inherit; cursor: pointer; }
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
 #hub-activity .feed-head h3 { font-size: 12px; color: #dfe4ea; letter-spacing: 0.02em; }
-#hub-activity .feed-head { margin-bottom: 4px; }
+#hub-activity .feed-head { margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+/* 접기 버튼 — 제목 오른쪽 끝. 카드가 왼쪽 아래에 떠 있으므로 '아래로 접는다'가 자연스럽다. */
+.activity-fold {
+  margin-left: auto;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #39435a;
+  border-radius: 6px;
+  background: #151b2a;
+  color: #b6bfcd;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.activity-fold:hover { border-color: #5b7ea8; color: #e8eaed; }
+/* 접힌 상태 — 제목 줄만 남기고 내용을 감춘다. 카드가 bottom 고정이라 높이가 줄면
+   자연히 아래로 접히는 모양이 된다. */
+#hub-activity.folded { max-height: none; }
+#hub-activity.folded .activity-subtabs,
+#hub-activity.folded .activity-list { display: none; }
+#hub-activity.folded .feed-head { margin-bottom: 0; }
 #hub-activity .agent-row { padding: 5px 2px; gap: 8px; }
 #hub-activity .agent-name { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #hub-activity .agent-status { font-size: 11px; white-space: nowrap; }
@@ -416,6 +441,23 @@ button { font: inherit; cursor: pointer; }
   border-bottom: 1px solid #2a3346;
 }
 .agent-row.off { opacity: 0.55; }
+/* 작업 기록 사람 목록 — 두 칸. 사이드바는 드래그로 폭이 바뀌므로(HUB_MIN 300) 칸이
+   150px 아래로 좁아지면 auto-fit이 알아서 한 칸으로 되돌린다 — 미디어 쿼리로 박아두면
+   사이드바 폭이 아니라 창 폭을 보게 되어 어긋난다. */
+.trail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  column-gap: 10px;
+}
+/* grid 자식은 기본 min-width:auto라 긴 이름이 칸을 밀어낸다 — 줄이고 말줄임으로 자른다. */
+.trail-grid .agent-row { min-width: 0; }
+.trail-grid .agent-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trail-grid .agent-status { white-space: nowrap; }
 .agent-dot { width: 8px; height: 8px; border-radius: 50%; background: #4a5260; flex: none; }
 .agent-dot.on { background: #7fc99a; box-shadow: 0 0 6px #7fc99a88; }
 .agent-name { font-weight: 600; color: #e8eaed; }
@@ -758,6 +800,76 @@ button { font: inherit; cursor: pointer; }
 }
 .collab-stats b { color: #e8eaed; font-variant-numeric: tabular-nums; }
 .collab-notes { margin-bottom: 8px; line-height: 1.5; }
+
+/* 프로젝트 태그 — a-mate가 실어 보낸 저장소 이름(사실). 누르면 그 프로젝트만의 지도로 좁힌다.
+   '분류 안 됨'은 버튼이 아니다: 누를 수 있으면 그런 프로젝트가 있다는 뜻이 되어버린다. */
+.collab-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding-top: 10px;
+  border-top: 1px solid #2a3346;
+}
+/* 누를 수 있다는 게 먼저 보여야 한다 — 색 점이 프로젝트를 가리키고, 글자는 텍스트 색을
+   그대로 쓴다. 이름을 프로젝트 색으로 칠하면 색이 옅은 슬롯에서 읽기가 나빠지고, 색이
+   글자와 점 두 곳에서 경쟁한다. 식별은 점 하나가 맡는다. */
+.collab-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 6px 12px;
+  border: 1px solid #38425a;
+  border-radius: 999px;
+  background: #141b2a;
+  color: #c2cad6;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  transition: border-color 0.12s, background 0.12s, color 0.12s, box-shadow 0.12s;
+}
+.collab-tag-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--proj, #8e98a8);
+}
+.collab-tag b {
+  color: #8e98a8;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/* hover·선택 모두 그 프로젝트 색으로 반응한다 — 어느 태그를 만지고 있는지가 색으로 온다.
+   배경은 color-mix로 아주 옅게만 깔아 글자 대비를 지킨다. */
+.collab-tag:hover {
+  border-color: var(--proj, #5b7ea8);
+  background: color-mix(in srgb, var(--proj, #5b7ea8) 14%, #141b2a);
+  color: #e8eaed;
+}
+.collab-tag.on {
+  background: color-mix(in srgb, var(--proj, #7fb3d5) 22%, #141b2a);
+  border-color: var(--proj, #7fb3d5);
+  color: #eaf2f9;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--proj, #7fb3d5) 45%, transparent);
+}
+.collab-tag.on b { color: #d6dee8; }
+.collab-tag.none {
+  cursor: default;
+  border-style: dashed;
+  border-color: #333c4e;
+  color: #8e98a8;
+  background: none;
+}
+.collab-tag.none .collab-tag-dot { background: none; border: 1px dashed #4a5468; }
+.collab-tag.none:hover {
+  border-color: #333c4e;
+  color: #8e98a8;
+  background: none;
+  box-shadow: none;
+}
 
 .collab-kws { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .collab-kw {
