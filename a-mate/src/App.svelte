@@ -149,8 +149,7 @@
   let diaryFocus = $state<string | null>(null);
   let notices = $state<Notice[]>(loadNotices());
   // N1 탭 뱃지 — 다이어리는 날짜 set(영속), 방명록은 entry_id set(세션) + lastSeen(영속)
-  let unseen = $state(loadUnseen(new Date().toISOString()));
-  saveUnseen(unseen); // 최초 실행: 초기 lastSeen을 고정해 재시작마다 리셋되지 않게
+  let unseen = $state(loadUnseen());
   let gbUnseenIds = $state(new Set<string>());
   // 관측한 타인 글의 최신 서버 시각 — 클리어 시 워터마크로 쓴다(클라이언트 시계 배제, 단조 증가)
   let gbMaxSeenAt = $state<string | null>(null);
@@ -163,6 +162,12 @@
     if (fresh.length) gbUnseenIds = new Set([...gbUnseenIds, ...fresh]);
     const at = maxCreatedAt(rows, meId);
     if (at && (!gbMaxSeenAt || at > gbMaxSeenAt)) gbMaxSeenAt = at;
+    // 최초 시드 — 첫 성공 조회의 서버 시각으로 워터마크를 세운다("이미 있는 건 다 본 것").
+    // 글이 없으면 세울 값이 없으므로 미시드로 남고, 다음 첫 글이 정상적으로 신규가 된다.
+    if (unseen.guestbookLastSeen === null && at) {
+      unseen = clearGuestbookSeen(unseen, at);
+      saveUnseen(unseen);
+    }
   }
 
   // O1 — 대문 게시 게이트: 로컬 조회가 **성공한** 사이클에만 열린다.
