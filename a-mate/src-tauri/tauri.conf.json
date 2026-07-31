@@ -15,10 +15,9 @@
         "label": "chat",
         "url": "chat.html",
         "title": "agent mentor",
-        "width": 860,
-        "height": 760,
-        "minWidth": 860,
-        "minHeight": 620,
+        "width": 960,
+        "height": 820,
+        "resizable": false,
         "visible": false
       },
       {
