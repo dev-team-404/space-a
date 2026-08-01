@@ -364,11 +364,16 @@ export const THEMES: InteriorTheme[] = [
   ['coral-sunset','코랄 선셋','#f5d2c7','#e9bfb3','#e4b0a5','#d79b91','#bd8279'],
   ['blue-night','블루 나이트','#7182a7','#5d6e94','#596a88','#4d5d79','#394863'],
   ['retro-pop','레트로 팝','#ffd783','#f0b962','#e9a865','#d8904d','#ba7137'],
-  ['forest-cabin','포레스트 캐빈','#cbdcbc','#b5cba5','#9b7657','#866247','#654631'],
+  ['forest-cabin','포레스트 그린','#cbdcbc','#b5cba5','#9b7657','#866247','#654631'],
   ['mono-studio','모노 스튜디오','#e7e7e4','#d4d4d0','#c7c7c3','#b8b8b4','#999995'],
   ['peach-bedlife','피치 베드라이프','#f6d9ca','#eac4b2','#f1e7d7','#e4d5c1','#c9b79e'],
   ['cyber-life','사이버 라이프','#4b3e6d','#382d59','#313d56','#263148','#38b7ad'],
-  ['sky-loft','스카이 로프트','#cce9f2','#b4d8e5','#dbc69f','#ceb78c','#aa9168'],
+  ['sky-loft','스카이 블루','#cce9f2','#b4d8e5','#dbc69f','#ceb78c','#aa9168'],
+  ['special-loft','복층 로프트','#c8a889','#b49172','#d8c09e','#c6a982','#967653'],
+  ['special-clinic','동네 병원','#d8eee8','#c3dfd7','#efe4cc','#e4d5b8','#aa9a7d'],
+  ['special-rooftop','옥상 카페','#a8d7dc','#8bc1c8','#c7ad86','#b7976e','#78664f'],
+  ['special-sky-loft','스카이 로프트','#cce9f2','#b4d8e5','#dbc69f','#ceb78c','#aa9168'],
+  ['special-forest-cabin','포레스트 캐빈','#cbdcbc','#b5cba5','#9b7657','#866247','#654631'],
 ].map(([id,name,wall,wallSide,floorBase,floorAlt,grout]) => ({ id, name, wallpaper:id, floor:`${id}-floor`, wall, wallSide, floorBase, floorAlt, grout })) as InteriorTheme[];
 
 export function themeFor(wallpaper: string, floor: string): InteriorTheme { return THEMES.find((t) => t.wallpaper === wallpaper && t.floor === floor) ?? THEMES[0]; }
