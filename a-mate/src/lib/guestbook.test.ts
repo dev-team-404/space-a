@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { autoVisitEnabled, groupGuestbook, showOwnerAvatar, visitGuestbookEnabled } from './guestbook';
+import { authorHue, authorIcon, authorInitial, autoVisitEnabled, groupGuestbook, visitGuestbookEnabled } from './guestbook';
 import type { GuestbookEntry } from './api';
 
 const e = (entry_id: string, parent_id: string | null = null): GuestbookEntry => ({
@@ -30,19 +30,73 @@ describe('groupGuestbook', () => {
   });
 });
 
-describe('showOwnerAvatar', () => {
-  const mk = (author: string): GuestbookEntry => ({
-    entry_id: 'x', life_id: 'l1', author_agent_id: author, author_name: 'n',
-    body: 'b', created_at: '2026-07-27T00:00:00Z',
+describe('authorIcon', () => {
+  const mk = (
+    author_kind: 'human' | 'bot' | null | undefined,
+    author_name = '홍길동',
+  ): GuestbookEntry => ({
+    entry_id: 'x', life_id: 'l1', author_agent_id: 'agent-1', author_name,
+    body: 'b', author_kind, created_at: '2026-08-02T00:00:00Z',
   });
-  it('주인이 자기 홈에서 보는 자기 항목만 true', () => {
-    expect(showOwnerAvatar(mk('me'), 'me', true)).toBe(true);
+
+  it("author_kind='bot'이면 봇 아이콘 — agent_id로 서버 얼굴을 찾는다", () => {
+    expect(authorIcon(mk('bot'))).toEqual({ kind: 'bot', agentId: 'agent-1' });
   });
-  it('다른 작성자 항목은 false', () => {
-    expect(showOwnerAvatar(mk('kimmy'), 'me', true)).toBe(false);
+
+  it("'human'과 구데이터(null·미제공)는 모두 모노그램 (서버 규약: 미제공=human 간주)", () => {
+    expect(authorIcon(mk('human')).kind).toBe('monogram');
+    expect(authorIcon(mk(null)).kind).toBe('monogram');
+    expect(authorIcon(mk(undefined)).kind).toBe('monogram');
   });
-  it('내 홈이 아니면(방문 중) false', () => {
-    expect(showOwnerAvatar(mk('me'), 'me', false)).toBe(false);
+
+  it('모노그램은 이름에서 글자와 색을 뽑는다', () => {
+    expect(authorIcon(mk('human', '김영희'))).toEqual({
+      kind: 'monogram', initial: '김', hue: authorHue('김영희'),
+    });
+  });
+
+  it('관찰자 인자를 받지 않는다 — 같은 엔트리는 누가 보든 같은 아이콘 (스펙 목표 2)', () => {
+    const entry = mk('human');
+    expect(authorIcon(entry)).toEqual(authorIcon(entry));
+    // 관찰자(meId·isOwner 등)를 인자로 추가하면 이 단언이 깨진다 — 회귀 고정
+    expect(authorIcon.length).toBe(1);
+  });
+});
+
+describe('authorInitial', () => {
+  it('한글·영문 첫 글자', () => {
+    expect(authorInitial('홍길동')).toBe('홍');
+    expect(authorInitial('John Doe')).toBe('J');
+  });
+
+  it('이모지는 서로게이트 페어를 쪼개지 않는다', () => {
+    expect(authorInitial('🤖봇')).toBe('🤖');
+  });
+
+  it('앞뒤 공백은 무시', () => {
+    expect(authorInitial('  김철수 ')).toBe('김');
+  });
+
+  it('빈 이름·공백뿐이면 물음표', () => {
+    expect(authorInitial('')).toBe('?');
+    expect(authorInitial('   ')).toBe('?');
+  });
+});
+
+describe('authorHue', () => {
+  it('같은 이름은 항상 같은 hue — 모든 관찰자가 같은 색을 본다', () => {
+    expect(authorHue('홍길동')).toBe(authorHue('홍길동'));
+  });
+
+  it('다른 이름은 다른 hue', () => {
+    expect(authorHue('홍길동')).not.toBe(authorHue('김영희'));
+  });
+
+  it('어떤 입력에도 0~359 범위', () => {
+    for (const name of ['홍길동', 'John', '', '🤖', 'a'.repeat(80)]) {
+      expect(authorHue(name)).toBeGreaterThanOrEqual(0);
+      expect(authorHue(name)).toBeLessThan(360);
+    }
   });
 });
 
