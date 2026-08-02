@@ -1168,6 +1168,21 @@ pub async fn life_mascot_image(state: State<'_, AppState>, agent_id: String) -> 
     }).await
 }
 
+/// G7 — 방명록 작성자 아이콘용 얼굴. 서버에 게시된 타인 마스코트를 받아 내 얼굴과 같은
+/// 기준으로 크롭한다 (스펙 §3.2). 게시본이 없으면(404) None → 프론트 이모지 폴백.
+/// 전신을 쓰는 `life_mascot_image`와 별도 커맨드인 이유: 방(LifeView)이 전신을 그린다.
+#[tauri::command]
+pub async fn life_mascot_face(state: State<'_, AppState>, agent_id: String) -> Result<Option<String>, String> {
+    let Some(client) = hub_client(&state)? else { return Ok(None) };
+    run_life_http("life_mascot_face", move || {
+        client
+            .mascot_image(&agent_id)
+            .map(|png| png.as_deref().and_then(crop_face_b64))
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
 /// O1 — 대문 한마디 게시. **자동 경로**이므로 hub 미연결이면 조용히 Ok(false)
 /// (life_sync_mascot_image 선례 — 사용자 개시 커맨드처럼 Err("hub_not_connected")를 던지지 않는다).
 #[tauri::command]
@@ -1682,32 +1697,21 @@ mod tests {
     }
 
     #[test]
-    fn face_icon_inner_lazy_materializes_and_caches() {
+    fn crop_face_b64_returns_128px_png_and_none_on_garbage() {
         use base64::Engine as _;
-        let dir = tempfile::tempdir().unwrap();
-        // ① sprite.png 없음 → None (프론트 이모지 폴백)
-        assert_eq!(face_icon_inner(dir.path()).unwrap(), None);
-        // ② sprite.png 생성(1×1 투명 PNG) → face.png 재료화 + base64 반환
-        let sprite = base64::engine::general_purpose::STANDARD
+        // 1×1 투명 PNG (제거된 face_icon_inner 테스트와 같은 픽스처)
+        let png = base64::engine::general_purpose::STANDARD
             .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
             .unwrap();
-        std::fs::write(dir.path().join("sprite.png"), &sprite).unwrap();
-        let b64 = face_icon_inner(dir.path()).unwrap().unwrap();
-        assert!(dir.path().join("face.png").exists());
-        // ③ 재호출 = 캐시 그대로 (내용 동일)
-        assert_eq!(face_icon_inner(dir.path()).unwrap().unwrap(), b64);
-        // ④ face.png를 sprite보다 과거로 백데이트(=리롤로 sprite가 더 새것) → 재크롭 경로
-        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
-        std::fs::File::options()
-            .write(true)
-            .open(dir.path().join("face.png"))
-            .unwrap()
-            .set_modified(old)
-            .unwrap();
-        assert_eq!(face_icon_inner(dir.path()).unwrap().unwrap(), b64); // 같은 sprite → 같은 결과
-        // 재크롭됐다면 mtime이 현재로 갱신됨
-        let refreshed = std::fs::metadata(dir.path().join("face.png")).unwrap().modified().unwrap();
-        assert!(refreshed > old, "stale face.png는 재크롭으로 갱신돼야 함");
+        let b64 = crop_face_b64(&png).expect("유효 PNG는 크롭된다");
+        let out = base64::engine::general_purpose::STANDARD.decode(&b64).unwrap();
+        assert_eq!(&out[..8], b"\x89PNG\r\n\x1a\n", "PNG 시그니처");
+        // IHDR width(바이트 16..20) = 128 — 내 얼굴 아이콘과 같은 크기
+        assert_eq!(u32::from_be_bytes([out[16], out[17], out[18], out[19]]), 128);
+
+        // 손상·비PNG 입력은 None — 아이콘 하나 때문에 방명록 조회를 실패시키지 않는다
+        assert!(crop_face_b64(b"not a png").is_none());
+        assert!(crop_face_b64(&[]).is_none());
     }
 
     #[test]
@@ -1730,37 +1734,17 @@ mod tests {
     }
 }
 
-/// G6 — 얼굴 아이콘 lazy 재료화: face.png가 없거나 sprite.png보다 오래되면 그 자리에서
-/// 크롭·저장한다. sprite 쓰기 경로(파이프라인 생성·리롤 승격)에 훅을 걸지 않는 이유:
-/// mtime 비교가 모든 갱신 경로를 자동 커버한다 (스펙 2026-07-28 결정 7).
-pub fn face_icon_inner(dir: &std::path::Path) -> anyhow::Result<Option<String>> {
+/// G7 — 서버에서 받은 마스코트 PNG를 방명록 아이콘용 얼굴(128×128)로 크롭해 base64로.
+/// 크롭 실패(손상·미지원 색 형식)는 None — 아이콘 하나 때문에 방명록 조회를 실패시키지 않는다.
+pub fn crop_face_b64(png: &[u8]) -> Option<String> {
     use base64::Engine as _;
-    let sprite = dir.join("sprite.png");
-    let face = dir.join("face.png");
-    let Ok(sprite_meta) = std::fs::metadata(&sprite) else { return Ok(None) };
-    let fresh = match std::fs::metadata(&face) {
-        Ok(m) => match (m.modified(), sprite_meta.modified()) {
-            (Ok(f), Ok(s)) => f >= s,
-            _ => false, // mtime을 못 읽으면 보수적으로 재크롭
-        },
-        Err(_) => false,
-    };
-    let bytes = if fresh {
-        std::fs::read(&face)?
-    } else {
-        let png = agent_mentor::sprite::crop_face(&std::fs::read(&sprite)?)?;
-        std::fs::write(&face, &png)?;
-        png
-    };
-    Ok(Some(base64::engine::general_purpose::STANDARD.encode(bytes)))
-}
-
-/// G6 — 방명록 아바타 등 소형 UI용 얼굴 아이콘(128×128 캐시). 없으면 None(이모지 폴백).
-#[tauri::command]
-pub fn get_face_icon(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    use tauri::Manager as _;
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    face_icon_inner(&dir).map_err(|e| e.to_string())
+    match agent_mentor::sprite::crop_face(png) {
+        Ok(face) => Some(base64::engine::general_purpose::STANDARD.encode(face)),
+        Err(e) => {
+            log::warn!("방명록 얼굴 크롭 실패(이모지 폴백): {e}");
+            None
+        }
+    }
 }
 
 /// H2 — 홈 컷 조회 payload. 생성은 파이프라인만 한다 (읽기 전용 — 과금 가드).
