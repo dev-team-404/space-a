@@ -1035,6 +1035,26 @@ impl SqliteStore {
         Ok(removed)
     }
 
+    /// 「무시」된 R6 카드들의 `member_norms` 합집합 = 억제 집합 (스펙 §5.4).
+    /// R6의 dedup_key는 사전순 최소 변형(앵커)에서 나오므로 묶음이 조금만 달라져도 키가
+    /// 바뀐다 — 처분을 키가 아니라 **내용**에 붙여야 무시가 우회되지 않는다.
+    /// `resolved`는 뺀다: 해결함 뒤에 또 잡혔다는 건 재발 신호라 떠야 한다.
+    pub fn dismissed_r6_member_norms(&self) -> Result<std::collections::HashSet<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT evidence_json FROM findings WHERE rule_id='R6' AND status='dismissed'")?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        let mut out = std::collections::HashSet::new();
+        for row in rows {
+            // 관대한 파싱 — member_norms가 없던 시절의 묵은 행은 억제에 기여하지 않고 넘어간다.
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(&row?) else { continue };
+            if let Some(arr) = v.get("member_norms").and_then(|m| m.as_array()) {
+                out.extend(arr.iter().filter_map(|x| x.as_str().map(str::to_string)));
+            }
+        }
+        Ok(out)
+    }
+
     /// 큐레이션 콘텐츠를 현재 랭킹으로 upsert. findings 선례처럼 **사용자 status는 보존**
     /// (dismissed는 재스캔에도 유지 — 나깅 방지). 점수·본문·last_seen만 갱신.
     pub fn replace_content_items(
