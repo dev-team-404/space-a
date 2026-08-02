@@ -8,12 +8,11 @@ export interface Bubble {
   target?: string;
 }
 
+// 등록 룰(R6·R7·R8)만 — 은퇴 룰은 카드가 안 뜨고, 빠진 룰은 아래 폴백 문구로 샌다.
 const RULE_LINE: Record<string, string> = {
-  R1: '안 쓰는 MCP가 상주 토큰을 먹고 있어요',
-  R2: '안 쓰는 플러그인이 자리만 차지해요',
-  R5: '같은 파일을 반복해서 읽고 있어요',
+  R6: '같은 지시를 반복하고 있어요',
   R7: '단순 작업에 Opus는 과해요',
-  R9: '웹 검색을 너무 많이 돌렸어요',
+  R8: '큰 MCP 결과가 컨텍스트를 잡아먹어요',
 };
 
 export function findingBubble(
@@ -27,7 +26,7 @@ export function findingBubble(
     kind: 'finding',
     tab: 'coach',
     target: top.dedup_key,
-    text: `${honorific}, ${line} (~${top.est_tokens_saved.toLocaleString()} tok)${more}`,
+    text: `${honorific}, ${line}${more}`,
   };
 }
 

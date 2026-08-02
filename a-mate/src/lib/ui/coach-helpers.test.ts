@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coachTitle, ctxLine, isHiddenFinding, sessionIdsOf, totalSessionsOf } from './coach-helpers';
+import { coachTitle, ctxLine, evidenceChip, isHiddenFinding, sessionIdsOf, totalSessionsOf } from './coach-helpers';
 import type { SessionCtxItem } from '../api';
 
 const item = (over: Partial<SessionCtxItem> = {}): SessionCtxItem => ({
@@ -36,19 +36,17 @@ describe('coach-helpers', () => {
 });
 
 describe('coachTitle', () => {
-  it('R5 cross_session subtype → CLAUDE.md 카피', () => {
-    expect(coachTitle('R5', { subtype: 'cross_session_claude_md' })).toContain('CLAUDE.md');
-  });
-  it('R5 context_drift subtype → 기존 다시읽기 제목', () => {
-    expect(coachTitle('R5', { subtype: 'within_session_context_drift' })).toContain('다시 읽었어요');
-  });
-  it('R1은 기존 제목', () => {
-    expect(coachTitle('R1', null)).toContain('MCP');
-  });
-  it('R6은 반복 지시 제목', () => {
+  it('등록된 룰만 고유 제목을 갖는다', () => {
     expect(coachTitle('R6', {})).toContain('같은 지시');
+    expect(coachTitle('R7', {})).toContain('모델');
+    expect(coachTitle('R8', {})).toContain('MCP');
   });
-  it('알 수 없는 rule → fallback', () => {
+  it('은퇴한 룰은 폴백 제목 — 죽은 매핑을 남기지 않는다', () => {
+    for (const retired of ['R1', 'R2', 'R5', 'R9', 'R10', 'R11', 'R12', 'R24']) {
+      expect(coachTitle(retired, {}), retired).toBe('아낄 수 있는 게 보여요');
+    }
+  });
+  it('알 수 없는 rule → 폴백', () => {
     expect(coachTitle('RX', {})).toBe('아낄 수 있는 게 보여요');
   });
 });
@@ -62,5 +60,35 @@ describe('isHiddenFinding', () => {
     expect(isHiddenFinding('new')).toBe(false);
     expect(isHiddenFinding('pending')).toBe(false);
     expect(isHiddenFinding('rejected')).toBe(false);
+  });
+});
+
+describe('evidenceChip', () => {
+  it('R6은 세션 수를 센다', () => {
+    expect(evidenceChip('R6', { session_count: 4 })).toBe('4개 세션');
+  });
+  it('R7은 집계된 세션 수를 센다', () => {
+    expect(evidenceChip('R7', { total_sessions: 5 })).toBe('5개 세션');
+  });
+  it('R8은 대형 결과 횟수를 센다', () => {
+    expect(evidenceChip('R8', { large_result_count: 12 })).toBe('12회 대형 결과');
+  });
+  it('occurrences·last_seen은 스캔 지표라 칩 재료가 아니다', () => {
+    // 룰별 evidence 키가 없으면 다른 값이 있어도 칩은 없다
+    expect(evidenceChip('R6', { occurrences: 99, last_seen: '2026-08-02' })).toBeNull();
+  });
+  it('키가 없거나 숫자가 아니거나 0이면 칩을 생략한다', () => {
+    expect(evidenceChip('R6', {})).toBeNull();
+    expect(evidenceChip('R6', { session_count: '4' })).toBeNull();
+    expect(evidenceChip('R6', { session_count: 0 })).toBeNull();
+    expect(evidenceChip('R7', { total_sessions: Number.NaN })).toBeNull();
+  });
+  it('evidence가 객체가 아니면 칩을 생략한다', () => {
+    expect(evidenceChip('R6', null)).toBeNull();
+    expect(evidenceChip('R6', 'junk')).toBeNull();
+    expect(evidenceChip('R6', undefined)).toBeNull();
+  });
+  it('칩 규칙이 없는 룰은 생략한다', () => {
+    expect(evidenceChip('RX', { session_count: 4 })).toBeNull();
   });
 });

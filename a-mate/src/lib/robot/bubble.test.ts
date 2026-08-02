@@ -2,15 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { adviceBubble, chatterCandidates, diaryBubble, findingBubble, occasionBubble, pickChatter, visitBubble } from './bubble';
 
 describe('bubble 팩토리', () => {
-  it('finding: 최대 절약 1건 + 외 N건, coach 탭, top dedup_key가 target', () => {
+  it('finding: 대표 1건 + 외 N건, coach 탭, top dedup_key가 target', () => {
+    // est_tokens_saved가 동점(등록 룰은 전부 0)이면 sort가 안정 정렬이라 입력 순서가 유지된다
     const b = findingBubble([
-      { rule_id: 'R5', est_tokens_saved: 100, severity: 'suggest', dedup_key: 'k-r5' },
-      { rule_id: 'R1', est_tokens_saved: 30000, severity: 'warn', dedup_key: 'k-r1' },
+      { rule_id: 'R6', est_tokens_saved: 0, severity: 'warn', dedup_key: 'k-r6' },
+      { rule_id: 'R8', est_tokens_saved: 0, severity: 'suggest', dedup_key: 'k-r8' },
     ], '주인');
     expect(b.tab).toBe('coach');
     expect(b.text).toContain('외 1건');
-    expect(b.text.includes('MCP')).toBe(true); // R1 문구가 대표
-    expect(b.target).toBe('k-r1');
+    expect(b.text).toContain('반복'); // R6 문구가 대표
+    expect(b.target).toBe('k-r6');
+    expect(b.text).not.toContain('tok'); // 절약 수치 표시 안 함
   });
   it('advice: detail을 싣고 dedup_key를 딥링크 target으로', () => {
     const b = adviceBubble({ dedup_key: 'k1', detail: '`playwright`가 상주하는데 호출 0회' }, '주인');
@@ -20,7 +22,7 @@ describe('bubble 팩토리', () => {
     expect(b.text).toContain('playwright');
   });
   it('커스텀 호칭이 finding·advice·chatter 대사에 반영된다', () => {
-    const f = findingBubble([{ rule_id: 'R1', est_tokens_saved: 100, severity: 'warn', dedup_key: 'k' }], '대장');
+    const f = findingBubble([{ rule_id: 'R6', est_tokens_saved: 0, severity: 'warn', dedup_key: 'k' }], '대장');
     expect(f.text.startsWith('대장,')).toBe(true);
     const a = adviceBubble({ dedup_key: 'k', detail: '뭐가 있어요' }, '대장');
     expect(a.text.startsWith('대장,')).toBe(true);

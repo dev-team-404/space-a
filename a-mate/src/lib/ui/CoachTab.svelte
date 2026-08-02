@@ -2,7 +2,7 @@
   import { listFindings, listContent, onContentReady, onNewFindings, setFindingStatus, sessionsCtx, generateSkillDraft, saveSkillDraft, type CoachFinding, type ContentItem, type SessionCtxItem, type SkillDraft } from '../api';
   import SessionModal from './SessionModal.svelte';
   import TipCard from './home/TipCard.svelte';
-  import { coachTitle, ctxLine, isHiddenFinding, sessionIdsOf, totalSessionsOf } from './coach-helpers';
+  import { coachTitle, ctxLine, evidenceChip, isHiddenFinding, sessionIdsOf, totalSessionsOf } from './coach-helpers';
 
   let { focusKey = null, onChanged }: { focusKey?: string | null; onChanged?: () => void } = $props();
 
@@ -146,10 +146,11 @@
     <p class="empty">지적할 게 없어요, 주인. 완벽해요!</p>
   {:else}
     {#each active as f (f.dedup_key)}
+      {@const chip = evidenceChip(f.rule_id, f.evidence)}
       <article class="card" class:warn={f.severity === 'warn'} data-key={f.dedup_key}>
         <header>
           <span class="title">{icon(f.severity)} {coachTitle(f.rule_id, f.evidence)}</span>
-          <span class="save">~{f.est_tokens_saved.toLocaleString()} tok</span>
+          {#if chip}<span class="chip">{chip}</span>{/if}
         </header>
         <!-- 집계(project) 카드의 occurrences는 스캔 횟수라 "N회 관측"이 오독을 유발 → 원본 데이터로 이동 -->
         <p class="why">{f.detail}{#if f.scope_kind === 'session'} · {f.occurrences}회 관측{/if}</p>
@@ -269,7 +270,10 @@
   .card.muted { opacity: 0.75; border-left-color: var(--pastel-lav); }
   header { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
   .title { font-weight: 600; }
-  .save { color: var(--accent-strong); font-size: 12px; white-space: nowrap; }
+  .chip {
+    color: var(--ink-soft); font-size: 11px; white-space: nowrap; flex: none;
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 1px 7px;
+  }
   .why { margin: 6px 0 2px; font-size: 12px; color: var(--ink-soft); }
   .judgment { margin: 2px 0 6px; font-size: 12px; color: var(--accent-strong); }
   .session { margin: 2px 0; font-size: 12px; color: var(--ink-soft); }

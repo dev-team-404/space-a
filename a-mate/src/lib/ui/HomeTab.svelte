@@ -77,9 +77,6 @@
     <span>세션 <b>{fmt(summary?.session_count)}</b></span>
     <span>입력 <b>{fmt(summary?.tok_input)}</b></span>
     <span>출력 <b>{fmt(summary?.tok_output)}</b></span>
-    {#if (summary?.est_tokens_saved_total ?? 0) > 0}
-      <span class="save">절약 가능 <b>{fmt(summary?.est_tokens_saved_total)}</b> tok</span>
-    {/if}
   </div>
 
   <div class="grid">
@@ -130,7 +127,6 @@
     padding: 9px 14px;
   }
   .strip b { color: var(--ink); }
-  .strip .save b { color: var(--accent-strong); }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; position: relative; flex: 0 0 auto; }
   /* grid 아이템 기본 min-width:auto가 긴 top3(nowrap)에 밀려 컬럼을 늘리는 것 방지 — 1fr 고정·ellipsis 복구 */
   .grid > :global(*) { min-width: 0; }

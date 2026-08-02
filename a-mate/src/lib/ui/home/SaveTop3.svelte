@@ -1,11 +1,11 @@
 <script lang="ts">
   import type { CoachFinding } from '../../api';
   let { findings, onGoto }: { findings: CoachFinding[]; onGoto: (dedupKey: string) => void } = $props();
-  const top3 = $derived(findings.slice(0, 3)); // 커맨드가 est_tokens_saved 내림차순 정렬을 보장
+  const top3 = $derived(findings.slice(0, 3)); // 커맨드가 정렬을 보장 — 앞에서 3건
 </script>
 
 <div class="widget">
-  <h3>절약 실천 top3</h3>
+  <h3>지금 볼 코칭</h3>
   {#if top3.length === 0}
     <p class="empty">지금은 지적할 게 없어요. 완벽해요!</p>
   {:else}
@@ -15,7 +15,6 @@
           <button onclick={() => onGoto(f.dedup_key)}>
             <span class="rank">{i + 1}</span>
             <span class="action">{f.suggested_action}</span>
-            <span class="save">~{f.est_tokens_saved.toLocaleString()}</span>
           </button>
         </li>
       {/each}
@@ -37,5 +36,4 @@
   li button:hover { background: var(--pastel-lav); }
   .rank { color: var(--accent-strong); font-weight: 700; }
   .action { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .save { color: var(--ink-soft); font-size: 11px; white-space: nowrap; }
 </style>
