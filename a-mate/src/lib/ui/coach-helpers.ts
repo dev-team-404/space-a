@@ -109,7 +109,7 @@ export function isHiddenFinding(status: string): boolean {
   return status === 'resolved' || status === 'dismissed';
 }
 
-/** 역량 사다리 축 → 한국어 배지 (TipCard에서 이관) */
+/** 역량 사다리 축 → 한국어 배지 (옛 「오늘의 배움」 컨테이너에서 이관) */
 const DIM_LABEL: Record<string, string> = {
   model_literacy: '모델 고르기',
   context_hygiene: '컨텍스트 정리',
