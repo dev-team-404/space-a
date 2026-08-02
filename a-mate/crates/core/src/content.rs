@@ -543,15 +543,16 @@ impl HubKnowledgeSource {
     }
 }
 
-impl ContentSource for HubKnowledgeSource {
-    fn id(&self) -> &str {
-        "hub-knowledge"
-    }
-    fn fetch(&self) -> Result<Vec<ContentItem>> {
+impl HubKnowledgeSource {
+    /// `fetch`와 같지만 **완전성**을 함께 반환한다 — 페이지 하나라도 실패했으면 `false`.
+    /// 피드 TTL이 부분 실패를 성공으로 기록하면 누락된 카드가 TTL 창만큼 복구되지 않는다
+    /// (`ops::gated_fetch`). 아이템 자체는 기존처럼 관대하게(받은 것만) 돌려준다.
+    pub fn fetch_complete(&self) -> Result<(Vec<ContentItem>, bool)> {
         let tree = self.get_json(&format!("/spaces/{}/tree", self.space_id))?;
         let nodes = tree.get("tree").cloned().unwrap_or_else(|| serde_json::json!([]));
         let ids = Self::pick_page_ids(&nodes, &self.own_agent_id, self.max_items);
         let mut out = Vec::new();
+        let mut complete = true;
         for id in ids {
             match self.get_json(&format!("/pages/{id}")) {
                 Ok(p) => {
@@ -559,10 +560,22 @@ impl ContentSource for HubKnowledgeSource {
                         out.push(item);
                     }
                 }
-                Err(e) => eprintln!("[curation] hub page {id} fetch 실패(계속): {e}"),
+                Err(e) => {
+                    eprintln!("[curation] hub page {id} fetch 실패(계속): {e}");
+                    complete = false;
+                }
             }
         }
-        Ok(out)
+        Ok((out, complete))
+    }
+}
+
+impl ContentSource for HubKnowledgeSource {
+    fn id(&self) -> &str {
+        "hub-knowledge"
+    }
+    fn fetch(&self) -> Result<Vec<ContentItem>> {
+        self.fetch_complete().map(|(items, _)| items)
     }
 }
 
@@ -1107,7 +1120,7 @@ mod tests {
             id: id.into(), kind: ItemKind::Tip, title: "t".into(), body: "b".into(),
             source_url: None, dimension: None, trigger_tags: vec!["personal".into()], base_priority: 0,
         };
-        store.replace_content_items(&[(mk("lesson-cache"), 550)], "2026-07-17T00:00:00Z").unwrap();
+        store.replace_content_items(&[(mk("lesson-cache"), 550)], "2026-07-17T00:00:00Z", &[]).unwrap();
         // 그제 2.1억 → 어제 0.6억 (71% 감소)
         store.conn.execute(
             "INSERT INTO daily_rollup (host,project_id,date,tok_input,tok_output,tok_cache_read,tok_cache_create,session_count)
@@ -1168,10 +1181,10 @@ mod tests {
             base_priority: 0,
         };
         // 1차 스캔: old-news 2건 (하나는 사용자가 닫음)
-        store.replace_content_items(&[(mk("old-1"), 100), (mk("old-2"), 100)], "2026-07-18T00:00:00Z").unwrap();
+        store.replace_content_items(&[(mk("old-1"), 100), (mk("old-2"), 100)], "2026-07-18T00:00:00Z", &[]).unwrap();
         store.set_content_status("old-2", "dismissed", "2026-07-18T01:00:00Z").unwrap();
         // 2차 스캔: 피드에 new-1만 남음 → old-1(new)은 프룬, old-2(dismissed)는 쿨다운 기록으로 보존
-        store.replace_content_items(&[(mk("new-1"), 50)], "2026-07-19T00:00:00Z").unwrap();
+        store.replace_content_items(&[(mk("new-1"), 50)], "2026-07-19T00:00:00Z", &[]).unwrap();
         let ids: Vec<String> = store
             .conn
             .prepare("SELECT id FROM content_items ORDER BY id")
@@ -1181,6 +1194,56 @@ mod tests {
             .collect::<std::result::Result<_, _>>()
             .unwrap();
         assert_eq!(ids, vec!["new-1".to_string(), "old-2".to_string()]);
+    }
+
+    fn content_ids(store: &crate::store::SqliteStore) -> Vec<String> {
+        store
+            .conn
+            .prepare("SELECT id FROM content_items ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<std::result::Result<_, _>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn prune_spares_cards_from_ttl_skipped_sources() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        let mk = |id: &str, tag: &str| ContentItem {
+            id: id.into(), kind: ItemKind::News, title: "t".into(), body: "b".into(),
+            source_url: None, dimension: None, trigger_tags: vec![tag.into()],
+            base_priority: 0,
+        };
+        // 1차 스캔: 세 소스가 모두 참여
+        store.replace_content_items(
+            &[(mk("cc-1", "changelog"), 100), (mk("bo-1", "boris"), 100), (mk("pr-1", "plugin-reco-catalog"), 100)],
+            "2026-08-01T00:00:00Z", &[],
+        ).unwrap();
+        // 2차 스캔: changelog만 참여. boris·마켓플레이스는 TTL로 스킵 → 랭킹에 없어도 보존
+        store.replace_content_items(
+            &[(mk("cc-2", "changelog"), 100)],
+            "2026-08-01T01:00:00Z", &["boris", "plugin-reco-catalog"],
+        ).unwrap();
+        assert_eq!(
+            content_ids(&store),
+            vec!["bo-1".to_string(), "cc-2".to_string(), "pr-1".to_string()],
+            "참여 소스(changelog)의 사라진 카드만 프룬"
+        );
+    }
+
+    #[test]
+    fn prune_still_removes_cards_without_source_tags() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        let mk = |id: &str| ContentItem {
+            id: id.into(), kind: ItemKind::Tip, title: "t".into(), body: "b".into(),
+            source_url: None, dimension: None, trigger_tags: vec!["mcp".into()],
+            base_priority: 0,
+        };
+        // 내장 팁엔 소스 태그가 없다 — 항상 참여하므로 스킵 목록과 무관하게 프룬된다
+        store.replace_content_items(&[(mk("tip-old"), 100)], "2026-08-01T00:00:00Z", &[]).unwrap();
+        store.replace_content_items(&[(mk("tip-new"), 100)], "2026-08-01T01:00:00Z", &["boris"]).unwrap();
+        assert_eq!(content_ids(&store), vec!["tip-new".to_string()]);
     }
 
     #[test]

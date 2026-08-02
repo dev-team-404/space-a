@@ -65,16 +65,17 @@ fn cmd_curate(store: &SqliteStore) -> Result<()> {
                     let stored = store.get_setting("knowledge_hub_token").ok().flatten();
                     agent_mentor::hub::pull_source(&cfg, stored)
                 });
-            let n = ops::fetch_feed_items(hub_src);
+            // CLI는 사용자가 직접 부르는 1회성 실행이라 TTL을 적용하지 않는다(전 소스 참여).
+            let (n, _) = ops::fetch_feed_items(hub_src, &ops::FeedPlan::all());
             eprintln!("feed: 네트워크에서 {}건", n.len());
             n
         }
     };
     let now = chrono::Utc::now().to_rfc3339();
     // E — 마켓플레이스 카탈로그(② 미설치 추천 재료)도 파이프라인과 동일하게 fetch(실패 시 빈).
-    let catalog = ops::fetch_marketplace_catalog();
+    let (catalog, _) = ops::fetch_marketplace_catalog(&ops::FeedPlan::all());
     eprintln!("catalog: 공식 마켓플레이스 {}건", catalog.len());
-    let visible = ops::run_curation(store, feed, &catalog, &now)?;
+    let visible = ops::run_curation(store, feed, &catalog, &now, &ops::FeedPlan::all())?;
     println!("\n== AX 튜터가 지금 보여줄 것 (노출 {}건, content_items에 persist) ==", visible.len());
     for r in &visible {
         println!("  [{:>4}] {:16} {}", r.score, r.dimension.as_deref().unwrap_or("news"), r.title);

@@ -1061,6 +1061,7 @@ impl SqliteStore {
         &self,
         ranked: &[(crate::content::ContentItem, i64)],
         now_ts: &str,
+        skipped_source_tags: &[&str],
     ) -> Result<()> {
         let tx = self.conn.unchecked_transaction()?;
         for (item, score) in ranked {
@@ -1078,13 +1079,35 @@ impl SqliteStore {
         }
         // 피드에서 사라진 아이템 프룬(2026-07-19): 소식·외부 팁은 일시적 — 랭킹에 없으면
         // 낡은 점수로 상단을 점령한다. 단, 사용자가 닫은(dismissed 등) 행은 쿨다운 기록이라 보존.
+        // 프룬 범위는 **이번에 참여한 소스로 한정**한다(2026-08-02, 스펙 §7.1): TTL로 fetch를
+        // 스킵한 소스는 이번 랭킹에 항목을 하나도 못 싣기 때문에, 함께 지우면 스킵할 때마다 그
+        // 소스의 카드가 통째로 사라졌다가 TTL 만료 후 되살아난다.
         if !ranked.is_empty() {
-            let placeholders = vec!["?"; ranked.len()].join(",");
-            let sql = format!(
-                "DELETE FROM content_items WHERE status='new' AND id NOT IN ({placeholders})"
-            );
-            let ids: Vec<&str> = ranked.iter().map(|(i, _)| i.id.as_str()).collect();
-            self.conn.execute(&sql, rusqlite::params_from_iter(ids))?;
+            let keep: std::collections::HashSet<&str> =
+                ranked.iter().map(|(i, _)| i.id.as_str()).collect();
+            let stale: Vec<String> = {
+                let mut stmt = self
+                    .conn
+                    .prepare("SELECT id, trigger_tags FROM content_items WHERE status='new'")?;
+                let rows = stmt.query_map([], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+                })?;
+                rows.collect::<rusqlite::Result<Vec<_>>>()?
+                    .into_iter()
+                    .filter(|(id, tags_json)| {
+                        if keep.contains(id.as_str()) {
+                            return false;
+                        }
+                        let tags: Vec<String> =
+                            serde_json::from_str(tags_json).unwrap_or_default();
+                        !tags.iter().any(|t| skipped_source_tags.contains(&t.as_str()))
+                    })
+                    .map(|(id, _)| id)
+                    .collect()
+            };
+            for id in stale {
+                self.conn.execute("DELETE FROM content_items WHERE id=?1", [&id])?;
+            }
         }
         tx.commit()?;
         Ok(())
