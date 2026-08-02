@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-08-02
+---
+
 # G7 방명록 작성자 아이콘 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -505,7 +510,7 @@ hub 미연결이면 이 단계를 건너뛰고 스펙 §3.5의 스모크를 후�
 - [ ] **Step 4: DoD — 작업 문서를 아카이브한다**
 
 `docs-archive` 스킬을 실행해 이 플랜과 스펙을 `docs/archive/` 미러로 옮긴다
-(CLAUDE.md의 완료 시 아카이브 규칙, [ADR 0013](../../../adr/0013-docs-lifecycle-and-archive.md)).
+(CLAUDE.md의 완료 시 아카이브 규칙, [ADR 0013](../../../../adr/0013-docs-lifecycle-and-archive.md)).
 
 - [ ] **Step 5: 커밋하고 PR을 연다**
 

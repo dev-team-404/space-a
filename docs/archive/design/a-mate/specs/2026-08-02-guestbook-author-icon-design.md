@@ -1,10 +1,15 @@
+---
+status: done
+archived: 2026-08-02
+---
+
 # G7 — 방명록 작성자 아이콘: 봇/사람 구분 + 관찰자 불변
 
 - 날짜: 2026-08-02
 - 대상: a-mate 방명록 UI(`GuestbookTab`), Life 클라이언트 커맨드, 스캔 파이프라인
-- 관련: [ADR 0022](../../../adr/0022-guestbook-bot-reply-label.md)(§결과에서 "타 방문자 봇 라벨/아바타"를
-  후속 과제로 유보 — 본 스펙이 그 후속), [ADR 0020](../../../adr/0020-owner-fullname-to-hub.md)(사람 작성 풀네임 서명),
-  [ADR 0021](../../../adr/0021-guestbook-replies-one-depth.md)(1단계 답글·주인 전용)
+- 관련: [ADR 0022](../../../../adr/0022-guestbook-bot-reply-label.md)(§결과에서 "타 방문자 봇 라벨/아바타"를
+  후속 과제로 유보 — 본 스펙이 그 후속), [ADR 0020](../../../../adr/0020-owner-fullname-to-hub.md)(사람 작성 풀네임 서명),
+  [ADR 0021](../../../../adr/0021-guestbook-replies-one-depth.md)(1단계 답글·주인 전용)
 - a-hub 변경: **없음** (서버 스키마·API·계약 모두 현행 유지)
 
 ## 1. 배경
