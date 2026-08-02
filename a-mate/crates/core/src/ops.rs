@@ -247,6 +247,7 @@ pub fn run_curation(
     feed_items: Vec<crate::content::ContentItem>,
     catalog: &[crate::content::CatalogEntry],
     now_ts: &str,
+    plan: &FeedPlan,
 ) -> Result<Vec<crate::store::ContentRow>> {
     use crate::content::{rank, BuiltinTipsSource, ContentSource, CONTENT_COOLDOWN_DAYS};
     let profile = crate::profile::detect_profile(store)?;
@@ -262,7 +263,8 @@ pub fn run_curation(
     items.extend(crate::plugin_reco::plugin_reco_items(store, catalog, now_ts)?);
     items.extend(feed_items);
     let ranked = rank(items, &profile);
-    store.replace_content_items(&ranked, now_ts)?;
+    // 프룬은 **이번에 참여한 소스로 한정** — TTL로 스킵한 소스는 랭킹에 항목이 없다(§7.1).
+    store.replace_content_items(&ranked, now_ts, &plan.skipped_item_tags())?;
     store.list_content(now_ts, CONTENT_COOLDOWN_DAYS, false)
 }
 
@@ -276,40 +278,138 @@ pub fn probe_docs_reachable() -> bool {
         .is_ok()
 }
 
+/// 네트워크 피드 소스 — `(소스, 그 소스가 만든 카드의 식별 태그, TTL 시간)`.
+/// 스캔은 로그 감시 60초 디바운스라 TTL이 없으면 작업 중 시간당 최대 60회씩 나간다(D6).
+/// 로컬 소스(내장 팁·개인 레슨)는 네트워크를 안 쓰므로 여기 없다 — TTL 대상이 아니다.
+/// 마켓플레이스 카탈로그는 그 자체가 카드가 아니라 ② 미설치 추천(`plugin-reco`)의 재료다.
+pub const FEED_SOURCES: [(&str, &str, i64); 4] = [
+    ("changelog", "changelog", 24),
+    ("boris", "boris", 24),
+    ("marketplace", "plugin-reco", 24),
+    ("team", "team", 6),
+];
+
+fn feed_stamp_key(source: &str) -> String {
+    format!("feed_last_fetch_{source}")
+}
+
+/// 이번 큐레이션에 네트워크로 갈 소스 집합 — TTL이 만료된 소스만.
+/// **프룬 범위도 이걸로 좁힌다**: 스킵한 소스는 이번 랭킹에 항목을 못 싣기 때문에,
+/// 그대로 프룬하면 스킵할 때마다 그 소스 카드가 사라졌다 TTL 만료 후 되살아난다(스펙 §7.1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FeedPlan {
+    due: Vec<&'static str>,
+}
+
+impl FeedPlan {
+    /// 전 소스 참여 — TTL을 적용하지 않는다. 1회성 CLI(`curate`)와 테스트용.
+    pub fn all() -> Self {
+        Self { due: FEED_SOURCES.iter().map(|(s, _, _)| *s).collect() }
+    }
+
+    /// `settings`의 마지막 fetch 시각으로 만료 판정. SQL만 — 짧은 락 안에서 호출한다.
+    /// 기록 부재·파싱 실패는 만료로 취급(fail-open: 카드가 영구히 안 뜨는 쪽이 더 나쁘다).
+    pub fn resolve(store: &SqliteStore, now_ts: &str) -> Self {
+        let now = chrono::DateTime::parse_from_rfc3339(now_ts).ok();
+        let due = FEED_SOURCES
+            .iter()
+            .filter(|(source, _, ttl_hours)| {
+                let Some(now) = now else { return true };
+                let last = store
+                    .get_setting(&feed_stamp_key(source))
+                    .ok()
+                    .flatten()
+                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok());
+                match last {
+                    Some(last) => now - last >= chrono::Duration::hours(*ttl_hours),
+                    None => true,
+                }
+            })
+            .map(|(source, _, _)| *source)
+            .collect();
+        Self { due }
+    }
+
+    pub fn is_due(&self, source: &str) -> bool {
+        self.due.iter().any(|s| *s == source)
+    }
+
+    /// TTL로 스킵한 소스가 만든 카드의 식별 태그 — 프룬에서 제외할 태그.
+    pub fn skipped_item_tags(&self) -> Vec<&'static str> {
+        FEED_SOURCES
+            .iter()
+            .filter(|(source, _, _)| !self.is_due(source))
+            .map(|(_, item_tag, _)| *item_tag)
+            .collect()
+    }
+}
+
+/// fetch에 **성공한** 소스의 시각만 기록한다. 실패를 기록하면 일시적 네트워크 장애가
+/// TTL 창만큼(최대 24h) 침묵으로 굳으므로, 실패는 남기지 않아 다음 스캔에 재시도한다.
+pub fn mark_feed_fetched(store: &SqliteStore, sources: &[&str], now_ts: &str) -> Result<()> {
+    for source in sources {
+        store.set_setting(&feed_stamp_key(source), now_ts)?;
+    }
+    Ok(())
+}
+
+/// 만료된 소스만 fetch하고, **성공한 소스 태그**를 함께 반환한다(TTL 시각 기록 대상).
 pub fn fetch_feed_items(
     hub: Option<crate::content::HubKnowledgeSource>,
-) -> Vec<crate::content::ContentItem> {
+    plan: &FeedPlan,
+) -> (Vec<crate::content::ContentItem>, Vec<&'static str>) {
     use crate::content::{BorisTipsSource, ClaudeChangelogSource, ContentSource};
     // 여러 소스를 각각 관대하게 fetch — 하나가 실패해도 나머지는 계속.
     let mut items = Vec::new();
-    match ClaudeChangelogSource::default().fetch() {
-        Ok(mut v) => items.append(&mut v),
-        Err(e) => eprintln!("[curation] changelog 피드 fetch 실패(계속): {e}"),
-    }
-    match BorisTipsSource::default().fetch() {
-        Ok(mut v) => items.append(&mut v),
-        Err(e) => eprintln!("[curation] boris 피드 fetch 실패(계속): {e}"),
-    }
+    let mut fetched = Vec::new();
+    items.extend(gated_fetch(plan, "changelog", &mut fetched, || {
+        ClaudeChangelogSource::default().fetch()
+    }));
+    items.extend(gated_fetch(plan, "boris", &mut fetched, || {
+        BorisTipsSource::default().fetch()
+    }));
     // 팀 지식(pull) — 허브 설정+토큰이 있을 때만 (hub::pull_source)
     if let Some(src) = hub {
-        match src.fetch() {
-            Ok(mut v) => items.append(&mut v),
-            Err(e) => eprintln!("[curation] 팀 지식 피드 fetch 실패(계속): {e}"),
+        items.extend(gated_fetch(plan, "team", &mut fetched, || src.fetch()));
+    }
+    (items, fetched)
+}
+
+/// 소스별 TTL 게이트. 미만료면 **네트워크를 건너뛴다**. 스킵과 실패는 로그에서 구분하고,
+/// 성공한 소스만 `fetched`에 담아 TTL 시각 기록 대상으로 남긴다.
+fn gated_fetch<T>(
+    plan: &FeedPlan,
+    source: &'static str,
+    fetched: &mut Vec<&'static str>,
+    fetch: impl FnOnce() -> Result<Vec<T>>,
+) -> Vec<T> {
+    if !plan.is_due(source) {
+        let ttl = FEED_SOURCES.iter().find(|(s, _, _)| *s == source).map_or(0, |(_, _, h)| *h);
+        eprintln!("[curation] {source} fetch 스킵 — TTL {ttl}h 미만료");
+        return Vec::new();
+    }
+    match fetch() {
+        Ok(v) => {
+            fetched.push(source);
+            v
+        }
+        Err(e) => {
+            eprintln!("[curation] {source} fetch 실패(계속): {e}");
+            Vec::new()
         }
     }
-    items
 }
 
 /// E 카탈로그 fetch — 부수효과는 가장자리(파이프라인이 락 밖에서 호출). 실패는 관대:
 /// 빈 벡터 = ② 추천만 침묵(에러 아님), ①·나머지 큐레이션은 계속 (스펙 §6).
-pub fn fetch_marketplace_catalog() -> Vec<crate::content::CatalogEntry> {
-    match crate::content::MarketplaceCatalogSource::default().fetch() {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("[curation] 마켓플레이스 카탈로그 fetch 실패(계속): {e}");
-            Vec::new()
-        }
-    }
+pub fn fetch_marketplace_catalog(
+    plan: &FeedPlan,
+) -> (Vec<crate::content::CatalogEntry>, Vec<&'static str>) {
+    let mut fetched = Vec::new();
+    let catalog = gated_fetch(plan, "marketplace", &mut fetched, || {
+        crate::content::MarketplaceCatalogSource::default().fetch()
+    });
+    (catalog, fetched)
 }
 
 #[cfg(test)]
@@ -381,14 +481,14 @@ mod tests {
         // ② 게이트: 설치 전수 스냅숏(스캔됨·설치 0개)으로 부재 확인
         store.set_installed_plugins("Windows", &serde_json::json!({})).unwrap();
         // ② 카드가 큐레이션 노출 목록에 오른다 (personal 스코어 → 상단권)
-        let visible = run_curation(&store, vec![], &catalog, &now).unwrap();
+        let visible = run_curation(&store, vec![], &catalog, &now, &FeedPlan::all()).unwrap();
         let reco = visible.iter().find(|r| r.id.starts_with("plugin-reco-"))
             .expect("plugin 추천 카드 노출");
         assert!(reco.trigger_tags.iter().any(|t| t == "personal"));
         // dismiss → 재큐레이션에도 다시 안 뜬다 (기존 dismissal 인프라 재사용 검증)
         let reco_id = reco.id.clone();
         store.set_content_status(&reco_id, "dismissed", &now).unwrap();
-        let again = run_curation(&store, vec![], &catalog, &now).unwrap();
+        let again = run_curation(&store, vec![], &catalog, &now, &FeedPlan::all()).unwrap();
         assert!(again.iter().all(|r| r.id != reco_id), "dismiss된 추천은 재노출 금지");
     }
 
@@ -398,7 +498,7 @@ mod tests {
         // 전부 opus → 프론티어 = 모델 리터러시
         opus_turn(&store, "s1", "u1", "claude-opus-4-8");
         opus_turn(&store, "s1", "u2", "claude-opus-4-8");
-        let visible = run_curation(&store, vec![], &[], "2026-07-14T10:00:00Z").unwrap();
+        let visible = run_curation(&store, vec![], &[], "2026-07-14T10:00:00Z", &FeedPlan::all()).unwrap();
         assert!(!visible.is_empty());
         assert_eq!(visible[0].dimension.as_deref(), Some("model_literacy"));
         // persist 확인: 전체(숨김 포함) 목록엔 마스터 축 팁도 저장돼 있음
@@ -419,7 +519,7 @@ mod tests {
             evidence: serde_json::json!({"server":"chrome-devtools","resident_tokens_total":432657}),
             est_tokens_saved: 2500, prescription: None, dedup_key: "R1|chrome-devtools".into(),
         }, "2026-07-14T10:00:00Z").unwrap();
-        run_curation(&store, vec![], &[], "2026-07-14T10:00:00Z").unwrap();
+        run_curation(&store, vec![], &[], "2026-07-14T10:00:00Z", &FeedPlan::all()).unwrap();
         let all = store.list_content("2026-07-14T10:00:00Z", 14.0, true).unwrap();
         let mcp = all.iter().find(|r| r.trigger_tags.iter().any(|t| t == "mcp")).unwrap();
         let p = mcp.personal.as_ref().expect("MCP 팁에 '당신 로그' 근거가 있어야 함");
@@ -433,7 +533,7 @@ mod tests {
         let store = SqliteStore::open_in_memory().unwrap();
         opus_turn(&store, "s1", "u1", "claude-opus-4-8");
         opus_turn(&store, "s1", "u2", "claude-opus-4-8");
-        let visible = run_curation(&store, vec![], &[], "2026-07-14T10:00:00Z").unwrap();
+        let visible = run_curation(&store, vec![], &[], "2026-07-14T10:00:00Z", &FeedPlan::all()).unwrap();
         let top = visible[0].id.clone(); // model_literacy 팁
         // 닫으면 같은 축 형제도 쿨다운 기간 동안 억제
         store.set_content_status(&top, "dismissed", "2026-07-14T10:05:00Z").unwrap();
@@ -700,5 +800,85 @@ mod tests {
 
         // 파일 부재 → None
         assert!(super::deref_jsonl_line("C:\\nope\\missing.jsonl", 0).is_none());
+    }
+
+    // ── 피드 fetch TTL (스펙 §7.1 / D6) ──
+
+    fn news(id: &str, tag: &str) -> crate::content::ContentItem {
+        crate::content::ContentItem {
+            id: id.into(),
+            kind: crate::content::ItemKind::News,
+            title: "t".into(),
+            body: "b".into(),
+            source_url: None,
+            dimension: None,
+            trigger_tags: vec![tag.into()],
+            base_priority: 0,
+        }
+    }
+
+    #[test]
+    fn ttl_skip_preserves_existing_news_cards() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 1차 스캔: changelog를 fetch해 소식 카드를 심는다
+        let t1 = "2026-08-01T00:00:00Z";
+        run_curation(&store, vec![news("cc-1", "changelog")], &[], t1, &FeedPlan::all()).unwrap();
+        mark_feed_fetched(&store, &["changelog"], t1).unwrap();
+        // 2차 스캔: 1시간 뒤 — TTL 24h가 안 지나 changelog는 네트워크를 건너뛴다(피드 빈 벡터)
+        let t2 = "2026-08-01T01:00:00Z";
+        let plan = FeedPlan::resolve(&store, t2);
+        assert!(!plan.is_due("changelog"), "24h 안에는 스킵해야 함");
+        run_curation(&store, vec![], &[], t2, &plan).unwrap();
+        let rows = store.list_content(t2, 14.0, true).unwrap();
+        assert!(
+            rows.iter().any(|r| r.id == "cc-1"),
+            "TTL로 스킵한 소스의 카드는 프룬 대상이 아니다: {:?}",
+            rows.iter().map(|r| &r.id).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn feed_fetch_resumes_after_ttl_expires() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        mark_feed_fetched(&store, &["changelog"], "2026-08-01T00:00:00Z").unwrap();
+        let before = FeedPlan::resolve(&store, "2026-08-01T23:00:00Z");
+        assert!(!before.is_due("changelog"), "23h 경과 — 24h 미만료");
+        let after = FeedPlan::resolve(&store, "2026-08-02T01:00:00Z");
+        assert!(after.is_due("changelog"), "25h 경과 — fetch 재개");
+    }
+
+    #[test]
+    fn feed_ttl_is_independent_per_source() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 같은 시각에 둘 다 fetch. TTL은 changelog 24h, 팀 지식 6h
+        mark_feed_fetched(&store, &["changelog", "team"], "2026-08-01T00:00:00Z").unwrap();
+        let plan = FeedPlan::resolve(&store, "2026-08-01T07:00:00Z");
+        assert!(!plan.is_due("changelog"), "7h 경과 — 24h 미만료");
+        assert!(plan.is_due("team"), "7h 경과 — 6h 만료");
+    }
+
+    #[test]
+    fn missing_or_unparsable_ttl_stamp_is_due() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        // 기록 없음 = 첫 스캔
+        assert!(FeedPlan::resolve(&store, "2026-08-01T00:00:00Z").is_due("boris"));
+        // 깨진 값은 fail-open — 카드가 영구히 안 뜨는 쪽이 더 나쁘다
+        store.set_setting("feed_last_fetch_boris", "쓰레기").unwrap();
+        assert!(FeedPlan::resolve(&store, "2026-08-01T00:00:00Z").is_due("boris"));
+    }
+
+    #[test]
+    fn network_failure_keeps_legacy_prune_and_retries_next_scan() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let t1 = "2026-08-01T00:00:00Z";
+        run_curation(&store, vec![news("cc-1", "changelog")], &[], t1, &FeedPlan::all()).unwrap();
+        // fetch 실패는 시각을 남기지 않는다 → 다음 스캔에 재시도
+        let t2 = "2026-08-01T01:00:00Z";
+        let plan = FeedPlan::resolve(&store, t2);
+        assert!(plan.is_due("changelog"), "실패는 TTL 시각을 남기지 않는다");
+        // 참여한 소스이므로 프룬은 기존과 동일 — 빈 벡터로 계속(에러 아님)
+        run_curation(&store, vec![], &[], t2, &plan).unwrap();
+        let rows = store.list_content(t2, 14.0, true).unwrap();
+        assert!(rows.iter().all(|r| r.id != "cc-1"), "참여 소스의 사라진 카드는 기존대로 프룬");
     }
 }
