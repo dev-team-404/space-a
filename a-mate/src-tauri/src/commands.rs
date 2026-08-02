@@ -834,6 +834,34 @@ fn upload_cached_mascot(app: &tauri::AppHandle, client: &LifeClient) -> Result<b
     client.upload_mascot_image(&png).map(|_| true).map_err(|e| e.to_string())
 }
 
+/// G7 — 스캔마다 마스코트 이미지 게시를 보장한다 (스펙 §3.5). 지금까지는 방 탭을 열 때만
+/// 올라가서, 방 탭을 한 번도 안 연 사용자의 봇은 남의 방명록에 글을 남겨도 얼굴이 보이지 않았다.
+/// 서버가 같은 sha면 쓰기를 생략하므로 반복 비용은 조회 1회다.
+/// hub 미연결·스프라이트 없음이면 no-op, 실패는 warn+skip (maybe_* 계열 규율).
+pub fn maybe_sync_mascot_image(
+    app: &tauri::AppHandle,
+    store_mutex: &std::sync::Mutex<SqliteStore>,
+) {
+    // 락은 설정 읽기 동안만 — 업로드(네트워크)는 락 밖 (이 모듈 상단 규율)
+    let client = match store_mutex.lock() {
+        Ok(store) => {
+            let get = |k: &str| store.get_setting(k).ok().flatten().unwrap_or_default();
+            let (url, token) = (get("hub_url"), get("hub_token"));
+            if url.trim().is_empty() || token.is_empty() {
+                return; // hub 미연결
+            }
+            LifeClient { base_url: url, token, api_key: opt_key(get("hub_api_key")) }
+        }
+        Err(e) => {
+            log::warn!("store lock poisoned: {e}");
+            return;
+        }
+    };
+    if let Err(e) = upload_cached_mascot(app, &client) {
+        log::warn!("마스코트 이미지 게시 실패(다음 스캔 재시도): {e}");
+    }
+}
+
 /// O1 — 캐시된 대문사진을 서버에 게시. 컷이 아직 없으면 Ok(false)(올릴 게 없음 = 실패 아님).
 /// PNG 바이트를 프론트로 왕복시키지 않기 위해 Rust가 파일을 직접 읽는다.
 fn upload_cached_daily_cut(app: &tauri::AppHandle, client: &LifeClient) -> Result<bool, String> {

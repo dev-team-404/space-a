@@ -237,6 +237,9 @@ mod runtime {
                 maybe_reply_guestbook(&state.store);
                 // 묶음 ② 방문 기록 보존(30일) — 방문·토글과 무관하게 스캔마다 (ADR 0025)
                 crate::visit::prune_visit_history(&state.store);
+                // G7 마스코트 얼굴 게시 보장 — 방명록 아이콘이 남에게도 보이려면 서버에 있어야 한다.
+                // 자율 방문이 방명록을 남기기 전에 올려둔다.
+                crate::commands::maybe_sync_mascot_image(app, &state.store);
                 // 묶음 ② 자율 방문 — 주말·공휴일 하루 1방(토글 off·hub 미연결·일촌 없으면 no-op)
                 crate::visit::maybe_auto_visit(&state.store);
                 // P4+N1 인바운드 소식 — 내 방 방문·방명록 diff를 emit (hub 미연결·구서버 no-op)
