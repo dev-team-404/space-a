@@ -36,19 +36,17 @@ describe('coach-helpers', () => {
 });
 
 describe('coachTitle', () => {
-  it('R5 cross_session subtype → CLAUDE.md 카피', () => {
-    expect(coachTitle('R5', { subtype: 'cross_session_claude_md' })).toContain('CLAUDE.md');
-  });
-  it('R5 context_drift subtype → 기존 다시읽기 제목', () => {
-    expect(coachTitle('R5', { subtype: 'within_session_context_drift' })).toContain('다시 읽었어요');
-  });
-  it('R1은 기존 제목', () => {
-    expect(coachTitle('R1', null)).toContain('MCP');
-  });
-  it('R6은 반복 지시 제목', () => {
+  it('등록된 룰만 고유 제목을 갖는다', () => {
     expect(coachTitle('R6', {})).toContain('같은 지시');
+    expect(coachTitle('R7', {})).toContain('모델');
+    expect(coachTitle('R8', {})).toContain('MCP');
   });
-  it('알 수 없는 rule → fallback', () => {
+  it('은퇴한 룰은 폴백 제목 — 죽은 매핑을 남기지 않는다', () => {
+    for (const retired of ['R1', 'R2', 'R5', 'R9', 'R10', 'R11', 'R12', 'R24']) {
+      expect(coachTitle(retired, {}), retired).toBe('아낄 수 있는 게 보여요');
+    }
+  });
+  it('알 수 없는 rule → 폴백', () => {
     expect(coachTitle('RX', {})).toBe('아낄 수 있는 게 보여요');
   });
 });
