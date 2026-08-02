@@ -1,5 +1,5 @@
 // 집계 finding evidence에서 세션 목록을 안전하게 추출 (코칭 v2 스펙 §5.2)
-import type { SessionCtxItem } from '../api';
+import type { CoachFinding, ContentItem, SessionCtxItem } from '../api';
 
 export function sessionIdsOf(evidence: unknown): string[] {
   if (typeof evidence !== 'object' || evidence === null) return [];
@@ -107,4 +107,105 @@ export function coachTitle(ruleId: string, _evidence: unknown): string {
  * pending(판정 대기)·rejected(판정 탈락)는 내부 상태라 노출하지 않는다 (fail-safe 침묵). */
 export function isHiddenFinding(status: string): boolean {
   return status === 'resolved' || status === 'dismissed';
+}
+
+/** 역량 사다리 축 → 한국어 배지 (TipCard에서 이관) */
+const DIM_LABEL: Record<string, string> = {
+  model_literacy: '모델 고르기',
+  context_hygiene: '컨텍스트 정리',
+  skill_reuse: '스킬로 반복 줄이기',
+  automation: '워크플로 자동화',
+  orchestration: '작업 위임',
+};
+
+export interface LogCardView {
+  key: string;
+  source: 'finding' | 'lesson';
+  icon: string;
+  title: string;
+  evidence: string | null;
+  chip: string | null;
+  reason: string | null;
+  principle: string | null;
+  action: string | null;
+  sourceUrl: string | null;
+}
+
+export interface LearnCardView {
+  id: string;
+  badge: string;
+  title: string;
+  summary: string | null;
+  sourceUrl: string | null;
+}
+
+const severityIcon = (s: CoachFinding['severity']): string =>
+  s === 'warn' ? '⚠' : s === 'suggest' ? '💡' : 'ℹ';
+
+const orNull = (s: string | null | undefined): string | null => {
+  const t = (s ?? '').trim();
+  return t === '' ? null : t;
+};
+
+/** 룰 finding → 문법 A. 원리는 레슨 전용 슬롯이라 항상 null. */
+export function toLogCardView(f: CoachFinding): LogCardView {
+  return {
+    key: f.dedup_key,
+    source: 'finding',
+    icon: severityIcon(f.severity),
+    title: coachTitle(f.rule_id, f.evidence),
+    evidence: orNull(f.detail),
+    chip: evidenceChip(f.rule_id, f.evidence),
+    reason: orNull(f.judgment?.reason),
+    principle: null,
+    action: orNull(f.suggested_action),
+    sourceUrl: null,
+  };
+}
+
+/** 개인 실전 레슨 → 문법 A. 칩·판정은 룰 전용이라 null.
+ * `personal`(store의 enrich_personal)이 있으면 본문에서 뽑은 근거보다 우선한다 — 실측 수치라서. */
+export function toLessonCardView(c: ContentItem): LogCardView {
+  const parts = splitLessonBody(c.body);
+  return {
+    key: c.id,
+    source: 'lesson',
+    icon: '💡',
+    title: c.title,
+    evidence: orNull(c.personal) ?? parts.evidence,
+    chip: null,
+    reason: null,
+    principle: parts.principle,
+    action: parts.action,
+    sourceUrl: orNull(c.source_url),
+  };
+}
+
+/** 커리큘럼·외부 팁·소식 → 문법 B(카드뉴스). */
+export function toLearnCardView(c: ContentItem): LearnCardView {
+  const has = (t: string) => c.trigger_tags?.includes(t) ?? false;
+  const badge = c.kind === 'news' || has('changelog')
+    ? '소식'
+    : has('boris')
+      ? 'Boris'
+      : has('team')
+        ? '팀'
+        : c.dimension
+          ? (DIM_LABEL[c.dimension] ?? c.dimension)
+          : '배움';
+  return { id: c.id, badge, title: c.title, summary: orNull(c.body), sourceUrl: orNull(c.source_url) };
+}
+
+/** 근거 출처로 두 섹션을 가른다 (스펙 §3).
+ * 「내 로그에서」 = 룰 finding + `personal` 태그 콘텐츠. finding을 앞에 둔다 —
+ * 처방·행동 버튼이 붙어 바로 실행 가능한 쪽이기 때문. */
+export function partitionCoachItems(
+  findings: CoachFinding[],
+  content: ContentItem[],
+): { log: LogCardView[]; learn: LearnCardView[] } {
+  const isPersonal = (c: ContentItem) => c.trigger_tags?.includes('personal') ?? false;
+  return {
+    log: [...findings.map(toLogCardView), ...content.filter(isPersonal).map(toLessonCardView)],
+    learn: content.filter((c) => !isPersonal(c)).map(toLearnCardView),
+  };
 }

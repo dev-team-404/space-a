@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { coachTitle, ctxLine, evidenceChip, isHiddenFinding, sessionIdsOf, splitLessonBody, totalSessionsOf } from './coach-helpers';
-import type { SessionCtxItem } from '../api';
+import {
+  coachTitle, ctxLine, evidenceChip, isHiddenFinding, partitionCoachItems, sessionIdsOf,
+  splitLessonBody, toLearnCardView, toLessonCardView, toLogCardView, totalSessionsOf,
+} from './coach-helpers';
+import type { CoachFinding, ContentItem, SessionCtxItem } from '../api';
 
 const item = (over: Partial<SessionCtxItem> = {}): SessionCtxItem => ({
   session_id: 's1', project_id: 'd--proj', first_ts: null, cwd: null, first_prompt: null, ...over,
@@ -125,5 +128,86 @@ describe('splitLessonBody', () => {
   it('빈 본문은 전부 null', () => {
     expect(splitLessonBody('')).toEqual({ evidence: null, principle: null, action: null });
     expect(splitLessonBody('   \n  ')).toEqual({ evidence: null, principle: null, action: null });
+  });
+});
+
+const finding = (over: Partial<CoachFinding> = {}): CoachFinding => ({
+  rule_id: 'R6', severity: 'warn', scope_host: 'Windows', scope_project: null,
+  scope_kind: 'pattern', scope_ref: 'pattern:ab', evidence: { session_count: 4 },
+  est_tokens_saved: 0, prescription: null, dedup_key: 'R6|Windows|ab',
+  last_seen: null, occurrences: 1, status: 'new',
+  detail: '같은 지시를 4개 세션에서 반복했어요', suggested_action: '스킬로 묶으세요',
+  fix_command: null, session: null, ...over,
+});
+
+const content = (over: Partial<ContentItem> = {}): ContentItem => ({
+  id: 'lesson-struggle', kind: 'tip', dimension: null, title: '도구 오류 3회',
+  body: '당신 로그: 오류가 났어요.\n• 원리: 계획 없이 손대면 헤매요.\n• 이렇게: 플랜 모드를 쓰세요.',
+  source_url: 'https://example.test/guide', trigger_tags: ['personal', 'plan'],
+  score: 550, status: 'new', personal: null, ...over,
+});
+
+describe('partitionCoachItems', () => {
+  it('룰 finding과 personal 레슨은 로그 섹션, 나머지는 배움 섹션', () => {
+    const { log, learn } = partitionCoachItems(
+      [finding()],
+      [content(), content({ id: 'T-L1-1', trigger_tags: [], dimension: 'context_hygiene', title: '내장 팁' })],
+    );
+    expect(log.map((v) => v.key)).toEqual(['R6|Windows|ab', 'lesson-struggle']);
+    expect(learn.map((v) => v.id)).toEqual(['T-L1-1']);
+  });
+  it('finding이 레슨보다 앞에 온다', () => {
+    const { log } = partitionCoachItems([finding()], [content()]);
+    expect(log[0].source).toBe('finding');
+    expect(log[1].source).toBe('lesson');
+  });
+  it('한쪽이 비어도 동작한다', () => {
+    expect(partitionCoachItems([], []).log).toEqual([]);
+    expect(partitionCoachItems([], []).learn).toEqual([]);
+  });
+});
+
+describe('toLogCardView', () => {
+  it('finding을 문법 A 슬롯으로 정규화한다', () => {
+    const v = toLogCardView(finding({ judgment: { reason: '재사용 가치 높음' } }));
+    expect(v.source).toBe('finding');
+    expect(v.icon).toBe('⚠');
+    expect(v.title).toContain('같은 지시');
+    expect(v.evidence).toBe('같은 지시를 4개 세션에서 반복했어요');
+    expect(v.chip).toBe('4개 세션');
+    expect(v.reason).toBe('재사용 가치 높음');
+    expect(v.principle).toBeNull();      // 원리는 레슨 전용
+    expect(v.action).toBe('스킬로 묶으세요');
+  });
+  it('severity에 따라 아이콘이 갈린다', () => {
+    expect(toLogCardView(finding({ severity: 'suggest' })).icon).toBe('💡');
+    expect(toLogCardView(finding({ severity: 'info' })).icon).toBe('ℹ');
+  });
+  it('레슨은 본문을 쪼개 담고 칩·판정이 없다', () => {
+    const v = toLessonCardView(content());
+    expect(v.source).toBe('lesson');
+    expect(v.evidence).toBe('당신 로그: 오류가 났어요.');
+    expect(v.principle).toBe('계획 없이 손대면 헤매요.');
+    expect(v.action).toBe('플랜 모드를 쓰세요.');
+    expect(v.chip).toBeNull();
+    expect(v.reason).toBeNull();
+    expect(v.sourceUrl).toBe('https://example.test/guide');
+  });
+  it('레슨의 personal 필드가 있으면 본문 근거보다 우선한다', () => {
+    const v = toLessonCardView(content({ personal: '당신 로그: 실측 한 줄' }));
+    expect(v.evidence).toBe('당신 로그: 실측 한 줄');
+  });
+});
+
+describe('toLearnCardView', () => {
+  it('출처별 배지', () => {
+    expect(toLearnCardView(content({ kind: 'news', trigger_tags: ['changelog'] })).badge).toBe('소식');
+    expect(toLearnCardView(content({ trigger_tags: ['boris'] })).badge).toBe('Boris');
+    expect(toLearnCardView(content({ trigger_tags: ['team'] })).badge).toBe('팀');
+    expect(toLearnCardView(content({ trigger_tags: [], dimension: 'skill_reuse' })).badge).toBe('스킬로 반복 줄이기');
+    expect(toLearnCardView(content({ trigger_tags: [], dimension: null })).badge).toBe('배움');
+  });
+  it('본문이 비면 summary는 null', () => {
+    expect(toLearnCardView(content({ trigger_tags: [], body: '  ' })).summary).toBeNull();
   });
 });
