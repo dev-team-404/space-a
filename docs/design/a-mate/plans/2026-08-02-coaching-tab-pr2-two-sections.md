@@ -10,11 +10,11 @@
 
 ## Global Constraints
 
-- **작업 위치**: 워크트리 `.claude/worktrees/coaching-tab-two-sections` (base `62dc86b` = PR① 머지된 main). 원본 저장소 루트로 `cd` 하지 않는다.
+- **작업 위치**: 워크트리 `.claude/worktrees/coaching-tab-two-sections` (base `236991b` = PR①·④ 머지된 main). 원본 저장소 루트로 `cd` 하지 않는다.
 - **플랫폼**: Windows 전용. 빌드·테스트는 네이티브 PowerShell에서. WSL 안에서 금지.
 - **명령은 `a-mate/`에서 실행**한다. `npm test` 하나로 svelte-check + vitest가 함께 돈다.
 - **베이스라인 확인 필수**: 새 워크트리엔 `node_modules`가 없다. `npm ci`를 먼저 돌려라.
-  ⚠ 설치 전 `npm test`는 *"'svelte-check'은(는) 내부 또는 외부 명령이 아닙니다"* 만 출력하고 **종료 코드 0**으로 끝난다. 종료 코드를 믿지 말고 출력에 `Tests  N passed`가 있는지 눈으로 확인한다. 기준값(PR① 머지 직후): **프론트 239건, `cargo test` 646건**.
+  ⚠ 설치 전 `npm test`는 *"'svelte-check'은(는) 내부 또는 외부 명령이 아닙니다"* 만 출력하고 **종료 코드 0**으로 끝난다. 종료 코드를 믿지 말고 출력에 `Tests  N passed`가 있는지 눈으로 확인한다. 기준값(`236991b` 실측): **프론트 239건, `cargo test` 652건**(604 + 48).
 - **이 PR은 Rust를 건드리지 않는다.** 백엔드 변경은 PR③·⑥ 몫이다.
 - **개인 레슨의 처분은 기존 `✕`(dismissed) 그대로 둔다.** `[해결함]`을 붙이려면 `content_items`에 `resolved` 어휘가 필요한데 그건 PR③이다. 같은 섹션에서 finding은 `[해결함][무시]`, 레슨은 `[✕]`인 **의도된 중간 상태**다.
 - **CSS는 하드코딩 hex 금지.** `var(--...)`만. 전경 `color`에 `var(--accent)` 금지 — `var(--accent-strong)`을 쓴다 (`no-hardcoded-colors.test.ts`가 강제).
@@ -794,7 +794,7 @@ git commit -m "refactor(frontend): split the coaching tab into two evidence sect
 ## 완료 조건
 
 - [ ] `cd a-mate; npm test` — svelte-check 오류 0, vitest 전체 통과
-- [ ] `cd a-mate; cargo test` — 646건 통과 (이 PR은 Rust 무변경, 회귀 확인용)
+- [ ] `cd a-mate; cargo test` — 652건 통과 (이 PR은 Rust 무변경, 회귀 확인용)
 - [ ] 코칭 탭이 「내 로그에서」/「배움 · 소식」 두 섹션으로 갈린다
 - [ ] 「오늘의 배움」 컨테이너가 사라지고 항목마다 독립 카드가 된다
 - [ ] 레슨 본문(`• 원리` / `• 이렇게`)이 통일된 슬롯에 담기고 **내용이 잘리지 않는다**
