@@ -834,6 +834,34 @@ fn upload_cached_mascot(app: &tauri::AppHandle, client: &LifeClient) -> Result<b
     client.upload_mascot_image(&png).map(|_| true).map_err(|e| e.to_string())
 }
 
+/// G7 — 스캔마다 마스코트 이미지 게시를 보장한다 (스펙 §3.5). 지금까지는 방 탭을 열 때만
+/// 올라가서, 방 탭을 한 번도 안 연 사용자의 봇은 남의 방명록에 글을 남겨도 얼굴이 보이지 않았다.
+/// 서버가 같은 sha면 쓰기를 생략하므로 반복 비용은 조회 1회다.
+/// hub 미연결·스프라이트 없음이면 no-op, 실패는 warn+skip (maybe_* 계열 규율).
+pub fn maybe_sync_mascot_image(
+    app: &tauri::AppHandle,
+    store_mutex: &std::sync::Mutex<SqliteStore>,
+) {
+    // 락은 설정 읽기 동안만 — 업로드(네트워크)는 락 밖 (이 모듈 상단 규율)
+    let client = match store_mutex.lock() {
+        Ok(store) => {
+            let get = |k: &str| store.get_setting(k).ok().flatten().unwrap_or_default();
+            let (url, token) = (get("hub_url"), get("hub_token"));
+            if url.trim().is_empty() || token.is_empty() {
+                return; // hub 미연결
+            }
+            LifeClient { base_url: url, token, api_key: opt_key(get("hub_api_key")) }
+        }
+        Err(e) => {
+            log::warn!("store lock poisoned: {e}");
+            return;
+        }
+    };
+    if let Err(e) = upload_cached_mascot(app, &client) {
+        log::warn!("마스코트 이미지 게시 실패(다음 스캔 재시도): {e}");
+    }
+}
+
 /// O1 — 캐시된 대문사진을 서버에 게시. 컷이 아직 없으면 Ok(false)(올릴 게 없음 = 실패 아님).
 /// PNG 바이트를 프론트로 왕복시키지 않기 위해 Rust가 파일을 직접 읽는다.
 fn upload_cached_daily_cut(app: &tauri::AppHandle, client: &LifeClient) -> Result<bool, String> {
@@ -1166,6 +1194,21 @@ pub async fn life_mascot_image(state: State<'_, AppState>, agent_id: String) -> 
             .map(|value| value.map(|png| base64::engine::general_purpose::STANDARD.encode(png)))
             .map_err(|e| e.to_string())
     }).await
+}
+
+/// G7 — 방명록 작성자 아이콘용 얼굴. 서버에 게시된 타인 마스코트를 받아 내 얼굴과 같은
+/// 기준으로 크롭한다 (스펙 §3.2). 게시본이 없으면(404) None → 프론트 이모지 폴백.
+/// 전신을 쓰는 `life_mascot_image`와 별도 커맨드인 이유: 방(LifeView)이 전신을 그린다.
+#[tauri::command]
+pub async fn life_mascot_face(state: State<'_, AppState>, agent_id: String) -> Result<Option<String>, String> {
+    let Some(client) = hub_client(&state)? else { return Ok(None) };
+    run_life_http("life_mascot_face", move || {
+        client
+            .mascot_image(&agent_id)
+            .map(|png| png.as_deref().and_then(crop_face_b64))
+            .map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// O1 — 대문 한마디 게시. **자동 경로**이므로 hub 미연결이면 조용히 Ok(false)
@@ -1682,32 +1725,39 @@ mod tests {
     }
 
     #[test]
-    fn face_icon_inner_lazy_materializes_and_caches() {
+    fn crop_face_b64_returns_128px_png_and_none_on_garbage() {
         use base64::Engine as _;
-        let dir = tempfile::tempdir().unwrap();
-        // ① sprite.png 없음 → None (프론트 이모지 폴백)
-        assert_eq!(face_icon_inner(dir.path()).unwrap(), None);
-        // ② sprite.png 생성(1×1 투명 PNG) → face.png 재료화 + base64 반환
-        let sprite = base64::engine::general_purpose::STANDARD
+        // 1×1 투명 PNG
+        let png = base64::engine::general_purpose::STANDARD
             .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
             .unwrap();
-        std::fs::write(dir.path().join("sprite.png"), &sprite).unwrap();
-        let b64 = face_icon_inner(dir.path()).unwrap().unwrap();
-        assert!(dir.path().join("face.png").exists());
-        // ③ 재호출 = 캐시 그대로 (내용 동일)
-        assert_eq!(face_icon_inner(dir.path()).unwrap().unwrap(), b64);
-        // ④ face.png를 sprite보다 과거로 백데이트(=리롤로 sprite가 더 새것) → 재크롭 경로
-        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
-        std::fs::File::options()
-            .write(true)
-            .open(dir.path().join("face.png"))
-            .unwrap()
-            .set_modified(old)
+        let b64 = crop_face_b64(&png).expect("유효 PNG는 크롭된다");
+        let out = base64::engine::general_purpose::STANDARD.decode(&b64).unwrap();
+        assert_eq!(&out[..8], b"\x89PNG\r\n\x1a\n", "PNG 시그니처");
+        // IHDR width(바이트 16..20) = 128 — 내 얼굴 아이콘과 같은 크기
+        assert_eq!(u32::from_be_bytes([out[16], out[17], out[18], out[19]]), 128);
+
+        // 손상·비PNG 입력은 None — 아이콘 하나 때문에 방명록 조회를 실패시키지 않는다
+        assert!(crop_face_b64(b"not a png").is_none());
+        assert!(crop_face_b64(&[]).is_none());
+    }
+
+    #[test]
+    fn crop_face_b64_rejects_oversized_dimensions_before_decoding() {
+        use base64::Engine as _;
+        let mut png = base64::engine::general_purpose::STANDARD
+            .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
             .unwrap();
-        assert_eq!(face_icon_inner(dir.path()).unwrap().unwrap(), b64); // 같은 sprite → 같은 결과
-        // 재크롭됐다면 mtime이 현재로 갱신됨
-        let refreshed = std::fs::metadata(dir.path().join("face.png")).unwrap().modified().unwrap();
-        assert!(refreshed > old, "stale face.png는 재크롭으로 갱신돼야 함");
+        // IHDR만 8192×8192로 위조 — 압축 바이트는 그대로다(작은 업로드가 거대 캔버스를 선언하는 형태).
+        // CRC가 깨지지만 그게 요점: png 크레이트가 검증하기 **전에** 버퍼가 잡히므로 여기서 막는다.
+        png[16..20].copy_from_slice(&8192u32.to_be_bytes());
+        png[20..24].copy_from_slice(&8192u32.to_be_bytes());
+        assert!(crop_face_b64(&png).is_none(), "상한 초과는 디코딩 전에 거른다");
+
+        // 상한 이내(2048×2048)는 통과시켜야 한다 — 여기선 IHDR만 고쳐 crop_face가 데이터에서 실패하지만,
+        // 치수 게이트에 걸린 게 아니라는 것만 확인하면 된다.
+        assert_eq!(png_dimensions(&png), Some((8192, 8192)));
+        assert!(png_dimensions(b"short").is_none());
     }
 
     #[test]
@@ -1730,37 +1780,39 @@ mod tests {
     }
 }
 
-/// G6 — 얼굴 아이콘 lazy 재료화: face.png가 없거나 sprite.png보다 오래되면 그 자리에서
-/// 크롭·저장한다. sprite 쓰기 경로(파이프라인 생성·리롤 승격)에 훅을 걸지 않는 이유:
-/// mtime 비교가 모든 갱신 경로를 자동 커버한다 (스펙 2026-07-28 결정 7).
-pub fn face_icon_inner(dir: &std::path::Path) -> anyhow::Result<Option<String>> {
-    use base64::Engine as _;
-    let sprite = dir.join("sprite.png");
-    let face = dir.join("face.png");
-    let Ok(sprite_meta) = std::fs::metadata(&sprite) else { return Ok(None) };
-    let fresh = match std::fs::metadata(&face) {
-        Ok(m) => match (m.modified(), sprite_meta.modified()) {
-            (Ok(f), Ok(s)) => f >= s,
-            _ => false, // mtime을 못 읽으면 보수적으로 재크롭
-        },
-        Err(_) => false,
-    };
-    let bytes = if fresh {
-        std::fs::read(&face)?
-    } else {
-        let png = agent_mentor::sprite::crop_face(&std::fs::read(&sprite)?)?;
-        std::fs::write(&face, &png)?;
-        png
-    };
-    Ok(Some(base64::engine::general_purpose::STANDARD.encode(bytes)))
+/// 원격 마스코트 디코딩 상한(픽셀). 허브는 업로드의 **압축 크기**(5MiB)와 시그니처만 검사하므로,
+/// 압축률이 높은 PNG는 작은 업로드로도 거대한 캔버스를 선언할 수 있다. `crop_face`는 IHDR 치수로
+/// 디코딩 버퍼를 먼저 잡기 때문에(`sprite.rs`) 그 전에 걸러야 프로세스가 OOM으로 죽지 않는다.
+/// 우리 스프라이트는 1024²급이라 4배 여유.
+const MAX_FACE_SOURCE_PIXELS: u64 = 2048 * 2048;
+
+/// PNG IHDR의 (width, height). 헤더가 짧거나 IHDR이 아니면 None.
+/// **디코딩 전에** 치수를 알아야 해서 직접 읽는다 — png 크레이트에 넘기는 순간 버퍼가 잡힌다.
+fn png_dimensions(png: &[u8]) -> Option<(u32, u32)> {
+    if png.len() < 24 || &png[..8] != b"\x89PNG\r\n\x1a\n" || &png[12..16] != b"IHDR" {
+        return None;
+    }
+    let be = |at: usize| u32::from_be_bytes([png[at], png[at + 1], png[at + 2], png[at + 3]]);
+    Some((be(16), be(20)))
 }
 
-/// G6 — 방명록 아바타 등 소형 UI용 얼굴 아이콘(128×128 캐시). 없으면 None(이모지 폴백).
-#[tauri::command]
-pub fn get_face_icon(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    use tauri::Manager as _;
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    face_icon_inner(&dir).map_err(|e| e.to_string())
+/// G7 — 서버에서 받은 마스코트 PNG를 방명록 아이콘용 얼굴(128×128)로 크롭해 base64로.
+/// 입력은 **타인이 올린 값**이라 디코딩 전에 치수 상한을 본다.
+/// 크롭 실패(손상·미지원 색 형식)는 None — 아이콘 하나 때문에 방명록 조회를 실패시키지 않는다.
+pub fn crop_face_b64(png: &[u8]) -> Option<String> {
+    use base64::Engine as _;
+    let (w, h) = png_dimensions(png)?; // PNG가 아니거나 헤더 손상 — crop_face도 실패할 입력
+    if u64::from(w) * u64::from(h) > MAX_FACE_SOURCE_PIXELS {
+        log::warn!("원격 마스코트가 너무 큼({w}×{h}) — 디코딩 생략, 이모지 폴백");
+        return None;
+    }
+    match agent_mentor::sprite::crop_face(png) {
+        Ok(face) => Some(base64::engine::general_purpose::STANDARD.encode(face)),
+        Err(e) => {
+            log::warn!("방명록 얼굴 크롭 실패(이모지 폴백): {e}");
+            None
+        }
+    }
 }
 
 /// H2 — 홈 컷 조회 payload. 생성은 파이프라인만 한다 (읽기 전용 — 과금 가드).

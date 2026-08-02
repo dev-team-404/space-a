@@ -266,6 +266,8 @@ export const lifeDeleteGuestbook = (entryId: string) => invoke('life_delete_gues
 export const lifeSetBubble = (body: string) => invoke<{bubble:string}>('life_set_bubble', { body }).then((v)=>{invalidateLifeView();return v});
 export const lifeSyncMascotImage = () => invoke<boolean>('life_sync_mascot_image');
 export const lifeMascotImage = (agentId: string) => invoke<string | null>('life_mascot_image', { agentId });
+/** G7 — 방명록 작성자 아이콘용 얼굴(128×128 크롭) base64. 게시본 없으면 null(이모지 폴백). */
+export const lifeMascotFace = (agentId: string) => invoke<string | null>('life_mascot_face', { agentId });
 /** O1 — 대문에 걸린 오늘의 한마디 게시. 자동 경로라 미연결·구서버에서도 reject하지 않고 false. */
 export const lifeSetDailyLine = (body: string) => invoke<boolean>('life_set_daily_line', { body });
 /** O1 — 캐시된 대문사진을 서버에 게시. 컷·연결이 없으면 false. */
@@ -325,11 +327,6 @@ export const onUpdateCheckRequested = (cb: () => void): Promise<UnlistenFn> =>
 /** AI 스프라이트(캐시) base64 — 없으면 null (절차 생성 폴백). */
 export async function getSprite(): Promise<string | null> {
   try { return await invoke<string | null>('get_sprite'); } catch { return null; }
-}
-
-/** G6 — 얼굴 아이콘(128×128 캐시) base64 — sprite 없으면 null (이모지 폴백). */
-export async function getFaceIcon(): Promise<string | null> {
-  try { return await invoke<string | null>('get_face_icon'); } catch { return null; }
 }
 
 /** H2 — 오늘의 컷 (png base64 + 하단 캡션 + 일기 날짜). 없으면 null (sprite 폴백). */
