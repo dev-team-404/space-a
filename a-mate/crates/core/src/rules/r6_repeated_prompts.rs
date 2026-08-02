@@ -438,8 +438,11 @@ mod tests {
 
     #[test]
     fn r6_resolved_findings_do_not_suppress() {
-        // 「해결함」은 조치했다는 뜻 — 그 뒤로도 같은 묶음이 잡혔다면 *또 반복했다*는 재발
-        // 신호이므로 떠야 한다. 억제는 `dismissed`에만 건다.
+        // 억제는 `dismissed`에만 건다 — 「해결함」 뒤에 같은 묶음이 또 잡힌 건 재발 신호다.
+        // ⚠ 여기서 보장하는 건 **방출까지**다. 그 뒤 `upsert_finding`의 ON CONFLICT가 기존
+        // status를 보존하므로, 같은 키로 재발하면 행은 `resolved`인 채 화면에 안 뜬다.
+        // 그 복귀는 스펙 §5.1 재발 감지(`status_evidence_n` 스냅숏, PR③) 몫이다 — 여기서
+        // status를 되돌리면 R6은 매 스캔 같은 묶음을 방출하므로 처분 60초 뒤 카드가 되살아난다(D5).
         let store = SqliteStore::open_in_memory().unwrap();
         seed_review_cluster(&store);
         let first = R6RepeatedPrompts::default().evaluate(&store).unwrap();

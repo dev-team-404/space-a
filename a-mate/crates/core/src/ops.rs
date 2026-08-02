@@ -505,6 +505,42 @@ mod tests {
     }
 
     #[test]
+    fn run_rules_creates_no_new_row_for_dismissed_r6_after_anchor_drift() {
+        // §5.4 영속성 레벨 검증 — 무시된 묶음의 앵커가 바뀌어도 새 행이 생기면 안 된다.
+        // (룰 레벨 침묵은 r6_repeated_prompts 테스트가, 여기서는 upsert·prune까지 통과시킨다.)
+        use crate::model::{EventKind, NormalizedEvent};
+        let store = SqliteStore::open_in_memory().unwrap();
+        let seed = |sess: &str, prompt: &str, min: i64| {
+            store.upsert_events(&[NormalizedEvent {
+                source_agent: "claude-code".into(), schema_version: "t".into(),
+                host: "Windows".into(), project_id: "p".into(),
+                session_id: sess.into(), uuid: Some(format!("{sess}-u")), parent_uuid: None,
+                is_sidechain: false,
+                ts: Some((chrono::Utc::now() - chrono::Duration::minutes(min)).to_rfc3339()),
+                source_file: "s.jsonl".into(), source_offset: 0, msg_id: None,
+                kind: EventKind::UserPrompt { preview: prompt.into(), is_command: false },
+            }]).unwrap();
+        };
+        seed("s1", "pr 리뷰 코멘트 종합 검토해서 조치해줘", 0);
+        seed("s2", "pr 리뷰 코멘트 종합 검토하고 반영해줘", 1);
+        seed("s3", "pr 리뷰 코멘트 종합 검토 후 조치", 2);
+
+        let first = run_rules(&store).unwrap();
+        let key = first.iter().find(|f| f.rule_id == "R6").unwrap().dedup_key.clone();
+        assert!(store.set_finding_status(&key, "dismissed").unwrap());
+
+        // 사전순으로 더 앞서는 변형 → 앵커(=dedup_key)가 바뀐다
+        seed("s4", "aa 리뷰 코멘트 종합 검토해서 조치하자", 3);
+        run_rules(&store).unwrap();
+
+        let rows = store.list_findings_current(true).unwrap();
+        let r6: Vec<_> = rows.iter().filter(|r| r.rule_id == "R6").collect();
+        assert_eq!(r6.len(), 1, "억제된 묶음이 새 행을 만들면 안 됨");
+        assert_eq!(r6[0].dedup_key, key);
+        assert_eq!(r6[0].status, "dismissed", "무시 기록은 그대로 보존");
+    }
+
+    #[test]
     fn run_rules_preserves_judged_r7_session_findings() {
         use crate::finding::{Finding, Severity};
         let store = SqliteStore::open_in_memory().unwrap();
