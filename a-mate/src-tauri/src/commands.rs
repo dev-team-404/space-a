@@ -1743,6 +1743,24 @@ mod tests {
     }
 
     #[test]
+    fn crop_face_b64_rejects_oversized_dimensions_before_decoding() {
+        use base64::Engine as _;
+        let mut png = base64::engine::general_purpose::STANDARD
+            .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+            .unwrap();
+        // IHDR만 8192×8192로 위조 — 압축 바이트는 그대로다(작은 업로드가 거대 캔버스를 선언하는 형태).
+        // CRC가 깨지지만 그게 요점: png 크레이트가 검증하기 **전에** 버퍼가 잡히므로 여기서 막는다.
+        png[16..20].copy_from_slice(&8192u32.to_be_bytes());
+        png[20..24].copy_from_slice(&8192u32.to_be_bytes());
+        assert!(crop_face_b64(&png).is_none(), "상한 초과는 디코딩 전에 거른다");
+
+        // 상한 이내(2048×2048)는 통과시켜야 한다 — 여기선 IHDR만 고쳐 crop_face가 데이터에서 실패하지만,
+        // 치수 게이트에 걸린 게 아니라는 것만 확인하면 된다.
+        assert_eq!(png_dimensions(&png), Some((8192, 8192)));
+        assert!(png_dimensions(b"short").is_none());
+    }
+
+    #[test]
     fn daily_cut_inner_requires_png_and_cut_date() {
         let dir = tempfile::tempdir().unwrap();
         // 아무것도 없음 → None
@@ -1762,10 +1780,32 @@ mod tests {
     }
 }
 
+/// 원격 마스코트 디코딩 상한(픽셀). 허브는 업로드의 **압축 크기**(5MiB)와 시그니처만 검사하므로,
+/// 압축률이 높은 PNG는 작은 업로드로도 거대한 캔버스를 선언할 수 있다. `crop_face`는 IHDR 치수로
+/// 디코딩 버퍼를 먼저 잡기 때문에(`sprite.rs`) 그 전에 걸러야 프로세스가 OOM으로 죽지 않는다.
+/// 우리 스프라이트는 1024²급이라 4배 여유.
+const MAX_FACE_SOURCE_PIXELS: u64 = 2048 * 2048;
+
+/// PNG IHDR의 (width, height). 헤더가 짧거나 IHDR이 아니면 None.
+/// **디코딩 전에** 치수를 알아야 해서 직접 읽는다 — png 크레이트에 넘기는 순간 버퍼가 잡힌다.
+fn png_dimensions(png: &[u8]) -> Option<(u32, u32)> {
+    if png.len() < 24 || &png[..8] != b"\x89PNG\r\n\x1a\n" || &png[12..16] != b"IHDR" {
+        return None;
+    }
+    let be = |at: usize| u32::from_be_bytes([png[at], png[at + 1], png[at + 2], png[at + 3]]);
+    Some((be(16), be(20)))
+}
+
 /// G7 — 서버에서 받은 마스코트 PNG를 방명록 아이콘용 얼굴(128×128)로 크롭해 base64로.
+/// 입력은 **타인이 올린 값**이라 디코딩 전에 치수 상한을 본다.
 /// 크롭 실패(손상·미지원 색 형식)는 None — 아이콘 하나 때문에 방명록 조회를 실패시키지 않는다.
 pub fn crop_face_b64(png: &[u8]) -> Option<String> {
     use base64::Engine as _;
+    let (w, h) = png_dimensions(png)?; // PNG가 아니거나 헤더 손상 — crop_face도 실패할 입력
+    if u64::from(w) * u64::from(h) > MAX_FACE_SOURCE_PIXELS {
+        log::warn!("원격 마스코트가 너무 큼({w}×{h}) — 디코딩 생략, 이모지 폴백");
+        return None;
+    }
     match agent_mentor::sprite::crop_face(png) {
         Ok(face) => Some(base64::engine::general_purpose::STANDARD.encode(face)),
         Err(e) => {
