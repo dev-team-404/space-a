@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coachTitle, ctxLine, evidenceChip, isHiddenFinding, sessionIdsOf, totalSessionsOf } from './coach-helpers';
+import { coachTitle, ctxLine, evidenceChip, isHiddenFinding, sessionIdsOf, splitLessonBody, totalSessionsOf } from './coach-helpers';
 import type { SessionCtxItem } from '../api';
 
 const item = (over: Partial<SessionCtxItem> = {}): SessionCtxItem => ({
@@ -90,5 +90,40 @@ describe('evidenceChip', () => {
   });
   it('칩 규칙이 없는 룰은 생략한다', () => {
     expect(evidenceChip('RX', { session_count: 4 })).toBeNull();
+  });
+});
+
+describe('splitLessonBody', () => {
+  it('원리·이렇게 마커로 세 조각을 나눈다', () => {
+    const r = splitLessonBody(
+      '당신 로그: 최근 세션에서 PowerShell 3회 오류가 났다가 회복했어요.\n' +
+      '• 원리: 계획 없이 바로 손대면 헤매요.\n' +
+      '• 이렇게: Shift+Tab으로 계획부터 세우세요.'
+    );
+    expect(r.evidence).toBe('당신 로그: 최근 세션에서 PowerShell 3회 오류가 났다가 회복했어요.');
+    expect(r.principle).toBe('계획 없이 바로 손대면 헤매요.');
+    expect(r.action).toBe('Shift+Tab으로 계획부터 세우세요.');
+  });
+  it('여러 줄에 걸친 조각을 이어 붙인다', () => {
+    const r = splitLessonBody('앞줄\n• 원리: 첫 줄\n이어지는 줄\n• 이렇게: 행동');
+    expect(r.principle).toBe('첫 줄 이어지는 줄');
+    expect(r.action).toBe('행동');
+  });
+  it('👉 첫걸음도 행동 마커로 인정한다 (lesson-frontier)', () => {
+    const r = splitLessonBody('당신 로그: 남은 다음 단계는 스킬 재사용이에요.\n👉 첫걸음: SKILL.md를 하나 만들어 보세요.');
+    expect(r.evidence).toBe('당신 로그: 남은 다음 단계는 스킬 재사용이에요.');
+    expect(r.principle).toBeNull();
+    expect(r.action).toBe('SKILL.md를 하나 만들어 보세요.');
+  });
+  it('마커가 없으면 전부 근거로 — 본문을 잃지 않는다', () => {
+    const body = '당신 로그: 최근 세션 5개가 UI 작업이었어요.\n설치된 플러그인이 쓰이지 않았어요.';
+    const r = splitLessonBody(body);
+    expect(r.evidence).toBe('당신 로그: 최근 세션 5개가 UI 작업이었어요. 설치된 플러그인이 쓰이지 않았어요.');
+    expect(r.principle).toBeNull();
+    expect(r.action).toBeNull();
+  });
+  it('빈 본문은 전부 null', () => {
+    expect(splitLessonBody('')).toEqual({ evidence: null, principle: null, action: null });
+    expect(splitLessonBody('   \n  ')).toEqual({ evidence: null, principle: null, action: null });
   });
 });

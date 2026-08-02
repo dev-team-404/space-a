@@ -41,6 +41,42 @@ export function evidenceChip(ruleId: string, evidence: unknown): string | null {
   }
 }
 
+/** 개인 실전 레슨 본문을 문법 A의 슬롯으로 쪼갠다 (스펙 §4.1).
+ * 마커(`• 원리:` / `• 이렇게:` / `👉 첫걸음:`)가 없는 레슨도 있으므로
+ * 그때는 전부 근거로 넘긴다 — 본문을 잃지 않는 것이 우선이다. */
+export interface LessonBody {
+  evidence: string | null;
+  principle: string | null;
+  action: string | null;
+}
+
+const PRINCIPLE_MARK = '• 원리:';
+const ACTION_MARKS = ['• 이렇게:', '👉 첫걸음:'];
+
+export function splitLessonBody(body: string): LessonBody {
+  const buckets: Record<keyof LessonBody, string[]> = { evidence: [], principle: [], action: [] };
+  let current: keyof LessonBody = 'evidence';
+  for (const raw of body.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const actionMark = ACTION_MARKS.find((m) => line.startsWith(m));
+    if (line.startsWith(PRINCIPLE_MARK)) {
+      current = 'principle';
+      buckets.principle.push(line.slice(PRINCIPLE_MARK.length).trim());
+    } else if (actionMark) {
+      current = 'action';
+      buckets.action.push(line.slice(actionMark.length).trim());
+    } else {
+      buckets[current].push(line);
+    }
+  }
+  const join = (parts: string[]): string | null => {
+    const s = parts.filter(Boolean).join(' ').trim();
+    return s === '' ? null : s;
+  };
+  return { evidence: join(buckets.evidence), principle: join(buckets.principle), action: join(buckets.action) };
+}
+
 export function ctxLine(s: SessionCtxItem): string {
   let base: string;
   if (!s.first_ts) {
