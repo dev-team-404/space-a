@@ -838,6 +838,29 @@ mod tests {
     }
 
     #[test]
+    fn ttl_skip_does_not_touch_the_network() {
+        let plan = FeedPlan { due: vec!["changelog"] };
+        let mut fetched = Vec::new();
+        let mut calls = 0;
+        // 만료된 소스는 fetch를 실행하고 시각 기록 대상에 오른다
+        let got = gated_fetch(&plan, "changelog", &mut fetched, || {
+            calls += 1;
+            Ok(vec![1])
+        });
+        assert_eq!(got, vec![1]);
+        assert_eq!(calls, 1);
+        assert_eq!(fetched, vec!["changelog"]);
+        // 미만료 소스는 클로저를 아예 부르지 않는다 — "네트워크를 건너뛴다"가 이 계약이다
+        let got = gated_fetch(&plan, "boris", &mut fetched, || {
+            calls += 1;
+            Ok(vec![2])
+        });
+        assert!(got.is_empty());
+        assert_eq!(calls, 1, "미만료 소스는 fetch를 호출하지 않는다");
+        assert_eq!(fetched, vec!["changelog"], "스킵은 TTL 시각 기록 대상이 아니다");
+    }
+
+    #[test]
     fn feed_fetch_resumes_after_ttl_expires() {
         let store = SqliteStore::open_in_memory().unwrap();
         mark_feed_fetched(&store, &["changelog"], "2026-08-01T00:00:00Z").unwrap();
