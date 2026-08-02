@@ -66,6 +66,20 @@ fn hash8(s: &str) -> String {
     format!("{:02x}{:02x}{:02x}{:02x}", d[0], d[1], d[2], d[3])
 }
 
+/// 새 묶음의 멤버 **과반(≥50%)**이 억제 집합에 있으면 사실상 같은 반복으로 보고 침묵한다
+/// (스펙 §5.4). "하나라도 겹치면 침묵"은 묶음이 커지며 무관한 반복까지 삼키고, 완전 일치는
+/// 변형 하나만 늘어도 뚫린다 — 과반이 그 사이다.
+fn is_dismiss_suppressed(
+    member_norms: &[String],
+    suppressed: &std::collections::HashSet<String>,
+) -> bool {
+    if suppressed.is_empty() {
+        return false;
+    }
+    let hit = member_norms.iter().filter(|n| suppressed.contains(*n)).count();
+    hit * 2 >= member_norms.len()
+}
+
 impl Rule for R6RepeatedPrompts {
     fn id(&self) -> &'static str {
         "R6"
@@ -75,6 +89,8 @@ impl Rule for R6RepeatedPrompts {
         use std::collections::{BTreeMap, BTreeSet};
         let cutoff = (chrono::Utc::now() - chrono::Duration::days(self.days)).to_rfc3339();
         let rows = store.prompt_occurrence_rows(&cutoff)?;
+        // 「무시」 처분은 키가 아니라 내용에 붙는다 — 앵커가 바뀌어도 우회되지 않게 (§5.4).
+        let dismissed_norms = store.dismissed_r6_member_norms()?;
 
         // 1) (host, norm60) 집계: 세션 집합·총 등장수·대표 preview(MIN 동치).
         struct NormAgg {
@@ -120,6 +136,11 @@ impl Rule for R6RepeatedPrompts {
                 let session_count = sessions.len();
                 // 발화: 다세션 반복 OR 세션 내 다회 반복(never-clear).
                 if session_count < self.min_sessions && occurrences < self.min_occurrences {
+                    continue;
+                }
+                // 노출 필터 — 판정은 그대로 두고 방출만 막는다. 새 행도 만들지 않는다
+                // (원래 무시된 행이 이미 남아 있으므로 중복).
+                if is_dismiss_suppressed(&member_norms, &dismissed_norms) {
                     continue;
                 }
                 let h = hash8(anchor);
@@ -335,6 +356,123 @@ mod tests {
             "feat/windows-hook-shell-fix 브랜치에서 …Task 12–14만 superpowers:executing-plans로 실행", &ts_at(2));
         assert!(R6RepeatedPrompts::default().evaluate(&store).unwrap().is_empty(),
             "스킬/커맨드 호출 프롬프트는 R6 카드로 올라오면 안 됨");
+    }
+
+    /// finding을 저장하고 사용자 처분을 찍는다 (UI에서 「무시」/「해결함」을 누른 상태와 동치).
+    fn dispose(store: &SqliteStore, f: &Finding, status: &str) {
+        store.upsert_finding(f, &ts_at(0)).unwrap();
+        assert!(store.set_finding_status(&f.dedup_key, status).unwrap());
+    }
+
+    /// 한 묶음으로 뭉치는 패러프레이즈 3종 — 세션 3개.
+    fn seed_review_cluster(store: &SqliteStore) {
+        seed_prompt_at(store, "s1", "pr 리뷰 코멘트 종합 검토해서 조치해줘", &ts_at(0), 0);
+        seed_prompt_at(store, "s2", "pr 리뷰 코멘트 종합 검토하고 반영해줘", &ts_at(1), 0);
+        seed_prompt_at(store, "s3", "pr 리뷰 코멘트 종합 검토 후 조치", &ts_at(2), 0);
+    }
+
+    /// 같은 묶음에 붙되 **사전순으로 더 앞서는** 변형 — 앵커(=dedup_key)를 갈아치운다.
+    fn seed_anchor_drift_variant(store: &SqliteStore) {
+        seed_prompt_at(store, "s4", "aa 리뷰 코멘트 종합 검토해서 조치하자", &ts_at(3), 0);
+    }
+
+    #[test]
+    fn r6_stays_silent_when_majority_of_members_were_dismissed() {
+        // §5.4 — 처분을 키가 아니라 내용(member_norms)에 붙인다. 같은 묶음이 다시 잡히면 침묵.
+        let store = SqliteStore::open_in_memory().unwrap();
+        seed_review_cluster(&store);
+        let first = R6RepeatedPrompts::default().evaluate(&store).unwrap();
+        assert_eq!(first.len(), 1);
+        dispose(&store, &first[0], "dismissed");
+
+        let again = R6RepeatedPrompts::default().evaluate(&store).unwrap();
+        assert!(again.is_empty(), "무시한 묶음은 다시 방출되면 안 됨");
+    }
+
+    #[test]
+    fn r6_dismissal_survives_anchor_drift() {
+        // 이 작업의 핵심 회귀: 사전순 최소 변형이 새로 붙으면 dedup_key가 바뀐다.
+        // 키 기반 억제였다면 여기서 뚫려 무시가 우회된다.
+        let control = SqliteStore::open_in_memory().unwrap();
+        seed_review_cluster(&control);
+        seed_anchor_drift_variant(&control);
+        let drifted = R6RepeatedPrompts::default().evaluate(&control).unwrap();
+        assert_eq!(drifted.len(), 1);
+
+        let store = SqliteStore::open_in_memory().unwrap();
+        seed_review_cluster(&store);
+        let base = R6RepeatedPrompts::default().evaluate(&store).unwrap();
+        assert_eq!(base.len(), 1);
+        assert_ne!(
+            drifted[0].dedup_key, base[0].dedup_key,
+            "전제 확인 — 새 변형이 앵커를 갈아치워 키가 실제로 달라진다"
+        );
+
+        dispose(&store, &base[0], "dismissed");
+        seed_anchor_drift_variant(&store);
+        assert!(
+            R6RepeatedPrompts::default().evaluate(&store).unwrap().is_empty(),
+            "키가 바뀌어도 멤버 과반이 겹치면 침묵해야 한다"
+        );
+    }
+
+    #[test]
+    fn r6_fires_when_dismissed_members_are_a_minority() {
+        // 무시한 건 1-멤버 묶음이었는데, 나중에 다른 표현 2개가 더 붙어 묶음이 커졌다.
+        // 겹침 1/3 < 과반 → 사실상 다른 반복이므로 정상 방출한다.
+        let store = SqliteStore::open_in_memory().unwrap();
+        for (i, off) in [0u64, 10, 20, 30, 40].iter().enumerate() {
+            seed_prompt_at(&store, "s1", "pr 리뷰 코멘트 종합 검토해서 조치해줘", &ts_at(i as i64), *off);
+        }
+        let first = R6RepeatedPrompts::default().evaluate(&store).unwrap();
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].evidence["member_norms"].as_array().unwrap().len(), 1);
+        dispose(&store, &first[0], "dismissed");
+
+        seed_prompt_at(&store, "s2", "pr 리뷰 코멘트 종합 검토하고 반영해줘", &ts_at(10), 0);
+        seed_prompt_at(&store, "s3", "pr 리뷰 코멘트 종합 검토 후 조치", &ts_at(11), 0);
+        let again = R6RepeatedPrompts::default().evaluate(&store).unwrap();
+        assert_eq!(again.len(), 1, "과반 미만이면 억제하지 않는다");
+        assert_eq!(again[0].evidence["member_norms"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn r6_resolved_findings_do_not_suppress() {
+        // 「해결함」은 조치했다는 뜻 — 그 뒤로도 같은 묶음이 잡혔다면 *또 반복했다*는 재발
+        // 신호이므로 떠야 한다. 억제는 `dismissed`에만 건다.
+        let store = SqliteStore::open_in_memory().unwrap();
+        seed_review_cluster(&store);
+        let first = R6RepeatedPrompts::default().evaluate(&store).unwrap();
+        assert_eq!(first.len(), 1);
+        dispose(&store, &first[0], "resolved");
+
+        assert_eq!(
+            R6RepeatedPrompts::default().evaluate(&store).unwrap().len(),
+            1,
+            "해결함에는 억제를 걸지 않는다"
+        );
+    }
+
+    #[test]
+    fn r6_unrelated_dismissal_does_not_suppress() {
+        // 억제는 내용 기반이다 — 무관한 묶음을 무시했다고 R6 전체가 조용해지면 안 된다.
+        // (무시 행이 아예 없는 경로는 이 모듈의 나머지 테스트가 전부 커버한다.)
+        let store = SqliteStore::open_in_memory().unwrap();
+        for (i, off) in [0u64, 10, 20, 30, 40].iter().enumerate() {
+            seed_prompt_at(&store, "other", "도커 이미지 빌드 캐시 정리해줘", &ts_at(i as i64), *off);
+        }
+        let other = R6RepeatedPrompts::default().evaluate(&store).unwrap();
+        assert_eq!(other.len(), 1);
+        dispose(&store, &other[0], "dismissed");
+
+        seed_review_cluster(&store);
+        let findings = R6RepeatedPrompts::default().evaluate(&store).unwrap();
+        assert!(
+            findings.iter().any(|f| {
+                f.evidence["repeated_prompt"].as_str().unwrap_or_default().contains("리뷰 코멘트")
+            }),
+            "겹치지 않는 묶음은 그대로 방출"
+        );
     }
 
     #[test]
