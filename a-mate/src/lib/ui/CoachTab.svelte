@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { listFindings, listContent, onContentReady, onNewFindings, setFindingStatus, sessionsCtx, generateSkillDraft, saveSkillDraft, type CoachFinding, type ContentItem, type SessionCtxItem, type SkillDraft } from '../api';
+  import { listFindings, listContent, onContentReady, onNewFindings, setFindingStatus, sessionsCtx, generateSkillDraft, saveSkillDraft, getSettings, coachTip, setContentStatus, type CoachFinding, type ContentItem, type SessionCtxItem, type SkillDraft } from '../api';
   import SessionModal from './SessionModal.svelte';
-  import TipCard from './home/TipCard.svelte';
-  import { coachTitle, ctxLine, evidenceChip, isHiddenFinding, sessionIdsOf, totalSessionsOf } from './coach-helpers';
+  import LogCard from './coach/LogCard.svelte';
+  import LearnCard from './coach/LearnCard.svelte';
+  import { coachTitle, ctxLine, isHiddenFinding, partitionCoachItems, sessionIdsOf, totalSessionsOf } from './coach-helpers';
 
   let { focusKey = null, onChanged }: { focusKey?: string | null; onChanged?: () => void } = $props();
 
@@ -28,9 +29,37 @@
   const active = $derived(all.filter((f) => f.status === 'new'));
   const hidden = $derived(all.filter((f) => isHiddenFinding(f.status)));
 
-  // 오늘의 배움 — 내 로그에 맞춘 큐레이션 팁. 홈에서 코칭 탭으로 옮겼다(홈이 너무 길어져서).
+  // 큐레이션 콘텐츠 — personal 태그는 「내 로그에서」로, 나머지는 「배움 · 소식」으로 갈린다.
   let tips = $state<ContentItem[]>([]);
-  const onTipDismissed = (id: string) => { tips = tips.filter((t) => t.id !== id); };
+
+  // 근거 출처로 두 섹션을 가른다 (스펙 §3). 분기 로직은 전부 coach-helpers의 순수 함수에 있다.
+  const sections = $derived(partitionCoachItems(active, tips));
+  const findingByKey = $derived(new Map(active.map((f) => [f.dedup_key, f])));
+
+  // 내부망이면 외부 링크를 숨긴다 (옛 컨테이너에서 이관 — 두 카드가 각각 부르지 않도록 여기서 한 번만)
+  let showLinks = $state(true);
+  getSettings().then((s) => (showLinks = s.docs_reachable !== 'false')).catch(() => {});
+
+  // 엔진 맞춤 코칭 — 배움 섹션 최상단 1건에만. personal 항목은 이미 로그 섹션으로 갈라져 여기 오지 않는다.
+  // $derived로 두어 top이 그대로면 effect가 다시 돌지 않는다 (dismiss마다 재호출 방지). 캐시화는 PR⑥.
+  const learnTop = $derived(tips.find((t) => !(t.trigger_tags?.includes('personal') ?? false)) ?? null);
+  let coaching = $state<string | null>(null);
+  let coachLoading = $state(false);
+  $effect(() => {
+    const top = learnTop;
+    coaching = null;
+    if (!top) return;
+    coachLoading = true;
+    coachTip(top)
+      .then((s) => { coaching = s?.trim() || null; })
+      .catch(() => { coaching = null; })
+      .finally(() => { coachLoading = false; });
+  });
+
+  async function dismissLearn(id: string) {
+    try { await setContentStatus(id, 'dismissed'); } catch { /* 무시 */ }
+    tips = tips.filter((t) => t.id !== id);
+  }
 
   async function refresh() {
     all = await listFindings(true).catch(() => []);
@@ -82,8 +111,6 @@
   function openDetail(f: CoachFinding) {
     detail = { id: f.scope_ref, title: sessionLine(f) ?? '세션 상세' };
   }
-
-  const icon = (s: CoachFinding['severity']) => (s === 'warn' ? '⚠' : s === 'suggest' ? '💡' : 'ℹ');
 
   // R6 → SKILL.md 초안: 반복 지시를 재사용 스킬로 전환 ("반복 작업은 Skill로 전환된다")
   const repeatedPromptOf = (f: CoachFinding): string | null => {
@@ -140,71 +167,82 @@
 <svelte:window onkeydown={(e) => { if (e.key === 'Escape' && draft) draft = null; }} />
 
 <section class="coach">
-  <TipCard items={tips} onDismissed={onTipDismissed} />
-
-  {#if active.length === 0}
+  <!-- 스펙 §3: 「내 로그에서」가 0건이면 섹션 헤더 대신 빈 상태 문구를 쓰고
+       「배움 · 소식」이 자연히 상단에 온다 — 배움 카드 유무와 무관하다. -->
+  {#if sections.log.length === 0}
     <p class="empty">지적할 게 없어요, 주인. 완벽해요!</p>
-  {:else}
-    {#each active as f (f.dedup_key)}
-      {@const chip = evidenceChip(f.rule_id, f.evidence)}
-      <article class="card" class:warn={f.severity === 'warn'} data-key={f.dedup_key}>
-        <header>
-          <span class="title">{icon(f.severity)} {coachTitle(f.rule_id, f.evidence)}</span>
-          {#if chip}<span class="chip">{chip}</span>{/if}
-        </header>
-        <!-- 집계(project) 카드의 occurrences는 스캔 횟수라 "N회 관측"이 오독을 유발 → 원본 데이터로 이동 -->
-        <p class="why">{f.detail}{#if f.scope_kind === 'session'} · {f.occurrences}회 관측{/if}</p>
-        {#if f.judgment?.reason}
-          <p class="judgment">🧭 코치 판정: {f.judgment.reason}</p>
-        {/if}
-        {#if sessionLine(f)}
-          <p class="session">📂 {sessionLine(f)}</p>
-        {:else if f.scope_kind === 'project' && f.scope_project}
-          <p class="session">📂 {f.scope_project}</p>
-        {/if}
-        {#if f.scope_kind === 'project' && sessionIdsOf(f.evidence).length > 0}
-          <button class="raw-toggle" onclick={() => toggleExpand(f)}>
-            {expanded === f.dedup_key ? '▾' : '▸'} 포함 세션 {totalSessionsOf(f.evidence, sessionIdsOf(f.evidence).length)}건
-          </button>
-          {#if expanded === f.dedup_key}
-            <ul class="session-list">
-              {#each ctxCache[f.dedup_key] ?? [] as s (s.session_id)}
-                <li>
-                  <button onclick={() => (detail = { id: s.session_id, title: ctxLine(s) })}>
-                    {ctxLine(s)}
-                  </button>
-                </li>
-              {/each}
-              {#if totalSessionsOf(f.evidence, 0) > sessionIdsOf(f.evidence).length}
-                <li class="more">최신 {sessionIdsOf(f.evidence).length}건 표시 중 (전체 {totalSessionsOf(f.evidence, 0)}건)</li>
-              {/if}
-            </ul>
+  {/if}
+
+  {#if sections.log.length > 0}
+    <h2 class="section">내 로그에서 <span class="count">{sections.log.length}</span></h2>
+    {#each sections.log as v (v.key)}
+      {@const f = findingByKey.get(v.key)}
+      <LogCard view={v} {showLinks}>
+        {#snippet extra()}
+          {#if f && f.scope_kind === 'session' && sessionLine(f)}
+            <p class="session">📂 {sessionLine(f)}</p>
+          {:else if f && f.scope_kind === 'project' && f.scope_project}
+            <p class="session">📂 {f.scope_project}</p>
           {/if}
-        {/if}
-        <p class="how">➜ {f.suggested_action}</p>
-        <div class="actions">
-          {#if f.fix_command}
-            <button class="cmd" onclick={() => copy(f)}>
-              {copied === f.dedup_key ? '복사됨!' : `📋 ${f.fix_command}`}
+          {#if f && f.scope_kind === 'project' && sessionIdsOf(f.evidence).length > 0}
+            <button class="raw-toggle" onclick={() => toggleExpand(f)}>
+              {expanded === f.dedup_key ? '▾' : '▸'} 포함 세션 {totalSessionsOf(f.evidence, sessionIdsOf(f.evidence).length)}건
             </button>
+            {#if expanded === f.dedup_key}
+              <ul class="session-list">
+                {#each ctxCache[f.dedup_key] ?? [] as s (s.session_id)}
+                  <li><button onclick={() => (detail = { id: s.session_id, title: ctxLine(s) })}>{ctxLine(s)}</button></li>
+                {/each}
+                {#if totalSessionsOf(f.evidence, 0) > sessionIdsOf(f.evidence).length}
+                  <li class="more">최신 {sessionIdsOf(f.evidence).length}건 표시 중 (전체 {totalSessionsOf(f.evidence, 0)}건)</li>
+                {/if}
+              </ul>
+            {/if}
           {/if}
-          {#if skillifiable(f)}
-            <button class="skillify" onclick={() => makeDraft(f)}>🧩 스킬 초안 만들기</button>
+        {/snippet}
+        {#snippet actions()}
+          {#if f}
+            {#if f.fix_command}
+              <button class="cmd" onclick={() => copy(f)}>{copied === f.dedup_key ? '복사됨!' : `📋 ${f.fix_command}`}</button>
+            {/if}
+            {#if skillifiable(f)}
+              <button class="skillify" onclick={() => makeDraft(f)}>🧩 스킬 초안 만들기</button>
+            {/if}
+            {#if f.scope_kind === 'session'}
+              <button onclick={() => openDetail(f)}>세션 상세</button>
+            {/if}
+            <button onclick={() => mark(f, 'resolved')}>해결함</button>
+            <button onclick={() => mark(f, 'dismissed')}>무시</button>
+          {:else}
+            <!-- 개인 레슨: 처분 어휘 확장(resolved)은 PR③ — 지금은 기존 ✕만 -->
+            <button onclick={() => dismissLearn(v.key)}>✕ 그만 보기</button>
           {/if}
-          {#if f.scope_kind === 'session'}
-            <button onclick={() => openDetail(f)}>세션 상세</button>
+        {/snippet}
+        {#snippet footer()}
+          {#if f}
+            <!-- occurrences는 스캔 횟수라 "N회 관측"이 카드 본문에선 오독을 유발 → 여기 원본 데이터로 (스펙 §1.2 D5) -->
+            <button class="raw-toggle" onclick={() => (open = open === f.dedup_key ? null : f.dedup_key)}>
+              {open === f.dedup_key ? '▾' : '▸'} 원본 데이터
+            </button>
+            {#if open === f.dedup_key}
+              <p class="why">스캔에서 {f.occurrences}회 관측 · 마지막 {f.last_seen ?? '–'}</p>
+              <pre>{JSON.stringify(f.evidence, null, 2)}</pre>
+            {/if}
           {/if}
-          <button onclick={() => mark(f, 'resolved')}>해결함</button>
-          <button onclick={() => mark(f, 'dismissed')}>무시</button>
-        </div>
-        <button class="raw-toggle" onclick={() => (open = open === f.dedup_key ? null : f.dedup_key)}>
-          {open === f.dedup_key ? '▾' : '▸'} 원본 데이터
-        </button>
-        {#if open === f.dedup_key}
-          <p class="why">스캔에서 {f.occurrences}회 관측 · 마지막 {f.last_seen ?? '–'}</p>
-          <pre>{JSON.stringify(f.evidence, null, 2)}</pre>
-        {/if}
-      </article>
+        {/snippet}
+      </LogCard>
+    {/each}
+  {/if}
+
+  {#if sections.learn.length > 0}
+    <h2 class="section">배움 · 소식</h2>
+    {#each sections.learn as v, i (v.id)}
+      <LearnCard
+        view={v}
+        {showLinks}
+        coaching={i === 0 ? (coachLoading ? '맞춤 코칭 생각 중…' : coaching) : null}
+        onDismiss={dismissLearn}
+      />
     {/each}
   {/if}
 
@@ -262,29 +300,21 @@
 <style>
   .coach { padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
   .empty { color: var(--ink-soft); }
+  .section {
+    margin: 6px 0 0; font-size: 12px; font-weight: 700; color: var(--ink-soft);
+    display: flex; align-items: baseline; gap: 6px;
+  }
+  .section .count { font-size: 11px; color: var(--accent-strong); }
+  /* 카드 본문 스타일은 LogCard/LearnCard로 이관됐다. 여기 남은 .card는 '숨긴 항목'용. */
   .card {
     background: var(--frame-bg); border-radius: var(--radius-m); box-shadow: var(--shadow-soft);
     padding: 12px 14px; border-left: 4px solid var(--pastel-mint);
   }
-  .card.warn { border-left-color: var(--pastel-coral); }
   .card.muted { opacity: 0.75; border-left-color: var(--pastel-lav); }
   header { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
   .title { font-weight: 600; }
-  .chip {
-    color: var(--ink-soft); font-size: 11px; white-space: nowrap; flex: none;
-    background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 1px 7px;
-  }
   .why { margin: 6px 0 2px; font-size: 12px; color: var(--ink-soft); }
-  .judgment { margin: 2px 0 6px; font-size: 12px; color: var(--accent-strong); }
   .session { margin: 2px 0; font-size: 12px; color: var(--ink-soft); }
-  .how { margin: 2px 0 8px; font-size: 13px; white-space: pre-line; }
-  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
-  .actions button {
-    border: none; cursor: pointer; font: inherit; font-size: 12px;
-    background: var(--pastel-lav); color: var(--ink);
-    border-radius: var(--radius-s); padding: 5px 10px;
-  }
-  .actions .cmd { background: var(--pastel-cream); font-family: Consolas, monospace; }
   .raw-toggle {
     margin-top: 8px; border: none; background: none; cursor: pointer;
     font: inherit; font-size: 11px; color: var(--ink-soft); padding: 0;
@@ -308,7 +338,6 @@
     border: none; cursor: pointer; font: inherit; font-size: 11px;
     background: var(--pastel-mint); border-radius: var(--radius-s); padding: 3px 8px;
   }
-  .actions .skillify { background: var(--pastel-mint); font-weight: 600; }
   .draft-scrim {
     position: fixed; inset: 0; background: rgba(40, 30, 60, 0.35);
     display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px;
