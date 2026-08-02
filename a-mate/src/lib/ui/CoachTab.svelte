@@ -167,7 +167,9 @@
 <svelte:window onkeydown={(e) => { if (e.key === 'Escape' && draft) draft = null; }} />
 
 <section class="coach">
-  {#if sections.log.length === 0 && sections.learn.length === 0}
+  <!-- 스펙 §3: 「내 로그에서」가 0건이면 섹션 헤더 대신 빈 상태 문구를 쓰고
+       「배움 · 소식」이 자연히 상단에 온다 — 배움 카드 유무와 무관하다. -->
+  {#if sections.log.length === 0}
     <p class="empty">지적할 게 없어요, 주인. 완벽해요!</p>
   {/if}
 

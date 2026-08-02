@@ -165,6 +165,25 @@ describe('partitionCoachItems', () => {
     expect(partitionCoachItems([], []).log).toEqual([]);
     expect(partitionCoachItems([], []).learn).toEqual([]);
   });
+  // list_content는 LIMIT 없이 score>=0인 행을 전부 준다. 옛 「오늘의 배움」 컨테이너가
+  // items[0]+slice(1,4)로 4건만 보였으므로, 그 상한을 여기서 유지한다.
+  it('콘텐츠는 상위 4건까지만 카드가 된다', () => {
+    const many = Array.from({ length: 7 }, (_, i) => content({ id: `T-${i}`, trigger_tags: [] }));
+    const { log, learn } = partitionCoachItems([finding()], many);
+    expect(learn.map((v) => v.id)).toEqual(['T-0', 'T-1', 'T-2', 'T-3']);
+    expect(log).toHaveLength(1); // 룰 finding은 상한과 무관
+  });
+  it('상한은 두 섹션 합계에 적용된다', () => {
+    const { log, learn } = partitionCoachItems([], [
+      content({ id: 'L1' }),
+      content({ id: 'L2' }),
+      content({ id: 'T1', trigger_tags: [] }),
+      content({ id: 'T2', trigger_tags: [] }),
+      content({ id: 'T3', trigger_tags: [] }),
+    ]);
+    expect(log.map((v) => v.key)).toEqual(['L1', 'L2']);
+    expect(learn.map((v) => v.id)).toEqual(['T1', 'T2']);
+  });
 });
 
 describe('toLogCardView', () => {
@@ -193,8 +212,19 @@ describe('toLogCardView', () => {
     expect(v.reason).toBeNull();
     expect(v.sourceUrl).toBe('https://example.test/guide');
   });
-  it('레슨의 personal 필드가 있으면 본문 근거보다 우선한다', () => {
-    const v = toLessonCardView(content({ personal: '당신 로그: 실측 한 줄' }));
+  // enrich_personal은 태그로 붙으므로 레슨 본문과 다른 얘기일 수 있다 —
+  // lesson-cache(태그 subagent)의 personal은 캐시가 아니라 서브에이전트 수치다.
+  // 하나를 버리면 제목·원리·행동과 어긋난 근거만 남으므로 둘 다 남긴다.
+  it('personal이 있으면 본문 근거보다 앞에 오되 본문을 버리지 않는다', () => {
+    const v = toLessonCardView(content({ personal: '당신 로그: 서브에이전트 3건 사용 중' }));
+    expect(v.evidence).toBe('당신 로그: 서브에이전트 3건 사용 중\n당신 로그: 오류가 났어요.');
+  });
+  it('둘이 같은 문장이면 한 번만 보인다', () => {
+    const v = toLessonCardView(content({ personal: '당신 로그: 오류가 났어요.' }));
+    expect(v.evidence).toBe('당신 로그: 오류가 났어요.');
+  });
+  it('본문에 근거 슬롯이 없으면 personal만', () => {
+    const v = toLessonCardView(content({ body: '• 이렇게: 플랜 모드', personal: '당신 로그: 실측 한 줄' }));
     expect(v.evidence).toBe('당신 로그: 실측 한 줄');
   });
 });

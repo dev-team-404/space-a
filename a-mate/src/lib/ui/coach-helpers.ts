@@ -164,15 +164,19 @@ export function toLogCardView(f: CoachFinding): LogCardView {
 }
 
 /** 개인 실전 레슨 → 문법 A. 칩·판정은 룰 전용이라 null.
- * `personal`(store의 enrich_personal)이 있으면 본문에서 뽑은 근거보다 우선한다 — 실측 수치라서. */
+ * `personal`(store의 enrich_personal)은 **태그로** 붙어서 레슨 본문과 다른 주제일 수 있다 —
+ * 예: `lesson-cache`는 `subagent` 태그가 있어 캐시 재읽기 레슨에 서브에이전트 수치가 달린다.
+ * 하나만 남기면 제목·원리·행동과 어긋난 근거만 보이므로 둘 다 싣는다(같으면 한 번만).
+ * `.evidence`가 `white-space: pre-line`이라 개행이 그대로 두 줄로 렌더된다. */
 export function toLessonCardView(c: ContentItem): LogCardView {
   const parts = splitLessonBody(c.body);
+  const lines = [...new Set([orNull(c.personal), parts.evidence].filter((s): s is string => s !== null))];
   return {
     key: c.id,
     source: 'lesson',
     icon: '💡',
     title: c.title,
-    evidence: orNull(c.personal) ?? parts.evidence,
+    evidence: lines.length === 0 ? null : lines.join('\n'),
     chip: null,
     reason: null,
     principle: parts.principle,
@@ -196,16 +200,24 @@ export function toLearnCardView(c: ContentItem): LearnCardView {
   return { id: c.id, badge, title: c.title, summary: orNull(c.body), sourceUrl: orNull(c.source_url) };
 }
 
+/** 큐레이션 콘텐츠가 카드가 되는 상한.
+ * `store.list_content`는 LIMIT 없이 `score>=0`인 행을 전부 주고, 옛 「오늘의 배움」 컨테이너가
+ * `items[0]` + `items.slice(1, 4)`로 4건만 보여줬다. 컨테이너를 해체하면서 그 상한까지
+ * 같이 없애면 카드가 수십 장으로 불어난다 — 상한은 여기서 유지한다. 룰 finding은 대상이 아니다. */
+export const CONTENT_CARD_LIMIT = 4;
+
 /** 근거 출처로 두 섹션을 가른다 (스펙 §3).
  * 「내 로그에서」 = 룰 finding + `personal` 태그 콘텐츠. finding을 앞에 둔다 —
- * 처방·행동 버튼이 붙어 바로 실행 가능한 쪽이기 때문. */
+ * 처방·행동 버튼이 붙어 바로 실행 가능한 쪽이기 때문.
+ * 상한은 score 순 상위 N건에 먼저 적용한 뒤 가른다(두 섹션 합계 기준 — 옛 컨테이너와 동일). */
 export function partitionCoachItems(
   findings: CoachFinding[],
   content: ContentItem[],
 ): { log: LogCardView[]; learn: LearnCardView[] } {
   const isPersonal = (c: ContentItem) => c.trigger_tags?.includes('personal') ?? false;
+  const top = content.slice(0, CONTENT_CARD_LIMIT);
   return {
-    log: [...findings.map(toLogCardView), ...content.filter(isPersonal).map(toLessonCardView)],
-    learn: content.filter((c) => !isPersonal(c)).map(toLearnCardView),
+    log: [...findings.map(toLogCardView), ...top.filter(isPersonal).map(toLessonCardView)],
+    learn: top.filter((c) => !isPersonal(c)).map(toLearnCardView),
   };
 }
