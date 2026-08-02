@@ -1727,7 +1727,7 @@ mod tests {
     #[test]
     fn crop_face_b64_returns_128px_png_and_none_on_garbage() {
         use base64::Engine as _;
-        // 1×1 투명 PNG (제거된 face_icon_inner 테스트와 같은 픽스처)
+        // 1×1 투명 PNG
         let png = base64::engine::general_purpose::STANDARD
             .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
             .unwrap();
