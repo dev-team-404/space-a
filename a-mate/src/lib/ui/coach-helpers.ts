@@ -13,6 +13,34 @@ export function totalSessionsOf(evidence: unknown, fallback: number): number {
   return typeof t === 'number' ? t : fallback;
 }
 
+/** evidence에서 유한한 숫자 키를 안전하게 꺼낸다. 없거나 숫자가 아니면 null. */
+function numberOf(evidence: unknown, key: string): number | null {
+  if (typeof evidence !== 'object' || evidence === null) return null;
+  const v = (evidence as Record<string, unknown>)[key];
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+/** 카드 헤더의 근거 칩 — "근거가 얼마나 굳어졌나"를 룰별 evidence 실수치로 보여준다.
+ * 절약 토큰(est_tokens_saved)은 등록된 룰이 전부 0이라 표시하지 않는다.
+ * occurrences·last_seen은 스캔마다 갱신되는 **스캔 지표**라 여기 쓰지 않는다.
+ * 재료가 없으면 null — 0이나 추정치를 지어내지 않는다. */
+export function evidenceChip(ruleId: string, evidence: unknown): string | null {
+  const count = (key: string, suffix: string): string | null => {
+    const v = numberOf(evidence, key);
+    return v !== null && v > 0 ? `${v}${suffix}` : null;
+  };
+  switch (ruleId) {
+    case 'R6':
+      return count('session_count', '개 세션');
+    case 'R7':
+      return count('total_sessions', '개 세션');
+    case 'R8':
+      return count('large_result_count', '회 대형 결과');
+    default:
+      return null;
+  }
+}
+
 export function ctxLine(s: SessionCtxItem): string {
   let base: string;
   if (!s.first_ts) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coachTitle, ctxLine, isHiddenFinding, sessionIdsOf, totalSessionsOf } from './coach-helpers';
+import { coachTitle, ctxLine, evidenceChip, isHiddenFinding, sessionIdsOf, totalSessionsOf } from './coach-helpers';
 import type { SessionCtxItem } from '../api';
 
 const item = (over: Partial<SessionCtxItem> = {}): SessionCtxItem => ({
@@ -62,5 +62,35 @@ describe('isHiddenFinding', () => {
     expect(isHiddenFinding('new')).toBe(false);
     expect(isHiddenFinding('pending')).toBe(false);
     expect(isHiddenFinding('rejected')).toBe(false);
+  });
+});
+
+describe('evidenceChip', () => {
+  it('R6은 세션 수를 센다', () => {
+    expect(evidenceChip('R6', { session_count: 4 })).toBe('4개 세션');
+  });
+  it('R7은 집계된 세션 수를 센다', () => {
+    expect(evidenceChip('R7', { total_sessions: 5 })).toBe('5개 세션');
+  });
+  it('R8은 대형 결과 횟수를 센다', () => {
+    expect(evidenceChip('R8', { large_result_count: 12 })).toBe('12회 대형 결과');
+  });
+  it('occurrences·last_seen은 스캔 지표라 칩 재료가 아니다', () => {
+    // 룰별 evidence 키가 없으면 다른 값이 있어도 칩은 없다
+    expect(evidenceChip('R6', { occurrences: 99, last_seen: '2026-08-02' })).toBeNull();
+  });
+  it('키가 없거나 숫자가 아니거나 0이면 칩을 생략한다', () => {
+    expect(evidenceChip('R6', {})).toBeNull();
+    expect(evidenceChip('R6', { session_count: '4' })).toBeNull();
+    expect(evidenceChip('R6', { session_count: 0 })).toBeNull();
+    expect(evidenceChip('R7', { total_sessions: Number.NaN })).toBeNull();
+  });
+  it('evidence가 객체가 아니면 칩을 생략한다', () => {
+    expect(evidenceChip('R6', null)).toBeNull();
+    expect(evidenceChip('R6', 'junk')).toBeNull();
+    expect(evidenceChip('R6', undefined)).toBeNull();
+  });
+  it('칩 규칙이 없는 룰은 생략한다', () => {
+    expect(evidenceChip('RX', { session_count: 4 })).toBeNull();
   });
 });
