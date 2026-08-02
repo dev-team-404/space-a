@@ -89,3 +89,4 @@ a-mate/src-tauri/gen/schemas/
 
 # git worktrees (isolated workspaces)
 .worktrees/
+.claude/worktrees/
