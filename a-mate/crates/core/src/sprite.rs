@@ -883,7 +883,7 @@ mod tests {
 
         let out = make_background_transparent(&src).expect("투명화 성공");
 
-        let mut dec = png::Decoder::new(&out[..]);
+        let dec = png::Decoder::new(&out[..]);
         let mut r = dec.read_info().unwrap();
         let mut buf = vec![0u8; r.output_buffer_size()];
         let info = r.next_frame(&mut buf).unwrap();

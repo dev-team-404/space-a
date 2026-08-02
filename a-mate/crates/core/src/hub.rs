@@ -1697,7 +1697,7 @@ mod tests {
 
     #[test]
     fn telemetry_brief_shape_and_derived_only() {
-        use crate::model::{EventKind, NormModel, NormalizedEvent, TokenUsage, ToolKind};
+        use crate::model::{EventKind, NormalizedEvent, ToolKind};
         let store = crate::store::SqliteStore::open_in_memory().unwrap();
         // MCP 호출 이벤트 2건 (jira) + 1건 (notion), 오늘 날짜
         let mk = |i: u64, server: &str| NormalizedEvent {

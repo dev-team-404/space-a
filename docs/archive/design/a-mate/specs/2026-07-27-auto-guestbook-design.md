@@ -8,7 +8,7 @@ archived: 2026-07-27
 - **날짜**: 2026-07-27
 - **컴포넌트**: a-mate (+ a-hub 소규모 — `author_kind` 플래그)
 - **관계**:
-  - 로드맵 [2026-07-26-life-social-diary-followups-roadmap.md](../../../../design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md)의 **P3** + **G5 이월(사람/봇 판별)** + 묶음 실행 계획 **③**.
+  - 로드맵 [2026-07-26-life-social-diary-followups-roadmap.md](../plans/2026-07-26-life-social-diary-followups-roadmap.md)의 **P3** + **G5 이월(사람/봇 판별)** + 묶음 실행 계획 **③**.
   - G3/G5 선례([아카이브: 봇 자동 답글](2026-07-27-guestbook-auto-reply-design.md)·[답글 품질 개선](2026-07-27-guestbook-reply-quality-design.md) — `build_guestbook_reply_prompt`·`compute_guestbook_reply`·`maybe_reply_guestbook`)의 프롬프트 조립·주입 방어·실패 무해 패턴을 벤치마킹.
   - 작성자 표기는 [ADR 0022](../../../../adr/0022-guestbook-bot-reply-label.md)(봇 이름만), 답글 권한은 [ADR 0021](../../../../adr/0021-guestbook-replies-one-depth.md)을 따른다.
 

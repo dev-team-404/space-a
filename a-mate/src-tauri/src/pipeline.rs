@@ -63,38 +63,154 @@ mod runtime {
         out
     }
 
+    /// 락을 놓은 뒤 대기 커맨드가 실제로 잡을 틈을 만든다. `yield_now`만으로는 부족했다 —
+    /// Windows `SwitchToThread`는 같은 프로세서의 ready 스레드에만 양보하므로 멀티코어에서는
+    /// 스캔 스레드가 그대로 재획득한다. 실측(X1): ingest가 짧은 웜 스캔에서 커맨드가
+    /// inventory+rules를 통째로 기다려 898ms가 나왔다. 상한을 둬서 커맨드가 끊이지 않을 때
+    /// (홈 탭 2초 폴링) 스캔이 굶지 않게 한다.
+    fn hand_off(state: &AppState) {
+        use std::sync::atomic::Ordering;
+        for _ in 0..2_000 {
+            if state.store_waiters.load(Ordering::Acquire) == 0 {
+                break;
+            }
+            std::thread::yield_now();
+        }
+    }
+
+    /// 스캔 1회. 락을 **단계·파일 단위로** 잡는다 — 통짜로 쥐면 마이그레이션 후 전량 재수집
+    /// (실측 16.7초) 동안 모든 커맨드가 막힌다(X1). 최장 연속 보유는 rules 블록이다.
     pub fn run_pipeline_once(app: &AppHandle) {
         let state = app.state::<AppState>();
         let scan_result = (|| -> anyhow::Result<String> {
-            // ── 스캔·diff·emit: 락을 잡는 범위 ──────────────────────────────────
-            let (now, _fresh_findings) = {
-                let mut store = state.store.lock()
-                    .map_err(|_| anyhow::anyhow!("store lock poisoned"))?;
-                let before: HashMap<String, String> = store.finding_severities()?.into_iter().collect();
+            let scan_started = std::time::Instant::now();
+            let mut longest_hold = Duration::ZERO;
 
-                let report = agent_mentor::ops::run_ingest_with_progress(&store, &mut |done, total| {
+            // ── 1) discover — DB를 쓰지 않으므로 락 밖 ──────────────────────────
+            let (work, warnings) = agent_mentor::ops::discover_work();
+            for w in &warnings {
+                log::warn!("{w}");
+            }
+            let total: usize = work.iter().map(|w| w.files.len()).sum();
+
+            // ── 2) 파일 수집 — 파일마다 락을 잡고 놓는다 ─────────────────────────
+            let mut ingest_held = Duration::ZERO;
+            let mut slowest_file = Duration::ZERO;
+            let mut new_events = 0usize;
+            let mut done = 0usize;
+            for w in &work {
+                for f in &w.files {
+                    let (held, result) = {
+                        let store = state
+                            .store
+                            .lock()
+                            .map_err(|_| anyhow::anyhow!("store lock poisoned"))?;
+                        let t = std::time::Instant::now();
+                        let result = agent_mentor::store::ingest_file(&store, &w.adapter, f);
+                        (t.elapsed(), result)
+                    }; // guard drops here — 다음 파일 전에 대기 커맨드가 끼어든다
+                    // std::sync::Mutex는 공정하지 않다. 해제 직후 이 스레드가 재획득하면
+                    // 청킹이 무효가 되므로 대기자가 잡을 때까지 넘긴다. sleep은 쓰지 않는다 —
+                    // Windows 타이머 해상도가 ~15ms라 파일당 sleep은 스캔에 수 초를 붙인다.
+                    hand_off(&state);
+                    match result {
+                        Ok(n) => new_events += n,
+                        Err(e) => log::warn!("{} 수집 실패(건너뜀): {e}", f.display()),
+                    }
+                    ingest_held += held;
+                    if held > slowest_file {
+                        slowest_file = held;
+                    }
+                    if held > longest_hold {
+                        longest_hold = held;
+                    }
+                    done += 1;
                     // 파일 수천 개일 수 있어 5건 단위로만 emit (마지막은 항상)
                     if done == total || done % 5 == 0 {
-                        let _ = app.emit("scan:progress", serde_json::json!({"done": done, "total": total}));
+                        let _ = app
+                            .emit("scan:progress", serde_json::json!({"done": done, "total": total}));
                     }
-                })?;
-                for w in &report.warnings { log::warn!("{w}"); }
-                for w in agent_mentor::ops::run_inventory(&mut store)? { log::warn!("{w}"); }
-                agent_mentor::ops::run_rules(&store)?;
+                }
+            }
 
+            // ── 3) rollup ────────────────────────────────────────────────────
+            let rollup_held = {
+                let store = state
+                    .store
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("store lock poisoned"))?;
+                let t = std::time::Instant::now();
+                store.rebuild_rollup()?;
+                t.elapsed()
+            };
+            hand_off(&state);
+            if rollup_held > longest_hold {
+                longest_hold = rollup_held;
+            }
+
+            // ── 4) inventory ─────────────────────────────────────────────────
+            let inventory_held = {
+                let mut store = state
+                    .store
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("store lock poisoned"))?;
+                let t = std::time::Instant::now();
+                for w in agent_mentor::ops::run_inventory(&mut store)? {
+                    log::warn!("{w}");
+                }
+                t.elapsed()
+            };
+            hand_off(&state);
+            if inventory_held > longest_hold {
+                longest_hold = inventory_held;
+            }
+
+            // ── 5) rules + diff + emit — 한 블록 ──────────────────────────────
+            // before/run_rules/after/diff를 쪼개지 않는다. 지금은 쪼개도 안전하지만
+            // (findings를 쓰는 커맨드는 set_finding_status 하나뿐이고 status만 바꾸며,
+            // finding_severities는 status를 안 본다) 그 안전이 다른 파일의 사실 두 개에
+            // 의존한다. 한 블록이면 불변식이 여기서 보인다 (X1 설계 §A).
+            let (now, rules_held) = {
+                let store = state
+                    .store
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("store lock poisoned"))?;
+                let t = std::time::Instant::now();
+                let before: HashMap<String, String> =
+                    store.finding_severities()?.into_iter().collect();
+                agent_mentor::ops::run_rules(&store)?;
                 let after = store.finding_severities()?;
                 let fresh = diff_findings(&before, &after);
                 let now = chrono::Utc::now().to_rfc3339();
                 store.set_setting("last_scan_ts", &now)?;
-
                 if !fresh.is_empty() {
-                    let rows: Vec<_> = store.list_findings_current(false)?.into_iter()
-                        .filter(|f| fresh.contains(&f.dedup_key)).collect();
+                    let rows: Vec<_> = store
+                        .list_findings_current(false)?
+                        .into_iter()
+                        .filter(|f| fresh.contains(&f.dedup_key))
+                        .collect();
                     app.emit("coach:finding", &rows)?;
                 }
-                (now, fresh)
+                (now, t.elapsed())
                 // guard drops here — 다이어리 생성(LLM 네트워크 I/O) 전에 락 해제
             };
+            if rules_held > longest_hold {
+                longest_hold = rules_held;
+            }
+
+            // 성능 telemetry — 스캔당 1줄. X1의 회귀를 보는 유일한 창이므로 영구 유지한다.
+            // 핵심 지표는 합계가 아니라 **longest**다: 커맨드가 기다리는 시간이 그것이다.
+            log::info!(
+                "scan done — wall {}ms | ingest {}ms ({total} files, {new_events} events, slowest file {}ms) \
+                 | rollup {}ms | inventory {}ms | rules {}ms | longest lock hold {}ms",
+                scan_started.elapsed().as_millis(),
+                ingest_held.as_millis(),
+                slowest_file.as_millis(),
+                rollup_held.as_millis(),
+                inventory_held.as_millis(),
+                rules_held.as_millis(),
+                longest_hold.as_millis(),
+            );
             Ok(now)
         })();
 
@@ -1247,7 +1363,7 @@ pub(crate) fn generate_daily_cut_core(
 
     // ① 짧은 락: 재료 읽기 → 즉시 해제 (네트워크 전 해제 규율)
     let (engine, cfg, identity, raw_uuid, mbti, date, diary) = {
-        let store = state.store.lock().map_err(|_| "store lock poisoned".to_string())?;
+        let store = state.lock_store().map_err(|_| "store lock poisoned".to_string())?;
         let Some(engine) = crate::resolve_engine(&store) else {
             return Err("텍스트 엔진이 설정되지 않았어요 — 설정 → 연결 → 텍스트 엔진을 확인해주세요".into());
         };

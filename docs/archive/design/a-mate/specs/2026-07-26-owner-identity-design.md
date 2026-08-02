@@ -8,7 +8,7 @@ archived: 2026-07-26
 - **날짜**: 2026-07-26
 - **컴포넌트**: a-mate (+ a-hub life 방명록 API 소폭)
 - **브랜치**: `feat/amate-owner-identity` (worktree)
-- **관계**: [후속 로드맵 2차 배치 G1](../../../../design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md) 착수분.
+- **관계**: [후속 로드맵 2차 배치 G1](../plans/2026-07-26-life-social-diary-followups-roadmap.md) 착수분.
   PR #104의 신원 배관([아카이브 스펙](2026-07-26-bot-tab-mascot-identity-design.md) §F) 위 확장.
   프라이버시 경계 결정은 [ADR 0020](../../../../adr/0020-owner-fullname-to-hub.md).
 

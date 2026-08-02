@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS events (
   source_file TEXT, tool_use_id TEXT, result_status TEXT,
   result_len INTEGER DEFAULT 0
 );
+-- 상관 서브쿼리의 상대는 언제나 session_id 다(struggle_sessions 는 세션당 3회 돈다).
+-- 인덱스가 없으면 그 하나하나가 events 전체 스캔이 되어, 6만 행·292 세션에서 56초가 나온다(실측).
+CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
 CREATE TABLE IF NOT EXISTS prompt_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   dedup_key TEXT UNIQUE NOT NULL,
@@ -2327,6 +2330,24 @@ mod tests {
             diary_excerpt_json: "[]".into(),
             signed: true,
         }
+    }
+
+    /// `events(session_id)` 인덱스가 사라지면 **성능 절벽**이 돌아온다 — 상관 서브쿼리로
+    /// events를 훑는 `struggle_sessions`가 실측 30MB DB(62k 행·292 세션)에서 188ms → 56,583ms로
+    /// 300배 느려졌고, 그 쿼리는 스캔 후처리가 **스토어 락을 쥔 채** 돌아 앱 전체가 멎었다.
+    /// 기능 테스트로는 절대 안 잡힌다(결과는 같고 시간만 다르다) — 그래서 존재를 직접 단언한다.
+    #[test]
+    fn events_session_id_index_exists() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        let found: i64 = store
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_events_session'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(found, 1, "events(session_id) 인덱스가 없다 — 후처리 쿼리가 전체 스캔이 된다");
     }
 
     #[test]

@@ -22,6 +22,29 @@ pub struct AppState {
     /// 재조회 경로가 없는 일회성 소식이라, 리스너 등록 전에 emit하면(emit은 수신자 0이어도 Ok)
     /// 커서만 전진해 영구 유실된다. maybe_poll_inbound가 이 플래그를 켜질 때까지 기다린다.
     pub notices_ready: std::sync::atomic::AtomicBool,
+    /// 스토어 락을 **기다리는** 커맨드 수(획득하면 즉시 감소). 스캔이 단계 사이에 이 값을 보고
+    /// 재획득을 미룬다 — `std::sync::Mutex`는 공정하지 않아 `yield_now`만으로는 해제 직후
+    /// 재획득을 막지 못한다. 실측(X1): ingest가 짧은 웜 스캔에서 커맨드가 inventory+rules를
+    /// 통째로 기다려 898ms가 나왔다.
+    pub store_waiters: std::sync::atomic::AtomicUsize,
+}
+
+impl AppState {
+    /// 스토어 락을 잡되 **기다린다는 사실을 신고**한다 — 스캔이 청크 사이에서 이걸 보고 양보한다
+    /// (`pipeline::runtime::hand_off`). **사용자 개시 경로는 전부 이걸 써야 한다**:
+    /// 커맨드(`commands::lock`)·트레이 메뉴·마스코트 배치·`generate_daily_cut_core`.
+    /// `store.lock()`을 직접 부르면 신고가 없어 스캔이 그 대기자를 못 보고 연속 청크를 통과해,
+    /// 그 경로만 청킹 이전 수준의 대기에 노출된다.
+    ///
+    /// **스캔 자신은 쓰지 않는다** — 보유자는 대기자가 아니고, 자기에게 양보할 이유도 없다.
+    /// 스캔과 같은 스레드에서 도는 후처리(`maybe_*`)도 스캔과 경합하지 않으므로 대상이 아니다.
+    pub fn lock_store(&self) -> std::sync::LockResult<std::sync::MutexGuard<'_, SqliteStore>> {
+        use std::sync::atomic::Ordering;
+        self.store_waiters.fetch_add(1, Ordering::AcqRel);
+        let guard = self.store.lock();
+        self.store_waiters.fetch_sub(1, Ordering::AcqRel);
+        guard
+    }
 }
 
 /// 마스코트 창 논리 크기(px). 창은 이 크기로 **상시 고정** — 확장/접힘을 리사이즈로
@@ -73,8 +96,7 @@ pub(crate) fn place_mascot(app: &tauri::AppHandle, force_default: bool) -> anyho
     let (saved_pos, saved_layout) = {
         let state = app.state::<AppState>();
         let store = state
-            .store
-            .lock()
+            .lock_store()
             .map_err(|_| anyhow::anyhow!("store lock"))?;
         (
             store.get_setting("mascot_pos")?,
@@ -115,8 +137,7 @@ pub(crate) fn place_mascot(app: &tauri::AppHandle, force_default: bool) -> anyho
     window.set_position(tauri::PhysicalPosition::new(position.0, position.1))?;
     let state = app.state::<AppState>();
     let store = state
-        .store
-        .lock()
+        .lock_store()
         .map_err(|_| anyhow::anyhow!("store lock"))?;
     store.set_setting("mascot_pos", &format!("{},{}", position.0, position.1))?;
     store.set_setting("mascot_display_layout", &layout)?;
@@ -250,6 +271,7 @@ pub fn run() {
                     scan_tx: tx.clone(),
                     mascot_expanded: std::sync::atomic::AtomicBool::new(false),
                     notices_ready: std::sync::atomic::AtomicBool::new(false),
+                    store_waiters: std::sync::atomic::AtomicUsize::new(0),
                 });
                 pipeline::start(app.handle().clone(), rx, tx);
                 tray::setup_tray(app.handle())?;
@@ -257,7 +279,7 @@ pub fn run() {
                 // (서버는 마지막 위치를 기억하지만, 세션 시작의 기본값은 내 방 — 설계 §3)
                 {
                     let state = app.state::<AppState>();
-                    let cfg = state.store.lock().ok().map(|s| {
+                    let cfg = state.lock_store().ok().map(|s| {
                         let get = |k: &str| s.get_setting(k).ok().flatten().unwrap_or_default();
                         (
                             get("hub_url"),
@@ -293,8 +315,7 @@ pub fn run() {
                 {
                     let visible = app
                         .state::<AppState>()
-                        .store
-                        .lock()
+                        .lock_store()
                         .map_err(|_| anyhow::anyhow!("store lock"))?
                         .get_setting("mascot_visible")?
                         .map(|value| value == "true")
@@ -352,8 +373,7 @@ pub fn run() {
                 {
                     let state = app.state::<AppState>();
                     let on = state
-                        .store
-                        .lock()
+                        .lock_store()
                         .ok()
                         .and_then(|store| store.get_setting("content_protected").ok().flatten())
                         .map(|v| v == "true")

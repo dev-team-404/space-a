@@ -263,8 +263,10 @@ pub fn coaching_brief_inner(store: &SqliteStore) -> anyhow::Result<agent_mentor:
     agent_mentor::chat::assemble_coaching_brief(store)
 }
 
+/// 커맨드용 스토어 락. `AppState::lock_store`를 거치므로 대기가 스캔에 신고된다 —
+/// `state.store.lock()`을 직접 부르면 그 신고가 빠져 스캔이 연속 청크를 통과한다(X1 실측 898ms).
 fn lock<'a>(state: &'a State<AppState>) -> Result<std::sync::MutexGuard<'a, SqliteStore>, String> {
-    state.store.lock().map_err(|e| e.to_string())
+    state.lock_store().map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]
@@ -1244,15 +1246,12 @@ pub struct GotoTabPayload {
 #[cfg_attr(test, allow(dead_code))]
 #[tauri::command]
 pub fn open_chat_tab(app: tauri::AppHandle, tab: String, target: Option<String>) -> Result<(), String> {
-    use tauri::{Emitter, Manager};
+    use tauri::Emitter;
     if !valid_tab(&tab) {
         return Err(format!("허용되지 않은 탭: {tab}"));
     }
-    if let Some(w) = app.get_webview_window("chat") {
-        let _ = w.show();
-        let _ = w.unminimize();
-        let _ = w.set_focus();
-    }
+    // 표시는 tray::show_chat 한 곳으로 — 거기서 chat:shown을 emit해 프론트가 강제 갱신한다.
+    crate::tray::show_chat(&app);
     app.emit("chat:goto-tab", GotoTabPayload { tab, target })
         .map_err(|e| e.to_string())
 }

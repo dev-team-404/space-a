@@ -1,8 +1,13 @@
+---
+status: done
+archived: 2026-07-31
+---
+
 # Life 소셜·일기 통합 후속 로드맵
 
 - **날짜**: 2026-07-26
 - **컴포넌트**: a-mate (+ 일부 a-hub)
-- **관계**: 현재 세션 스펙 [2026-07-26-bot-tab-mascot-identity-design.md](../../../archive/design/a-mate/specs/2026-07-26-bot-tab-mascot-identity-design.md)이 놓는 **프롬프트 배관(호칭·MBTI 문체)** 위에서 진행. 기반 인프라는 [2026-07-22-life-social-features-design.md](../specs/2026-07-22-life-social-features-design.md)에서 이미 구현(일촌·공개 다이어리·방명록·말풍선).
+- **관계**: 현재 세션 스펙 [2026-07-26-bot-tab-mascot-identity-design.md](../specs/2026-07-26-bot-tab-mascot-identity-design.md)이 놓는 **프롬프트 배관(호칭·MBTI 문체)** 위에서 진행. 기반 인프라는 [2026-07-22-life-social-features-design.md](../../../../design/a-mate/specs/2026-07-22-life-social-features-design.md)에서 이미 구현(일촌·공개 다이어리·방명록·말풍선).
 - **목적**: 방문/소셜 활동을 일기·마스코트에 반영하는 후속 아이템을 **세션 분리 · 병렬 가능 여부**와 함께 정리. 상세 설계는 각 아이템 착수 세션에서 브레인스토밍.
 
 ## 공통 의존
@@ -45,7 +50,7 @@
 - 예상 수정: 말풍선 렌더러에 `word-break: keep-all`(어절 단위) + 사용자 입력 개행 존중(`white-space: pre-wrap`) + 적절한 max-width. 실제 원인·컴포넌트는 착수 시 확인.
 - **터치**: 말풍선 렌더링(`bubble.ts` + 표시 컴포넌트 `RobotPortrait.svelte`/`MiniLife.svelte`/`Mascot.svelte` 중 해당). diary/프롬프트 미접촉.
 - **세션**: 소규모·독립. 현재 세션과 파일 충돌 없음 → **완전 병렬(언제든 단독 처리 가능)**.
-- **구현 결과(2026-07-27, 묶음 ①)**: `word-break:keep-all`(+비상 `overflow-wrap:anywhere`)을 LifeView `.agent-bubble`(=lifeSetBubble, `pre-wrap` 기존 유지)·MiniLife·데스크톱 Mascot 말풍선 + 홈 `.daily-line`에 적용. max-width·line-clamp 불변(어색하면 후속). 조사 보정: MiniLife 말풍선은 lifeSetBubble이 아니라 자체 정적 잡담 — lifeSetBubble 렌더는 LifeView 한 곳. 실화면 확인은 PR 체크리스트로 사용자 진행. 설계: [아카이브 스펙](../../../archive/design/a-mate/specs/2026-07-27-home-bubble-polish-design.md).
+- **구현 결과(2026-07-27, 묶음 ①)**: `word-break:keep-all`(+비상 `overflow-wrap:anywhere`)을 LifeView `.agent-bubble`(=lifeSetBubble, `pre-wrap` 기존 유지)·MiniLife·데스크톱 Mascot 말풍선 + 홈 `.daily-line`에 적용. max-width·line-clamp 불변(어색하면 후속). 조사 보정: MiniLife 말풍선은 lifeSetBubble이 아니라 자체 정적 잡담 — lifeSetBubble 렌더는 LifeView 한 곳. 실화면 확인은 PR 체크리스트로 사용자 진행. 설계: [아카이브 스펙](../specs/2026-07-27-home-bubble-polish-design.md).
 
 ## 병렬 가능 요약
 
@@ -187,7 +192,7 @@
 
 > G3 검증 중 발견. **G3/PR #108이 만든 문제가 아님** — 기존 아키텍처 이슈. 위 기능 아이템(G/H)과 성격이 다른 **cross-cutting 성능·동시성** 항목. **착수 전 측정 우선**.
 
-**X1 — 앱 시작 시 방명록 등 초기 로딩 지연 (store 락 경합)** (백로그 — 2026-07-27 검증 피드백)
+**X1 — 앱 시작 시 방명록 등 초기 로딩 지연 (store 락 경합)** (백로그 — 2026-07-27 검증 피드백) — ✅ 완료(2026-07-31)
 
 - **증상**: 앱을 처음 띄우면 방명록(및 다른 store 의존 화면)이 한참 뒤에 나타남.
 - **확정 원인(코드 구조)**: `AppState.store = Mutex<SqliteStore>` **단일 락** + `SqliteStore { conn: Connection }` **단일 연결** → 읽기·쓰기 전부 이 락 하나로 직렬화. 시작 시 `pipeline::start`가 백그라운드 스레드에서 `run_pipeline_once`를 즉시 실행하고, 이 함수는 ingest→inventory→rules **전체 배치 동안 락을 계속 쥔다**(`src-tauri/src/pipeline.rs` `run_pipeline_once` 스캔 블록). 그동안 `life_guestbook` 등 store를 읽는 모든 커맨드(`hub_client`→`lock`)가 **락 해제까지 블로킹**. Claude 로그 이력이 클수록 초기 스캔이 길어져 지연도 커짐.
@@ -203,9 +208,35 @@
 - **터치**: `src-tauri/src/lib.rs`(`AppState`), `crates/core/src/store.rs`(연결 구조), `src-tauri/src/pipeline.rs`(스캔 락 범위), `crates/core/src/ops.rs`(ingest).
 - **의존·세션**: **독립 · 별도 세션**. 착수 전 **측정 우선**(초기 스캔 시간 vs hub 왕복 계측).
 
+**구현 결과(2026-07-31)** — 설계: [아카이브 스펙](../specs/2026-07-31-startup-lock-contention-design.md) · [아카이브 계획](2026-07-31-startup-lock-contention.md)
+
+- **판정 = (a) 락 경합. hub HTTP는 무죄.** 방명록 hub 왕복은 **51ms**(life_view 78–163 · people 42 · list 65–99) — 10초 타임아웃 근처도 아니고 콜드 락 대기와 약 325배 차이다. 측정은 실제 DB(30.7MB, 트랜스크립트 220개)를 복사해 `AGENT_MENTOR_DATA_DIR`로 격리하고 `npm run tauri dev`로 띄워서 했다.
+- **콜드는 최초 설치 한정 예외가 아니었다 — 이게 이 항목의 핵심 발견이다.** `store.rs migrate()`에 `events`/`sessions`/`ingest_state`/`daily_rollup`을 비우는 트리거가 **9개**(컬럼 부재 4 + `user_version` 5) 있고, `ingest_state`가 비면 다음 스캔이 220개 파일을 offset 0부터 다시 읽는다. 즉 **마이그레이션을 실은 릴리스마다 16초 정지가 되돌아온다.** 사용자 증언 "PR 머지 후 실행하니 설정탭도 15초 이상"이 `get_settings`의 **16,630ms** 대기와 정확히 맞았다. 항목의 정당성은 웜(1.1초)이 아니라 이 경로에 있었다.
+- **채택 = (2) 초기 스캔 락 청킹.** 나머지는 측정으로 기각 —
+  - (3) hub 설정 캐시: 막힌 커맨드 11종 중 hub 설정으로 풀리는 건 4종뿐이고, 나머지 **7종**(`get_summary`·`list_findings`·`get_settings`·`theme_get`·`get_week_summary`·`get_model_mix`·`get_today_occasions`)은 홈·설정 화면 렌더 재료 전부인데 그대로 막힌다.
+  - (1) 읽기 전용 연결 분리: 읽기만 풀고 **쓰기 커맨드는 같은 락을 그대로 기다린다** — 하필 "업데이트 후 첫 실행 → 설정 탭"과 겹쳐, 탭은 즉시 뜨는데 토글이 16초 멈추는 형태로 증상이 옮겨간다. 게다가 **WAL 전환이 선행 조건**이다(`SqliteStore::open`이 `journal_mode`·`busy_timeout` PRAGMA를 전혀 설정하지 않아 두 번째 연결은 쓰기 트랜잭션 동안 `SQLITE_BUSY`).
+- **구조**: `discover`를 락 밖으로(DB 미사용 97ms) → **파일마다** 락 획득·해제 → `rollup`·`inventory` 각자 블록 → `before`+`run_rules`+`after`+`diff`를 **한 블록**으로. 최장 연속 보유는 rules 블록이 된다. `ops.rs`에 `discover_work`/`HostWork`를 노출하고 `run_ingest_with_progress`를 그 위에 재구현해 **CLI(`main.rs`) 경로는 불변**.
+- **`yield_now()`만으로는 부족했다 — 측정이 잡아냈다.** 청킹만 적용한 상태에서 콜드는 470ms로 떨어졌는데 **웜이 898ms에 머물렀다**(최장 보유 533ms보다 크다). 서로 다른 커맨드 6개가 거의 동일한 ~890ms를 기다렸고 `inventory 284 + rules 535 ≈ 819ms`가 원인을 지목했다 — 대기자가 inventory 블록에서 재획득 경쟁에 지고 **inventory와 rules를 연달아** 기다린 것이다. Windows `SwitchToThread`는 같은 프로세서의 ready 스레드에만 양보하므로 멀티코어에서 스캔 스레드가 그대로 이긴다(콜드는 릴리스 지점이 220개여서 기회가 많아 가려졌다). → `AppState.store_waiters`(AtomicUsize)로 커맨드가 대기를 신고하고, 스캔이 블록 사이에서 카운터가 0이 될 때까지 **상한 있는** yield로 넘긴다(상한이 없으면 홈 탭 2초 폴링에 스캔이 굶는다).
+- **전/후 실측**:
+
+  | 항목 | 전 | 청킹만 | 청킹+handoff |
+  |---|---|---|---|
+  | 콜드 최장 연속 락 보유 | **16,707ms** | 503ms | **508ms** |
+  | 콜드 커맨드 최대 대기 | **16,630ms** | 470ms | **157ms** |
+  | 웜 커맨드 최대 대기 | **1,099ms** | 898ms ⚠️ | **531ms** |
+  | 웜 최장 연속 락 보유 | 1,512ms | 535ms | **533ms** |
+  | 파일당 최대 ingest | 미측정 | 251ms | **267ms**(콜드) |
+
+  웜 531ms는 rules 블록(533ms) = **이 설계의 하한**이다(그 블록은 의도적으로 안 쪼갠다). 파일당 최대가 rules보다 작으니 **파일 내부 청킹은 불필요**함도 확인됐다.
+- **비목표(중요)**: **스캔 총량은 줄지 않는다.** 청킹은 보유를 재분배할 뿐이라 마이그레이션 후 첫 실행은 여전히 ~15초 걸린다. 바뀐 것은 그 동안 설정 탭·홈·방명록이 기다리지 않는다는 점이다. 웜 벽시계는 1,512→1,656ms(+9.5%)로 **약간 느려졌다** — handoff가 커맨드를 우선하므로 의도된 교환이다. 콜드 벽시계가 16,707→14,899ms로 나온 건 반복 실행으로 OS 파일 캐시가 더워진 편차이고 **수집이 빨라진 게 아니다**. 수집 자체의 속도(파일당 트랜잭션 fsync 등)는 별도 과제.
+- **정정 — `setup`은 막히지 않는다.** 착수 전 가설은 "`lib.rs:254`가 파이프라인을 띄운 직후 같은 `setup`이 락을 3번 잡아(`:260`·`:297`·`:356`) 메인 스레드가 막히고 웹뷰가 안 뜬다"였으나 실측은 `setup` 반환 **웜 +27ms / 콜드 +380ms**였다. 파이프라인 스레드가 `spawn_watchers`를 먼저 돌아 `setup`이 경합에서 이긴다. 보장이 아니라 레이스지만 실측상 문제가 아니라 범위에서 제외했다(후속 후보).
+- **정정 — 스펙 대비 2건**: ① `store::ingest_file`은 이미 `pub`이라 계획했던 `ops::ingest_one` 래퍼가 불필요했다(신규 공개 API는 `discover_work`·`HostWork` 둘뿐). ② `ops.rs` ingest 계측 로그를 영구 유지하려 했으나, 파이프라인이 `run_ingest_with_progress`를 더는 호출하지 않아 앱에서 안 찍히므로 제거하고 **단계 telemetry는 `pipeline.rs`가 단독 소유**한다(스캔당 1줄 `scan done — …`, 영구).
+- **테스트**: `pipeline.rs`의 `runtime` 모듈이 `#[cfg(not(test))]`라 청킹 오케스트레이션은 단위 테스트로 덮을 수 없어 **측정으로 검증**했다. 대신 `ops.rs`에 등가성 테스트 1건 — 파일 단위 수집이 일괄 `ingest_all`과 **같은 이벤트 수·같은 `ingest_state` offset**을 낸다(offset이 어긋나면 다음 스캔이 중복/누락). 부수로 기존 `cargo test` 경고 2건(`hub.rs:1700` 미사용 import, `sprite.rs:886` 불필요 `mut`)도 정리해 경고 0을 만들었다.
+- **검증**: `cargo test` **597 + 47**(신규 1, 경고 0) · 프론트 **224 passed**(svelte-check 0 errors) · `npm run build` exit 0.
+
 | 아이템 | 병렬성 | 선행 |
 |---|---|---|
-| X1 첫 로딩 지연(락 경합) | 독립 · cross-cutting 성능 | 측정 우선(락 vs hub 왕복) |
+| X1 첫 로딩 지연(락 경합) — ✅ 완료 | 독립 · cross-cutting 성능 | 측정 우선(락 vs hub 왕복) — 충족(2026-07-31) |
 
 ---
 
@@ -227,7 +258,7 @@
 - **근거(코드 사실)**: 스폰 셀은 서버(a-hub `life.py`)가 goto 시 할당한다 — a-mate는 결과 `cell`을 받아 그릴 뿐이라 **프론트 수정은 불필요할 가능성이 높다**.
 - **수정 방향**: goto 시 빈 칸 선택 — 기존 점유자 cell + 가구 footprint 회피, 랜덤 또는 결정적 분산.
 - **의존·세션**: **a-hub 별도 레포 · 완전 병렬**(P4 인바운드 방문 추적과 같은 급). a-mate 쪽은 서버 배포 후 스모크만.
-- **구현 결과(2026-07-27)**: 조사 결과 진짜 원인은 "고정 셀"이 아니라 **고정 앵커 (8,16) 주변 밀집**(점유·가구 회피는 기존에 이미 있었음 — 인접 칸 스폰이 아이소메트릭에서 겹쳐 보임). 수정 = `_free_cell_locked` 개편: 에이전트 간 **Chebyshev 버퍼 ≥3**(사이 2칸) + 완화 사다리 3→2→없음 + sha256 해시 등거리 분산(결정적) + 재입장 시 자기 옛 자리 제외. 계약·a-mate·API 스키마 무변경, life.py+test_life.py 두 파일만(테스트 47→55). 설계: [아카이브 스펙](../../../archive/design/a-hub/specs/2026-07-27-life-spawn-scatter-design.md). 온프레 배포 후 실환경 스모크는 PR 체크리스트로 사용자 확인.
+- **구현 결과(2026-07-27)**: 조사 결과 진짜 원인은 "고정 셀"이 아니라 **고정 앵커 (8,16) 주변 밀집**(점유·가구 회피는 기존에 이미 있었음 — 인접 칸 스폰이 아이소메트릭에서 겹쳐 보임). 수정 = `_free_cell_locked` 개편: 에이전트 간 **Chebyshev 버퍼 ≥3**(사이 2칸) + 완화 사다리 3→2→없음 + sha256 해시 등거리 분산(결정적) + 재입장 시 자기 옛 자리 제외. 계약·a-mate·API 스키마 무변경, life.py+test_life.py 두 파일만(테스트 47→55). 설계: [아카이브 스펙](../../a-hub/specs/2026-07-27-life-spawn-scatter-design.md). 온프레 배포 후 실환경 스모크는 PR 체크리스트로 사용자 확인.
 
 | 아이템 | 병렬성 | 선행 |
 |---|---|---|
@@ -248,7 +279,7 @@
 - **터치**: 신규 read-only 커맨드(일자별 활동 요약) + `api.ts` + `DiaryTab.svelte`(달력 하단 시각화). diary 프롬프트 미접촉.
 - **의존·세션**: **독립 아이템** — ②(일기 클러스터)와 "다이어리" 주제는 닿지만 성격이 다르고(diary 생성 백엔드 vs 탭 UI 시각화), ②는 이월분(자율 방문·방문 일기) 흡수로 이미 커질 예정이라 묶지 않는다. 파일 겹침은 `commands.rs` 등록부 정도(P3·②와 머지 가능 수준) → **언제든 단독**. 시각화 구현 시 dataviz 스킬 참고.
 
-**묶음 ⑦ 구현 결과(2026-07-31)** — 설계: [아카이브 스펙](../../../archive/design/a-mate/specs/2026-07-31-window-home-layout-and-day-activity-design.md) · [아카이브 계획](../../../archive/design/a-mate/plans/2026-07-31-window-home-layout-and-day-activity.md)
+**묶음 ⑦ 구현 결과(2026-07-31)** — 설계: [아카이브 스펙](../specs/2026-07-31-window-home-layout-and-day-activity-design.md) · [아카이브 계획](2026-07-31-window-home-layout-and-day-activity.md)
 
 > D1은 사용자 요청(창 크기 고정·홈 배치 싸이월드화)과 **한 묶음으로 진행**했다 —
 > 셋 다 같은 화면 구조를 건드리고, 창이 가변이면 "달력 아래 남는 공간"의 크기가 정해지지 않아
@@ -333,7 +364,7 @@
 - **프라이버시**: 오늘의 한마디는 작업 활동 파생 텍스트 — 기존 `content_visibility`(다이어리
   공개 범위) 체계 재사용해 공개 범위 결정 필요. 상세 설계는 착수 세션 브레인스토밍.
 - **의존·세션**: ④와 같은 life 서버 파일(api.py/life.py/store.py) 접촉 → **④ 머지 후 별도 세션**.
-- **결과(2026-07-30)**: 공개범위 게이트를 **두지 않기로** 결정 — 상주 말풍선과 같은 수위([ADR 0026](../../../adr/0026-front-door-outbound-publication.md)).
+- **결과(2026-07-30)**: 공개범위 게이트를 **두지 않기로** 결정 — 상주 말풍선과 같은 수위([ADR 0026](../../../../adr/0026-front-door-outbound-publication.md)).
   위 "프라이버시" 항목이 전제한 `content_visibility` 재사용은 기각됐고, `feature != "diary"` 하드 거부는 그대로 남는다.
   업로드도 생성 훅이 아니라 **프론트 구독**(마스코트 이미지·공개 일기 선례)이 맡는다 — `pipeline.rs` 미접촉.
   신규 표면 3개(`PATCH /life/me/daily-line`, `PUT /life/me/daily-cut`, `GET /life/agents/{id}/daily-cut`) +
@@ -388,7 +419,7 @@
   (도입 PR에서 오류 개수부터 세고, 필요하면 `--threshold error`로 단계 도입).
 - **터치**: `package.json`(devDep + `check` 스크립트), 이후 DoD·리뷰 관행.
 
-**묶음 ⑥ 구현 결과(2026-07-31)** — 설계: [아카이브 스펙](../../../archive/design/a-mate/specs/2026-07-31-typecheck-and-visit-polish-design.md) · [아카이브 계획](../../../archive/design/a-mate/plans/2026-07-31-typecheck-and-visit-polish.md)
+**묶음 ⑥ 구현 결과(2026-07-31)** — 설계: [아카이브 스펙](../specs/2026-07-31-typecheck-and-visit-polish-design.md) · [아카이브 계획](2026-07-31-typecheck-and-visit-polish.md)
 
 - **Q3 — 실측이 계획을 바꿨다.** 총 **78 errors 중 71건이 라이브러리 `.d.ts`**(패키지 간 전역 타입
   충돌 — `svelte`↔`esrap`의 `Node` 중복 등)라 `skipLibCheck: true` 한 줄로 소거되고, 우리 코드는
@@ -439,14 +470,23 @@
 | **③ 기능 단독** — ✅ 완료(2026-07-27, PR #117) | P3 (+G5 이월 방문자 사람/봇 판별 — `author_kind` 플래그로 해소) | 판별 설계는 P3의 일부. 신규 모듈 위주라 묶을 상대 없음. 작성자 표기는 ADR 0022 정합 | **즉시**(배관 PR #104 완료). ①과 동시 진행 시 `mascot.rs` 겹침 주의(신규 함수 vs `compute_chatter_pool` 수정 — 머지 가능 수준) |
 | **④ 방문 인프라** — ✅ 완료(2026-07-29, PR #132) | P4 (a-hub 방문 추적 API + a-mate 말풍선) *(+6차에서 편입: **N1** — 최근 알림에 방명록 + 다이어리·방명록 탭 뱃지)* | 원래 서버/클라 두 세션이던 것을 한 기능으로. N1은 같은 "인바운드 소식 표면" 계열(guestbook 폴링·홈 UI 공유) | **V1 머지 후** (a-hub life 방문 경로 공유) — 충족(2026-07-27) |
 | **⑤ sprite 서브시스템** — ✅ 완료(2026-07-28, feat/sprite-face-daily-cut) | G6 → H2 | 둘 다 `sprite.rs` — G6(얼굴 크롭 저장)을 H2 R&D 세션의 Task 1(워밍업)로 | 별도 R&D 세션 |
-| 단독 유지 | X1 | cross-cutting 성능·동시성 + **측정 선행**(hub 연결 사용자 환경 필요) — 묶을 수 없는 성격 | 사용자 계측 후 |
+| 단독 유지 — ✅ 완료(2026-07-31) | X1 | cross-cutting 성능·동시성 + **측정 선행**(hub 연결 사용자 환경 필요) — 묶을 수 없는 성격 | 사용자 계측 후 — 충족 |
 | 단독 유지 | D1 다이어리 탭 일별 활동 시각화 | 프론트 시각화 + read-only 커맨드 — ②와 성격이 달라 비묶음 (5차 배치 참조) | **언제든** (`commands.rs` 등록부 소충돌만 주의) |
 
-**묶음 ② 자율 방문·방문 일기 구현 결과(2026-07-29)**: 트리거=주말·공휴일(`is_rest_day` — `korean_public_holiday` 재사용, 비-ko 로케일은 주말만) **하루 1방**(오늘 `kind='auto'` 기록 유무로 판정), 대상=일촌 중 **미방문 우선 → 가장 오래 안 간 방**(난수 없이 결정적, 동률은 `life_id` asc). 순서=**문구 먼저 생성 → `enter` → 게시 → 원래 있던 방으로 복귀** — 복귀 지점은 내 방이 아니라 진입 직전 `me().life_id`(사용자가 수동으로 남의 방에 있을 수 있음), LLM 생성을 이동 전에 끝내 남의 방 체류를 HTTP 2왕복으로 줄였다(`LifeView` 2초 폴링이 드물게 그 순간을 비출 수 있는 점은 감수). 방명록 게이트는 자율 방문에선 이유 대신 **쿨다운(24h)만**(`SignReason::PlayVisit`), 못 남기면 이동을 취소해 보이지 않는 빈 방문을 만들지 않는다. 수동 방문은 게이트 탈락에도 방문 기록·스냅샷을 남긴다(P1·P2 소재는 방명록과 무관). 글루는 `prepare_visit`/`commit_visit` 2단으로 분리(기존 `maybe_sign_guestbook`은 래퍼로 유지 — `life_goto` 호출부 무변경). 무활동일 일기(`IdleContext`)에도 `visits`를 실어 **실제 방문이 `IDLE_PALETTE` 상상 소재보다 우선**하게 했다 — 휴일은 대개 활동 0건이라 자율 방문의 주 무대가 무활동일 일기이기 때문. 토글 `auto_visit_enabled`(기본 on, 설정 > 자율 방문). 테스트: cargo 571+45(신규 25), 프론트 176. 설계: [스펙](../../../archive/design/a-mate/specs/2026-07-29-diary-social-cluster-design.md) · [ADR 0025](../../../adr/0025-neighbour-content-transmission-boundary.md).
+**묶음 ② 자율 방문·방문 일기 구현 결과(2026-07-29)**: 트리거=주말·공휴일(`is_rest_day` — `korean_public_holiday` 재사용, 비-ko 로케일은 주말만) **하루 1방**(오늘 `kind='auto'` 기록 유무로 판정), 대상=일촌 중 **미방문 우선 → 가장 오래 안 간 방**(난수 없이 결정적, 동률은 `life_id` asc). 순서=**문구 먼저 생성 → `enter` → 게시 → 원래 있던 방으로 복귀** — 복귀 지점은 내 방이 아니라 진입 직전 `me().life_id`(사용자가 수동으로 남의 방에 있을 수 있음), LLM 생성을 이동 전에 끝내 남의 방 체류를 HTTP 2왕복으로 줄였다(`LifeView` 2초 폴링이 드물게 그 순간을 비출 수 있는 점은 감수). 방명록 게이트는 자율 방문에선 이유 대신 **쿨다운(24h)만**(`SignReason::PlayVisit`), 못 남기면 이동을 취소해 보이지 않는 빈 방문을 만들지 않는다. 수동 방문은 게이트 탈락에도 방문 기록·스냅샷을 남긴다(P1·P2 소재는 방명록과 무관). 글루는 `prepare_visit`/`commit_visit` 2단으로 분리(기존 `maybe_sign_guestbook`은 래퍼로 유지 — `life_goto` 호출부 무변경). 무활동일 일기(`IdleContext`)에도 `visits`를 실어 **실제 방문이 `IDLE_PALETTE` 상상 소재보다 우선**하게 했다 — 휴일은 대개 활동 0건이라 자율 방문의 주 무대가 무활동일 일기이기 때문. 토글 `auto_visit_enabled`(기본 on, 설정 > 자율 방문). 테스트: cargo 571+45(신규 25), 프론트 176. 설계: [스펙](../specs/2026-07-29-diary-social-cluster-design.md) · [ADR 0025](../../../../adr/0025-neighbour-content-transmission-boundary.md).
 
-**묶음 ④ 방문 인프라 구현 결과(2026-07-29, PR #132)**: **서버가 방문의 단일 원천** — life 서버 `enter()`가 같은 락 안에서 `visits` 행을 기록하므로 클라이언트 하트비트가 필요 없다(자기 방 입장은 미기록). 같은 (방, 방문자)의 **30분 세션화**(새 행 대신 `last_at` 연장 + 이름 재스냅샷)와 **방당 100행 prune**으로 들락날락 도배를 서버에서 억제하고, `GET /life/me/visits?since=&limit=`(본인 방 전용, `last_at` 내림차순, `present` 파생)로 노출한다. 클라이언트는 스캔 편승 `maybe_poll_inbound`가 settings 커서(`inbound_visits_cursor`/`inbound_guestbook_cursor`) 기준 diff — 방문은 `first_at > cursor`라 **세션 연장분이 재-emit되지 않고**, 첫 실행(커서 없음)은 emit 없이 커서만 초기화해 설치 직후 과거분 도배를 막는다. 방명록 diff는 타인 글만(`author_agent_id ≠ 나` — 내 봇 답글 제외). 구서버는 `visits` 404 → **방문 폴링만** 이번 실행 동안 비활성(`maybe_reply_guestbook` INCOMPATIBLE 선례), 방명록 알림은 계속 동작. 기존 `maybe_reply_guestbook`은 병렬 세션(②) 충돌 표면 최소화를 위해 **무수정**. 읽음 상태는 프론트 localStorage(`unseen.ts` — 다이어리는 날짜 set, 방명록은 `lastSeen` + 세션 내 `entry_id` set으로 부트스트랩·이벤트 중복 카운트 구조적 차단). **Codex 리뷰 반영(4건)**: ① `app.emit`은 수신자 0이어도 Ok라 리스너 등록 전 emit이 커서만 전진시켜 소식을 영구 유실 → `AppState.notices_ready` + `notices_ready` **커맨드** 게이트(이벤트로 하면 같은 레이스가 방향만 바뀜)와, `debounce_loop`이 주기 타이머 없는 순수 이벤트 구동이라 게이트만으론 파일 변경 전까지 폴링이 안 되므로 준비 신고가 `poll_inbound_now`로 1회 만회 폴링을 촉발. ② `GuestbookTab`이 `guestbook:new`를 구독해 재조회(안 보인 채 읽음 처리되던 문제). ③ 뱃지 부트스트랩을 2초 폴링 tick으로 이동(비반응 가드 탓에 실패 후 영구 비활성 — `diaryCatchUpStarted` 관용구). ④ 읽음 워터마크를 `maxCreatedAt`로 **서버 시각**에서만 상승(클라이언트 시계와 서버 `created_at`을 비교하던 문제). 테스트: pytest 81(신규 12) · cargo 581+45(신규 `inbound` 10) · 프론트 191(신규 11). `contracts/` 미접촉 — life 계약 정본은 [life-visit.md §4](../../life-visit.md). 설계: [스펙](../../../archive/design/a-mate/specs/2026-07-29-visit-infra-notices-design.md). **잔여 후속은 8차 배치 Q1–Q3.**
+**묶음 ④ 방문 인프라 구현 결과(2026-07-29, PR #132)**: **서버가 방문의 단일 원천** — life 서버 `enter()`가 같은 락 안에서 `visits` 행을 기록하므로 클라이언트 하트비트가 필요 없다(자기 방 입장은 미기록). 같은 (방, 방문자)의 **30분 세션화**(새 행 대신 `last_at` 연장 + 이름 재스냅샷)와 **방당 100행 prune**으로 들락날락 도배를 서버에서 억제하고, `GET /life/me/visits?since=&limit=`(본인 방 전용, `last_at` 내림차순, `present` 파생)로 노출한다. 클라이언트는 스캔 편승 `maybe_poll_inbound`가 settings 커서(`inbound_visits_cursor`/`inbound_guestbook_cursor`) 기준 diff — 방문은 `first_at > cursor`라 **세션 연장분이 재-emit되지 않고**, 첫 실행(커서 없음)은 emit 없이 커서만 초기화해 설치 직후 과거분 도배를 막는다. 방명록 diff는 타인 글만(`author_agent_id ≠ 나` — 내 봇 답글 제외). 구서버는 `visits` 404 → **방문 폴링만** 이번 실행 동안 비활성(`maybe_reply_guestbook` INCOMPATIBLE 선례), 방명록 알림은 계속 동작. 기존 `maybe_reply_guestbook`은 병렬 세션(②) 충돌 표면 최소화를 위해 **무수정**. 읽음 상태는 프론트 localStorage(`unseen.ts` — 다이어리는 날짜 set, 방명록은 `lastSeen` + 세션 내 `entry_id` set으로 부트스트랩·이벤트 중복 카운트 구조적 차단). **Codex 리뷰 반영(4건)**: ① `app.emit`은 수신자 0이어도 Ok라 리스너 등록 전 emit이 커서만 전진시켜 소식을 영구 유실 → `AppState.notices_ready` + `notices_ready` **커맨드** 게이트(이벤트로 하면 같은 레이스가 방향만 바뀜)와, `debounce_loop`이 주기 타이머 없는 순수 이벤트 구동이라 게이트만으론 파일 변경 전까지 폴링이 안 되므로 준비 신고가 `poll_inbound_now`로 1회 만회 폴링을 촉발. ② `GuestbookTab`이 `guestbook:new`를 구독해 재조회(안 보인 채 읽음 처리되던 문제). ③ 뱃지 부트스트랩을 2초 폴링 tick으로 이동(비반응 가드 탓에 실패 후 영구 비활성 — `diaryCatchUpStarted` 관용구). ④ 읽음 워터마크를 `maxCreatedAt`로 **서버 시각**에서만 상승(클라이언트 시계와 서버 `created_at`을 비교하던 문제). 테스트: pytest 81(신규 12) · cargo 581+45(신규 `inbound` 10) · 프론트 191(신규 11). `contracts/` 미접촉 — life 계약 정본은 [life-visit.md §4](../../../../design/life-visit.md). 설계: [스펙](../specs/2026-07-29-visit-infra-notices-design.md). **잔여 후속은 8차 배치 Q1–Q3.**
 
 **권장 순서**: ①(즉시, V1과 병렬) → ③ → V1·③ 머지 후 ②·④ 병렬 → ⑤ → X1은 측정 후. D1은 틈나는 대로 단독.
 
-**남은 항목(2026-07-31 기준)**: **X1**(첫 로딩 지연 — 측정 선행) **하나뿐**이다.
-①~⑦·G·H·V1·O1·N1·D1은 전부 완료. 묶음 ②·④·O1의 **실환경 스모크는 life 서버 재배포 대기** 중.
+## 로드맵 완료 (2026-07-31)
+
+**남은 항목이 없다.** ①~⑦·G·H·V1·O1·N1·D1에 이어 마지막 항목 **X1**(첫 로딩 지연)까지 완료됐다 —
+이로써 이 로드맵은 종료된다.
+
+열린 항목 2건은 **이 로드맵 밖의 사유**로 남는다:
+
+- 묶음 ②·④·O1의 **실환경 스모크는 life 서버 재배포 대기** 중.
+- X1이 범위 밖으로 남긴 후속 후보 3건: ① 수집 자체의 속도(파일당 트랜잭션 fsync 등 — 청킹은 총량을
+  줄이지 않는다) ② `setup`의 락 레이스(실측상 문제 없으나 보장은 아니다) ③ 마이그레이션이 `ingest_state`를
+  비우는 트리거 9개(전량 재수집을 증분으로 바꿀 수 있는지는 정합성 위험이 커 별도 검토 필요).

@@ -16,31 +16,49 @@ pub struct IngestReport {
     pub warnings: Vec<String>,
 }
 
-pub fn run_ingest(store: &SqliteStore) -> Result<IngestReport> {
-    run_ingest_with_progress(store, &mut |_, _| {})
+/// 한 호스트의 수집 대상. `discover_work`가 만들고 호출자가 소비한다.
+pub struct HostWork {
+    pub adapter: crate::adapter::ClaudeCodeAdapter,
+    pub files: Vec<std::path::PathBuf>,
 }
 
-/// 파일 단위 진행 콜백 `(done, total)` — Tauri 쪽에서 scan:progress emit에 사용 (스펙 §7).
-pub fn run_ingest_with_progress(
-    store: &SqliteStore,
-    on_progress: &mut dyn FnMut(usize, usize),
-) -> Result<IngestReport> {
-    let mut report = IngestReport { files: 0, new_events: 0, warnings: Vec::new() };
-    // 1) 전 호스트 discover 먼저 — total을 알아야 진행률이 됨
-    let mut work: Vec<(crate::adapter::ClaudeCodeAdapter, Vec<std::path::PathBuf>)> = Vec::new();
+/// 전 호스트 discover. **DB를 쓰지 않으므로 store 락 밖에서 호출할 수 있다** —
+/// Tauri 파이프라인이 초기 스캔의 락 보유를 줄이려고 이 성질에 의존한다(X1).
+/// 반환: (호스트별 작업 목록, 열거 실패 경고). 한 호스트가 실패해도 나머지는 진행한다.
+pub fn discover_work() -> (Vec<HostWork>, Vec<String>) {
+    let mut work = Vec::new();
+    let mut warnings = Vec::new();
     for hs in enumerate_hosts() {
         let adapter = hs.adapter();
         let files = match adapter.discover() {
             Ok(f) => f,
             Err(e) => {
-                report.warnings.push(format!("host {} 파일 열거 실패: {e}", hs.host));
+                warnings.push(format!("host {} 파일 열거 실패: {e}", hs.host));
                 Vec::new()
             }
         };
-        report.files += files.len();
-        work.push((adapter, files));
+        work.push(HostWork { adapter, files });
     }
-    // 2) 파일 단위 수집 + 진행 보고
+    (work, warnings)
+}
+
+pub fn run_ingest(store: &SqliteStore) -> Result<IngestReport> {
+    run_ingest_with_progress(store, &mut |_, _| {})
+}
+
+/// 파일 단위 진행 콜백 `(done, total)`. CLI(`crates/core/src/main.rs`) 경로 — 호출자가 잡은 락을
+/// 끝까지 유지한다. 락을 쪼개야 하는 Tauri 파이프라인은 `discover_work` + `store::ingest_file`을
+/// 직접 조립한다(X1 설계 §A).
+pub fn run_ingest_with_progress(
+    store: &SqliteStore,
+    on_progress: &mut dyn FnMut(usize, usize),
+) -> Result<IngestReport> {
+    let (work, warnings) = discover_work();
+    let mut report = IngestReport {
+        files: work.iter().map(|w| w.files.len()).sum(),
+        new_events: 0,
+        warnings,
+    };
     ingest_all(store, &work, &mut report, on_progress);
     store.rebuild_rollup()?;
     Ok(report)
@@ -48,15 +66,15 @@ pub fn run_ingest_with_progress(
 
 fn ingest_all(
     store: &SqliteStore,
-    work: &[(crate::adapter::ClaudeCodeAdapter, Vec<std::path::PathBuf>)],
+    work: &[HostWork],
     report: &mut IngestReport,
     on_progress: &mut dyn FnMut(usize, usize),
 ) {
-    let total: usize = work.iter().map(|(_, files)| files.len()).sum();
+    let total: usize = work.iter().map(|w| w.files.len()).sum();
     let mut done = 0;
-    for (adapter, files) in work {
-        for f in files {
-            match ingest_file(store, adapter, f) {
+    for w in work {
+        for f in &w.files {
+            match ingest_file(store, &w.adapter, f) {
                 Ok(n) => report.new_events += n,
                 Err(e) => report.warnings.push(format!("{} 수집 실패(건너뜀): {e}", f.display())),
             }
@@ -571,7 +589,7 @@ mod tests {
 
         let store = SqliteStore::open_in_memory().unwrap();
         let adapter = ClaudeCodeAdapter { root: dir.path().into(), host: "Windows".into() };
-        let work = vec![(adapter, files)];
+        let work = vec![HostWork { adapter, files }];
         let mut seen = Vec::new();
         let mut report = IngestReport { files: 2, new_events: 0, warnings: Vec::new() };
         ingest_all(&store, &work, &mut report, &mut |done, total| seen.push((done, total)));
@@ -579,6 +597,62 @@ mod tests {
         assert_eq!(seen, vec![(1, 2), (2, 2)]); // 파일 단위 단조 증가
         assert_eq!(report.new_events, 2);
         assert!(report.warnings.is_empty());
+    }
+
+    /// 파이프라인이 락을 파일 단위로 놓고 잡으려면, 파일마다 따로 수집해도 일괄 수집과
+    /// 같은 결과가 나와야 한다. offset이 어긋나면 다음 스캔이 중복 수집하거나 빠뜨린다.
+    #[test]
+    fn per_file_ingest_matches_ingest_all() {
+        use crate::adapter::ClaudeCodeAdapter;
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        let proj = dir.path().join("C--Users-jibin");
+        std::fs::create_dir_all(&proj).unwrap();
+        let mut files = Vec::new();
+        for (name, sid) in [("a.jsonl", "s1"), ("b.jsonl", "s2"), ("c.jsonl", "s3")] {
+            let file = proj.join(name);
+            let mut f = std::fs::File::create(&file).unwrap();
+            writeln!(f, r#"{{"type":"assistant","sessionId":"{sid}","uuid":"{sid}-u","timestamp":"2026-07-01T10:00:00Z","message":{{"model":"claude-opus-4-8","usage":{{"input_tokens":1,"output_tokens":2}}}}}}"#).unwrap();
+            files.push(file);
+        }
+
+        // A: ingest_all 한 번 (CLI 경로)
+        let bulk = SqliteStore::open_in_memory().unwrap();
+        let work = vec![HostWork {
+            adapter: ClaudeCodeAdapter { root: dir.path().into(), host: "Windows".into() },
+            files: files.clone(),
+        }];
+        let mut report = IngestReport { files: files.len(), new_events: 0, warnings: Vec::new() };
+        ingest_all(&bulk, &work, &mut report, &mut |_, _| {});
+
+        // B: 파일마다 따로 (파이프라인이 쓸 경로 — 락을 파일 단위로 놓는다)
+        let chunked = SqliteStore::open_in_memory().unwrap();
+        let adapter = ClaudeCodeAdapter { root: dir.path().into(), host: "Windows".into() };
+        let mut chunked_events = 0usize;
+        for f in &files {
+            chunked_events += crate::store::ingest_file(&chunked, &adapter, f).unwrap();
+        }
+
+        assert_eq!(
+            report.new_events, chunked_events,
+            "파일 단위 수집이 일괄 수집과 같은 이벤트 수를 낸다"
+        );
+        assert_eq!(chunked_events, 3);
+
+        // ingest_state(파일별 재개 offset)가 같아야 한다
+        let offsets = |s: &SqliteStore| -> Vec<(String, i64)> {
+            let mut stmt = s
+                .conn
+                .prepare("SELECT source_file, last_offset FROM ingest_state ORDER BY source_file")
+                .unwrap();
+            stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                .unwrap()
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .unwrap()
+        };
+        assert_eq!(offsets(&bulk), offsets(&chunked), "ingest_state 재개 지점이 같다");
+        assert_eq!(offsets(&chunked).len(), 3);
     }
 
     #[test]
