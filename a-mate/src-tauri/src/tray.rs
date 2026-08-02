@@ -198,12 +198,19 @@ fn toggle_chat(app: &AppHandle) {
     }
 }
 
-fn show_chat(app: &AppHandle) {
+/// chat 창 표시의 단일 지점 — 트레이 "열기"·마스코트 클릭·딥링크가 모두 여기를 지난다.
+/// 표시 직후 `chat:shown`을 emit해 프론트가 **강제로 다시 읽게** 한다. 창이 숨겨져 있는 동안
+/// WebView2가 웹뷰를 정지시켜 JS가 20~30초씩 멈추고(실측), 그동안 폴링도 서지 않는다.
+/// `document.visibilityState`는 숨겨져도 `visible`로 남아 `visibilitychange`가 오지 않으므로,
+/// 웹뷰 가시성에 기대지 않고 **네이티브 쪽이 알려주는** 이 경로가 유일하게 신뢰할 수 있다.
+pub(crate) fn show_chat(app: &AppHandle) {
+    use tauri::Emitter;
     if let Some(w) = app.get_webview_window("chat") {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
     }
+    let _ = app.emit("chat:shown", ());
 }
 
 /// 설정 = 미니홈피 창의 설정 탭(연결 그룹). 별도 설정 창은 없다.

@@ -12,7 +12,7 @@
   import UpdateBanner from './lib/ui/UpdateBanner.svelte';
   import { runCheck } from './lib/ui/update-store.svelte';
   import {
-    getSummary, getDailyLine, getDailyCut, listFindings, onScanDone, onGotoTab, onDailyCutReady,
+    getSummary, getDailyLine, getDailyCut, listFindings, onScanDone, onGotoTab, onChatShown, onDailyCutReady,
     onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, onUpdateCheckRequested,
     onLifeVisit, onGuestbookNew, noticesReady, lifeContentAccess, lifeGoto, lifeGuestbook,
     lifeSetDailyLine, lifeSyncDailyCut, lifeView,
@@ -67,6 +67,8 @@
   let cutSyncedLifeId = '';     // 마지막으로 게시한 내 방 (서버·계정 전환 감지)
   const currentDiaryVisibility = () => diaryVisibility(localStorage.getItem('life-diary-visibility'));
   // 창(App) 레벨에서 직접 폴링 — 어느 탭에 있든 방 이동을 감지해 방문 모드로 전환
+  // 창 표시 시 강제 폴링용 — $effect 안의 tick 을 밖으로 노출한다(아래 onChatShown).
+  let pollNow: () => void = () => {};
   $effect(() => {
     let ticking = false;
     const tick = async () => {
@@ -132,7 +134,12 @@
       }
     };
     tick();
+    // 정지됐다 깨어난 tick 이 아직 안 끝났으면 가드에 막히므로, 강제 폴링은 가드를 먼저 푼다.
+    // 두 tick 이 겹쳐도 같은 값을 재대입할 뿐이라 무해하다.
+    pollNow = () => { ticking = false; tick(); };
     const t = setInterval(tick, 2000);
+    // 창 show/hide 는 여기 안 걸린다 — 숨겨져도 visibilityState 가 'visible' 로 남는 것을 실측했다.
+    // 그 경로는 onChatShown(네이티브 emit)이 담당한다. 이건 그 외 상황용으로만 남긴다.
     const onVis = () => { if (!document.hidden) tick(); };
     document.addEventListener('visibilitychange', onVis);
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
@@ -191,6 +198,10 @@
   }
   refresh();
   onScanDone(() => refresh());
+  // 창이 숨겨진 동안 WebView2가 웹뷰를 정지시켜 JS가 20~30초씩 멈춘다(실측). 그동안 폴링도
+  // refresh 도 서지 않아 창을 열면 낡은 화면이 남는다. document.visibilityState 는 숨겨져도
+  // 'visible' 이라 visibilitychange 로는 이 순간을 잡을 수 없어, 네이티브가 보내는 신호를 쓴다.
+  onChatShown(() => { refresh(); pollNow(); });
 
   // O1 대문 게시 — 내 화면에 걸린 문장을 그대로 올린다(빈 문자열 = 지움).
   // visiting을 절대 참조하지 않는다 — 참조하면 남의 방에 들어간 순간 내 대문이 지워진다.

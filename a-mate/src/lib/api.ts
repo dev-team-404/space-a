@@ -305,6 +305,9 @@ export const onOccasionToday = (cb: (labels: string[]) => void): Promise<Unliste
   listen<string[]>('occasion:today', (e) => cb(e.payload));
 export const onGotoTab = (cb: (p: GotoTabPayload) => void): Promise<UnlistenFn> =>
   listen<GotoTabPayload>('chat:goto-tab', (e) => cb(e.payload));
+/** 창이 표시됐다 — 숨겨진 동안 웹뷰가 정지해 데이터가 낡았으므로 강제로 다시 읽어야 한다 */
+export const onChatShown = (cb: () => void): Promise<UnlistenFn> =>
+  listen<null>('chat:shown', () => cb());
 export const onSettingsChanged = (cb: () => void): Promise<UnlistenFn> =>
   listen('settings:changed', () => cb());
 export const onContentReady = (cb: (rows: ContentItem[]) => void): Promise<UnlistenFn> =>

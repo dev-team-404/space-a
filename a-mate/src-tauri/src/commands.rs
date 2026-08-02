@@ -1246,15 +1246,12 @@ pub struct GotoTabPayload {
 #[cfg_attr(test, allow(dead_code))]
 #[tauri::command]
 pub fn open_chat_tab(app: tauri::AppHandle, tab: String, target: Option<String>) -> Result<(), String> {
-    use tauri::{Emitter, Manager};
+    use tauri::Emitter;
     if !valid_tab(&tab) {
         return Err(format!("허용되지 않은 탭: {tab}"));
     }
-    if let Some(w) = app.get_webview_window("chat") {
-        let _ = w.show();
-        let _ = w.unminimize();
-        let _ = w.set_focus();
-    }
+    // 표시는 tray::show_chat 한 곳으로 — 거기서 chat:shown을 emit해 프론트가 강제 갱신한다.
+    crate::tray::show_chat(&app);
     app.emit("chat:goto-tab", GotoTabPayload { tab, target })
         .map_err(|e| e.to_string())
 }
