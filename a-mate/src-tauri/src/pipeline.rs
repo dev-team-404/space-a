@@ -278,7 +278,7 @@ mod runtime {
     fn maybe_curate_content(app: &AppHandle, store_mutex: &std::sync::Mutex<SqliteStore>) {
         let now = chrono::Utc::now().to_rfc3339();
         // ⓪ 짧은 락: 팀 지식(pull) 소스 구성에 필요한 저장 토큰 + 소스별 TTL 판정(SQL만)
-        let (hub_src, plan) = {
+        let (hub_src, mut plan) = {
             let (cfg, stored, plan) = match store_mutex.lock() {
                 Ok(store) => (
                     agent_mentor::hub::HubConfig::resolve(&store),
@@ -289,21 +289,30 @@ mod runtime {
             };
             (cfg.and_then(|cfg| agent_mentor::hub::pull_source(&cfg, stored)), plan)
         };
+        // 허브 opt-out(`knowledge_hub_share=off`)이나 토큰 부재로 소스 자체가 없으면 TTL
+        // 스킵으로 보호하지 않는다 — 껐는데 팀 지식 카드가 6h 더 보이면 안 된다.
+        if hub_src.is_none() {
+            plan.mark_unavailable("team");
+        }
         // ① 락 밖: TTL이 만료된 소스만 네트워크 fetch (실패해도 빈 벡터)
         let (feed, mut fetched) = agent_mentor::ops::fetch_feed_items(hub_src, &plan);
         let (catalog, cat_fetched) = agent_mentor::ops::fetch_marketplace_catalog(&plan);
         fetched.extend(cat_fetched);
 
-        // ② 락: fetch 시각 기록 + run_curation(감지→랭킹→persist) → 노출 목록 → 즉시 해제
+        // ② 락: run_curation(감지→랭킹→persist) → fetch 시각 기록 → 노출 목록 → 즉시 해제.
+        // **기록은 persist 성공 뒤**여야 한다: 순서가 반대면 큐레이션이 실패했는데 시각만 남아
+        // 받아온 데이터가 저장되지 않은 채 그 소스가 TTL 창만큼 억제된다.
         let visible = match store_mutex.lock() {
             Ok(store) => {
+                let rows = match agent_mentor::ops::run_curation(&store, feed, &catalog, &now, &plan)
+                {
+                    Ok(rows) => rows,
+                    Err(e) => { log::warn!("run_curation 실패: {e}"); return; }
+                };
                 if let Err(e) = agent_mentor::ops::mark_feed_fetched(&store, &fetched, &now) {
                     log::warn!("피드 fetch 시각 기록 실패(계속): {e}");
                 }
-                match agent_mentor::ops::run_curation(&store, feed, &catalog, &now, &plan) {
-                    Ok(rows) => rows,
-                    Err(e) => { log::warn!("run_curation 실패: {e}"); return; }
-                }
+                rows
             }
             Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
         }; // guard drops here

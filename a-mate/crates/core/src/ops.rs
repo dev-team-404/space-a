@@ -281,11 +281,13 @@ pub fn probe_docs_reachable() -> bool {
 /// 네트워크 피드 소스 — `(소스, 그 소스가 만든 카드의 식별 태그, TTL 시간)`.
 /// 스캔은 로그 감시 60초 디바운스라 TTL이 없으면 작업 중 시간당 최대 60회씩 나간다(D6).
 /// 로컬 소스(내장 팁·개인 레슨)는 네트워크를 안 쓰므로 여기 없다 — TTL 대상이 아니다.
-/// 마켓플레이스 카탈로그는 그 자체가 카드가 아니라 ② 미설치 추천(`plugin-reco`)의 재료다.
+/// 마켓플레이스 카탈로그는 그 자체가 카드가 아니라 ② 미설치 추천의 재료라, 카탈로그가 없으면
+/// 만들어지지 않는 그 카드(`plugin-reco-catalog`)만 프룬 면제 대상이다. 같은 `plugin-reco`
+/// 계열이라도 ① 설치+미사용 카드는 로컬 인벤토리만으로 매 스캔 재생성되므로 면제하지 않는다.
 pub const FEED_SOURCES: [(&str, &str, i64); 4] = [
     ("changelog", "changelog", 24),
     ("boris", "boris", 24),
-    ("marketplace", "plugin-reco", 24),
+    ("marketplace", "plugin-reco-catalog", 24),
     ("team", "team", 6),
 ];
 
@@ -334,6 +336,15 @@ impl FeedPlan {
         self.due.iter().any(|s| *s == source)
     }
 
+    /// 소스가 아예 없는 경우(허브 opt-out·토큰 부재 등) — TTL 스킵이 아니라 **참여했으나
+    /// 아이템 0**으로 취급해 그 소스의 카드가 즉시 프룬되게 한다. 설정을 끈 효과가 TTL
+    /// 창만큼(팀 지식은 6h) 지연되면 안 된다.
+    pub fn mark_unavailable(&mut self, source: &'static str) {
+        if !self.is_due(source) {
+            self.due.push(source);
+        }
+    }
+
     /// TTL로 스킵한 소스가 만든 카드의 식별 태그 — 프룬에서 제외할 태그.
     pub fn skipped_item_tags(&self) -> Vec<&'static str> {
         FEED_SOURCES
@@ -362,26 +373,29 @@ pub fn fetch_feed_items(
     // 여러 소스를 각각 관대하게 fetch — 하나가 실패해도 나머지는 계속.
     let mut items = Vec::new();
     let mut fetched = Vec::new();
+    // changelog·boris는 단일 요청이라 Ok면 완전하다.
     items.extend(gated_fetch(plan, "changelog", &mut fetched, || {
-        ClaudeChangelogSource::default().fetch()
+        ClaudeChangelogSource::default().fetch().map(|v| (v, true))
     }));
     items.extend(gated_fetch(plan, "boris", &mut fetched, || {
-        BorisTipsSource::default().fetch()
+        BorisTipsSource::default().fetch().map(|v| (v, true))
     }));
-    // 팀 지식(pull) — 허브 설정+토큰이 있을 때만 (hub::pull_source)
+    // 팀 지식(pull) — 허브 설정+토큰이 있을 때만 (hub::pull_source).
+    // 페이지 단위 요청이 섞여 있어 부분 실패가 가능하므로 완전성을 함께 받는다.
     if let Some(src) = hub {
-        items.extend(gated_fetch(plan, "team", &mut fetched, || src.fetch()));
+        items.extend(gated_fetch(plan, "team", &mut fetched, || src.fetch_complete()));
     }
     (items, fetched)
 }
 
-/// 소스별 TTL 게이트. 미만료면 **네트워크를 건너뛴다**. 스킵과 실패는 로그에서 구분하고,
-/// 성공한 소스만 `fetched`에 담아 TTL 시각 기록 대상으로 남긴다.
+/// 소스별 TTL 게이트. 미만료면 **네트워크를 건너뛴다**. 스킵·부분 실패·전체 실패를 로그에서
+/// 구분하고, `fetch`가 완전(`true`)하다고 보고한 소스만 `fetched`에 담아 TTL 시각 기록
+/// 대상으로 남긴다 — 불완전한 결과에 시각을 남기면 누락분이 TTL 창만큼 복구되지 않는다.
 fn gated_fetch<T>(
     plan: &FeedPlan,
     source: &'static str,
     fetched: &mut Vec<&'static str>,
-    fetch: impl FnOnce() -> Result<Vec<T>>,
+    fetch: impl FnOnce() -> Result<(Vec<T>, bool)>,
 ) -> Vec<T> {
     if !plan.is_due(source) {
         let ttl = FEED_SOURCES.iter().find(|(s, _, _)| *s == source).map_or(0, |(_, _, h)| *h);
@@ -389,8 +403,13 @@ fn gated_fetch<T>(
         return Vec::new();
     }
     match fetch() {
-        Ok(v) => {
+        Ok((v, true)) => {
             fetched.push(source);
+            v
+        }
+        // 부분 실패 — 받은 것은 관대하게 쓰지만 시각은 남기지 않아 다음 스캔에 재시도한다
+        Ok((v, false)) => {
+            eprintln!("[curation] {source} 일부 항목 fetch 실패 — TTL 시각 미기록(재시도)");
             v
         }
         Err(e) => {
@@ -407,7 +426,7 @@ pub fn fetch_marketplace_catalog(
 ) -> (Vec<crate::content::CatalogEntry>, Vec<&'static str>) {
     let mut fetched = Vec::new();
     let catalog = gated_fetch(plan, "marketplace", &mut fetched, || {
-        crate::content::MarketplaceCatalogSource::default().fetch()
+        crate::content::MarketplaceCatalogSource::default().fetch().map(|v| (v, true))
     });
     (catalog, fetched)
 }
@@ -845,7 +864,7 @@ mod tests {
         // 만료된 소스는 fetch를 실행하고 시각 기록 대상에 오른다
         let got = gated_fetch(&plan, "changelog", &mut fetched, || {
             calls += 1;
-            Ok(vec![1])
+            Ok((vec![1], true))
         });
         assert_eq!(got, vec![1]);
         assert_eq!(calls, 1);
@@ -853,7 +872,7 @@ mod tests {
         // 미만료 소스는 클로저를 아예 부르지 않는다 — "네트워크를 건너뛴다"가 이 계약이다
         let got = gated_fetch(&plan, "boris", &mut fetched, || {
             calls += 1;
-            Ok(vec![2])
+            Ok((vec![2], true))
         });
         assert!(got.is_empty());
         assert_eq!(calls, 1, "미만료 소스는 fetch를 호출하지 않는다");
@@ -878,6 +897,34 @@ mod tests {
         let plan = FeedPlan::resolve(&store, "2026-08-01T07:00:00Z");
         assert!(!plan.is_due("changelog"), "7h 경과 — 24h 미만료");
         assert!(plan.is_due("team"), "7h 경과 — 6h 만료");
+    }
+
+    #[test]
+    fn partial_fetch_is_not_stamped_as_success() {
+        let plan = FeedPlan::all();
+        let mut fetched = Vec::new();
+        // 완전한 fetch는 TTL 시각 기록 대상
+        let got = gated_fetch(&plan, "changelog", &mut fetched, || Ok((vec![1], true)));
+        assert_eq!(got, vec![1]);
+        assert_eq!(fetched, vec!["changelog"]);
+        // 부분 실패(팀 지식은 페이지 단위 실패를 삼키고 Ok를 준다)는 아이템은 그대로 쓰되
+        // 시각을 남기지 않는다 — 안 그러면 누락된 카드가 TTL 창만큼 복구되지 않는다
+        let got = gated_fetch(&plan, "team", &mut fetched, || Ok((vec![2], false)));
+        assert_eq!(got, vec![2], "부분 결과도 관대하게 쓴다");
+        assert_eq!(fetched, vec!["changelog"], "부분 실패는 미기록 → 다음 스캔 재시도");
+    }
+
+    #[test]
+    fn unavailable_source_is_not_treated_as_a_ttl_skip() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        mark_feed_fetched(&store, &["team"], "2026-08-01T00:00:00Z").unwrap();
+        // 6h 안이라 평소엔 스킵 대상 = 프룬 면제
+        let mut plan = FeedPlan::resolve(&store, "2026-08-01T01:00:00Z");
+        assert!(plan.skipped_item_tags().contains(&"team"));
+        // 허브를 끄면 소스 자체가 없다 — 스킵이 아니라 "참여했으나 아이템 0"이라,
+        // 그 카드는 즉시 프룬돼야 한다(opt-out이 TTL 창만큼 지연되면 안 된다)
+        plan.mark_unavailable("team");
+        assert!(!plan.skipped_item_tags().contains(&"team"));
     }
 
     #[test]

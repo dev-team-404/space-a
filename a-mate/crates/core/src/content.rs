@@ -543,15 +543,16 @@ impl HubKnowledgeSource {
     }
 }
 
-impl ContentSource for HubKnowledgeSource {
-    fn id(&self) -> &str {
-        "hub-knowledge"
-    }
-    fn fetch(&self) -> Result<Vec<ContentItem>> {
+impl HubKnowledgeSource {
+    /// `fetch`와 같지만 **완전성**을 함께 반환한다 — 페이지 하나라도 실패했으면 `false`.
+    /// 피드 TTL이 부분 실패를 성공으로 기록하면 누락된 카드가 TTL 창만큼 복구되지 않는다
+    /// (`ops::gated_fetch`). 아이템 자체는 기존처럼 관대하게(받은 것만) 돌려준다.
+    pub fn fetch_complete(&self) -> Result<(Vec<ContentItem>, bool)> {
         let tree = self.get_json(&format!("/spaces/{}/tree", self.space_id))?;
         let nodes = tree.get("tree").cloned().unwrap_or_else(|| serde_json::json!([]));
         let ids = Self::pick_page_ids(&nodes, &self.own_agent_id, self.max_items);
         let mut out = Vec::new();
+        let mut complete = true;
         for id in ids {
             match self.get_json(&format!("/pages/{id}")) {
                 Ok(p) => {
@@ -559,10 +560,22 @@ impl ContentSource for HubKnowledgeSource {
                         out.push(item);
                     }
                 }
-                Err(e) => eprintln!("[curation] hub page {id} fetch 실패(계속): {e}"),
+                Err(e) => {
+                    eprintln!("[curation] hub page {id} fetch 실패(계속): {e}");
+                    complete = false;
+                }
             }
         }
-        Ok(out)
+        Ok((out, complete))
+    }
+}
+
+impl ContentSource for HubKnowledgeSource {
+    fn id(&self) -> &str {
+        "hub-knowledge"
+    }
+    fn fetch(&self) -> Result<Vec<ContentItem>> {
+        self.fetch_complete().map(|(items, _)| items)
     }
 }
 
@@ -1204,13 +1217,13 @@ mod tests {
         };
         // 1차 스캔: 세 소스가 모두 참여
         store.replace_content_items(
-            &[(mk("cc-1", "changelog"), 100), (mk("bo-1", "boris"), 100), (mk("pr-1", "plugin-reco"), 100)],
+            &[(mk("cc-1", "changelog"), 100), (mk("bo-1", "boris"), 100), (mk("pr-1", "plugin-reco-catalog"), 100)],
             "2026-08-01T00:00:00Z", &[],
         ).unwrap();
         // 2차 스캔: changelog만 참여. boris·마켓플레이스는 TTL로 스킵 → 랭킹에 없어도 보존
         store.replace_content_items(
             &[(mk("cc-2", "changelog"), 100)],
-            "2026-08-01T01:00:00Z", &["boris", "plugin-reco"],
+            "2026-08-01T01:00:00Z", &["boris", "plugin-reco-catalog"],
         ).unwrap();
         assert_eq!(
             content_ids(&store),

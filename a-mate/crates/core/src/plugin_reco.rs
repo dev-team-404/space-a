@@ -148,6 +148,13 @@ pub fn plugin_reco_items(
                 )
             };
             seen_ids.insert(id.clone());
+            let mut trigger_tags = vec!["personal".into(), "plugin-reco".into(), kind.clone()];
+            if !installed {
+                // ②만 카탈로그가 있어야 만들어진다 — 마켓플레이스 fetch를 TTL로 스킵한 스캔에서
+                // 프룬 면제를 받아야 하는 카드가 이것뿐이다(`ops::FEED_SOURCES`). ①은 로컬
+                // 인벤토리만으로 매 스캔 재생성되므로 면제하면 "이미 사용 중이면 침묵"이 밀린다.
+                trigger_tags.push("plugin-reco-catalog".into());
+            }
             out.push(ContentItem {
                 id,
                 kind: ItemKind::Tip,
@@ -155,7 +162,7 @@ pub fn plugin_reco_items(
                 body,
                 source_url,
                 dimension: None, // 개인 사건형 — 마스터 억제·축 쿨다운 미적용, dismiss는 id 영구
-                trigger_tags: vec!["personal".into(), "plugin-reco".into(), kind.clone()],
+                trigger_tags,
                 base_priority: -2, // 실측 사건 레슨(0)보단 아래, 프론티어 안내(-5)보단 위
             });
             break; // work-kind당 1장 — 첫 비침묵 후보만 (나깅 방지)
@@ -317,6 +324,30 @@ mod tests {
         assert_eq!(it.id, "plugin-reco-Windows-frontend-design");
         assert!(it.body.contains("설치된"), "① 문구: {}", it.body);
         assert!(!it.body.contains("/plugin install"), "①은 설치 안내 아님: {}", it.body);
+    }
+
+    #[test]
+    fn only_catalog_dependent_recos_carry_the_prune_exemption_tag() {
+        let now = chrono::Utc::now().to_rfc3339();
+        // ② 미설치 추천은 카탈로그 없이 만들 수 없다 → 마켓플레이스 TTL 스킵 시 프룬 면제 대상
+        let store = SqliteStore::open_in_memory().unwrap();
+        seed_frontend_sessions(&store, 2, &now);
+        mark_plugin_scan_empty(&store);
+        let case2 = plugin_reco_items(&store, &official_catalog(), &now).unwrap();
+        assert!(
+            case2[0].trigger_tags.iter().any(|t| t == "plugin-reco-catalog"),
+            "② 태그: {:?}", case2[0].trigger_tags
+        );
+        // ① 설치+미사용은 카탈로그와 무관하게 매 스캔 재생성된다. 면제받으면 "이미 사용 중이면
+        // 침묵"이 TTL 창만큼 지연되므로 태그를 달지 않는다.
+        let mut store = SqliteStore::open_in_memory().unwrap();
+        seed_frontend_sessions(&store, 2, &now);
+        install_frontend_design(&mut store);
+        let case1 = plugin_reco_items(&store, &[], &now).unwrap();
+        assert!(
+            case1[0].trigger_tags.iter().all(|t| t != "plugin-reco-catalog"),
+            "① 태그: {:?}", case1[0].trigger_tags
+        );
     }
 
     #[test]
