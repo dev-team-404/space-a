@@ -237,9 +237,6 @@ mod runtime {
                 maybe_reply_guestbook(&state.store);
                 // 묶음 ② 방문 기록 보존(30일) — 방문·토글과 무관하게 스캔마다 (ADR 0025)
                 crate::visit::prune_visit_history(&state.store);
-                // G7 마스코트 얼굴 게시 보장 — 방명록 아이콘이 남에게도 보이려면 서버에 있어야 한다.
-                // 자율 방문이 방명록을 남기기 전에 올려둔다.
-                crate::commands::maybe_sync_mascot_image(app, &state.store);
                 // 묶음 ② 자율 방문 — 주말·공휴일 하루 1방(토글 off·hub 미연결·일촌 없으면 no-op)
                 crate::visit::maybe_auto_visit(&state.store);
                 // P4+N1 인바운드 소식 — 내 방 방문·방명록 diff를 emit (hub 미연결·구서버 no-op)
@@ -252,6 +249,11 @@ mod runtime {
                 maybe_post_retros(&state.store);
                 // AI 스프라이트 — 캐시 없으면 1회 생성 (실패 무해, 절차 생성 폴백)
                 maybe_generate_sprite(app);
+                // G7 마스코트 얼굴 게시 보장 — 방명록 아이콘이 남에게도 보이려면 서버에 있어야 한다.
+                // **생성 바로 뒤**여야 한다: 앞에 두면 첫 스캔엔 sprite.png가 아직 없어 no-op이 된다.
+                // 봇 글쓰기(위쪽 답글·자율 방문)보다 뒤지만, 아이콘은 엔트리에 박히는 게 아니라
+                // 조회 시점에 agent_id로 가져오므로 이번 스캔에 남긴 글에도 소급 적용된다.
+                crate::commands::maybe_sync_mascot_image(app, &state.store);
                 // H2 매일 마스코트 컷 — 옵트인(기본 off)·일기 파생·일일 3회 상한 (실패는 조용히)
                 maybe_generate_daily_cut(app);
                 // 외부 문서 도달성 — 내부망이면 배움 카드의 외부 링크를 숨긴다 (동료 이슈)
