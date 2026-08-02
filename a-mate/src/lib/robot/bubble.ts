@@ -27,7 +27,7 @@ export function findingBubble(
     kind: 'finding',
     tab: 'coach',
     target: top.dedup_key,
-    text: `${honorific}, ${line} (~${top.est_tokens_saved.toLocaleString()} tok)${more}`,
+    text: `${honorific}, ${line}${more}`,
   };
 }
 
