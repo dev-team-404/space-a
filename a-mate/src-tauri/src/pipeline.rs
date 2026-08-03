@@ -166,10 +166,11 @@ mod runtime {
             }
 
             // ── 5) rules + diff + emit — 한 블록 ──────────────────────────────
-            // before/run_rules/after/diff를 쪼개지 않는다. 지금은 쪼개도 안전하지만
-            // (findings를 쓰는 커맨드는 set_finding_status 하나뿐이고 status만 바꾸며,
-            // finding_severities는 status를 안 본다) 그 안전이 다른 파일의 사실 두 개에
-            // 의존한다. 한 블록이면 불변식이 여기서 보인다 (X1 설계 §A).
+            // before/run_rules/after/diff를 쪼개면 **안 된다**. 스냅숏이 활성('new')만 보므로,
+            // 사이에 낀 `set_finding_status` 커맨드(사용자의 처분·실행취소)가 그대로 diff에 섞여
+            // "새로 떴다"고 알리게 된다. 한 블록이면 그 불변식이 여기서 보인다 (X1 설계 §A).
+            // 활성 스냅숏을 쓰는 이유는 `store.active_finding_severities` 주석 참조 —
+            // 재발 복귀는 키·severity가 그대로라 전체 스냅숏에서는 보이지 않는다 (스펙 §5.1).
             let (now, rules_held) = {
                 let store = state
                     .store
@@ -177,9 +178,9 @@ mod runtime {
                     .map_err(|_| anyhow::anyhow!("store lock poisoned"))?;
                 let t = std::time::Instant::now();
                 let before: HashMap<String, String> =
-                    store.finding_severities()?.into_iter().collect();
+                    store.active_finding_severities()?.into_iter().collect();
                 agent_mentor::ops::run_rules(&store)?;
-                let after = store.finding_severities()?;
+                let after = store.active_finding_severities()?;
                 let fresh = diff_findings(&before, &after);
                 let now = chrono::Utc::now().to_rfc3339();
                 store.set_setting("last_scan_ts", &now)?;
@@ -273,7 +274,7 @@ mod runtime {
 
     /// 콘텐츠 큐레이션 — 스캔 편승. 피드 fetch(네트워크)는 diary·daily-line과 동일하게
     /// **store 락 밖**에서, 그다음 run_curation(프로필 감지·랭킹·persist)만 락 안에서.
-    /// 노출 목록이 있으면 `content:ready`를 emit해 프론트가 즉시 반영(coach:finding 선례).
+    /// 큐레이션이 끝나면 `content:ready`를 emit해 프론트가 즉시 반영(coach:finding 선례).
     /// 네트워크 실패는 조용히(빈 피드로 진행 — 내장 팁만으로도 코칭 성립).
     fn maybe_curate_content(app: &AppHandle, store_mutex: &std::sync::Mutex<SqliteStore>) {
         let now = chrono::Utc::now().to_rfc3339();
@@ -317,10 +318,12 @@ mod runtime {
             Err(e) => { log::warn!("store lock poisoned: {e}"); return; }
         }; // guard drops here
 
-        // ③ 노출할 게 있으면 프론트에 알림
-        if !visible.is_empty() {
-            let _ = app.emit("content:ready", &visible);
-        }
+        // ③ 큐레이션이 끝났음을 프론트에 알린다 — **빈 목록이어도 보낸다**.
+        // 큐레이션은 노출 목록을 바꾸기만 하는 게 아니라 행을 지우기도 한다(미방출 resolved
+        // 레슨 프룬, 스펙 §5.2). 커리큘럼이 전부 소진돼 노출 목록이 비는 날 이 emit을 건너뛰면
+        // 프론트의 처분 줄이 이미 지워진 레슨을 계속 들고 있게 된다. scan:done은 큐레이션
+        // **전에** 나가므로 대신할 수 없다.
+        let _ = app.emit("content:ready", &visible);
     }
 
     /// 코칭 판정 패스(B 스펙) — 스캔 편승. judges 벡터(R6·R7…)를 순회하며 각 룰의 pending

@@ -1544,6 +1544,18 @@ impl SqliteStore {
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
     }
 
+    /// **활성('new')** finding만의 key→severity — 스캔 전후로 비교해 "새로 뜬 카드"를 가린다.
+    /// 전체가 아니라 활성만 보는 이유: 재발로 `resolved`→`new`가 된 카드는 키도 severity도
+    /// 그대로라 전체 스냅숏에서는 아무 변화가 없다(스펙 §5.1의 복귀가 알림 없이 묻힌다).
+    /// 노출 목록(`list_findings_current(false)`)과 같은 필터라 emit 대상과도 어긋나지 않는다.
+    pub fn active_finding_severities(&self) -> Result<Vec<(String, String)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT dedup_key, severity FROM findings WHERE status='new'")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
     pub fn diary_dates(&self) -> Result<Vec<String>> {
         let mut stmt = self.conn.prepare("SELECT DISTINCT date FROM diary_index ORDER BY date")?;
         let rows = stmt.query_map([], |r| r.get(0))?;
@@ -3429,6 +3441,35 @@ mod tests {
         assert_eq!(ts.as_deref(), Some("2026-08-03T09:00:00Z"), "처분 시각은 스캔이 밀지 않는다");
         assert!(store.list_findings_current(false).unwrap().is_empty(), "활성 목록엔 안 나온다");
         assert_eq!(store.list_findings_current(true).unwrap().len(), 1);
+    }
+
+    /// 재발 복귀는 **키도 severity도 그대로**라 전체 스냅숏 비교로는 보이지 않는다.
+    /// 파이프라인이 활성 스냅숏을 봐야 `coach:finding`이 나가고 알림·말풍선이 뜬다 —
+    /// 안 그러면 "재발하면 다시 떠야 한다"(§5)가 조용히 묻힌다.
+    #[test]
+    fn revival_is_invisible_to_the_full_snapshot_but_fresh_in_the_active_one() {
+        use std::collections::HashMap;
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-01T00:00:00Z").unwrap();
+        store.set_finding_status("R6|W|a", "resolved", "2026-08-03T09:00:00Z").unwrap();
+
+        let full_before: HashMap<String, String> =
+            store.finding_severities().unwrap().into_iter().collect();
+        let active_before: HashMap<String, String> =
+            store.active_finding_severities().unwrap().into_iter().collect();
+        assert!(active_before.is_empty(), "처분된 카드는 활성 스냅숏에 없다");
+
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 4), "2026-08-04T09:00:00Z").unwrap();
+
+        assert!(
+            crate::pipeline::diff_findings(&full_before, &store.finding_severities().unwrap())
+                .is_empty(),
+            "전체 스냅숏은 재발을 놓친다 — 이게 활성 스냅숏을 쓰는 이유다"
+        );
+        assert_eq!(
+            crate::pipeline::diff_findings(&active_before, &store.active_finding_severities().unwrap()),
+            vec!["R6|W|a".to_string()],
+        );
     }
 
     /// 7일 창은 프론트의 순수 함수가 판정한다(컴포넌트 테스트 라이브러리가 없어 세운 규약).
