@@ -760,16 +760,10 @@ pub fn engine_test(url: String, key: String, model: String) -> Result<String, St
     Ok(format!("연결 성공 — 응답: {snippet}"))
 }
 
-/// (2) LLM 코칭 — 팁 + 사용자 실측 근거(personal)를 엔진에 넘겨 이 사람 맞춤 한 줄 코칭 생성.
-/// 엔진 미설정이면 에러(프론트가 결정론적 근거 줄만 유지). 네트워크 호출이라 async.
-#[tauri::command(async)]
-pub fn coach_tip(title: String, body: String, personal: Option<String>) -> Result<String, String> {
-    let Some(engine) = OpenAiCompatEngine::from_env() else {
-        return Err("engine-not-configured".into());
-    };
-    let (system, user) = agent_mentor::content::coach_prompt(&title, &body, personal.as_deref());
-    engine.generate(&system, &user).map(|o| o.text).map_err(|e| e.to_string())
-}
+// `coach_tip`(팁마다 맞춤 코칭 한 줄을 매 렌더 생성)은 ⑥에서 제거됐다 —
+// 스펙 §6.3 표가 소스별 LLM 처리를 확정하며 **한국어 소스(내장 팁·팀 지식)는 "그대로"** 로
+// 못박았고, §4.2 문법 B의 슬롯에도 그 줄이 없다. 외국어 소식은 파이프라인의 번역 스텝이
+// 아이템당 1회 생성해 `content_items.summary_ko`에 캐시한다(D7 해소).
 
 // --- 방 방문 (docs/design/life-visit.md) ---
 // 설정 키: hub_url·hub_token·hub_agent_id·hub_life_id. 이름의 단일 원본은 user_name이다.
