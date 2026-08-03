@@ -239,17 +239,28 @@ class SpaceAService:
     ) -> list[ReuseEvent]:
         """인용(재사용) 이력 조회 — 북극성 지표를 읽는 경로.
 
-        권한은 list_issues와 같은 규칙: 내가 속한 space의 이슈에 달린 인용만 보인다.
-        space 귀속은 ReuseEvent가 아니라 그 이슈에서 파생한다(모델에 space_id가 없음).
+        보이는 조건은 둘 중 하나(OR):
+
+        1. **인용이 일어난 space의 구성원** — list_issues와 같은 규칙. space 귀속은
+           ReuseEvent가 아니라 그 이슈에서 파생한다(모델에 space_id가 없음).
+        2. **재사용된 지식의 작성자** — 내 지식이 남에게 쓰인 기록은 내가 볼 수 있어야 한다.
+
+        2번이 없으면 교차 팀 재사용을 **원 작성자만 못 본다**. 인용은 남의 space에서
+        일어나므로 조건 1로는 영원히 안 보이고, "개인의 발견이 조직의 자산이 된다"의
+        되돌아오는 반쪽(인정 루프)이 구조적으로 불가능해진다 — 2026-07-30 E2E에서 실측.
         """
         agent = self._authed_agent(token)
         if space_id is not None and space_id not in agent.spaces:
             raise errors.Forbidden(f"not a member of space '{space_id}'")
         issue_space = {i.id: i.space_id for i in self.store.all_issues()}
+        page_author = {p.id: p.created_by for p in self.store.all_pages()}
         out: list[ReuseEvent] = []
         for e in self.store.all_reuse_events():
             sid = issue_space.get(e.issue_id)
-            if sid is None or sid not in agent.spaces:
+            if sid is None:
+                continue
+            mine = page_author.get(e.page_id) == agent.id
+            if sid not in agent.spaces and not mine:
                 continue
             if space_id is not None and sid != space_id:
                 continue

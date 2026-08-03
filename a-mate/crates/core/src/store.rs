@@ -1645,6 +1645,16 @@ impl SqliteStore {
         Ok(())
     }
 
+    /// 내가 허브에 발행한 페이지 id 집합 — 인정 루프가 "남이 인용한 게 내 것인지" 대조한다.
+    /// `page_id`가 NULL인 행(이슈만 열고 아직 발행 전)은 제외한다.
+    pub fn hub_published_page_ids(&self) -> Result<std::collections::HashSet<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT page_id FROM hub_share_state WHERE page_id IS NOT NULL AND page_id <> ''")?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
     /// 콘텐츠 아이템 존재 여부 (레슨 칭찬 루프 — "이 레슨을 보여준 적 있나").
     pub fn content_item_exists(&self, id: &str) -> Result<bool> {
         let n: i64 = self.conn.query_row(

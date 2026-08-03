@@ -241,6 +241,8 @@ mod runtime {
                 crate::visit::maybe_auto_visit(&state.store);
                 // P4+N1 인바운드 소식 — 내 방 방문·방명록 diff를 emit (hub 미연결·구서버 no-op)
                 maybe_poll_inbound(app, &state.store);
+                // 인정 루프 — 내 지식이 재사용됐는지(읽기 전용, 미배포 허브면 no-op)
+                maybe_poll_reuse(app, &state.store);
                 // a-hub 지식 공유 — 유의미 finding을 이슈→해결로 발행 (env 미설정 시 no-op)
                 maybe_share_findings(&state.store);
                 // 텔레메트리(#46) — 전날 파생 신호 하루 1회 발행 (env 미설정 시 no-op)
@@ -1308,6 +1310,82 @@ mod runtime {
                 }
             }
             Err(e) => log::warn!("방명록 신규 폴링: 조회 실패(다음 스캔 재시도): {e}"),
+        }
+    }
+
+    /// 인정 루프 — 내가 발행한 지식을 남이 인용했는지 확인하고 축하한다 (스펙 PR #81).
+    /// life 서버(방·방명록)가 아니라 **work 허브**를 읽으므로 폴링 함수가 따로다.
+    /// 읽기 전용이며, 실패·미배포는 조용히 넘긴다(실패 무해).
+    fn maybe_poll_reuse(app: &AppHandle, store_mutex: &std::sync::Mutex<SqliteStore>) {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        // 구버전 허브(404)는 매 스캔 경고하지 않는다 — 한 번만 알리고 조용히 건너뛴다.
+        static UNSUPPORTED: AtomicBool = AtomicBool::new(false);
+
+        // 알림 창 구독 전에는 폴링하지 않는다 — 커서만 전진해 축하가 유실되는 것 방지(②와 같은 규율).
+        if !app.state::<AppState>().notices_ready.load(Ordering::SeqCst) {
+            return;
+        }
+        if UNSUPPORTED.load(Ordering::SeqCst) {
+            return;
+        }
+
+        // ① 락: 설정·발행분·커서 스냅샷 → 즉시 해제 (네트워크 전 해제 규율)
+        let (cfg, token, mine, cursor) = match store_mutex.lock() {
+            Ok(store) => {
+                let Some(cfg) = agent_mentor::hub::HubConfig::resolve(&store) else { return };
+                let token = cfg
+                    .token
+                    .clone()
+                    .or_else(|| store.get_setting("knowledge_hub_token").ok().flatten());
+                let mine = store.hub_published_page_ids().unwrap_or_default();
+                let cursor = store
+                    .get_setting("inbound_reuse_cursor")
+                    .ok()
+                    .flatten()
+                    .filter(|v: &String| !v.is_empty());
+                (cfg, token, mine, cursor)
+            }
+            Err(e) => {
+                log::warn!("store lock poisoned: {e}");
+                return;
+            }
+        };
+        // 발행한 게 없으면 인용될 것도 없다 — 네트워크를 아예 타지 않는다.
+        let (Some(token), false) = (token, mine.is_empty()) else { return };
+
+        let client = agent_mentor::hub::HubClient {
+            base_url: cfg.base_url.clone(),
+            api_key: cfg.api_key.clone(),
+            token,
+        };
+        // ② 락 밖: 네트워크
+        let rows = match client.reuse_events(200) {
+            Ok(Some(rows)) => rows,
+            Ok(None) => {
+                UNSUPPORTED.store(true, Ordering::SeqCst);
+                log::info!("인정 루프: 허브에 /reuse-events가 없어 건너뜁니다(구버전 배포)");
+                return;
+            }
+            Err(e) => {
+                log::warn!("인정 루프: 조회 실패(다음 스캔 재시도): {e}");
+                return;
+            }
+        };
+
+        let (fresh, next) =
+            agent_mentor::inbound::select_new_reuses(&rows, &mine, &cfg.user_id, cursor.as_deref());
+        let notes: Vec<_> = fresh.iter().filter_map(agent_mentor::hub::to_reuse_note).collect();
+
+        // ③ emit 성공 시에만 커서 전진 — 실패하면 다음 스캔이 같은 구간을 다시 받는다.
+        if notes.is_empty() || app.emit("reuse:celebrated", &notes).is_ok() {
+            if let (Some(next), Ok(store)) = (next, store_mutex.lock()) {
+                let _ = store.set_setting("inbound_reuse_cursor", &next);
+            }
+            if !notes.is_empty() {
+                log::info!("인정 루프: 내 지식 재사용 {}건 축하", notes.len());
+            }
+        } else {
+            log::warn!("reuse:celebrated emit 실패 — 다음 스캔 재시도");
         }
     }
 }

@@ -1,6 +1,6 @@
 export interface Notice {
   ts: string;
-  kind: 'finding' | 'diary' | 'occasion' | 'visit' | 'guestbook';
+  kind: 'finding' | 'diary' | 'occasion' | 'visit' | 'guestbook' | 'reuse';
   text: string;
   /** 딥링크 대상 — finding=dedup_key, diary=YYYY-MM-DD, guestbook=entry_id. 없으면 클릭 불가. */
   target?: string;
@@ -61,6 +61,16 @@ export function guestbookNotice(entries: { entry_id: string; author_name: string
     ? `방명록에 새 글 ${entries.length}건 — ${who}님 외`
     : `방명록에 새 글 — ${who}님`;
   return { ts, kind: 'guestbook', text, target: entries[0].entry_id };
+}
+
+/** 인정 루프 알림 — 내가 올린 지식을 남이 재사용했다. target 없음(클릭 불가, visit 선례).
+ *  프라이버시: 팀까지만 말하고 개인명·상대 이슈 제목은 넣지 않는다 (백엔드가 이미 그렇게 준다). */
+export function reuseNotice(notes: { space: string; cross_team: boolean }[], ts: string): Notice {
+  const where = notes[0].cross_team ? `${notes[0].space} 팀` : '같은 팀';
+  const text = notes.length > 1
+    ? `내 지식이 ${notes.length}곳에서 재사용됐어요 — ${where} 포함`
+    : `내 지식을 ${where}에서 가져다 썼어요`;
+  return { ts, kind: 'reuse', text };
 }
 
 export function noticeDest(n: Notice): NoticeDest | null {
