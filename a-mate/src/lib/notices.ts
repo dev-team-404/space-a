@@ -1,9 +1,29 @@
 export interface Notice {
   ts: string;
-  kind: 'finding' | 'diary' | 'occasion' | 'visit' | 'guestbook' | 'reuse';
+  kind: 'finding' | 'diary' | 'occasion' | 'visit' | 'guestbook' | 'reuse' | 'announcement';
   text: string;
-  /** 딥링크 대상 — finding=dedup_key, diary=YYYY-MM-DD, guestbook=entry_id. 없으면 클릭 불가. */
+  /** 딥링크 대상 — finding=dedup_key, diary=YYYY-MM-DD, guestbook=entry_id,
+   *  announcement=content id. 없으면 클릭 불가. */
   target?: string;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** 알림 박스 타임스탬프 (단일 스트림 스펙 §5 C).
+ * 오늘은 `HH:MM`, 그 외는 `MM-DD` — 어제 알림과 오늘 알림이 화면에서 구분돼야 한다.
+ * `full`은 호버(title 속성)용이라 언제나 전체를 담는다.
+ *
+ * `now`를 **인자로 받는다**: 함수 안에서 `new Date()`를 만들면 "오늘"의 기준이
+ * 테스트에서 고정되지 않아 자정 근처에 간헐적으로 깨진다. */
+export function noticeStamp(ts: string, now: Date): { label: string; full: string } {
+  const d = new Date(ts);
+  const hhmm = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const mmdd = `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  return { label: sameDay ? hhmm : mmdd, full: `${d.getFullYear()}-${mmdd} ${hhmm}` };
 }
 
 const MAX = 20;
@@ -73,9 +93,21 @@ export function reuseNotice(notes: { space: string; cross_team: boolean }[], ts:
   return { ts, kind: 'reuse', text };
 }
 
+/** ⑥ 새 공지 알림 (스펙 §6.5) — rows는 점수 내림차순(백엔드 랭킹 순서 유지).
+ *  번역이 끝난 뒤에 오는 이벤트라 `title_ko`가 있으면 그것을 쓴다 — 없으면 영어 원제목. */
+export function announcementNotice(
+  rows: { id: string; title: string; title_ko?: string | null }[],
+  ts: string,
+): Notice {
+  const head = rows[0];
+  const title = head.title_ko?.trim() || head.title;
+  const text = rows.length > 1 ? `새 소식 ${rows.length}건 — ${title} 외` : `새 소식 — ${title}`;
+  return { ts, kind: 'announcement', text, target: head.id };
+}
+
 export function noticeDest(n: Notice): NoticeDest | null {
   if (!n.target) return null;
-  if (n.kind === 'finding') return { tab: 'coach', target: n.target };
+  if (n.kind === 'finding' || n.kind === 'announcement') return { tab: 'coach', target: n.target };
   if (n.kind === 'diary') return { tab: 'diary', target: n.target };
   if (n.kind === 'guestbook') return { tab: 'guestbook', target: n.target };
   return null;

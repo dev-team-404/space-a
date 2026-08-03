@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adviceBubble, chatterCandidates, diaryBubble, findingBubble, occasionBubble, pickChatter, visitBubble } from './bubble';
+import { adviceBubble, announcementBubble, chatterCandidates, diaryBubble, findingBubble, occasionBubble, pickChatter, visitBubble } from './bubble';
 
 describe('bubble 팩토리', () => {
   it('finding: 대표 1건 + 외 N건, coach 탭, top dedup_key가 target', () => {
@@ -13,6 +13,25 @@ describe('bubble 팩토리', () => {
     expect(b.text).toContain('반복'); // R6 문구가 대표
     expect(b.target).toBe('k-r6');
     expect(b.text).not.toContain('tok'); // 절약 수치 표시 안 함
+  });
+  // ⑥ §6.5 — 새 공지는 기존 인프라(말풍선)로 한 번만 알린다. 탭·홈을 새로 만들지 않는다.
+  it('announcement: 제목을 싣고 coach 탭 + content id를 target으로', () => {
+    const b = announcementBubble([{ id: 'cc-announce-fable', title: 'Fable 5 팀 플랜 포함' }], '주인');
+    expect(b.kind).toBe('announcement');
+    expect(b.tab).toBe('coach');
+    expect(b.target).toBe('cc-announce-fable');
+    expect(b.text).toContain('Fable 5 팀 플랜 포함');
+    expect(b.text.startsWith('주인,')).toBe(true);
+    const many = announcementBubble([{ id: 'a', title: '가' }, { id: 'b', title: '나' }], '대장');
+    expect(many.text).toContain('외 1건');
+    expect(many.target).toBe('a');
+    // 번역이 끝난 뒤 오는 이벤트라 한국어 제목이 있으면 그것을 말한다
+    const ko = announcementBubble(
+      [{ id: 'a', title: 'Fable 5 is now standard', title_ko: '페이블 5, 팀 플랜 기본 포함' }],
+      '주인',
+    );
+    expect(ko.text).toContain('페이블 5, 팀 플랜 기본 포함');
+    expect(ko.text).not.toContain('Fable 5 is now standard');
   });
   it('advice: detail을 싣고 dedup_key를 딥링크 target으로', () => {
     const b = adviceBubble({ dedup_key: 'k1', detail: '`playwright`가 상주하는데 호출 0회' }, '주인');

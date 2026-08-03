@@ -14,13 +14,13 @@
   import {
     getSummary, getDailyLine, getDailyCut, listFindings, onScanDone, onGotoTab, onChatShown, onDailyCutReady,
     onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, onUpdateCheckRequested,
-    onLifeVisit, onGuestbookNew, onReuseCelebrated, noticesReady, lifeContentAccess, lifeGoto, lifeGuestbook,
+    onLifeVisit, onGuestbookNew, onReuseCelebrated, onAnnouncementNew, noticesReady, lifeContentAccess, lifeGoto, lifeGuestbook,
     lifeSetDailyLine, lifeSyncDailyCut, lifeView,
     type Summary,
   } from './lib/api';
   import {
-    diaryNotice, findingNotice, guestbookNotice, loadNotices, occasionNotice, pushNotice, saveNotices,
-    visitNotice, reuseNotice, type Notice, type NoticeDest,
+    announcementNotice, diaryNotice, findingNotice, guestbookNotice, loadNotices, occasionNotice,
+    pushNotice, saveNotices, visitNotice, reuseNotice, type Notice, type NoticeDest,
   } from './lib/notices';
   import {
     addDiaryDate, clearDiaryDates, clearGuestbookSeen, loadUnseen, maxCreatedAt, newGuestbookIds,
@@ -249,6 +249,8 @@
       }),
       onOccasionToday((labels) => labels.length && record(occasionNotice(labels, new Date().toISOString()))),
       onLifeVisit((rows) => rows.length && record(visitNotice(rows, new Date().toISOString()))),
+      // ⑥ §6.5 — 새 공지는 처음 감지될 때만 온다(백엔드가 통지 기록을 갖는다)
+      onAnnouncementNew((rows) => rows.length && record(announcementNotice(rows, new Date().toISOString()))),
       onGuestbookNew((rows) => {
         if (!rows.length) return;
         record(guestbookNotice(rows, new Date().toISOString()));

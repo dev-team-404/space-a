@@ -1,4 +1,5 @@
 pub mod adapter;
+pub mod announcements;
 pub mod chat;
 pub mod coach;
 pub mod content;

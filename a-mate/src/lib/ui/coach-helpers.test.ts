@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  RESOLVED_WINDOW_DAYS, coachTitle, ctxLine, disposedLabel, evidenceChip, isDisposedVisible,
-  isHiddenFinding, partitionCoachItems, sessionIdsOf, splitLessonBody, toDisposedRows,
-  toLearnCardView, toLessonCardView, toLogCardView, totalSessionsOf,
+  CONTENT_CARD_LIMIT, RESOLVED_WINDOW_DAYS, coachTitle, ctxLine, disposedLabel, evidenceChip,
+  isDisposedVisible, isHiddenFinding, partitionCoachItems, pinnedNewsItem, sessionIdsOf,
+  splitLessonBody, toDisposedRows, toLearnCardView, toLessonCardView, toLogCardView,
+  totalSessionsOf,
 } from './coach-helpers';
 import type { CoachFinding, ContentItem, SessionCtxItem } from '../api';
 
@@ -166,12 +167,12 @@ describe('partitionCoachItems', () => {
     expect(partitionCoachItems([], []).log).toEqual([]);
     expect(partitionCoachItems([], []).learn).toEqual([]);
   });
-  // list_content는 LIMIT 없이 score>=0인 행을 전부 준다. 옛 「오늘의 배움」 컨테이너가
-  // items[0]+slice(1,4)로 4건만 보였으므로, 그 상한을 여기서 유지한다.
-  it('콘텐츠는 상위 4건까지만 카드가 된다', () => {
-    const many = Array.from({ length: 7 }, (_, i) => content({ id: `T-${i}`, trigger_tags: [] }));
+  // list_content는 LIMIT 없이 score>=0인 행을 전부 준다. 자르는 지점은 여기 한 곳뿐이다.
+  // ⑥에서 소스(로컬 공지)가 하나 늘어 상한을 4 → 6으로 올렸다.
+  it('콘텐츠는 상위 CONTENT_CARD_LIMIT건까지만 카드가 된다', () => {
+    const many = Array.from({ length: 9 }, (_, i) => content({ id: `T-${i}`, trigger_tags: [] }));
     const { log, learn } = partitionCoachItems([finding()], many);
-    expect(learn.map((v) => v.id)).toEqual(['T-0', 'T-1', 'T-2', 'T-3']);
+    expect(learn.map((v) => v.id)).toEqual(['T-0', 'T-1', 'T-2', 'T-3', 'T-4', 'T-5']);
     expect(log).toHaveLength(1); // 룰 finding은 상한과 무관
   });
   it('상한은 두 섹션 합계에 적용된다', () => {
@@ -181,9 +182,11 @@ describe('partitionCoachItems', () => {
       content({ id: 'T1', trigger_tags: [] }),
       content({ id: 'T2', trigger_tags: [] }),
       content({ id: 'T3', trigger_tags: [] }),
+      content({ id: 'T4', trigger_tags: [] }),
+      content({ id: 'T5', trigger_tags: [] }),
     ]);
     expect(log.map((v) => v.key)).toEqual(['L1', 'L2']);
-    expect(learn.map((v) => v.id)).toEqual(['T1', 'T2']);
+    expect(learn.map((v) => v.id)).toEqual(['T1', 'T2', 'T3', 'T4']);
   });
 });
 
@@ -240,6 +243,118 @@ describe('toLearnCardView', () => {
   });
   it('본문이 비면 summary는 null', () => {
     expect(toLearnCardView(content({ trigger_tags: [], body: '  ' })).summary).toBeNull();
+  });
+  // ⑥ §6.1 — 긴급 팁(lastShownEmergencyTip)만 「공지」로 갈린다. 나머지 로컬 공지는 「소식」.
+  it('로컬 공지는 소식, 긴급 팁은 공지 배지', () => {
+    expect(toLearnCardView(content({ kind: 'news', trigger_tags: ['announcement'] })).badge).toBe('소식');
+    expect(
+      toLearnCardView(content({ kind: 'news', trigger_tags: ['announcement', 'notice'] })).badge,
+    ).toBe('공지');
+  });
+  // ⑥ §6.3 — 번역이 있으면 그것을, 없으면 원문을 그대로 (엔진 미설정 사용자 폴백).
+  it('번역 캐시가 있으면 제목·요약을 대체하고, 없으면 원문으로 폴백한다', () => {
+    const raw = content({
+      kind: 'news', trigger_tags: ['announcement'],
+      title: 'Fable 5 is now standard', body: 'You can use up to 50%.',
+    });
+    expect(toLearnCardView(raw).title).toBe('Fable 5 is now standard');
+    expect(toLearnCardView(raw).summary).toBe('You can use up to 50%.');
+
+    const translated = content({
+      ...raw, title_ko: '페이블 5, 팀 플랜 기본 포함', summary_ko: '주간 한도의 50%까지 쓸 수 있어요.',
+    });
+    expect(toLearnCardView(translated).title).toBe('페이블 5, 팀 플랜 기본 포함');
+    expect(toLearnCardView(translated).summary).toBe('주간 한도의 50%까지 쓸 수 있어요.');
+    // title_ko만 비어도 summary_ko는 살아야 한다 (부분 번역 허용)
+    expect(toLearnCardView(content({ ...raw, summary_ko: '한국어 요약' })).title)
+      .toBe('Fable 5 is now standard');
+    expect(toLearnCardView(content({ ...raw, title_ko: '  ', summary_ko: '한국어 요약' })).summary)
+      .toBe('한국어 요약');
+  });
+  it('기한을 뷰모델에 싣는다', () => {
+    expect(toLearnCardView(content({ deadline: '2026-08-31' })).deadline).toBe('2026-08-31');
+    expect(toLearnCardView(content()).deadline).toBeNull();
+  });
+  // 배움 카드도 문법 A와 같은 📊 근거 슬롯을 갖는다 — 커리큘럼=지도, 내 로그=GPS.
+  // store의 enrich_personal이 이미 모든 행에 채워 보내주므로 LLM이 필요 없다.
+  it('personal이 있으면 근거 슬롯에 싣는다', () => {
+    const v = toLearnCardView(
+      content({ trigger_tags: [], personal: '당신 로그: 서브에이전트 사용 없음' }),
+    );
+    expect(v.evidence).toBe('당신 로그: 서브에이전트 사용 없음');
+  });
+  it('personal이 없으면 슬롯을 생략한다 — 0이나 추정치를 지어내지 않는다', () => {
+    expect(toLearnCardView(content({ trigger_tags: [], personal: null })).evidence).toBeNull();
+    expect(toLearnCardView(content({ trigger_tags: [], personal: '   ' })).evidence).toBeNull();
+    expect(toLearnCardView(content({ trigger_tags: [] })).evidence).toBeNull();
+  });
+  it('근거는 요약을 대체하지 않는다 — 둘 다 남는다', () => {
+    const v = toLearnCardView(
+      content({ trigger_tags: [], body: '일반 설명', personal: '당신 로그: 스킬 47회' }),
+    );
+    expect(v.evidence).toBe('당신 로그: 스킬 47회');
+    expect(v.summary).toBe('일반 설명');
+  });
+});
+
+// ⑥ §6.4 — 고정 슬롯. "확신 없으면 null"·"경과 기한은 고정 안 함"은 negative-space라
+// 구현 후 조건을 뒤집어 실패하는지 확인했다(계획 「뮤테이션 규율」).
+describe('pinnedNewsItem', () => {
+  const news = (over: Partial<ContentItem> = {}) =>
+    content({ id: 'cc-announce-a', kind: 'news', trigger_tags: ['announcement'], score: 320, ...over });
+
+  it('유효 기한 + 미확인이면 고정한다', () => {
+    const got = pinnedNewsItem([news({ deadline: '2026-08-31' })], [], '2026-08-03');
+    expect(got?.id).toBe('cc-announce-a');
+  });
+  it('기한 당일까지는 고정한다 — 그날 안에 행동할 수 있다', () => {
+    expect(pinnedNewsItem([news({ deadline: '2026-08-03' })], [], '2026-08-03')).not.toBeNull();
+  });
+  it('기한이 지나면 사용자가 안 눌러도 자동 강등된다 (LLM 오추출 안전망)', () => {
+    expect(pinnedNewsItem([news({ deadline: '2026-08-02' })], [], '2026-08-03')).toBeNull();
+  });
+  it('기한이 없으면 고정하지 않는다 (엔진 없음·추출 실패 포함)', () => {
+    expect(pinnedNewsItem([news()], [], '2026-08-03')).toBeNull();
+    expect(pinnedNewsItem([news({ deadline: null })], [], '2026-08-03')).toBeNull();
+  });
+  it('형식이 어긋난 기한은 고정하지 않는다 (기본 폐쇄)', () => {
+    for (const bad of ['곧', '2026-08', '08-31', '2026-13-40', '']) {
+      expect(pinnedNewsItem([news({ deadline: bad })], [], '2026-08-03'), bad).toBeNull();
+    }
+  });
+  it('[확인]을 누르면 즉시 강등된다', () => {
+    const rows = [news({ deadline: '2026-08-31' })];
+    expect(pinnedNewsItem(rows, ['cc-announce-a'], '2026-08-03')).toBeNull();
+  });
+  it('후보가 여럿이면 목록 순서(점수 내림차순) 상위 1건만', () => {
+    const got = pinnedNewsItem(
+      [news({ id: 'hi', deadline: '2026-09-01' }), news({ id: 'lo', deadline: '2026-08-31' })],
+      [],
+      '2026-08-03',
+    );
+    expect(got?.id).toBe('hi');
+  });
+  it('빈 목록은 null', () => {
+    expect(pinnedNewsItem([], [], '2026-08-03')).toBeNull();
+  });
+});
+
+describe('고정 슬롯과 카드 상한', () => {
+  // 상한은 한 곳(partitionCoachItems)에서만 자른다. 고정 슬롯은 그 밖의 별도 1칸이라,
+  // 호출부가 고정된 항목을 빼고 넘긴다.
+  it('고정된 항목을 제외하고 넘기면 배움 목록에 중복되지 않는다', () => {
+    const rows = [
+      content({ id: 'pin', kind: 'news', trigger_tags: ['announcement'], deadline: '2026-08-31' }),
+      content({ id: 'T1', trigger_tags: [] }),
+    ];
+    const pinned = pinnedNewsItem(rows, [], '2026-08-03');
+    const { learn } = partitionCoachItems([], rows.filter((r) => r.id !== pinned?.id));
+    expect(learn.map((v) => v.id)).toEqual(['T1']);
+  });
+  it('소스가 하나 늘어 상한을 6으로 올렸다', () => {
+    expect(CONTENT_CARD_LIMIT).toBe(6);
+    const many = Array.from({ length: 9 }, (_, i) => content({ id: `T-${i}`, trigger_tags: [] }));
+    expect(partitionCoachItems([], many).learn).toHaveLength(6);
   });
 });
 
@@ -333,12 +448,16 @@ describe('처분 항목은 활성 집계에서 빠진다', () => {
     expect(log).toEqual([]);
     expect(learn).toEqual([]);
   });
-  it('처분된 항목이 4건 상한의 자리를 잡아먹지 않는다', () => {
+  // 상한 자체는 ⑥에서 4 → 6으로 올랐다(소스 하나 추가). 이 테스트가 지키려는 건
+  // 그 숫자가 아니라 "처분된 항목은 상한을 먹지 않는다"라 상수 기준으로 쓴다.
+  it('처분된 항목이 카드 상한의 자리를 잡아먹지 않는다', () => {
     const many = [
       ...Array.from({ length: 3 }, (_, i) => content({ id: `D-${i}`, trigger_tags: [], status: 'dismissed' })),
-      ...Array.from({ length: 5 }, (_, i) => content({ id: `T-${i}`, trigger_tags: [] })),
+      ...Array.from({ length: CONTENT_CARD_LIMIT + 2 }, (_, i) => content({ id: `T-${i}`, trigger_tags: [] })),
     ];
     const { learn } = partitionCoachItems([], many);
-    expect(learn.map((v) => v.id)).toEqual(['T-0', 'T-1', 'T-2', 'T-3']);
+    expect(learn.map((v) => v.id)).toEqual(
+      Array.from({ length: CONTENT_CARD_LIMIT }, (_, i) => `T-${i}`),
+    );
   });
 });

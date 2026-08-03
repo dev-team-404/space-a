@@ -87,7 +87,10 @@ CREATE TABLE IF NOT EXISTS content_items (
   source_url TEXT, trigger_tags TEXT NOT NULL DEFAULT '[]',
   score INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'new',
   first_seen TEXT, last_seen TEXT,
-  status_ts TEXT
+  status_ts TEXT,
+  -- 소식 파이프라인(⑥ 스펙 §6.3·§6.4): 아이템당 1회 번역 결과 캐시.
+  -- 재큐레이션이 덮어쓰지 않는다(replace_content_items의 ON CONFLICT 목록에 없음).
+  summary_ko TEXT, title_ko TEXT, deadline TEXT
 );
 CREATE TABLE IF NOT EXISTS personal_skill_inventory (
   host TEXT NOT NULL, scope TEXT NOT NULL, name TEXT NOT NULL,
@@ -238,6 +241,19 @@ fn migrate(conn: &Connection) -> Result<()> {
         .exists([])?;
     if !has_content_status_ts {
         conn.execute_batch("ALTER TABLE content_items ADD COLUMN status_ts TEXT;")?;
+    }
+    // 소식 파이프라인(⑥ 스펙 §6.3·§6.4) — content_items 번역 캐시. **컬럼만** 추가한다:
+    // 번역은 다음 스캔에 새로 채워지므로 재수집이 필요 없고, 여기에 DELETE를 붙이면
+    // 릴리스마다 콜드 스캔이 되돌아온다(#146). judgment_json 전례.
+    let has_summary_ko = conn
+        .prepare("SELECT 1 FROM pragma_table_info('content_items') WHERE name='summary_ko'")?
+        .exists([])?;
+    if !has_summary_ko {
+        conn.execute_batch(
+            "ALTER TABLE content_items ADD COLUMN summary_ko TEXT;
+             ALTER TABLE content_items ADD COLUMN title_ko TEXT;
+             ALTER TABLE content_items ADD COLUMN deadline TEXT;",
+        )?;
     }
     // v3.1 재수집 — IDE 합성 블록(<ide_opened_file> 등) 프롬프트 오염 수정이 라인 재해석을 요구.
     // 스키마 변화가 없어 PRAGMA user_version(=1)으로 1회 트리거. 오염 preview에서 파생된
@@ -1114,6 +1130,11 @@ impl SqliteStore {
 
     /// 큐레이션 콘텐츠를 현재 랭킹으로 upsert. findings 선례처럼 **사용자 status는 보존**
     /// (dismissed는 재스캔에도 유지 — 나깅 방지). 점수·본문·last_seen만 갱신.
+    ///
+    /// 번역 캐시(`summary_ko`·`title_ko`·`deadline`)는 **원문이 그대로일 때만** 보존한다.
+    /// `cc-changelog-latest`처럼 id가 고정이고 내용만 갱신되는 소스가 있어(새 릴리스마다
+    /// title·body가 바뀐다), 무조건 보존하면 카드가 영영 낡은 한국어를 보여준다.
+    /// SET의 우변은 갱신 전 행 값으로 평가되므로 `content_items.title`이 **옛 제목**이다.
     pub fn replace_content_items(
         &self,
         ranked: &[(crate::content::ContentItem, i64)],
@@ -1129,7 +1150,13 @@ impl SqliteStore {
                     (id, kind, dimension, title, body, source_url, trigger_tags, score, status, first_seen, last_seen)
                  VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'new',?9,?9)
                  ON CONFLICT(id) DO UPDATE SET
-                    score=?8, title=?4, body=?5, source_url=?6, trigger_tags=?7, last_seen=?9",
+                    score=?8, title=?4, body=?5, source_url=?6, trigger_tags=?7, last_seen=?9,
+                    summary_ko=CASE WHEN content_items.title=?4 AND content_items.body=?5
+                                    THEN content_items.summary_ko ELSE NULL END,
+                    title_ko  =CASE WHEN content_items.title=?4 AND content_items.body=?5
+                                    THEN content_items.title_ko   ELSE NULL END,
+                    deadline  =CASE WHEN content_items.title=?4 AND content_items.body=?5
+                                    THEN content_items.deadline   ELSE NULL END",
                 params![item.id, item.kind.as_str(), dim, item.title, item.body,
                         item.source_url, tags, score, now_ts],
             )?;
@@ -1182,8 +1209,67 @@ impl SqliteStore {
             title: r.get(3)?, body: r.get(4)?, source_url: r.get(5)?,
             trigger_tags: serde_json::from_str(&tags_json).unwrap_or_default(),
             score: r.get(7)?, status: r.get(8)?, status_ts: r.get(9)?,
+            summary_ko: r.get(10)?, title_ko: r.get(11)?, deadline: r.get(12)?,
             personal: None, // list_content에서 enrich_personal로 채움
         })
+    }
+
+    /// `content_row_from`이 기대하는 컬럼 순서 — SELECT를 한 군데서만 정의한다.
+    const CONTENT_COLS: &'static str =
+        "id,kind,dimension,title,body,source_url,trigger_tags,score,status,status_ts,summary_ko,title_ko,deadline";
+
+    /// 아직 번역되지 않은 외국어 소식 (스펙 §6.3). **한국어 소스는 애초에 담기지 않는다** —
+    /// 이 목록이 비면 호출부가 Engine을 한 번도 부르지 않는다(= 아이템당 1회 보장).
+    pub fn content_needing_translation(&self, limit: usize) -> Result<Vec<ContentRow>> {
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {} FROM content_items
+             WHERE status='new' AND summary_ko IS NULL
+             ORDER BY score DESC, id",
+            Self::CONTENT_COLS
+        ))?;
+        let rows = stmt.query_map([], Self::content_row_from)?;
+        Ok(rows
+            .collect::<std::result::Result<Vec<_>, _>>()?
+            .into_iter()
+            .filter(|r| crate::content::translate_kind_for(&r.trigger_tags).is_some())
+            .take(limit)
+            .collect())
+    }
+
+    /// 번역 결과 캐시. `title_ko`·`deadline`은 없을 수 있다(선택 필드·기본 폐쇄).
+    /// 반환 = 해당 행 존재 여부.
+    pub fn set_content_translation(
+        &self,
+        id: &str,
+        title_ko: Option<&str>,
+        summary_ko: &str,
+        deadline: Option<&str>,
+    ) -> Result<bool> {
+        let n = self.conn.execute(
+            "UPDATE content_items SET summary_ko=?2, title_ko=?3, deadline=?4 WHERE id=?1",
+            params![id, summary_ko, title_ko, deadline],
+        )?;
+        Ok(n > 0)
+    }
+
+    /// 아직 알리지 않은 공지 id만 돌려주고 **같은 호출에서 통지 기록에 넣는다**(§6.5 "한 번만").
+    /// 기록은 무한히 자라지 않게 최근 것부터 상한을 둔다 — 잘려나간 옛 id가 다시 알림을
+    /// 받으려면 그 공지가 `claude.json`에 아직 남아 있어야 하므로 실질 재알림은 없다.
+    pub fn take_unnotified_announcements(&self, ids: &[String]) -> Result<Vec<String>> {
+        const KEEP: usize = 50;
+        let raw = self.get_setting("announcement_notified_ids")?.unwrap_or_default();
+        let mut known: Vec<String> = serde_json::from_str(&raw).unwrap_or_default();
+        let fresh: Vec<String> =
+            ids.iter().filter(|id| !known.contains(id)).cloned().collect();
+        if fresh.is_empty() {
+            return Ok(fresh);
+        }
+        known.extend(fresh.iter().cloned());
+        if known.len() > KEEP {
+            known.drain(..known.len() - KEEP);
+        }
+        self.set_setting("announcement_notified_ids", &serde_json::to_string(&known)?)?;
+        Ok(fresh)
     }
 
     /// 노출용 콘텐츠 목록. include_hidden=false면 status='new' + score≥0만,
@@ -1196,17 +1282,16 @@ impl SqliteStore {
         include_hidden: bool,
     ) -> Result<Vec<ContentRow>> {
         if include_hidden {
-            let mut stmt = self.conn.prepare(
-                "SELECT id,kind,dimension,title,body,source_url,trigger_tags,score,status,status_ts
-                 FROM content_items ORDER BY score DESC, id",
-            )?;
+            let mut stmt = self.conn.prepare(&format!(
+                "SELECT {} FROM content_items ORDER BY score DESC, id",
+                Self::CONTENT_COLS
+            ))?;
             let rows = stmt.query_map([], Self::content_row_from)?;
             let out = rows.collect::<std::result::Result<Vec<_>, _>>()?;
             return Ok(self.enrich_personal(out));
         }
-        let mut stmt = self.conn.prepare(
-            "SELECT id,kind,dimension,title,body,source_url,trigger_tags,score,status,status_ts
-             FROM content_items c
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {} FROM content_items c
              WHERE status='new' AND score >= 0
                AND NOT EXISTS (
                  SELECT 1 FROM content_items d
@@ -1215,7 +1300,8 @@ impl SqliteStore {
                    AND julianday(?1) - julianday(d.last_seen) < ?2
                )
              ORDER BY score DESC, id",
-        )?;
+            Self::CONTENT_COLS
+        ))?;
         let rows = stmt.query_map(params![now_ts, cooldown_days], Self::content_row_from)?;
         let out = rows.collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(self.enrich_personal(out))
@@ -2280,6 +2366,15 @@ pub struct ContentRow {
     pub status: String,
     /// 처분 시각 — 「해결함」 7일 창 판정용 (스펙 §5). 미처분이면 None.
     pub status_ts: Option<String>,
+    /// 번역 캐시 (스펙 §6.3·§6.4) — 아이템당 1회 생성, 재큐레이션에도 보존된다.
+    /// 없으면 프론트가 원문(`title`·`body`)으로 폴백한다(엔진 미설정 사용자).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary_ko: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title_ko: Option<String>,
+    /// 본문에서 뽑은 유효 기한 `YYYY-MM-DD`. 고정 슬롯 판정의 재료 (§6.4).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deadline: Option<String>,
     /// "당신 로그: …" — 사용자 실측 데이터로 접지한 근거 줄. list_content read 시점 계산.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub personal: Option<String>,
@@ -4465,6 +4560,192 @@ mod tests {
             "R6 'new'만 삭제 — dismissed·타 룰은 보존");
         let uv: i64 = store.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
         assert!(uv >= 8, "v8 분기 통과");
+    }
+
+    #[test]
+    fn translation_is_generated_once_per_item_and_survives_recuration() {
+        // 스펙 §6.3 "아이템당 1회 + DB 캐시" — 같은 id를 다시 큐레이션해도 Engine을 부르지
+        // 않는다. 호출 카운트 대신 **대상 목록이 비는지**로 검증한다(호출부가 이 목록만 돈다).
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |id: &str, tags: &[&str], title: &str| crate::content::ContentItem {
+            id: id.into(),
+            kind: crate::content::ItemKind::News,
+            title: title.into(),
+            body: "You can use up to 50% of your weekly usage limit.".into(),
+            source_url: None,
+            dimension: None,
+            trigger_tags: tags.iter().map(|s| s.to_string()).collect(),
+            base_priority: 0,
+        };
+        let ranked = vec![
+            (mk("cc-announce-a", &["announcement"], "Fable 5 promo"), 320),
+            // 한국어 소스는 번역 대상이 아니다 (§6.3 표: 내장 팁·팀 지식은 "그대로")
+            (mk("T-L0-1", &[], "잔심부름엔 굳이 상위 모델 아니어도 돼요"), 500),
+        ];
+        store.replace_content_items(&ranked, "2026-08-03T00:00:00Z", &[]).unwrap();
+
+        let pending = store.content_needing_translation(10).unwrap();
+        assert_eq!(pending.len(), 1, "영어 소식만 번역 대상: {pending:?}");
+        assert_eq!(pending[0].id, "cc-announce-a");
+
+        store
+            .set_content_translation(
+                "cc-announce-a",
+                Some("페이블 5 프로모"),
+                "주간 사용 한도의 50%까지 쓸 수 있어요.",
+                Some("2026-08-31"),
+            )
+            .unwrap();
+        assert!(store.content_needing_translation(10).unwrap().is_empty(), "번역된 아이템 재호출 금지");
+
+        // 재큐레이션(다음 스캔)이 캐시를 덮어쓰면 매 스캔 LLM을 다시 부르게 된다
+        store.replace_content_items(&ranked, "2026-08-04T00:00:00Z", &[]).unwrap();
+        assert!(
+            store.content_needing_translation(10).unwrap().is_empty(),
+            "재큐레이션이 번역 캐시를 지우면 안 된다"
+        );
+
+        let rows = store.list_content("2026-08-04T00:00:00Z", 14.0, false).unwrap();
+        let row = rows.iter().find(|r| r.id == "cc-announce-a").unwrap();
+        assert_eq!(row.summary_ko.as_deref(), Some("주간 사용 한도의 50%까지 쓸 수 있어요."));
+        assert_eq!(row.title_ko.as_deref(), Some("페이블 5 프로모"));
+        assert_eq!(row.deadline.as_deref(), Some("2026-08-31"));
+        // 원문은 남는다 — 엔진 없는 사용자는 이 원문을 본다 (§6.3 "엔진 없으면 원문 그대로")
+        assert_eq!(row.title, "Fable 5 promo");
+    }
+
+    #[test]
+    fn translation_cache_is_dropped_when_the_source_text_changes() {
+        // `cc-changelog-latest`처럼 **id가 고정이고 내용만 갱신되는** 소스가 있다
+        // (`content.rs` ClaudeChangelogSource — 새 릴리스마다 title·body가 바뀐다).
+        // 번역은 "그 원문의" 번역이라, 원문이 바뀌었는데 캐시가 남으면 카드가 영영
+        // 낡은 한국어를 보여준다 — 엔진 사용자에게만 나타나는 조용한 회귀다.
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |title: &str, body: &str| crate::content::ContentItem {
+            id: "cc-changelog-latest".into(),
+            kind: crate::content::ItemKind::News,
+            title: title.into(),
+            body: body.into(),
+            source_url: None,
+            dimension: None,
+            trigger_tags: vec!["changelog".into()],
+            base_priority: 0,
+        };
+        let translated = |s: &SqliteStore| {
+            s.list_content("2026-08-09T00:00:00Z", 14.0, false)
+                .unwrap()
+                .into_iter()
+                .find(|r| r.id == "cc-changelog-latest")
+                .unwrap()
+        };
+
+        store
+            .replace_content_items(&[(mk("새 기능 2건 (최신 v1)", "adds A · adds B"), 25)],
+                "2026-08-03T00:00:00Z", &[])
+            .unwrap();
+        store
+            .set_content_translation("cc-changelog-latest", Some("새 기능 2건"), "A와 B가 추가됐어요.", Some("2026-08-31"))
+            .unwrap();
+        assert!(store.content_needing_translation(10).unwrap().is_empty());
+
+        // 같은 원문으로 재큐레이션 — 캐시는 유지된다(매 스캔 재번역 금지)
+        store
+            .replace_content_items(&[(mk("새 기능 2건 (최신 v1)", "adds A · adds B"), 25)],
+                "2026-08-04T00:00:00Z", &[])
+            .unwrap();
+        assert!(
+            store.content_needing_translation(10).unwrap().is_empty(),
+            "원문이 그대로면 재번역하지 않는다"
+        );
+        assert_eq!(translated(&store).summary_ko.as_deref(), Some("A와 B가 추가됐어요."));
+
+        // 새 릴리스로 제목·본문이 바뀜 — 옛 번역·기한을 버리고 재번역 대상이 된다
+        store
+            .replace_content_items(&[(mk("새 기능 1건 (최신 v2)", "adds C"), 25)],
+                "2026-08-05T00:00:00Z", &[])
+            .unwrap();
+        let row = translated(&store);
+        assert_eq!(row.summary_ko, None, "원문이 바뀌면 옛 요약을 버린다");
+        assert_eq!(row.title_ko, None, "제목 번역도 함께");
+        assert_eq!(row.deadline, None, "기한도 옛 원문에서 뽑은 값이라 함께 버린다");
+        assert_eq!(
+            store.content_needing_translation(10).unwrap().len(),
+            1,
+            "다음 스캔에 재번역된다"
+        );
+
+        // 본문만 바뀌어도 마찬가지 (제목은 같은데 항목만 갱신되는 경우)
+        store
+            .set_content_translation("cc-changelog-latest", None, "C가 추가됐어요.", None)
+            .unwrap();
+        store
+            .replace_content_items(&[(mk("새 기능 1건 (최신 v2)", "adds D"), 25)],
+                "2026-08-06T00:00:00Z", &[])
+            .unwrap();
+        assert_eq!(translated(&store).summary_ko, None, "본문만 바뀌어도 버린다");
+    }
+
+    #[test]
+    fn announcements_are_notified_once_per_id() {
+        // §6.5 "새 공지 id가 처음 감지되면 … 한 번만 알린다"
+        let store = SqliteStore::open_in_memory().unwrap();
+        let first = store
+            .take_unnotified_announcements(&["a".to_string(), "b".to_string()])
+            .unwrap();
+        assert_eq!(first, vec!["a".to_string(), "b".to_string()]);
+        assert!(
+            store.take_unnotified_announcements(&["a".into(), "b".into()]).unwrap().is_empty(),
+            "같은 id는 다시 알리지 않는다"
+        );
+        let second = store
+            .take_unnotified_announcements(&["b".into(), "c".into()])
+            .unwrap();
+        assert_eq!(second, vec!["c".to_string()], "새 id만");
+    }
+
+    #[test]
+    fn migrate_adds_content_translation_columns_without_recollect() {
+        // 소식 파이프라인(⑥ 스펙 §6.3) — summary_ko·title_ko·deadline은 **컬럼만** 추가한다.
+        // 릴리스마다 콜드 스캔이 되돌아온 사고(#146)를 반복하지 않도록, 수집 테이블의
+        // 행 수가 보존되는지 테이블별로 명시 검증한다 (judgment_json 전례).
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("mko.db");
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(SCHEMA).unwrap();
+            // 번역 컬럼이 없던 시절의 content_items로 되돌린다 (구 스키마 재현)
+            conn.execute_batch(
+                "DROP TABLE content_items;
+                 CREATE TABLE content_items (
+                   id TEXT PRIMARY KEY,
+                   kind TEXT NOT NULL, dimension TEXT, title TEXT NOT NULL, body TEXT NOT NULL,
+                   source_url TEXT, trigger_tags TEXT NOT NULL DEFAULT '[]',
+                   score INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'new',
+                   first_seen TEXT, last_seen TEXT
+                 );
+                 PRAGMA user_version = 8;
+                 INSERT INTO content_items (id, kind, title, body) VALUES ('t1','tip','제목','본문');
+                 INSERT INTO events (dedup_key, session_id, host, project_id, source_offset, kind)
+                   VALUES ('e1','s1','Windows','p',0,'assistant_turn');
+                 INSERT INTO sessions (session_id, host, project_id) VALUES ('s1','Windows','p');
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 42);
+                 INSERT INTO daily_rollup (host, project_id, date) VALUES ('Windows','p','2026-08-02');",
+            ).unwrap();
+        }
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행
+        for table in ["events", "sessions", "ingest_state", "daily_rollup", "content_items"] {
+            let n: i64 = store.conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0)).unwrap();
+            assert_eq!(n, 1, "{table} 행이 보존돼야 함 — 재수집 유발 금지(#146)");
+        }
+        for col in ["summary_ko", "title_ko", "deadline"] {
+            let exists = store.conn
+                .prepare(&format!(
+                    "SELECT 1 FROM pragma_table_info('content_items') WHERE name='{col}'"
+                )).unwrap()
+                .exists([]).unwrap();
+            assert!(exists, "content_items.{col} 이 추가돼야 함");
+        }
     }
 
     #[test]

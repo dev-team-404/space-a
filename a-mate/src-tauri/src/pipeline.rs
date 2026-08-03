@@ -223,6 +223,10 @@ mod runtime {
                 }
                 // 콘텐츠 큐레이션 — 피드 fetch(락 밖) → run_curation(락) → content:ready
                 maybe_curate_content(app, &state.store);
+                // 소식 번역·기한 추출(⑥ §6.3·§6.4) — 엔진 없으면 no-op(원문 그대로 노출)
+                maybe_translate_content(app, &state.store);
+                // 새 공지 알림(§6.5) — **번역 뒤**여야 한다: 앞에 두면 말풍선에 영어 제목이 나간다
+                maybe_notify_announcements(app, &state.store);
                 // 코칭 판정(R6·R7…) — 엔진 없으면 no-op(pending 침묵), 실패는 조용히(다음 스캔 재시도)
                 run_coaching_judgments(app, &state.store);
                 // E — 세션 work-kind 판정(LLM) 캐시. 엔진 없으면 no-op, 카드는 다음 스캔의
@@ -298,9 +302,13 @@ mod runtime {
             plan.mark_unavailable("team");
         }
         // ① 락 밖: TTL이 만료된 소스만 네트워크 fetch (실패해도 빈 벡터)
-        let (feed, mut fetched) = agent_mentor::ops::fetch_feed_items(hub_src, &plan);
+        let (mut feed, mut fetched) = agent_mentor::ops::fetch_feed_items(hub_src, &plan);
         let (catalog, cat_fetched) = agent_mentor::ops::fetch_marketplace_catalog(&plan);
         fetched.extend(cat_fetched);
+        // 로컬 공지(§6.1) — 파일 읽기라 네트워크가 없다. TTL 대상이 아니므로 `FEED_SOURCES`에
+        // 넣지 않는다: 매 스캔 전량 재생성되어 프룬도 정상 동작한다(스킵되는 소스가 아니다).
+        let announcements = agent_mentor::announcements::collect_local_announcements();
+        feed.extend(agent_mentor::announcements::announcement_items(&announcements));
 
         // ② 락: run_curation(감지→랭킹→persist) → fetch 시각 기록 → 노출 목록 → 즉시 해제.
         // **기록은 persist 성공 뒤**여야 한다: 순서가 반대면 큐레이션이 실패했는데 시각만 남아
@@ -326,6 +334,126 @@ mod runtime {
         // 프론트의 처분 줄이 이미 지워진 레슨을 계속 들고 있게 된다. scan:done은 큐레이션
         // **전에** 나가므로 대신할 수 없다.
         let _ = app.emit("content:ready", &visible);
+    }
+
+    /// 소식 번역·기한 추출 (스펙 §6.3·§6.4) — 스캔 편승. **아이템당 1회**: 이미 번역된 행은
+    /// `content_needing_translation`이 돌려주지 않으므로 Engine을 다시 부르지 않는다.
+    /// 락 규율은 큐레이션과 동형: ①엔진 해석·대상 조회(SQL만)는 짧은 락, ②LLM은 **락 밖**,
+    /// ③persist만 짧은 락. 엔진 미설정이면 no-op — 소식은 원문 그대로 노출된다.
+    fn maybe_translate_content(app: &AppHandle, store_mutex: &std::sync::Mutex<SqliteStore>) {
+        use agent_mentor::content::{parse_translation, translate_kind_for, translate_prompt};
+        use agent_mentor::diary::engine::Engine as _;
+
+        // ① 짧은 락: 엔진 + 대상 목록
+        let (engine, pending) = match store_mutex.lock() {
+            Ok(store) => (
+                crate::resolve_engine(&store),
+                store.content_needing_translation(TRANSLATE_BATCH).unwrap_or_default(),
+            ),
+            Err(e) => {
+                log::warn!("store lock poisoned: {e}");
+                return;
+            }
+        };
+        let Some(engine) = engine else { return };
+        if pending.is_empty() {
+            return;
+        }
+
+        // ② 락 밖: LLM. 한 건이 실패해도 나머지는 계속한다(관대한 처리 — 다음 스캔 재시도).
+        let mut done: Vec<(String, agent_mentor::content::Translation)> = Vec::new();
+        for row in &pending {
+            let Some(kind) = translate_kind_for(&row.trigger_tags) else { continue };
+            let (system, user) = translate_prompt(kind, &row.title, &row.body);
+            match engine.generate(&system, &user).and_then(|o| parse_translation(&o.text)) {
+                Ok(t) => done.push((row.id.clone(), t)),
+                Err(e) => log::warn!("소식 번역 실패({}): {e}", row.id),
+            }
+        }
+        if done.is_empty() {
+            return;
+        }
+
+        // ③ 짧은 락: persist → 갱신된 노출 목록
+        let visible = match store_mutex.lock() {
+            Ok(store) => {
+                for (id, t) in &done {
+                    if let Err(e) = store.set_content_translation(
+                        id,
+                        t.title_ko.as_deref(),
+                        &t.summary_ko,
+                        t.deadline.as_deref(),
+                    ) {
+                        log::warn!("번역 저장 실패({id}): {e}");
+                    }
+                }
+                let now = chrono::Utc::now().to_rfc3339();
+                store
+                    .list_content(&now, agent_mentor::content::CONTENT_COOLDOWN_DAYS, false)
+                    .unwrap_or_default()
+            }
+            Err(e) => {
+                log::warn!("store lock poisoned: {e}");
+                return;
+            }
+        };
+
+        // 큐레이션이 이미 번역 전 목록을 내보냈다 — 갱신본을 다시 보내야 카드가 한국어가 된다.
+        if !visible.is_empty() {
+            let _ = app.emit("content:ready", &visible);
+        }
+    }
+
+    /// 한 스캔에서 번역할 최대 건수. 소식은 하루 1~2건이라 실질 상한이 아니지만,
+    /// 첫 실행에서 묵은 changelog·Boris가 한꺼번에 잡혀 스캔이 길어지는 것을 막는다.
+    const TRANSLATE_BATCH: usize = 5;
+
+    /// 새 공지 알림 (스펙 §6.5) — 처음 보는 공지 id만 **한 번** 알린다.
+    /// 탭을 새로 만들지 않고 기존 인프라(마스코트 말풍선 + 알림 로그)에 얹는다.
+    /// 노출 목록(`list_content`)에 있는 것만 대상이다 — 사용자가 이미 닫은 공지는 알리지 않는다.
+    fn maybe_notify_announcements(app: &AppHandle, store_mutex: &std::sync::Mutex<SqliteStore>) {
+        use std::sync::atomic::Ordering;
+        // ⓪ 알림 창이 구독을 끝내기 전에는 알리지 않는다. emit은 수신자가 0이어도 Ok라,
+        // 여기서 통지 기록만 전진하면 그 공지는 영영 알림이 오지 않는다(인바운드 폴링 선례).
+        // 기록을 그대로 두면 다음 스캔이 다시 시도하고, `notices_ready`가 켜지는 순간에도
+        // `poll_inbound_now`가 한 번 만회한다. 카드 자체는 이미 코칭 탭에 있으므로 손실 없음.
+        if !app.state::<AppState>().notices_ready.load(Ordering::SeqCst) {
+            return;
+        }
+        let now = chrono::Utc::now().to_rfc3339();
+        let fresh = match store_mutex.lock() {
+            Ok(store) => {
+                let rows = store
+                    .list_content(&now, agent_mentor::content::CONTENT_COOLDOWN_DAYS, false)
+                    .unwrap_or_default();
+                let announced: Vec<agent_mentor::store::ContentRow> = rows
+                    .into_iter()
+                    .filter(|r| {
+                        r.trigger_tags
+                            .iter()
+                            .any(|t| t == agent_mentor::announcements::TAG_ANNOUNCEMENT)
+                    })
+                    .collect();
+                let ids: Vec<String> = announced.iter().map(|r| r.id.clone()).collect();
+                match store.take_unnotified_announcements(&ids) {
+                    Ok(new_ids) => announced
+                        .into_iter()
+                        .filter(|r| new_ids.contains(&r.id))
+                        .collect::<Vec<_>>(),
+                    Err(e) => {
+                        log::warn!("공지 통지 기록 실패(알림 생략): {e}");
+                        Vec::new()
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!("store lock poisoned: {e}");
+                return;
+            }
+        };
+        if !fresh.is_empty() {
+            let _ = app.emit("announcement:new", &fresh);
+        }
     }
 
     /// 코칭 판정 패스(B 스펙) — 스캔 편승. judges 벡터(R6·R7…)를 순회하며 각 룰의 pending
@@ -1228,13 +1356,15 @@ mod runtime {
     /// 스캔 재시도. 커서 저장은 emit 성공 후 — 실패 시 커서 미갱신으로 재-emit된다.
     /// 구서버(visits 404)는 이번 실행 동안 방문 폴링만 비활성(maybe_reply_guestbook
     /// INCOMPATIBLE 선례). 기존 maybe_reply_guestbook은 건드리지 않는다(묶음 ② 충돌 억제).
-    /// 알림 창이 구독을 끝냈다고 신고한 직후의 1회 폴링. 스캔은 파일 변경 구동(주기 타이머
+    /// 알림 창이 구독을 끝냈다고 신고한 직후의 1회 만회. 스캔은 파일 변경 구동(주기 타이머
     /// 없음)이라 준비 이전에 스캔이 지나갔으면 다음 변경까지 소식이 안 온다 — 그 공백을 메운다.
+    /// 같은 게이트(`notices_ready`)를 기다리는 새 공지 알림(⑥ §6.5)도 여기서 함께 만회한다.
     /// 네트워크를 타므로 커맨드 스레드를 막지 않게 별 스레드에서.
     pub fn poll_inbound_now(app: AppHandle) {
         std::thread::spawn(move || {
             let state = app.state::<AppState>();
             maybe_poll_inbound(&app, &state.store);
+            maybe_notify_announcements(&app, &state.store);
         });
     }
 

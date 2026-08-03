@@ -26,7 +26,7 @@ archived: 2026-08-03
 - **절약 수치를 다시 렌더하지 않는다.** `no-savings-display.test.ts`가 막고 있다.
 - **커밋 메시지는 Conventional Commits, 영어.**
 
-**참조 스펙:** `docs/design/a-mate/specs/2026-08-02-coaching-tab-unification-design.md` §3(최종 구조), §4(카드 문법 2종), §11(PR 분할).
+**참조 스펙:** `docs/archive/design/a-mate/specs/2026-08-02-coaching-tab-unification-design.md` §3(최종 구조), §4(카드 문법 2종), §11(PR 분할).
 
 ---
 

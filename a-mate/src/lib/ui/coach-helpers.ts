@@ -135,8 +135,12 @@ export interface LearnCardView {
   id: string;
   badge: string;
   title: string;
+  /** 📊 근거 — store의 `enrich_personal`이 채운 "당신 로그: …" 실측 한 줄. 없으면 null. */
+  evidence: string | null;
   summary: string | null;
   sourceUrl: string | null;
+  /** 유효 기한 `YYYY-MM-DD` — 고정 슬롯의 기한 칩 (⑥ §6.4). 없으면 null. */
+  deadline: string | null;
 }
 
 const severityIcon = (s: CoachFinding['severity']): string =>
@@ -185,26 +189,94 @@ export function toLessonCardView(c: ContentItem): LogCardView {
   };
 }
 
-/** 커리큘럼·외부 팁·소식 → 문법 B(카드뉴스). */
+/** 커리큘럼·외부 팁·소식 → 문법 B(카드뉴스).
+ * 번역 캐시(`title_ko`·`summary_ko`, ⑥ §6.3)가 있으면 그것을 쓰고, 없으면 원문으로 폴백한다 —
+ * 엔진 미설정 사용자에게도 영어 원문이 그대로 값을 남긴다(소식은 코칭이 아니라 정보 전달). */
 export function toLearnCardView(c: ContentItem): LearnCardView {
   const has = (t: string) => c.trigger_tags?.includes(t) ?? false;
-  const badge = c.kind === 'news' || has('changelog')
-    ? '소식'
-    : has('boris')
-      ? 'Boris'
-      : has('team')
-        ? '팀'
-        : c.dimension
-          ? (DIM_LABEL[c.dimension] ?? c.dimension)
-          : '배움';
-  return { id: c.id, badge, title: c.title, summary: orNull(c.body), sourceUrl: orNull(c.source_url) };
+  const badge = has('notice')
+    ? '공지' // lastShownEmergencyTip — 장애 안내라 프로모(「소식」)와 갈린다 (§6.1)
+    : c.kind === 'news' || has('changelog')
+      ? '소식'
+      : has('boris')
+        ? 'Boris'
+        : has('team')
+          ? '팀'
+          : c.dimension
+            ? (DIM_LABEL[c.dimension] ?? c.dimension)
+            : '배움';
+  return {
+    id: c.id,
+    badge,
+    title: orNull(c.title_ko) ?? c.title,
+    // 📊 근거 — 커리큘럼은 지도, 내 로그는 GPS. 문법 A와 같은 슬롯을 써서 두 카드가
+    // "근거 → 내용" 구조로 수렴한다. 재료는 store가 이미 채워 보내는 결정론 수치라
+    // LLM이 필요 없고 매 조회마다 최신이다 — 캐시가 굳지 않는다.
+    // 재료가 없으면 줄을 생략한다(근거 칩과 같은 규칙: 0·추정치를 지어내지 않는다).
+    evidence: orNull(c.personal),
+    summary: orNull(c.summary_ko) ?? orNull(c.body),
+    sourceUrl: orNull(c.source_url),
+    deadline: orNull(c.deadline),
+  };
+}
+
+/** 기한 문자열이 실제 달력 날짜인가 — `2026-13-40`·`곧` 같은 오추출을 거른다. */
+function validDeadline(d: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+  const parsed = new Date(`${d}T00:00:00`);
+  return !Number.isNaN(parsed.getTime()) && d.endsWith(String(parsed.getDate()).padStart(2, '0'));
+}
+
+/** 최상단 고정 슬롯에 올릴 소식 1건 (⑥ §6.4). 없으면 null.
+ *
+ * 고정 조건은 **기한이 있고 · 유효하고 · 아직 확인하지 않았을 때**뿐이다. 셋 중 하나라도
+ * 빠지면 일반 소식 카드로 남는다(기본 폐쇄). 특히 **기한 경과 자동 강등이 LLM 오추출의
+ * 안전망**이다 — 잘못 뽑힌 날짜라도 그날이 지나면 스스로 내려온다.
+ *
+ * `items`는 점수 내림차순이므로 첫 후보가 곧 우선순위 1위다. 상한은 1건. */
+export function pinnedNewsItem(
+  items: ContentItem[],
+  ackedIds: string[],
+  today: string,
+): ContentItem | null {
+  return (
+    items.find((c) => {
+      const d = orNull(c.deadline);
+      return d !== null && validDeadline(d) && d >= today && !ackedIds.includes(c.id);
+    }) ?? null
+  );
+}
+
+/** 고정 슬롯 `[확인]` 기록 — 표시 층 상태라 localStorage에 둔다(notices·unseen 선례).
+ * 기한 경과 자동 강등이 안전망이라 이 기록이 없어져도 카드가 영원히 고정되지 않는다. */
+const PIN_ACK_KEY = 'agent-mentor.newsPinAcked';
+
+export function loadPinAcks(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(PIN_ACK_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 최근 것부터 상한을 둬 무한히 자라지 않게 한다. 실제로 저장된 목록을 돌려주므로
+ *  호출부의 상태와 localStorage가 어긋나지 않는다. */
+export function savePinAcks(ids: string[]): string[] {
+  const kept = ids.slice(-30);
+  localStorage.setItem(PIN_ACK_KEY, JSON.stringify(kept));
+  return kept;
 }
 
 /** 큐레이션 콘텐츠가 카드가 되는 상한.
  * `store.list_content`는 LIMIT 없이 `score>=0`인 행을 전부 주고, 옛 「오늘의 배움」 컨테이너가
  * `items[0]` + `items.slice(1, 4)`로 4건만 보여줬다. 컨테이너를 해체하면서 그 상한까지
- * 같이 없애면 카드가 수십 장으로 불어난다 — 상한은 여기서 유지한다. 룰 finding은 대상이 아니다. */
-export const CONTENT_CARD_LIMIT = 4;
+ * 같이 없애면 카드가 수십 장으로 불어난다 — 상한은 여기서 유지한다. 룰 finding은 대상이 아니다.
+ *
+ * ⑥에서 4 → 6. 로컬 공지라는 소스가 하나 늘어, 4를 유지하면 공지 2건이 배움 카드를 전부
+ * 밀어낸다. **자르는 지점은 여전히 여기 한 곳뿐이다**(백엔드엔 LIMIT이 없다).
+ * 고정 슬롯(최대 1건)은 이 상한 밖의 별도 칸이라 호출부가 미리 빼고 넘긴다. */
+export const CONTENT_CARD_LIMIT = 6;
 
 /** 「내 로그에서」로 가는 콘텐츠 = 개인 실전 레슨. 문법 A라 처분·수명 규칙을 함께 받는다. */
 const isPersonal = (c: ContentItem) => c.trigger_tags?.includes('personal') ?? false;

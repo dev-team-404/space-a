@@ -122,6 +122,11 @@ export interface ContentItem {
   status: 'new' | 'resolved' | 'dismissed';
   /** 처분 시각 — 「해결함」 7일 창 판정용(스펙 §5). 미처분이면 null. */
   status_ts?: string | null;
+  /** 번역 캐시(⑥ §6.3) — 외국어 소스만 채워진다. 없으면 원문(title·body)으로 폴백. */
+  summary_ko?: string | null;
+  title_ko?: string | null;
+  /** 본문에서 뽑은 유효 기한 `YYYY-MM-DD`(⑥ §6.4). 고정 슬롯 판정 재료. */
+  deadline?: string | null;
   /** "당신 로그: …" — 사용자 실측 데이터로 접지한 근거 줄(없을 수 있음). */
   personal?: string | null;
 }
@@ -156,9 +161,6 @@ export const listContent = (includeHidden = false) =>
   invoke<ContentItem[]>('list_content', { includeHidden });
 export const setContentStatus = (id: string, status: 'new' | 'resolved' | 'dismissed') =>
   invoke<void>('set_content_status', { id, status });
-/** (2) LLM 코칭 — 팁+개인 근거를 엔진에 넘겨 맞춤 한 줄 생성. 엔진 미설정이면 reject. */
-export const coachTip = (item: ContentItem) =>
-  invoke<string>('coach_tip', { title: item.title, body: item.body, personal: item.personal ?? null });
 
 // 마스코트가 pull한 occasion을 chat 창 알림 로그용으로 재방송 (pull 단일화 — 플랜 Task 2 Step 5)
 export const emitOccasionToday = (labels: string[]) => emit('occasion:today', labels);
@@ -318,6 +320,9 @@ export const onSettingsChanged = (cb: () => void): Promise<UnlistenFn> =>
   listen('settings:changed', () => cb());
 export const onContentReady = (cb: (rows: ContentItem[]) => void): Promise<UnlistenFn> =>
   listen<ContentItem[]>('content:ready', (e) => cb(e.payload));
+/** ⑥ §6.5 — 처음 감지된 로컬 공지. 같은 id로는 다시 오지 않는다(백엔드가 통지 기록을 갖는다). */
+export const onAnnouncementNew = (cb: (rows: ContentItem[]) => void): Promise<UnlistenFn> =>
+  listen<ContentItem[]>('announcement:new', (e) => cb(e.payload));
 export const onLifeVisit = (cb: (rows: LifeVisit[]) => void): Promise<UnlistenFn> =>
   listen<LifeVisit[]>('life:visit', (e) => cb(e.payload));
 export const onGuestbookNew = (cb: (rows: GuestbookEntry[]) => void): Promise<UnlistenFn> =>

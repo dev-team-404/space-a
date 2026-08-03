@@ -6,11 +6,11 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
     emitOccasionToday, getChatterPool, getMascotSeed, getSettings, getSummary, getTodayOccasions,
     hubSettingsGet, listFindings, mascotSetExpanded, openChatTab,
     lifeGoto, lifeView, lifeList, lifeSetBubble, setSetting,
-    onDiaryReady, onLifeVisit, onNewFindings, onScanDone, onSettingsChanged,
+    onAnnouncementNew, onDiaryReady, onLifeVisit, onNewFindings, onScanDone, onSettingsChanged,
     type LifeListEntry, getSprite } from './lib/api';
   import { drawRobot, type RobotSpec } from './lib/robot/render';
   import { frameAt, resolveState, type BubbleKind } from './lib/robot/anim';
-  import { adviceBubble, diaryBubble, findingBubble, occasionBubble, pickChatter, visitBubble, type Bubble } from './lib/robot/bubble';
+  import { adviceBubble, announcementBubble, diaryBubble, findingBubble, occasionBubble, pickChatter, visitBubble, type Bubble } from './lib/robot/bubble';
   import { isDrag } from './lib/robot/drag';
   import { lifeDestinations } from './lib/life-navigation';
 
@@ -70,6 +70,8 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
       onNewFindings((rows) => rows.length && showBubble(findingBubble(rows, honorific))),
       onDiaryReady((date) => showBubble(diaryBubble(date))),
       onLifeVisit((rows) => rows.length && showBubble(visitBubble(rows))),
+      // ⑥ §6.5 — 새 공지 1회 알림 (같은 id 재알림 방지는 백엔드 통지 기록이 담당)
+      onAnnouncementNew((rows) => rows.length && showBubble(announcementBubble(rows, honorific))),
       onScanDone(async () => {
         pullOccasions(); // 자정 넘김 대비 — 게이트 덕에 하루 1회만 유효
         if (!realtimeAdvice) return;

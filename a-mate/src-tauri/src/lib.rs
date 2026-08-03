@@ -433,7 +433,6 @@ pub fn run() {
                 commands::theme_get,
                 commands::theme_set,
                 commands::engine_test,
-                commands::coach_tip,
                 commands::list_content,
                 commands::set_content_status,
                 commands::hub_settings_get,

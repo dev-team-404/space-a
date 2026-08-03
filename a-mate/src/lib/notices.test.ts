@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diaryNotice, findingNotice, guestbookNotice, noticeDest, occasionNotice, pushNotice, visitNotice, type Notice } from './notices';
+import { announcementNotice, diaryNotice, findingNotice, guestbookNotice, noticeDest, noticeStamp, occasionNotice, pushNotice, visitNotice, type Notice } from './notices';
 
 const n = (text: string): Notice => ({ ts: '2026-07-05T10:00:00Z', kind: 'finding', text });
 
@@ -54,6 +54,27 @@ describe('notice 팩토리', () => {
     const many = visitNotice([{ visitor_name: '가' }, { visitor_name: '나' }], '2026-07-29T10:00:00Z');
     expect(many.text).toBe('가님 외 1명이 방에 다녀갔어요');
   });
+  it('announcement: 새 공지 문구 + 첫 공지 id가 target + 코칭 탭 dest', () => {
+    const one = announcementNotice(
+      [{ id: 'cc-announce-fable', title: 'Fable 5 팀 플랜 포함' }],
+      '2026-08-03T10:00:00Z',
+    );
+    expect(one.kind).toBe('announcement');
+    expect(one.text).toBe('새 소식 — Fable 5 팀 플랜 포함');
+    expect(noticeDest(one)).toEqual({ tab: 'coach', target: 'cc-announce-fable' });
+    const many = announcementNotice(
+      [{ id: 'a', title: '가' }, { id: 'b', title: '나' }],
+      '2026-08-03T10:00:00Z',
+    );
+    expect(many.text).toBe('새 소식 2건 — 가 외');
+    expect(many.target).toBe('a');
+    // 번역이 끝난 뒤 오는 이벤트라 한국어 제목이 있으면 그것을 쓴다
+    const ko = announcementNotice(
+      [{ id: 'a', title: 'Fable 5 is now standard', title_ko: '페이블 5, 팀 플랜 기본 포함' }],
+      '2026-08-03T10:00:00Z',
+    );
+    expect(ko.text).toBe('새 소식 — 페이블 5, 팀 플랜 기본 포함');
+  });
   it('guestbook: N건 문구 + 최신 entry_id target + 방명록 탭 dest', () => {
     const one = guestbookNotice([{ entry_id: 'e1', author_name: '준녕' }], '2026-07-29T10:00:00Z');
     expect(one.kind).toBe('guestbook');
@@ -65,6 +86,36 @@ describe('notice 팩토리', () => {
     );
     expect(many.text).toBe('방명록에 새 글 2건 — 가님 외');
     expect(many.target).toBe('e2');
+  });
+});
+
+describe('noticeStamp (단일 스트림 스펙 §5 C)', () => {
+  // 로컬 시각 기준 — 테스트도 로컬 생성자로 만들어 타임존에 흔들리지 않게 한다.
+  const at = (y: number, m: number, d: number, h = 0, min = 0) =>
+    new Date(y, m - 1, d, h, min).toISOString();
+  const now = new Date(2026, 7, 3, 14, 30); // 2026-08-03 14:30 로컬
+
+  it('오늘 알림은 HH:MM', () => {
+    expect(noticeStamp(at(2026, 8, 3, 9, 5), now).label).toBe('09:05');
+  });
+  it('어제 알림은 MM-DD — 오늘과 구분된다', () => {
+    expect(noticeStamp(at(2026, 8, 2, 23, 59), now).label).toBe('08-02');
+  });
+  it('해가 바뀐 과거도 MM-DD', () => {
+    expect(noticeStamp(at(2025, 12, 31, 12, 0), now).label).toBe('12-31');
+  });
+  it('full은 두 경우 모두 YYYY-MM-DD HH:MM', () => {
+    expect(noticeStamp(at(2026, 8, 3, 9, 5), now).full).toBe('2026-08-03 09:05');
+    expect(noticeStamp(at(2025, 12, 31, 12, 0), now).full).toBe('2025-12-31 12:00');
+  });
+  it('자정 경계에서 날짜가 정확히 갈린다', () => {
+    // 00:00은 오늘의 시작 — HH:MM. 그 1분 전은 어제라 MM-DD.
+    expect(noticeStamp(at(2026, 8, 3, 0, 0), now).label).toBe('00:00');
+    expect(noticeStamp(at(2026, 8, 2, 23, 59), now).label).toBe('08-02');
+    // now가 자정 직후여도 같은 판정이어야 한다 (now를 인자로 받는 이유)
+    const justAfterMidnight = new Date(2026, 7, 3, 0, 0);
+    expect(noticeStamp(at(2026, 8, 3, 0, 0), justAfterMidnight).label).toBe('00:00');
+    expect(noticeStamp(at(2026, 8, 2, 23, 59), justAfterMidnight).label).toBe('08-02');
   });
 });
 

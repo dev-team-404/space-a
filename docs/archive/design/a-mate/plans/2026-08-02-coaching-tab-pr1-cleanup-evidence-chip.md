@@ -25,7 +25,7 @@ archived: 2026-08-03
 - **커밋 메시지는 Conventional Commits, 영어.** `<type>(<scope>): <subject>` — 소문자 시작, 마침표 없음.
 - **베이스라인은 이미 확인됨** (2026-08-02): `npm test` exit 0, `cargo test` exit 0. 이 PR은 Rust를 건드리지 않는다.
 
-**참조 스펙:** `docs/design/a-mate/specs/2026-08-02-coaching-tab-unification-design.md` §1.2(D1·D2·D3·D5), §4.1(근거 칩), §8(잔재 정리 목록), §11(PR 분할).
+**참조 스펙:** `docs/archive/design/a-mate/specs/2026-08-02-coaching-tab-unification-design.md` §1.2(D1·D2·D3·D5), §4.1(근거 칩), §8(잔재 정리 목록), §11(PR 분할).
 
 ---
 

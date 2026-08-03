@@ -841,6 +841,11 @@ pub const SCORE_TAG_MATCH: i64 = 300;
 pub const SCORE_TAG_MISS: i64 = -600;
 /// changelog 소식 기본 점수 — 어떤 팁(비프론티어 ~40 포함)보다도 낮게 (2026-07-19 품질 개편).
 pub const SCORE_NEWS: i64 = 25;
+/// 로컬 공지(§6.1) — changelog와 달리 **이 사용자에게 실제로 표시된** 시한부 공지이고,
+/// 노출 상한이 소진되면 다른 데서 다시 볼 방법이 없다. 그래서 패치노트(25)와 같이 두면
+/// 카드 상한에 밀려 영영 안 보이고, 태그 게이트(-600)에 걸리면 `list_content`의
+/// `score >= 0`에서 통째로 사라진다. 프론티어 팁(500)·개인 레슨(550)보다는 아래.
+pub const SCORE_ANNOUNCEMENT: i64 = 320;
 /// 개인 실전 레슨 — 내 로그의 사건이 일반 커리큘럼(프론티어 500)보다 먼저다.
 pub const SCORE_PERSONAL: i64 = 550;
 
@@ -870,6 +875,10 @@ pub fn score(item: &ContentItem, profile: &CompetencyProfile) -> i64 {
         }
         // 뉴스/태그 게이트: 관심 태그와 겹칠 때만 노출
         None => {
+            // 로컬 공지는 태그 게이트를 타지 않는다 — 게이트에 걸리면 음수 점수라 아예 안 보인다.
+            if item.trigger_tags.iter().any(|t| t == crate::announcements::TAG_ANNOUNCEMENT) {
+                return SCORE_ANNOUNCEMENT + item.base_priority;
+            }
             let hit = item
                 .trigger_tags
                 .iter()
@@ -896,23 +905,89 @@ pub fn rank(items: Vec<ContentItem>, profile: &CompetencyProfile) -> Vec<(Conten
     scored
 }
 
-/// LLM 코칭용 프롬프트(system, user). 사용자 실측 근거(personal)를 반드시 녹여
-/// "일반론"이 아니라 이 사람 데이터에 기반한 조언이 나오게 한다. (2) LLM 레이어.
-pub fn coach_prompt(title: &str, body: &str, personal: Option<&str>) -> (String, String) {
-    let system = "당신은 사용자의 AI 코딩(Claude Code) 습관을 코칭하는 멘토입니다. \
-        반드시 사용자의 실제 로그 데이터를 근거로, 일반론이 아니라 이 사람에게 맞는 조언을 \
-        존댓말로 1~2문장(120자 이내) 한국어로 쓰세요. 데이터 수치를 자연스럽게 인용하고, \
-        인사말·따옴표·과장 없이 핵심만. \
-        새 기능 소식이라면: 원문(패치노트)을 번역·반복하지 말고, 이 기능으로 '무엇이 가능해졌고 \
-        언제 어떤 명령·방법으로 써보면 되는지'를 구체적으로 안내하세요. 쓸 만한 활용법이 \
-        떠오르지 않는 소식이면 억지로 포장하지 말고 어떤 상황에 해당되는지만 짧게 알려주세요.         절대 금지: 카드 제목·본문에 이미 있는 문장을 반복·번역·재서술하는 것. 본문에 없는         '다음 행동 딱 한 걸음'을 더할 수 없으면 빈 문자열만 반환하세요."
-        .to_string();
-    let data = personal.unwrap_or("(개인 데이터 없음 — 일반 원칙만)");
-    let user = format!(
-        "코칭 주제: {title}\n일반 설명: {body}\n이 사용자의 실제 데이터: {data}\n\n\
-         위 데이터를 인용해 이 사용자만을 위한 코칭 1~2문장을 써주세요."
+// ─────────────────────────────────────────────────────────────────────────
+// 번역·기한 추출 (스펙 §6.3·§6.4) — 아이템당 **1회**, 결과는 content_items에 캐시된다.
+// 한국어 소스(내장 팁·팀 지식)는 대상이 아니다: §6.3 표가 "그대로"로 못박았다.
+// 원문이 이미 Anthropic이 쓴 1~2문장 요약이라 요약이 아니라 번역이며, 환각 위험이 낮다.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// 소스별 처리 방식 (§6.3 표).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TranslateKind {
+    /// 로컬 공지 — 이미 요약된 1~2문장. **번역만**.
+    Announcement,
+    /// changelog — 영어 bullet. 번역 + 한 줄 다듬기.
+    Changelog,
+    /// Boris 팁 — 영어 본문. 요약 + 번역.
+    Boris,
+}
+
+/// 이 아이템이 번역 대상인가. 한국어 소스는 `None`(LLM을 아예 부르지 않는다).
+pub fn translate_kind_for(tags: &[String]) -> Option<TranslateKind> {
+    let has = |t: &str| tags.iter().any(|x| x == t);
+    if has(crate::announcements::TAG_ANNOUNCEMENT) {
+        Some(TranslateKind::Announcement)
+    } else if has("changelog") {
+        Some(TranslateKind::Changelog)
+    } else if has("boris") {
+        Some(TranslateKind::Boris)
+    } else {
+        None
+    }
+}
+
+/// 번역 + 기한 추출 프롬프트. 기한 필드를 같은 호출에 얹어 추가 비용을 0으로 만든다(§6.4).
+pub fn translate_prompt(kind: TranslateKind, title: &str, body: &str) -> (String, String) {
+    let task = match kind {
+        // "번역만" — 원문에 없는 내용을 더하면 그게 곧 환각이다.
+        TranslateKind::Announcement => {
+            "원문은 이미 1~2문장으로 요약된 공지입니다. **번역만** 하고 없는 내용을 더하지 마세요."
+        }
+        TranslateKind::Changelog => {
+            "원문은 영어 변경 로그 항목입니다. 번역한 뒤 읽기 좋게 한 줄로 다듬으세요."
+        }
+        TranslateKind::Boris => "원문은 영어 팁 본문입니다. 핵심만 골라 요약하고 번역하세요.",
+    };
+    let system = format!(
+        "당신은 Claude Code 소식을 한국어로 옮기는 번역가입니다. {task}\n\
+         반드시 JSON 객체 **하나만** 출력하세요 (코드펜스·설명·인사말 금지):\n\
+         {{\"title_ko\": string, \"summary_ko\": string, \"deadline\": \"YYYY-MM-DD\" | null}}\n\
+         - title_ko: 제목을 자연스러운 한국어로 (40자 이내)\n\
+         - summary_ko: 핵심을 존댓말 1~2문장(140자 이내)으로\n\
+         - deadline: 본문에 **명시된 종료 날짜**가 있을 때만 YYYY-MM-DD로 씁니다. \
+           확신이 없으면 반드시 null입니다. '곧', '한정 기간', '지금' 같은 모호한 표현은 null입니다."
     );
+    let user = format!("제목: {title}\n본문: {body}");
     (system, user)
+}
+
+/// 번역 결과. `deadline`은 `YYYY-MM-DD`로 파싱되는 값만 살아남는다(정밀도 우선, 기본 폐쇄).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Translation {
+    pub title_ko: Option<String>,
+    pub summary_ko: String,
+    pub deadline: Option<String>,
+}
+
+/// 엔진 응답 → `Translation`. 코드펜스·사족은 관대히 벗기되(`extract_verdict_json`),
+/// `summary_ko`가 비면 실패로 본다 — 빈 요약을 캐시하면 그 카드는 영영 번역되지 않는다.
+pub fn parse_translation(text: &str) -> Result<Translation> {
+    let v = crate::judge::extract_verdict_json(text)?;
+    let pick = |k: &str| {
+        v.get(k)
+            .and_then(|x| x.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    };
+    let summary_ko = pick("summary_ko").ok_or_else(|| anyhow::anyhow!("summary_ko 없음"))?;
+    Ok(Translation {
+        title_ko: pick("title_ko"),
+        summary_ko,
+        // 형식이 어긋나면 버린다 — 잘못 뽑힌 날짜로 카드를 고정하느니 고정하지 않는 게 낫다.
+        deadline: pick("deadline")
+            .filter(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").is_ok()),
+    })
 }
 
 #[cfg(test)]
@@ -954,23 +1029,77 @@ mod tests {
     }
 
     #[test]
-    fn coach_prompt_grounds_in_user_data_and_runs_via_engine() {
+    fn only_foreign_language_sources_are_translated() {
+        // §6.3 표 — 내장 팁·팀 지식은 한국어라 "그대로"다. LLM을 아예 부르지 않는다.
+        let tags = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(translate_kind_for(&tags(&["announcement"])), Some(TranslateKind::Announcement));
+        assert_eq!(translate_kind_for(&tags(&["changelog", "claude-code"])), Some(TranslateKind::Changelog));
+        assert_eq!(translate_kind_for(&tags(&["boris", "skill"])), Some(TranslateKind::Boris));
+        assert_eq!(translate_kind_for(&tags(&["team", "hooks"])), None, "팀 지식은 한국어");
+        assert_eq!(translate_kind_for(&tags(&[])), None, "내장 팁은 한국어");
+        assert_eq!(translate_kind_for(&tags(&["personal"])), None, "개인 레슨은 한국어");
+    }
+
+    #[test]
+    fn translate_prompt_carries_source_specific_instruction_and_runs_via_engine() {
         use crate::diary::engine::{Engine, MockEngine};
-        let (system, user) = coach_prompt(
-            "안 쓰는 MCP는 대화 시작 전부터 토큰을 깔아요",
-            "안 쓰면 정리하는 게 이득이에요.",
-            Some("당신 로그: 미사용 MCP `chrome-devtools`가 상주 ~432K토큰"),
+        let (sys_a, user) = translate_prompt(
+            TranslateKind::Announcement,
+            "Fable 5 is now a standard part of your Team plan",
+            "You can use up to 50% of your weekly usage limit on Fable 5.",
         );
-        // LLM에 사용자 실데이터가 반드시 전달돼야 한다 (일반론 방지).
-        assert!(user.contains("chrome-devtools"), "user 프롬프트에 실데이터: {user}");
-        assert!(user.contains("안 쓰는 MCP"), "주제 포함: {user}");
-        assert!(!system.is_empty());
-        // 엔진을 통해 실제로 코칭 문장이 나온다 (mock으로 계약 검증).
+        assert!(sys_a.contains("번역만"), "공지는 번역만 — 요약하면 환각 위험: {sys_a}");
+        assert!(sys_a.contains("deadline"), "기한 필드를 같은 호출에 얹는다(§6.4)");
+        assert!(user.contains("Fable 5"), "원문이 프롬프트에 실린다: {user}");
+        let (sys_b, _) = translate_prompt(TranslateKind::Boris, "t", "b");
+        assert!(sys_b.contains("요약"), "Boris는 요약 + 번역: {sys_b}");
+        assert_ne!(sys_a, sys_b, "소스별로 지시가 갈려야 한다");
+
+        // 엔진 계약 — mock 응답이 그대로 Translation으로 환원된다.
         let eng = MockEngine {
-            canned: "chrome-devtools MCP가 상주 토큰을 꽤 먹고 있어요, 안 쓰면 정리해보세요.".into(),
+            canned: r#"{"title_ko":"페이블 5, 팀 플랜 기본 포함","summary_ko":"주간 한도의 50%까지 쓸 수 있어요.","deadline":null}"#.into(),
         };
-        let out = eng.generate(&system, &user).unwrap();
-        assert!(!out.text.is_empty());
+        let out = eng.generate(&sys_a, &user).unwrap();
+        let t = parse_translation(&out.text).unwrap();
+        assert_eq!(t.title_ko.as_deref(), Some("페이블 5, 팀 플랜 기본 포함"));
+        assert!(t.summary_ko.starts_with("주간 한도"));
+        assert_eq!(t.deadline, None);
+    }
+
+    #[test]
+    fn parse_translation_is_lenient_about_wrapping_but_strict_about_the_deadline() {
+        // 코드펜스·사족은 벗긴다 (judge의 extract_verdict_json 규약)
+        let t = parse_translation(
+            "```json\n{\"title_ko\":\"제목\",\"summary_ko\":\"요약\",\"deadline\":\"2026-08-31\"}\n```\n끝",
+        ).unwrap();
+        assert_eq!(t.deadline.as_deref(), Some("2026-08-31"));
+        // 정밀도 우선 — 형식이 어긋난 기한은 채택하지 않는다(기본 폐쇄, §6.4)
+        for bad in ["곧", "2026-13-99", "8/31", "2026-08", "next week", ""] {
+            let raw = format!("{{\"summary_ko\":\"요약\",\"deadline\":\"{bad}\"}}");
+            assert_eq!(parse_translation(&raw).unwrap().deadline, None, "기한 '{bad}'은 버려야 함");
+        }
+        assert_eq!(parse_translation(r#"{"summary_ko":"요약"}"#).unwrap().deadline, None);
+        // title_ko는 선택 — 없으면 원문 제목을 계속 쓴다
+        assert_eq!(parse_translation(r#"{"summary_ko":"요약"}"#).unwrap().title_ko, None);
+        // summary_ko가 비면 실패 — 빈 요약을 캐시하면 그 카드는 영영 번역되지 않는다
+        assert!(parse_translation(r#"{"title_ko":"제목"}"#).is_err());
+        assert!(parse_translation(r#"{"summary_ko":"   "}"#).is_err());
+        assert!(parse_translation("JSON이 아님").is_err());
+    }
+
+    #[test]
+    fn local_announcements_clear_the_tag_gate() {
+        // 태그 게이트에 걸리면 SCORE_TAG_MISS(-600) → list_content의 score>=0에서 통째로 사라진다.
+        let p = profile_with(&[Dimension::Automation], &["hooks"]);
+        let ann = ContentItem {
+            id: "cc-announce-x".into(), kind: ItemKind::News,
+            title: "t".into(), body: "b".into(), source_url: None, dimension: None,
+            trigger_tags: vec!["announcement".into()], base_priority: 1,
+        };
+        assert_eq!(score(&ann, &p), SCORE_ANNOUNCEMENT + 1);
+        assert!(score(&ann, &p) > SCORE_NEWS, "패치노트보다 위 — 상한에 밀리면 안 된다");
+        assert!(score(&ann, &p) < SCORE_PERSONAL, "개인 레슨보다는 아래");
+        assert!(score(&ann, &p) < SCORE_FRONTIER_BOOST, "프론티어 팁보다는 아래");
     }
 
     #[test]
