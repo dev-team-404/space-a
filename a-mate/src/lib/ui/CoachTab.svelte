@@ -3,13 +3,12 @@
   import SessionModal from './SessionModal.svelte';
   import LogCard from './coach/LogCard.svelte';
   import LearnCard from './coach/LearnCard.svelte';
-  import { coachTitle, ctxLine, isHiddenFinding, partitionCoachItems, sessionIdsOf, totalSessionsOf } from './coach-helpers';
+  import { ctxLine, partitionCoachItems, sessionIdsOf, toDisposedRows, totalSessionsOf, type DisposedRow } from './coach-helpers';
 
   let { focusKey = null, onChanged }: { focusKey?: string | null; onChanged?: () => void } = $props();
 
   let all = $state<CoachFinding[]>([]);
   let open = $state<string | null>(null);
-  let showHidden = $state(false);
   let copied = $state<string | null>(null);
   let detail = $state<{ id: string; title: string } | null>(null);
   let expanded = $state<string | null>(null);
@@ -27,14 +26,18 @@
   }
 
   const active = $derived(all.filter((f) => f.status === 'new'));
-  const hidden = $derived(all.filter((f) => isHiddenFinding(f.status)));
 
   // 큐레이션 콘텐츠 — personal 태그는 「내 로그에서」로, 나머지는 「배움 · 소식」으로 갈린다.
   let tips = $state<ContentItem[]>([]);
+  // 처분된 레슨까지 포함한 전체 — 접힌 줄의 재료다. 활성 목록(tips)은 백엔드가 점수·축
+  // 쿨다운으로 이미 걸러 주므로 그대로 두고, 처분 줄만 별도로 받는다.
+  let allTips = $state<ContentItem[]>([]);
 
   // 근거 출처로 두 섹션을 가른다 (스펙 §3). 분기 로직은 전부 coach-helpers의 순수 함수에 있다.
   const sections = $derived(partitionCoachItems(active, tips));
   const findingByKey = $derived(new Map(active.map((f) => [f.dedup_key, f])));
+  // 처분 줄 (스펙 §5) — 해결함은 7일, 무시는 영구. 판정은 전부 순수 함수 쪽에 있다.
+  const disposed = $derived(toDisposedRows(all, allTips, Date.now()));
 
   // 내부망이면 외부 링크를 숨긴다 (옛 컨테이너에서 이관 — 두 카드가 각각 부르지 않도록 여기서 한 번만)
   let showLinks = $state(true);
@@ -65,12 +68,17 @@
     all = await listFindings(true).catch(() => []);
   }
   async function refreshTips() {
-    tips = await listContent(false).catch(() => []);
+    const [visible, everything] = await Promise.all([
+      listContent(false).catch(() => []),
+      listContent(true).catch(() => []),
+    ]);
+    tips = visible;
+    allTips = everything;
   }
   refresh();
   refreshTips();
   $effect(() => {
-    const subs = [onNewFindings(() => refresh()), onContentReady((rows) => { tips = rows; })];
+    const subs = [onNewFindings(() => refresh()), onContentReady(() => refreshTips())];
     return () => { subs.forEach((s) => s.then((u) => u())); };
   });
 
@@ -93,11 +101,23 @@
     setTimeout(() => (copied = null), 1500);
   }
 
-  async function mark(f: CoachFinding, status: 'resolved' | 'dismissed' | 'new') {
-    await setFindingStatus(f.dedup_key, status).catch(() => {});
+  type Disposition = 'resolved' | 'dismissed' | 'new';
+
+  async function mark(key: string, status: Disposition) {
+    await setFindingStatus(key, status).catch(() => {});
     await refresh();
     onChanged?.(); // 셸의 절약 총액·코칭 배지 즉시 갱신
   }
+
+  // 개인 레슨도 룰 카드와 같은 처분 모델을 쓴다 (스펙 §5.5) — 옛 `✕` 영구 소멸(D4)을 대체한다.
+  async function markLesson(id: string, status: Disposition) {
+    await setContentStatus(id, status).catch(() => {});
+    await refreshTips();
+    onChanged?.();
+  }
+
+  const undo = (d: DisposedRow) =>
+    d.source === 'finding' ? mark(d.key, 'new') : markLesson(d.key, 'new');
 
   // 세션 스코프 finding의 "어떤 작업인지" — 프로젝트 · 시작 시각
   const sessionLine = (f: CoachFinding) => {
@@ -211,11 +231,13 @@
             {#if f.scope_kind === 'session'}
               <button onclick={() => openDetail(f)}>세션 상세</button>
             {/if}
-            <button onclick={() => mark(f, 'resolved')}>해결함</button>
-            <button onclick={() => mark(f, 'dismissed')}>무시</button>
+            <button onclick={() => mark(f.dedup_key, 'resolved')}>해결함</button>
+            <button onclick={() => mark(f.dedup_key, 'dismissed')}>무시</button>
           {:else}
-            <!-- 개인 레슨: 처분 어휘 확장(resolved)은 PR③ — 지금은 기존 ✕만 -->
-            <button onclick={() => dismissLearn(v.key)}>✕ 그만 보기</button>
+            <!-- 개인 레슨도 같은 두 처분 — 「해결함」은 방출이 멈추면 정리되고(§5.2),
+                 「무시」는 영구다. 둘 다 하단 접힌 줄에서 실행취소할 수 있다. -->
+            <button onclick={() => markLesson(v.key, 'resolved')}>해결함</button>
+            <button onclick={() => markLesson(v.key, 'dismissed')}>무시</button>
           {/if}
         {/snippet}
         {#snippet footer()}
@@ -246,21 +268,16 @@
     {/each}
   {/if}
 
-  {#if hidden.length > 0}
-    <button class="hidden-toggle" onclick={() => (showHidden = !showHidden)}>
-      숨긴 항목 {hidden.length}개 {showHidden ? '접기' : '보기'}
-    </button>
-    {#if showHidden}
-      {#each hidden as f (f.dedup_key)}
-        <article class="card muted" data-key={f.dedup_key}>
-          <header>
-            <span class="title">{f.status === 'resolved' ? '✔ 해결함' : '✕ 무시'} · {coachTitle(f.rule_id, f.evidence)}</span>
-            <button onclick={() => mark(f, 'new')}>다시 보기</button>
-          </header>
-          <p class="why">{f.detail}</p>
-        </article>
-      {/each}
-    {/if}
+  <!-- 처분 줄 (스펙 §5) — 토글 없이 바로 노출한다. "내가 뭘 처분했는지"가 보여야 「해결함」이
+       사라지는 게 아니라 접히는 것임을 알 수 있다. 표시 **위치**는 단일 스트림 재설계가 정한다. -->
+  {#if disposed.length > 0}
+    {#each disposed as d (`${d.source}:${d.key}`)}
+      <div class="disposed" data-key={d.key} title={d.detail ?? ''}>
+        <span class="disposed-label">{d.label}</span>
+        <span class="disposed-title">{d.title}</span>
+        <button onclick={() => undo(d)}>실행취소</button>
+      </div>
+    {/each}
   {/if}
 
   {#if detail}
@@ -305,14 +322,17 @@
     display: flex; align-items: baseline; gap: 6px;
   }
   .section .count { font-size: 11px; color: var(--accent-strong); }
-  /* 카드 본문 스타일은 LogCard/LearnCard로 이관됐다. 여기 남은 .card는 '숨긴 항목'용. */
-  .card {
-    background: var(--frame-bg); border-radius: var(--radius-m); box-shadow: var(--shadow-soft);
-    padding: 12px 14px; border-left: 4px solid var(--pastel-mint);
+  /* 카드 본문 스타일은 LogCard/LearnCard로 이관됐다. 여기 남은 건 처분 줄뿐. */
+  .disposed {
+    display: flex; align-items: baseline; gap: 8px;
+    opacity: 0.6; font-size: 12px; color: var(--ink-soft); padding: 2px 2px 2px 4px;
   }
-  .card.muted { opacity: 0.75; border-left-color: var(--pastel-lav); }
-  header { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
-  .title { font-weight: 600; }
+  .disposed-label { flex: none; }
+  .disposed-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .disposed button {
+    flex: none; border: none; background: none; cursor: pointer;
+    font: inherit; font-size: 11px; color: var(--ink-soft); text-decoration: underline; padding: 0;
+  }
   .why { margin: 6px 0 2px; font-size: 12px; color: var(--ink-soft); }
   .session { margin: 2px 0; font-size: 12px; color: var(--ink-soft); }
   .raw-toggle {
