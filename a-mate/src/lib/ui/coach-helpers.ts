@@ -206,6 +206,9 @@ export function toLearnCardView(c: ContentItem): LearnCardView {
  * 같이 없애면 카드가 수십 장으로 불어난다 — 상한은 여기서 유지한다. 룰 finding은 대상이 아니다. */
 export const CONTENT_CARD_LIMIT = 4;
 
+/** 「내 로그에서」로 가는 콘텐츠 = 개인 실전 레슨. 문법 A라 처분·수명 규칙을 함께 받는다. */
+const isPersonal = (c: ContentItem) => c.trigger_tags?.includes('personal') ?? false;
+
 /** 근거 출처로 두 섹션을 가른다 (스펙 §3).
  * 「내 로그에서」 = 룰 finding + `personal` 태그 콘텐츠. finding을 앞에 둔다 —
  * 처방·행동 버튼이 붙어 바로 실행 가능한 쪽이기 때문.
@@ -214,10 +217,96 @@ export function partitionCoachItems(
   findings: CoachFinding[],
   content: ContentItem[],
 ): { log: LogCardView[]; learn: LearnCardView[] } {
-  const isPersonal = (c: ContentItem) => c.trigger_tags?.includes('personal') ?? false;
-  const top = content.slice(0, CONTENT_CARD_LIMIT);
+  // 처분된 항목은 카드가 아니라 하단 접힌 줄이다 — 4건 상한의 자리도 잡아먹지 않게 먼저 거른다.
+  // 탭 신규 배지·알림 집계도 같은 기준(백엔드 status='new')을 쓴다.
+  const top = content.filter((c) => c.status === 'new').slice(0, CONTENT_CARD_LIMIT);
   return {
-    log: [...findings.map(toLogCardView), ...top.filter(isPersonal).map(toLessonCardView)],
+    log: [
+      ...findings.filter((f) => f.status === 'new').map(toLogCardView),
+      ...top.filter(isPersonal).map(toLessonCardView),
+    ],
     learn: top.filter((c) => !isPersonal(c)).map(toLearnCardView),
   };
+}
+
+// ── 처분 줄 (스펙 §5) ─────────────────────────────────────────────────────
+//
+// 두 처분은 뜻이 다르므로 수명도 다르다.
+//   해결함 = "조치했다" → 7일간 접힌 줄로 남아 되돌릴 수 있고, 재발하면 활성 복귀(백엔드 §5.1)
+//   무시   = "알지만 지금은 안 한다" → 영구히 접힌 줄. 같은 묶음까지 침묵
+// 표시 **위치**는 잠정이다 — 단일 스트림 재설계가 섹션을 없애며 다시 정한다. 여기 있는 것은
+// "어떤 줄이 어떤 라벨로 보이는가"의 판정뿐이라 위치가 바뀌어도 그대로 쓰인다.
+
+/** 「해결함」 접힌 줄이 남는 기간 — 실수로 눌렀을 때의 복구 창. 이후엔 화면에서만 사라지고
+ * DB 행은 재발 감지를 위해 보존된다(지우면 룰이 다음 스캔에 같은 카드를 새로 만든다). */
+export const RESOLVED_WINDOW_DAYS = 7;
+
+const DISPOSED_LABEL: Record<string, string> = {
+  resolved: '✔ 해결함',
+  dismissed: '◷ 무시',
+};
+
+/** 처분 라벨. 처분이 아닌 상태(new·pending·rejected)는 null — 줄을 만들지 않는다. */
+export function disposedLabel(status: string): string | null {
+  return DISPOSED_LABEL[status] ?? null;
+}
+
+/** 처분 줄을 지금 보여줄지. 무시는 영구, 해결함은 7일.
+ * 처분 시각을 모르면(마이그레이션 이전 처분 · 파싱 불가) **보이는 쪽**으로 기운다 —
+ * 만료를 계산할 수 없다고 실행취소까지 빼앗지 않는다. */
+export function isDisposedVisible(
+  status: string,
+  statusTs: string | null | undefined,
+  nowMs: number,
+): boolean {
+  if (!isHiddenFinding(status)) return false;
+  if (status === 'dismissed') return true;
+  if (!statusTs) return true;
+  const ts = Date.parse(statusTs);
+  if (Number.isNaN(ts)) return true;
+  return nowMs - ts < RESOLVED_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+}
+
+export interface DisposedRow {
+  key: string;
+  /** 실행취소가 어느 커맨드로 가는지 — finding=set_finding_status, lesson=set_content_status */
+  source: 'finding' | 'lesson';
+  label: string;
+  title: string;
+  detail: string | null;
+}
+
+/** 룰 카드와 개인 레슨을 하나의 처분 줄 목록으로 합친다 — 둘 다 문법 A라 처분 모델이 같다.
+ * finding을 앞에 두는 것은 활성 카드 정렬과 같은 규약. */
+export function toDisposedRows(
+  findings: CoachFinding[],
+  content: ContentItem[],
+  nowMs: number,
+): DisposedRow[] {
+  const rows: DisposedRow[] = [];
+  for (const f of findings) {
+    const label = disposedLabel(f.status);
+    if (label === null || !isDisposedVisible(f.status, f.status_ts, nowMs)) continue;
+    rows.push({
+      key: f.dedup_key,
+      source: 'finding',
+      label,
+      title: coachTitle(f.rule_id, f.evidence),
+      detail: orNull(f.detail),
+    });
+  }
+  for (const c of content) {
+    // 수명 규칙은 문법 A 공통이다 — 배움·소식(문법 B)은 `✕` 하나뿐이라 처분 줄을 만들지 않는다.
+    if (!isPersonal(c)) continue;
+    const label = disposedLabel(c.status);
+    if (label === null || !isDisposedVisible(c.status, c.status_ts, nowMs)) continue;
+    rows.push({
+      key: c.id,
+      source: 'lesson',
+      label,
+      title: c.title,
+      detail: splitLessonBody(c.body).evidence,
+    });
+  }
+  return rows;
 }

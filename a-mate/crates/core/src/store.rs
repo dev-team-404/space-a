@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS findings (
   evidence_json TEXT NOT NULL, est_tokens_saved INTEGER DEFAULT 0,
   prescription_json TEXT, status TEXT NOT NULL DEFAULT 'new',
   first_seen TEXT, last_seen TEXT, occurrences INTEGER DEFAULT 1,
-  judgment_json TEXT
+  judgment_json TEXT,
+  status_evidence_n INTEGER, status_ts TEXT
 );
 CREATE TABLE IF NOT EXISTS mcp_inventory (
   host TEXT NOT NULL, project_id TEXT NOT NULL, server TEXT NOT NULL,
@@ -85,7 +86,8 @@ CREATE TABLE IF NOT EXISTS content_items (
   kind TEXT NOT NULL, dimension TEXT, title TEXT NOT NULL, body TEXT NOT NULL,
   source_url TEXT, trigger_tags TEXT NOT NULL DEFAULT '[]',
   score INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'new',
-  first_seen TEXT, last_seen TEXT
+  first_seen TEXT, last_seen TEXT,
+  status_ts TEXT
 );
 CREATE TABLE IF NOT EXISTS personal_skill_inventory (
   host TEXT NOT NULL, scope TEXT NOT NULL, name TEXT NOT NULL,
@@ -217,6 +219,25 @@ fn migrate(conn: &Connection) -> Result<()> {
         .exists([])?;
     if !has_judgment {
         conn.execute_batch("ALTER TABLE findings ADD COLUMN judgment_json TEXT;")?;
+    }
+    // 처분·수명 모델(PR③ 스펙 §5.3) — 컬럼 전용. `status_evidence_n`은 「해결함」 시점의 룰별
+    // 근거 수치 스냅숏(재발 판정용), `status_ts`는 처분 시각(해결함 7일 창 계산용)이다.
+    // judgment_json 선례대로 **재수집을 유발하지 않는다** — 기존 행은 NULL로 남고,
+    // NULL 스냅숏은 재발 판정에서 제외되어 묵은 카드가 한꺼번에 되살아나지 않는다(§5.1).
+    let has_status_evidence = conn
+        .prepare("SELECT 1 FROM pragma_table_info('findings') WHERE name='status_evidence_n'")?
+        .exists([])?;
+    if !has_status_evidence {
+        conn.execute_batch(
+            "ALTER TABLE findings ADD COLUMN status_evidence_n INTEGER;
+             ALTER TABLE findings ADD COLUMN status_ts TEXT;",
+        )?;
+    }
+    let has_content_status_ts = conn
+        .prepare("SELECT 1 FROM pragma_table_info('content_items') WHERE name='status_ts'")?
+        .exists([])?;
+    if !has_content_status_ts {
+        conn.execute_batch("ALTER TABLE content_items ADD COLUMN status_ts TEXT;")?;
     }
     // v3.1 재수집 — IDE 합성 블록(<ide_opened_file> 등) 프롬프트 오염 수정이 라인 재해석을 요구.
     // 스키마 변화가 없어 PRAGMA user_version(=1)으로 1회 트리거. 오염 preview에서 파생된
@@ -555,6 +576,18 @@ impl SqliteStore {
                 init_status
             ],
         )?;
+        // 재발 감지 (스펙 §5.1) — 「해결함」 뒤 근거 수치가 기준선을 **초과**하면 활성 복귀.
+        // 방출 여부를 신호로 쓰면 안 된다: 룰은 관찰창만 보고 status를 안 보므로 매 스캔 같은
+        // 묶음을 방출하고, 파이프라인은 60초 디바운스라 처분 1분 뒤 카드가 부활한다.
+        // 기준선이 NULL인 행(마이그레이션 이전 처분)은 판정 대상이 아니다.
+        if let Some(n) = crate::coach::recurrence_evidence_n(&f.rule_id, &f.evidence) {
+            self.conn.execute(
+                "UPDATE findings SET status='new', status_evidence_n=NULL, status_ts=NULL
+                 WHERE dedup_key=?1 AND status='resolved'
+                   AND status_evidence_n IS NOT NULL AND ?2 > status_evidence_n",
+                params![f.dedup_key, n],
+            )?;
+        }
         Ok(())
     }
 
@@ -874,7 +907,7 @@ impl SqliteStore {
         let sql = format!(
             "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                     evidence_json, est_tokens_saved, prescription_json, dedup_key,
-                    last_seen, occurrences, status, judgment_json
+                    last_seen, occurrences, status, judgment_json, status_ts
              FROM findings {}
              ORDER BY est_tokens_saved DESC, dedup_key",
             if include_hidden { "" } else { "WHERE status='new'" }
@@ -890,12 +923,14 @@ impl SqliteStore {
                 r.get::<_, Option<String>>(10)?, r.get::<_, i64>(11)?,
                 r.get::<_, String>(12)?,
                 r.get::<_, Option<String>>(13)?,
+                r.get::<_, Option<String>>(14)?,
             ))
         })?;
         let mut out = Vec::new();
         for row in rows {
             let (rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
-                 evidence_json, est, prescription_json, dedup_key, last_seen, occ, status, judgment_raw) = row?;
+                 evidence_json, est, prescription_json, dedup_key, last_seen, occ, status,
+                 judgment_raw, status_ts) = row?;
             out.push(FindingRow {
                 rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                 evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
@@ -904,6 +939,7 @@ impl SqliteStore {
                 dedup_key, last_seen,
                 occurrences: occ as u64,
                 status,
+                status_ts,
                 judgment: judgment_raw.and_then(|s| serde_json::from_str(&s).ok()),
             });
         }
@@ -911,10 +947,31 @@ impl SqliteStore {
     }
 
     /// status: 'new' | 'resolved' | 'dismissed' (검증은 커맨드 층). 반환 = 해당 행 존재 여부.
-    pub fn set_finding_status(&self, dedup_key: &str, status: &str) -> Result<bool> {
+    ///
+    /// 처분 수명 기록도 함께 남긴다 (스펙 §5.1/§5.3):
+    /// - `resolved` → 그 순간의 룰별 근거 수치를 `status_evidence_n`에 스냅숏(재발 기준선) + 처분 시각
+    /// - `dismissed` → 처분 시각만 (영구 침묵이라 기준선이 필요 없다)
+    /// - 그 외(`new` = 실행취소, 판정 내부 상태) → 기준선·시각을 모두 지운다
+    pub fn set_finding_status(&self, dedup_key: &str, status: &str, now_ts: &str) -> Result<bool> {
+        let snapshot = if status == "resolved" {
+            self.conn
+                .query_row(
+                    "SELECT rule_id, evidence_json FROM findings WHERE dedup_key=?1",
+                    params![dedup_key],
+                    |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+                )
+                .optional()?
+                .and_then(|(rule_id, ev)| {
+                    let ev: serde_json::Value = serde_json::from_str(&ev).ok()?;
+                    crate::coach::recurrence_evidence_n(&rule_id, &ev)
+                })
+        } else {
+            None
+        };
+        let ts = matches!(status, "resolved" | "dismissed").then_some(now_ts);
         let n = self.conn.execute(
-            "UPDATE findings SET status=?2 WHERE dedup_key=?1",
-            params![dedup_key, status],
+            "UPDATE findings SET status=?2, status_evidence_n=?3, status_ts=?4 WHERE dedup_key=?1",
+            params![dedup_key, status, snapshot, ts],
         )?;
         Ok(n > 0)
     }
@@ -1078,7 +1135,9 @@ impl SqliteStore {
             )?;
         }
         // 피드에서 사라진 아이템 프룬(2026-07-19): 소식·외부 팁은 일시적 — 랭킹에 없으면
-        // 낡은 점수로 상단을 점령한다. 단, 사용자가 닫은(dismissed 등) 행은 쿨다운 기록이라 보존.
+        // 낡은 점수로 상단을 점령한다. 단, 사용자가 「무시」한(dismissed) 행은 쿨다운 기록이라 보존.
+        // 「해결함」(resolved)은 함께 프룬한다 — 개인 레슨의 수명은 **방출 기반**이라(스펙 §5.2)
+        // 미방출이 곧 "고쳐졌다"는 신호다. 나중에 다시 방출되면 새 `new` 카드로 돌아온다.
         // 프룬 범위는 **이번에 참여한 소스로 한정**한다(2026-08-02, 스펙 §7.1): TTL로 fetch를
         // 스킵한 소스는 이번 랭킹에 항목을 하나도 못 싣기 때문에, 함께 지우면 스킵할 때마다 그
         // 소스의 카드가 통째로 사라졌다가 TTL 만료 후 되살아난다.
@@ -1088,7 +1147,10 @@ impl SqliteStore {
             let stale: Vec<String> = {
                 let mut stmt = self
                     .conn
-                    .prepare("SELECT id, trigger_tags FROM content_items WHERE status='new'")?;
+                    .prepare(
+                        "SELECT id, trigger_tags FROM content_items
+                         WHERE status IN ('new','resolved')",
+                    )?;
                 let rows = stmt.query_map([], |r| {
                     Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
                 })?;
@@ -1119,7 +1181,7 @@ impl SqliteStore {
             id: r.get(0)?, kind: r.get(1)?, dimension: r.get(2)?,
             title: r.get(3)?, body: r.get(4)?, source_url: r.get(5)?,
             trigger_tags: serde_json::from_str(&tags_json).unwrap_or_default(),
-            score: r.get(7)?, status: r.get(8)?,
+            score: r.get(7)?, status: r.get(8)?, status_ts: r.get(9)?,
             personal: None, // list_content에서 enrich_personal로 채움
         })
     }
@@ -1135,7 +1197,7 @@ impl SqliteStore {
     ) -> Result<Vec<ContentRow>> {
         if include_hidden {
             let mut stmt = self.conn.prepare(
-                "SELECT id,kind,dimension,title,body,source_url,trigger_tags,score,status
+                "SELECT id,kind,dimension,title,body,source_url,trigger_tags,score,status,status_ts
                  FROM content_items ORDER BY score DESC, id",
             )?;
             let rows = stmt.query_map([], Self::content_row_from)?;
@@ -1143,7 +1205,7 @@ impl SqliteStore {
             return Ok(self.enrich_personal(out));
         }
         let mut stmt = self.conn.prepare(
-            "SELECT id,kind,dimension,title,body,source_url,trigger_tags,score,status
+            "SELECT id,kind,dimension,title,body,source_url,trigger_tags,score,status,status_ts
              FROM content_items c
              WHERE status='new' AND score >= 0
                AND NOT EXISTS (
@@ -1243,12 +1305,17 @@ impl SqliteStore {
         None
     }
 
-    /// status: 'new' | 'shown' | 'dismissed' (검증은 커맨드 층). dismiss 시 last_seen 갱신해
+    /// status: 'new' | 'resolved' | 'dismissed' (검증은 커맨드 층). dismiss 시 last_seen 갱신해
     /// 쿨다운 기준 시각으로 삼는다. 반환 = 해당 행 존재 여부.
+    ///
+    /// `status_ts`는 「해결함」 7일 창의 기준 시각이다 (스펙 §5). `last_seen`으로 대신할 수 없다 —
+    /// 재방출마다 `replace_content_items`가 갱신해 창이 영영 만료되지 않는다.
+    /// 개인 레슨은 방출 기반이라 근거 수치 스냅숏(`status_evidence_n`)은 두지 않는다(§5.2).
     pub fn set_content_status(&self, id: &str, status: &str, now_ts: &str) -> Result<bool> {
+        let status_ts = matches!(status, "resolved" | "dismissed").then_some(now_ts);
         let n = self.conn.execute(
-            "UPDATE content_items SET status=?2, last_seen=?3 WHERE id=?1",
-            params![id, status, now_ts],
+            "UPDATE content_items SET status=?2, last_seen=?3, status_ts=?4 WHERE id=?1",
+            params![id, status, now_ts, status_ts],
         )?;
         Ok(n > 0)
     }
@@ -1473,6 +1540,18 @@ impl SqliteStore {
 
     pub fn finding_severities(&self) -> Result<Vec<(String, String)>> {
         let mut stmt = self.conn.prepare("SELECT dedup_key, severity FROM findings")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// **활성('new')** finding만의 key→severity — 스캔 전후로 비교해 "새로 뜬 카드"를 가린다.
+    /// 전체가 아니라 활성만 보는 이유: 재발로 `resolved`→`new`가 된 카드는 키도 severity도
+    /// 그대로라 전체 스냅숏에서는 아무 변화가 없다(스펙 §5.1의 복귀가 알림 없이 묻힌다).
+    /// 노출 목록(`list_findings_current(false)`)과 같은 필터라 emit 대상과도 어긋나지 않는다.
+    pub fn active_finding_severities(&self) -> Result<Vec<(String, String)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT dedup_key, severity FROM findings WHERE status='new'")?;
         let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(Into::into)
     }
@@ -1974,7 +2053,7 @@ impl SqliteStore {
             .query_row(
                 "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                         evidence_json, est_tokens_saved, prescription_json, dedup_key,
-                        last_seen, occurrences, status, judgment_json
+                        last_seen, occurrences, status, judgment_json, status_ts
                  FROM findings WHERE dedup_key=?1",
                 params![dedup_key],
                 |r| {
@@ -1987,13 +2066,15 @@ impl SqliteStore {
                         r.get::<_, Option<String>>(10)?, r.get::<_, i64>(11)?,
                         r.get::<_, String>(12)?,
                         r.get::<_, Option<String>>(13)?,
+                        r.get::<_, Option<String>>(14)?,
                     ))
                 },
             )
             .optional()?;
         Ok(row.map(
             |(rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
-              evidence_json, est, prescription_json, dedup_key, last_seen, occ, status, judgment_raw)| {
+              evidence_json, est, prescription_json, dedup_key, last_seen, occ, status,
+              judgment_raw, status_ts)| {
                 FindingRow {
                     rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                     evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
@@ -2002,6 +2083,7 @@ impl SqliteStore {
                     dedup_key, last_seen,
                     occurrences: occ as u64,
                     status,
+                    status_ts,
                     judgment: judgment_raw.and_then(|s| serde_json::from_str(&s).ok()),
                 }
             },
@@ -2196,6 +2278,8 @@ pub struct ContentRow {
     pub trigger_tags: Vec<String>,
     pub score: i64,
     pub status: String,
+    /// 처분 시각 — 「해결함」 7일 창 판정용 (스펙 §5). 미처분이면 None.
+    pub status_ts: Option<String>,
     /// "당신 로그: …" — 사용자 실측 데이터로 접지한 근거 줄. list_content read 시점 계산.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub personal: Option<String>,
@@ -2240,6 +2324,8 @@ pub struct FindingRow {
     pub last_seen: Option<String>,
     pub occurrences: u64,
     pub status: String,
+    /// 처분 시각 — 「해결함」 7일 창을 프론트가 판정하는 재료 (스펙 §5). 미처분이면 None.
+    pub status_ts: Option<String>,
     /// R6 판정 결과({worthy,reason,suggested_name,attempts,tokens}). 미판정이면 None.
     pub judgment: Option<serde_json::Value>,
 }
@@ -3135,11 +3221,11 @@ mod tests {
         assert_eq!(store.list_findings_current(false).unwrap()[0].status, "new");
 
         // dismiss → active에서 빠지고 include_hidden엔 남음
-        assert!(store.set_finding_status("k1", "dismissed").unwrap());
+        assert!(store.set_finding_status("k1", "dismissed", "2026-08-03T00:00:00Z").unwrap());
         assert_eq!(store.list_findings_current(false).unwrap().len(), 1);
         assert_eq!(store.list_findings_current(true).unwrap().len(), 2);
         // 없는 키는 false
-        assert!(!store.set_finding_status("nope", "resolved").unwrap());
+        assert!(!store.set_finding_status("nope", "resolved", "2026-08-03T00:00:00Z").unwrap());
 
         // 재관측(upsert)돼도 status 유지
         store.upsert_finding(&f("k1"), "2026-07-05T01:00:00Z").unwrap();
@@ -3173,7 +3259,7 @@ mod tests {
             dedup_key: "R10|W|p".into(),
         };
         store.upsert_finding(&f, "2026-07-01T10:00:00Z").unwrap();
-        assert!(store.set_finding_status("R10|W|p", "dismissed").unwrap());
+        assert!(store.set_finding_status("R10|W|p", "dismissed", "2026-08-03T00:00:00Z").unwrap());
 
         let f2 = Finding { severity: Severity::Info, prescription: None, ..f };
         store.upsert_finding(&f2, "2026-07-02T10:00:00Z").unwrap();
@@ -3189,6 +3275,237 @@ mod tests {
         assert_eq!(severity, "info");
         assert!(prescription_json.is_none());
         assert_eq!(status, "dismissed");
+    }
+
+    // ── 처분·수명 모델 (스펙 §5) ────────────────────────────────────────────
+
+    /// 근거 수치가 n인 R6 패턴 finding — 재발 감지 테스트의 공용 재료.
+    fn r6_with_sessions(key: &str, n: u64) -> Finding {
+        Finding {
+            rule_id: "R6".into(),
+            severity: Severity::Suggest,
+            scope_host: Some("Windows".into()),
+            scope_project: None,
+            scope_kind: "pattern".into(),
+            scope_ref: "x".into(),
+            evidence: serde_json::json!({"repeated_prompt": "rep", "session_count": n}),
+            est_tokens_saved: 0,
+            prescription: None,
+            dedup_key: key.into(),
+        }
+    }
+
+    fn disposition_of(store: &SqliteStore, key: &str) -> (String, Option<i64>, Option<String>) {
+        store
+            .conn
+            .query_row(
+                "SELECT status, status_evidence_n, status_ts FROM findings WHERE dedup_key=?1",
+                params![key],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap()
+    }
+
+    /// 스펙 §5.1 — 「해결함」은 그 순간의 룰별 근거 수치를 스냅숏한다. 이 값이 재발 판정의
+    /// 기준선이다. last_seen·occurrences는 스캔 지표라 기준선이 될 수 없다(§1.2 D5).
+    #[test]
+    fn resolving_a_finding_snapshots_rule_evidence_and_dispose_time() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-01T00:00:00Z").unwrap();
+
+        assert!(store.set_finding_status("R6|W|a", "resolved", "2026-08-03T09:00:00Z").unwrap());
+
+        let (status, n, ts) = disposition_of(&store, "R6|W|a");
+        assert_eq!(status, "resolved");
+        assert_eq!(n, Some(3), "R6은 evidence.session_count를 스냅숏해야 함");
+        assert_eq!(ts.as_deref(), Some("2026-08-03T09:00:00Z"));
+    }
+
+    /// 「무시」는 같은 묶음까지 영구 침묵이라 재발 기준선이 필요 없다 — 처분 시각만 남긴다.
+    #[test]
+    fn dismissing_a_finding_records_time_without_an_evidence_snapshot() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-01T00:00:00Z").unwrap();
+
+        store.set_finding_status("R6|W|a", "dismissed", "2026-08-03T09:00:00Z").unwrap();
+
+        let (status, n, ts) = disposition_of(&store, "R6|W|a");
+        assert_eq!(status, "dismissed");
+        assert_eq!(n, None, "무시는 재발 기준선을 두지 않는다");
+        assert_eq!(ts.as_deref(), Some("2026-08-03T09:00:00Z"));
+    }
+
+    /// 「실행취소」(new 복귀)는 기준선과 처분 시각을 지운다 — 남겨두면 다음 처분 전까지
+    /// 옛 기준선이 살아 있어 엉뚱한 시점의 수치와 비교하게 된다.
+    #[test]
+    fn undoing_a_disposition_clears_the_snapshot_and_dispose_time() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-01T00:00:00Z").unwrap();
+        store.set_finding_status("R6|W|a", "resolved", "2026-08-03T09:00:00Z").unwrap();
+
+        store.set_finding_status("R6|W|a", "new", "2026-08-03T09:30:00Z").unwrap();
+
+        let (status, n, ts) = disposition_of(&store, "R6|W|a");
+        assert_eq!(status, "new");
+        assert_eq!(n, None);
+        assert_eq!(ts, None);
+    }
+
+    /// 스펙 §5.1 — 수치가 그대로면 침묵. 스캔은 60초 디바운스라 여기서 부활시키면
+    /// 「해결함」을 누른 1분 뒤 카드가 되돌아온다(§1.2 D5).
+    #[test]
+    fn resolved_finding_stays_silent_while_evidence_is_unchanged() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-01T00:00:00Z").unwrap();
+        store.set_finding_status("R6|W|a", "resolved", "2026-08-03T09:00:00Z").unwrap();
+
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-03T09:01:00Z").unwrap();
+
+        assert_eq!(disposition_of(&store, "R6|W|a").0, "resolved");
+    }
+
+    /// 근거 수치가 **초과**하면 재발이다 — 같은 지시를 또 반복해 세션이 붙었다는 뜻.
+    /// 활성 복귀와 함께 기준선을 지워 다음 처분이 새 기준선을 잡게 한다.
+    #[test]
+    fn resolved_finding_revives_when_evidence_exceeds_the_snapshot() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-01T00:00:00Z").unwrap();
+        store.set_finding_status("R6|W|a", "resolved", "2026-08-03T09:00:00Z").unwrap();
+
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 4), "2026-08-04T09:00:00Z").unwrap();
+
+        let (status, n, ts) = disposition_of(&store, "R6|W|a");
+        assert_eq!(status, "new", "근거 수치 초과 = 재발 → 활성 복귀");
+        assert_eq!(n, None);
+        assert_eq!(ts, None);
+    }
+
+    /// 관찰창이 밀려 수치가 줄었다 원래대로 돌아온 건 재발이 아니다 — **초과**해야 한다.
+    /// 보수적이지만 계속 반복하면 결국 초과하므로 영구 누락은 아니다(§12).
+    #[test]
+    fn resolved_finding_stays_silent_when_evidence_dips_and_returns() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-01T00:00:00Z").unwrap();
+        store.set_finding_status("R6|W|a", "resolved", "2026-08-03T09:00:00Z").unwrap();
+
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 2), "2026-08-04T09:00:00Z").unwrap();
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-05T09:00:00Z").unwrap();
+
+        assert_eq!(disposition_of(&store, "R6|W|a").0, "resolved");
+    }
+
+    /// 업데이트 전에 처분한 행은 기준선이 NULL이다 — 판정하지 않는다. 판정하면 업데이트
+    /// 직후 묵은 카드가 한꺼번에 되살아난다.
+    #[test]
+    fn resolved_finding_with_null_snapshot_is_never_judged_as_recurrence() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-01T00:00:00Z").unwrap();
+        // 마이그레이션 이전에 처분된 행 재현 — status만 있고 기준선이 없다
+        store
+            .conn
+            .execute(
+                "UPDATE findings SET status='resolved', status_evidence_n=NULL, status_ts=NULL
+                 WHERE dedup_key='R6|W|a'",
+                [],
+            )
+            .unwrap();
+
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 99), "2026-08-04T09:00:00Z").unwrap();
+
+        assert_eq!(disposition_of(&store, "R6|W|a").0, "resolved");
+    }
+
+    /// 「무시」는 영구 침묵이다 — 수치가 늘어도 부활하지 않는다(§5: 같은 묶음까지 침묵).
+    /// 기준선을 **일부러 심어두고** 검증한다: 실제로는 무시가 기준선을 남기지 않아 NULL 가드에
+    /// 걸리지만, 그러면 이 테스트가 "dismissed는 부활 대상이 아니다"를 증명하지 못한다
+    /// (뮤테이션 확인: 부활 조건을 `status IN ('resolved','dismissed')`로 바꿔도 안 잡혔다).
+    #[test]
+    fn dismissed_finding_never_revives_even_with_a_baseline_planted() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-01T00:00:00Z").unwrap();
+        store.set_finding_status("R6|W|a", "dismissed", "2026-08-03T09:00:00Z").unwrap();
+        store
+            .conn
+            .execute("UPDATE findings SET status_evidence_n=3 WHERE dedup_key='R6|W|a'", [])
+            .unwrap();
+
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 40), "2026-08-04T09:00:00Z").unwrap();
+
+        assert_eq!(disposition_of(&store, "R6|W|a").0, "dismissed");
+    }
+
+    /// 해결함 7일 창 — 7일이 지나면 **화면에서만** 사라진다. 행은 남아 재발 감지를 계속하고,
+    /// 다음 스캔이 같은 카드를 새 `new`로 되살리지 않아야 한다(지우면 룰이 새로 만든다).
+    #[test]
+    fn resolved_row_survives_rescans_and_is_not_recreated_as_new() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-01T00:00:00Z").unwrap();
+        store.set_finding_status("R6|W|a", "resolved", "2026-08-03T09:00:00Z").unwrap();
+
+        // 7일 경과 후에도 룰은 같은 묶음을 계속 방출한다(수치는 그대로)
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-11T09:00:00Z").unwrap();
+        store.prune_stale_r6_patterns(&["R6|W|a".to_string()]).unwrap();
+
+        let (status, _, ts) = disposition_of(&store, "R6|W|a");
+        assert_eq!(status, "resolved", "행이 보존돼야 재발 감지가 이어진다");
+        assert_eq!(ts.as_deref(), Some("2026-08-03T09:00:00Z"), "처분 시각은 스캔이 밀지 않는다");
+        assert!(store.list_findings_current(false).unwrap().is_empty(), "활성 목록엔 안 나온다");
+        assert_eq!(store.list_findings_current(true).unwrap().len(), 1);
+    }
+
+    /// 재발 복귀는 **키도 severity도 그대로**라 전체 스냅숏 비교로는 보이지 않는다.
+    /// 파이프라인이 활성 스냅숏을 봐야 `coach:finding`이 나가고 알림·말풍선이 뜬다 —
+    /// 안 그러면 "재발하면 다시 떠야 한다"(§5)가 조용히 묻힌다.
+    #[test]
+    fn revival_is_invisible_to_the_full_snapshot_but_fresh_in_the_active_one() {
+        use std::collections::HashMap;
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-01T00:00:00Z").unwrap();
+        store.set_finding_status("R6|W|a", "resolved", "2026-08-03T09:00:00Z").unwrap();
+
+        let full_before: HashMap<String, String> =
+            store.finding_severities().unwrap().into_iter().collect();
+        let active_before: HashMap<String, String> =
+            store.active_finding_severities().unwrap().into_iter().collect();
+        assert!(active_before.is_empty(), "처분된 카드는 활성 스냅숏에 없다");
+
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 4), "2026-08-04T09:00:00Z").unwrap();
+
+        assert!(
+            crate::pipeline::diff_findings(&full_before, &store.finding_severities().unwrap())
+                .is_empty(),
+            "전체 스냅숏은 재발을 놓친다 — 이게 활성 스냅숏을 쓰는 이유다"
+        );
+        assert_eq!(
+            crate::pipeline::diff_findings(&active_before, &store.active_finding_severities().unwrap()),
+            vec!["R6|W|a".to_string()],
+        );
+    }
+
+    /// 7일 창은 프론트의 순수 함수가 판정한다(컴포넌트 테스트 라이브러리가 없어 세운 규약).
+    /// 그러려면 처분 시각이 목록 행에 실려야 한다 — 두 테이블 모두.
+    #[test]
+    fn disposition_time_is_carried_on_finding_and_content_rows() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-01T00:00:00Z").unwrap();
+        store.set_finding_status("R6|W|a", "resolved", "2026-08-03T09:00:00Z").unwrap();
+        let row = &store.list_findings_current(true).unwrap()[0];
+        assert_eq!(row.status_ts.as_deref(), Some("2026-08-03T09:00:00Z"));
+
+        let item = crate::content::ContentItem {
+            id: "lesson-model".into(),
+            kind: crate::content::ItemKind::Tip,
+            title: "t".into(),
+            body: "b".into(),
+            source_url: None,
+            dimension: None,
+            trigger_tags: vec!["personal".into()],
+            base_priority: 0,
+        };
+        store.replace_content_items(&[(item, 550)], "2026-08-01T00:00:00Z", &[]).unwrap();
+        store.set_content_status("lesson-model", "resolved", "2026-08-03T09:00:00Z").unwrap();
+        let rows = store.list_content("2026-08-03T10:00:00Z", 3.0, true).unwrap();
+        assert_eq!(rows[0].status_ts.as_deref(), Some("2026-08-03T09:00:00Z"));
     }
 
     #[test]
@@ -3211,7 +3528,7 @@ mod tests {
         assert_eq!(status("R11|W|b"), "new", "다른 룰은 기존대로 new");
 
         // 이미 판정돼 rejected가 된 R6은 재관측(upsert)돼도 status 불변 — 판정 캐시 유지
-        store.set_finding_status("R6|W|a", "rejected").unwrap();
+        store.set_finding_status("R6|W|a", "rejected", "2026-08-03T00:00:00Z").unwrap();
         store.upsert_finding(&mk("R6", "R6|W|a"), "2026-07-21T01:00:00Z").unwrap();
         assert_eq!(status("R6|W|a"), "rejected", "ON CONFLICT는 status를 덮지 않아야 함");
     }
@@ -3564,7 +3881,7 @@ mod tests {
                 evidence: serde_json::json!({}), est_tokens_saved: 10,
                 prescription: None, dedup_key: "keep".into(),
             }, "2026-07-05T00:00:00Z").unwrap();
-            store.set_finding_status("keep", "dismissed").unwrap();
+            store.set_finding_status("keep", "dismissed", "2026-08-03T00:00:00Z").unwrap();
         }
 
         let store = SqliteStore::open(&db).unwrap(); // migrate 실행
@@ -3626,7 +3943,7 @@ mod tests {
                 evidence: serde_json::json!({}), est_tokens_saved: 10,
                 prescription: None, dedup_key: "keep21".into(),
             }, "2026-07-05T00:00:00Z").unwrap();
-            store.set_finding_status("keep21", "dismissed").unwrap();
+            store.set_finding_status("keep21", "dismissed", "2026-08-03T00:00:00Z").unwrap();
         }
 
         let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v2.1 분기 발화
@@ -3653,6 +3970,67 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].dedup_key, "keep21");
         assert_eq!(rows[0].status, "dismissed");
+    }
+
+    /// 스펙 §5.3 — 처분·수명 컬럼은 **컬럼 전용** 마이그레이션이다. judgment_json 선례를 따라
+    /// events/sessions/ingest_state/daily_rollup을 절대 비우지 않는다. 마이그레이션이 전량
+    /// 재수집을 유발해 릴리스마다 콜드 스캔이 되돌아오던 사고(#146)의 재발 방지 가드.
+    #[test]
+    fn migrate_adds_status_lifecycle_columns_without_recollecting() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("mstatus.db");
+        let old = SCHEMA
+            .replace(",\n  status_evidence_n INTEGER, status_ts TEXT", "")
+            .replace(",\n  status_ts TEXT\n);", "\n);");
+        assert!(old.len() < SCHEMA.len(), "처분·수명 컬럼 치환 실패 — SCHEMA 문자열 확인");
+
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(&old).unwrap();
+            // user_version=8 = 현행 최신. 이전 파괴적 분기는 건너뛰고 새 컬럼 분기만 단독 발화한다.
+            conn.execute_batch(
+                "PRAGMA user_version = 8;
+                 INSERT INTO events (dedup_key, session_id, host, project_id, source_offset, kind)
+                   VALUES ('e:0','s1','Windows','p',0,'assistant_turn');
+                 INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts)
+                   VALUES ('s1','Windows','p','claude-code','2026-08-01T00:00:00Z','2026-08-01T00:00:00Z');
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 42);
+                 INSERT INTO daily_rollup (host, project_id, date, session_count)
+                   VALUES ('Windows','p','2026-08-01',1);
+                 INSERT INTO content_items (id, kind, title, body, status)
+                   VALUES ('lesson-cache','tip','t','b','dismissed');",
+            )
+            .unwrap();
+        }
+
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행
+
+        for (table, col) in [
+            ("findings", "status_evidence_n"),
+            ("findings", "status_ts"),
+            ("content_items", "status_ts"),
+        ] {
+            let exists = store
+                .conn
+                .prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name='{col}'"))
+                .unwrap()
+                .exists([])
+                .unwrap();
+            assert!(exists, "{table}.{col} 컬럼이 추가돼야 함");
+        }
+        for table in ["events", "sessions", "ingest_state", "daily_rollup"] {
+            let n: i64 = store
+                .conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 1, "{table} 행은 컬럼 전용 마이그레이션에서 보존돼야 함");
+        }
+        // 사용자 처분 기록도 보존
+        let status: String = store
+            .conn
+            .query_row("SELECT status FROM content_items WHERE id='lesson-cache'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(status, "dismissed");
     }
 
     #[test]
@@ -3916,7 +4294,7 @@ mod tests {
                 est_tokens_saved: 0, prescription: None, dedup_key: "R6|Windows|ok".into(),
             }, "2026-07-20T12:00:00Z").unwrap();
             // PR2: upsert가 R6을 pending으로 넣으므로, v6(오염된 'new' 카드 정화) 검증을 위해 new로 복원
-            store.set_finding_status("R6|Windows|ok", "new").unwrap();
+            store.set_finding_status("R6|Windows|ok", "new", "2026-08-03T00:00:00Z").unwrap();
             // v6까지는 dismissed R23이 나깅 방지용으로 보존됐으나, v7에서 R23 룰 자체가
             // 폐기되며 dismissed 포함 전량 삭제 대상이 된다 (PR2 스펙 §4.6) — 아래 assert 참고.
             store.upsert_finding(&Finding {
@@ -3926,7 +4304,7 @@ mod tests {
                 evidence: serde_json::json!({"sequence": ["skill:x", "mcp:m", "bash:gh"]}),
                 est_tokens_saved: 0, prescription: None, dedup_key: "R23|Windows|muted".into(),
             }, "2026-07-20T12:00:00Z").unwrap();
-            store.set_finding_status("R23|Windows|muted", "dismissed").unwrap();
+            store.set_finding_status("R23|Windows|muted", "dismissed", "2026-08-03T00:00:00Z").unwrap();
         }
         let store = SqliteStore::open(&db).unwrap();
         let keys: Vec<String> = {
@@ -3967,10 +4345,10 @@ mod tests {
             };
             store.upsert_finding(&f("R6", "R6|Windows|junk"), "2026-07-21T00:00:00Z").unwrap();
             // PR2: upsert가 R6을 pending으로 넣으므로, v6(오염된 'new' 카드 정화) 검증을 위해 new로 복원
-            store.set_finding_status("R6|Windows|junk", "new").unwrap();
+            store.set_finding_status("R6|Windows|junk", "new", "2026-08-03T00:00:00Z").unwrap();
             store.upsert_finding(&f("R23", "R23|Windows|junk"), "2026-07-21T00:00:00Z").unwrap();
             store.upsert_finding(&f("R6", "R6|Windows|muted"), "2026-07-21T00:00:00Z").unwrap();
-            store.set_finding_status("R6|Windows|muted", "dismissed").unwrap();
+            store.set_finding_status("R6|Windows|muted", "dismissed", "2026-08-03T00:00:00Z").unwrap();
             store.upsert_finding(&f("R1", "R1|Windows|keep"), "2026-07-21T00:00:00Z").unwrap();
         }
         let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v6 분기 발화
@@ -4014,11 +4392,11 @@ mod tests {
             };
             store.upsert_finding(&f("R23", "R23|Windows|a"), "2026-07-21T00:00:00Z").unwrap();
             store.upsert_finding(&f("R23", "R23|Windows|muted"), "2026-07-21T00:00:00Z").unwrap();
-            store.set_finding_status("R23|Windows|muted", "dismissed").unwrap();
+            store.set_finding_status("R23|Windows|muted", "dismissed", "2026-08-03T00:00:00Z").unwrap();
             store.upsert_finding(&f("R6", "R6|Windows|active"), "2026-07-21T00:00:00Z").unwrap();
-            store.set_finding_status("R6|Windows|active", "new").unwrap(); // PR1 시대 노출 카드
+            store.set_finding_status("R6|Windows|active", "new", "2026-08-03T00:00:00Z").unwrap(); // PR1 시대 노출 카드
             store.upsert_finding(&f("R6", "R6|Windows|kept"), "2026-07-21T00:00:00Z").unwrap();
-            store.set_finding_status("R6|Windows|kept", "dismissed").unwrap();
+            store.set_finding_status("R6|Windows|kept", "dismissed", "2026-08-03T00:00:00Z").unwrap();
             store.upsert_finding(&f("R11", "R11|Windows|keep"), "2026-07-21T00:00:00Z").unwrap();
         }
         // 재오픈 → migrate 실행
@@ -4066,9 +4444,9 @@ mod tests {
                 prescription: None, dedup_key: key.into(),
             };
             store.upsert_finding(&f("R6", "R6|Windows|cmd"), "2026-07-23T00:00:00Z").unwrap();
-            store.set_finding_status("R6|Windows|cmd", "new").unwrap(); // 스킬 호출로 뜬 오탐 카드
+            store.set_finding_status("R6|Windows|cmd", "new", "2026-08-03T00:00:00Z").unwrap(); // 스킬 호출로 뜬 오탐 카드
             store.upsert_finding(&f("R6", "R6|Windows|muted"), "2026-07-23T00:00:00Z").unwrap();
-            store.set_finding_status("R6|Windows|muted", "dismissed").unwrap();
+            store.set_finding_status("R6|Windows|muted", "dismissed", "2026-08-03T00:00:00Z").unwrap();
             store.upsert_finding(&f("R1", "R1|Windows|keep"), "2026-07-23T00:00:00Z").unwrap();
         }
         let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v8 분기 발화
@@ -4147,7 +4525,7 @@ mod tests {
             }, "2026-07-20T00:00:00Z").unwrap();
             // v6까지 연쇄 실행되면 status='new'인 R6/R23은 전량 정화 대상이라, 이 finding이
             // "R23만 삭제" 관찰을 견디려면 dismissed로 사용자 기록화해야 한다.
-            store.set_finding_status("R6|Windows|ok", "dismissed").unwrap();
+            store.set_finding_status("R6|Windows|ok", "dismissed", "2026-08-03T00:00:00Z").unwrap();
         }
 
         let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v3 분기 발화 (이후 v6까지 연쇄)
@@ -4194,7 +4572,7 @@ mod tests {
             }, "2026-07-19T00:00:00Z").unwrap();
             // v6까지 연쇄 실행되면 status='new'인 R6는 (합성 오염 여부와 무관히) 전량 정화
             // 대상이라, "정상 R6는 보존" 관찰을 견디려면 dismissed로 사용자 기록화해야 한다.
-            store.set_finding_status("R6|WSL:U|ok", "dismissed").unwrap();
+            store.set_finding_status("R6|WSL:U|ok", "dismissed", "2026-08-03T00:00:00Z").unwrap();
         }
 
         let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — 마커 부재로 발화 (이후 v6까지 연쇄)
@@ -4411,7 +4789,7 @@ mod tests {
                 evidence: serde_json::json!({}), est_tokens_saved: 10,
                 prescription: None, dedup_key: "keepv3".into(),
             }, "2026-07-05T00:00:00Z").unwrap();
-            store.set_finding_status("keepv3", "dismissed").unwrap();
+            store.set_finding_status("keepv3", "dismissed", "2026-08-03T00:00:00Z").unwrap();
         }
 
         let store = SqliteStore::open(&db).unwrap(); // migrate 실행 — v3 분기 발화

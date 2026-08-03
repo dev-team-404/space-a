@@ -29,6 +29,8 @@ export interface Finding {
   last_seen: string | null;
   occurrences: number;
   status: string;
+  /** 처분 시각 — 「해결함」 7일 창 판정용(스펙 §5). 미처분이면 null. */
+  status_ts?: string | null;
   /** R6 판정 결과(worthy만 노출됨). rejected/pending은 목록에 안 옴. */
   judgment?: { worthy?: boolean; reason?: string; suggested_name?: string } | null;
 }
@@ -117,7 +119,9 @@ export interface ContentItem {
   source_url: string | null;
   trigger_tags: string[];
   score: number;
-  status: 'new' | 'shown' | 'dismissed';
+  status: 'new' | 'resolved' | 'dismissed';
+  /** 처분 시각 — 「해결함」 7일 창 판정용(스펙 §5). 미처분이면 null. */
+  status_ts?: string | null;
   /** "당신 로그: …" — 사용자 실측 데이터로 접지한 근거 줄(없을 수 있음). */
   personal?: string | null;
 }
@@ -150,7 +154,7 @@ export const chatStatus = () => invoke<ChatStatus>('chat_status');
 export const chatSend = (messages: ChatMessage[]) => invoke<string>('chat_send', { messages });
 export const listContent = (includeHidden = false) =>
   invoke<ContentItem[]>('list_content', { includeHidden });
-export const setContentStatus = (id: string, status: 'new' | 'shown' | 'dismissed') =>
+export const setContentStatus = (id: string, status: 'new' | 'resolved' | 'dismissed') =>
   invoke<void>('set_content_status', { id, status });
 /** (2) LLM 코칭 — 팁+개인 근거를 엔진에 넘겨 맞춤 한 줄 생성. 엔진 미설정이면 reject. */
 export const coachTip = (item: ContentItem) =>

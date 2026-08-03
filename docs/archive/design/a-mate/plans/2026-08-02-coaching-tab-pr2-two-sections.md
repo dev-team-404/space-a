@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-08-03
+---
+
 # 코칭 탭 통일 PR② — 표현 통일(2단 섹션 + 카드 문법) 구현 계획
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

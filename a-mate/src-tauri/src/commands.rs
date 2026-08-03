@@ -161,8 +161,12 @@ pub(crate) fn valid_finding_status(s: &str) -> bool {
     matches!(s, "new" | "resolved" | "dismissed")
 }
 
+/// 콘텐츠 처분 어휘 (스펙 §5.6). 개인 실전 레슨이 문법 A로 넘어오며 findings와 같은
+/// `resolved`/`dismissed` 두 처분을 갖는다. 옛 `shown`은 **설정하는 코드가 없는 죽은 값**이라
+/// 함께 걷어냈다 — 남겨두면 list_content가 영구히 숨기는 상태로 카드를 밀어넣을 수 있고
+/// 되돌릴 UI가 없다.
 pub(crate) fn valid_content_status(s: &str) -> bool {
-    matches!(s, "new" | "shown" | "dismissed")
+    matches!(s, "new" | "resolved" | "dismissed")
 }
 
 /// occasionBubble("오늘 …이래요! 🎉")은 축하 톤이라 추모일(mood=solemn, 예: 현충일)엔 부적절 →
@@ -315,8 +319,9 @@ pub fn set_finding_status(state: State<AppState>, dedup_key: String, status: Str
     if !valid_finding_status(&status) {
         return Err(format!("허용되지 않은 상태: {status}"));
     }
+    let now = chrono::Utc::now().to_rfc3339();
     let guard = lock(&state)?;
-    guard.set_finding_status(&dedup_key, &status)
+    guard.set_finding_status(&dedup_key, &status, &now)
         .map_err(|e| e.to_string())
         .and_then(|found| if found { Ok(()) } else { Err(format!("finding 없음: {dedup_key}")) })
 }
@@ -1344,8 +1349,11 @@ mod tests {
 
     #[test]
     fn content_status_validation_and_empty_list() {
-        assert!(valid_content_status("new") && valid_content_status("shown") && valid_content_status("dismissed"));
-        assert!(!valid_content_status("resolved") && !valid_content_status(""));
+        // 스펙 §5.6 — 개인 레슨이 문법 A로 넘어오며 `resolved`(해결함)가 findings와 같은 어휘로 들어온다.
+        assert!(valid_content_status("new") && valid_content_status("resolved") && valid_content_status("dismissed"));
+        // `shown`은 죽은 값이라 어휘에서 뺀다 — 설정하는 코드가 어디에도 없고(단일 스트림 재설계 §3.4),
+        // 허용해두면 list_content가 영구히 숨기는 상태에 카드를 밀어넣을 수 있다(복구 UI 없음).
+        assert!(!valid_content_status("shown") && !valid_content_status("resolved_") && !valid_content_status(""));
         let store = SqliteStore::open_in_memory().unwrap();
         assert!(content_inner(&store, false).unwrap().is_empty());
     }

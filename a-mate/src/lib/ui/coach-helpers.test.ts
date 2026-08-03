@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  coachTitle, ctxLine, evidenceChip, isHiddenFinding, partitionCoachItems, sessionIdsOf,
-  splitLessonBody, toLearnCardView, toLessonCardView, toLogCardView, totalSessionsOf,
+  RESOLVED_WINDOW_DAYS, coachTitle, ctxLine, disposedLabel, evidenceChip, isDisposedVisible,
+  isHiddenFinding, partitionCoachItems, sessionIdsOf, splitLessonBody, toDisposedRows,
+  toLearnCardView, toLessonCardView, toLogCardView, totalSessionsOf,
 } from './coach-helpers';
 import type { CoachFinding, ContentItem, SessionCtxItem } from '../api';
 
@@ -239,5 +240,105 @@ describe('toLearnCardView', () => {
   });
   it('본문이 비면 summary는 null', () => {
     expect(toLearnCardView(content({ trigger_tags: [], body: '  ' })).summary).toBeNull();
+  });
+});
+
+// ── 처분 줄 (스펙 §5) ─────────────────────────────────────────────────────
+// 이 저장소엔 컴포넌트 테스트 라이브러리가 없다(@testing-library/svelte·jsdom 부재).
+// 그래서 "어떤 줄이 어떤 라벨로 보이는가"의 판정을 전부 순수 함수로 빼고 여기서 검증한다.
+
+const DAY = 24 * 60 * 60 * 1000;
+const NOW = Date.parse('2026-08-10T00:00:00Z');
+const daysAgo = (n: number) => new Date(NOW - n * DAY).toISOString();
+
+describe('disposedLabel', () => {
+  it('두 처분은 뜻이 다르므로 라벨도 다르다', () => {
+    expect(disposedLabel('resolved')).toBe('✔ 해결함');
+    expect(disposedLabel('dismissed')).toBe('◷ 무시');
+  });
+  it('처분이 아닌 상태는 줄을 만들지 않는다', () => {
+    for (const s of ['new', 'pending', 'rejected', '']) {
+      expect(disposedLabel(s), s).toBeNull();
+    }
+  });
+});
+
+describe('isDisposedVisible', () => {
+  it('무시는 영구 — 아무리 오래돼도 줄이 남는다', () => {
+    expect(isDisposedVisible('dismissed', daysAgo(400), NOW)).toBe(true);
+  });
+  it('해결함은 7일 안에만 보인다 (실수로 눌렀을 때의 복구 창)', () => {
+    expect(isDisposedVisible('resolved', daysAgo(6), NOW)).toBe(true);
+    expect(isDisposedVisible('resolved', daysAgo(RESOLVED_WINDOW_DAYS + 1), NOW)).toBe(false);
+  });
+  it('처분 시각을 모르면 감춘 채 잃지 않는다 — 실행취소를 남기는 쪽으로 기운다', () => {
+    // 마이그레이션 이전에 처분된 행은 status_ts가 NULL이라 만료를 계산할 수 없다
+    expect(isDisposedVisible('resolved', null, NOW)).toBe(true);
+    expect(isDisposedVisible('resolved', '언젠가', NOW)).toBe(true);
+  });
+  it('처분하지 않은 상태는 줄에 오지 않는다', () => {
+    expect(isDisposedVisible('new', daysAgo(1), NOW)).toBe(false);
+    expect(isDisposedVisible('pending', null, NOW)).toBe(false);
+  });
+});
+
+describe('toDisposedRows', () => {
+  it('룰 카드와 개인 레슨이 같은 처분 줄로 합쳐진다', () => {
+    const rows = toDisposedRows(
+      [finding({ status: 'resolved', status_ts: daysAgo(1) })],
+      [content({ status: 'dismissed', status_ts: daysAgo(30) })],
+      NOW,
+    );
+    expect(rows.map((r) => [r.source, r.label])).toEqual([
+      ['finding', '✔ 해결함'],
+      ['lesson', '◷ 무시'],
+    ]);
+    expect(rows[0].key).toBe('R6|Windows|ab');
+    expect(rows[1].key).toBe('lesson-struggle');
+  });
+  it('7일 지난 해결함 줄은 렌더 대상에서 빠진다', () => {
+    const rows = toDisposedRows(
+      [finding({ status: 'resolved', status_ts: daysAgo(8) })],
+      [content({ status: 'resolved', status_ts: daysAgo(8) })],
+      NOW,
+    );
+    expect(rows).toEqual([]);
+  });
+  it('활성 항목은 처분 줄이 아니다', () => {
+    expect(toDisposedRows([finding()], [content()], NOW)).toEqual([]);
+  });
+  it('배움·소식(문법 B)은 처분 줄을 갖지 않는다 — 수명 규칙은 문법 A 공통이다', () => {
+    const news = content({ id: 'cc-1', trigger_tags: ['changelog'], status: 'dismissed' });
+    expect(toDisposedRows([], [news], NOW)).toEqual([]);
+  });
+  it('판정 내부 상태(pending·rejected)는 노출하지 않는다', () => {
+    const rows = toDisposedRows(
+      [finding({ status: 'pending' }), finding({ dedup_key: 'x', status: 'rejected' })],
+      [],
+      NOW,
+    );
+    expect(rows).toEqual([]);
+  });
+});
+
+describe('처분 항목은 활성 집계에서 빠진다', () => {
+  it('처분된 finding·레슨은 카드로 만들지 않는다 — 탭 신규 배지·알림 집계와 같은 기준', () => {
+    const { log, learn } = partitionCoachItems(
+      [finding({ status: 'resolved', status_ts: daysAgo(1) })],
+      [
+        content({ status: 'dismissed' }),
+        content({ id: 'T-1', trigger_tags: [], status: 'resolved' }),
+      ],
+    );
+    expect(log).toEqual([]);
+    expect(learn).toEqual([]);
+  });
+  it('처분된 항목이 4건 상한의 자리를 잡아먹지 않는다', () => {
+    const many = [
+      ...Array.from({ length: 3 }, (_, i) => content({ id: `D-${i}`, trigger_tags: [], status: 'dismissed' })),
+      ...Array.from({ length: 5 }, (_, i) => content({ id: `T-${i}`, trigger_tags: [] })),
+    ];
+    const { learn } = partitionCoachItems([], many);
+    expect(learn.map((v) => v.id)).toEqual(['T-0', 'T-1', 'T-2', 'T-3']);
   });
 });
