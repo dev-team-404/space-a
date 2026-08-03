@@ -102,13 +102,25 @@ def people(force: bool = False) -> list[dict]:
             try:
                 me = c.get(f"{url}/life/me").json()
                 if me.get("agent_id"):
-                    rows.append({
+                    row = {
                         "agent_id": me["agent_id"],
                         "name": me.get("name", ""),
                         "life_id": me.get("my_life_id") or me.get("life_id"),
                         "identity": me.get("identity") or {},
                         "is_me": True,
-                    })
+                    }
+                    # 프레즌스도 실어야 한다. 이 행에만 빠지면 **a-lens가 Life 인증에 쓰는
+                    # 계정(=나)만** 허브 write 시각으로 판정돼, a-mate를 켜고 쓰는 중에도
+                    # 혼자 오프라인으로 보인다(실측: last_seen 1분 전인데 3일 전 write로 idle).
+                    # 남들은 /life/people로 오므로 멀쩡하다 — 그래서 '나만' 이상해 보인다.
+                    #
+                    # 키가 없으면 만들지 않는다: `_presence_status`는 `last_seen` 키의 부재로
+                    # 구버전 Life 서버를 알아보고 종전 방식으로 강등한다. 여기서 None을 채우면
+                    # 그 판정을 가로채 구버전에서 전원이 idle이 된다.
+                    for k in ("connected", "last_seen"):
+                        if k in me:
+                            row[k] = me[k]
+                    rows.append(row)
             except Exception as e:  # noqa: BLE001 — 내 정보 실패는 목록 전체를 버릴 이유가 아니다
                 log.info("life /life/me 조회 실패(목록만 사용): %s", e)
     except Exception as e:  # noqa: BLE001 — Life 실패는 Hub-only 폴백
