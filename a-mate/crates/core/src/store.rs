@@ -1179,16 +1179,27 @@ impl SqliteStore {
             // 처음 본 시각 보존 (§3.2) — 프룬이 위 행을 지워도 이 표는 남아, 다시 랭킹에
             // 든 카드가 신규로 튀지 않는다. 두 번째 큐레이션부터는 IGNORE로 무시된다.
             //
+            // **노출 자격이 있는 항목만 찍는다.** `rank`는 음수 점수를 걸러내지 않으므로
+            // 여기엔 `list_content`가 `score >= 0`에서 숨기는 항목도 섞여 있다. 그것까지
+            // 찍으면 프론티어가 진행돼 그 팁이 자격을 얻는 순간(억제·거리 감점 → 프론티어
+            // 부스트) 이미 과거 시각을 들고 있어 최신순 하단에 묻히고 「안 본 개수」에도
+            // 안 잡힌다. 자격을 얻는 큐레이션에서 처음 찍히는 것이 맞다.
+            //
+            // 남는 한계: 축 쿨다운(같은 dimension의 dismissed 형제가 14일 이내)으로 숨는
+            // 항목은 **다른 행의 상태와 시각**에 달려 있어 쓰기 시점에 판단할 수 없다.
+            //
             // ⚠ id가 고정이고 내용만 갱신되는 소스(`cc-changelog-latest`)에서도 **유지가
             // 맞다.** 바로 위 번역 캐시는 "그 원문의" 번역이라 원문이 바뀌면 버려야 하지만,
             // `first_seen`은 "처음 본 시각"이어서 내용 갱신과 무관하다. 대가로 **내용이
             // 새로워진 고정-id 소식은 최신순 스트림 하단에 남는다** — 의도된 트레이드오프이고,
             // 그 소스의 노출은 고정 슬롯이 담당한다(스펙 §4 질문 4). id만 보고 보존해 화면이
             // 영영 낡았던 ⑥의 번역 캐시 버그와는 판단이 다르다는 것을 여기 명시해 둔다.
-            self.conn.execute(
-                "INSERT OR IGNORE INTO content_first_seen (id, ts) VALUES (?1, ?2)",
-                params![item.id, now_ts],
-            )?;
+            if *score >= 0 {
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO content_first_seen (id, ts) VALUES (?1, ?2)",
+                    params![item.id, now_ts],
+                )?;
+            }
         }
         // 피드에서 사라진 아이템 프룬(2026-07-19): 소식·외부 팁은 일시적 — 랭킹에 없으면
         // 낡은 점수로 상단을 점령한다. 단, 사용자가 「무시」한(dismissed) 행은 쿨다운 기록이라 보존.
@@ -2462,6 +2473,19 @@ pub struct FindingRow {
     pub dedup_key: String,
     /// 처음 관측한 시각 — `upsert_finding`의 ON CONFLICT가 갱신하지 않아 "처음 본 시각"으로
     /// 남는다. 단일 스트림의 최신순 정렬·「안 본 개수」 배지가 쓰는 재료 (§3.1·§3.3).
+    ///
+    /// ⚠ 이 값은 **삽입 시각이지 활성화 시각이 아니다.** 카드가 새로 보이기 시작하는 두
+    /// 전이가 이 값을 갱신하지 않는다:
+    /// ① R6·R7 세션 후보는 `pending`으로 삽입돼 **판정을 통과할 때** 비로소 노출된다
+    ///    (판정 실패는 `attempts < 3`까지 재시도되므로 그 창이 며칠일 수 있다)
+    /// ② 「해결함」 뒤 재발 복귀(`resolved`→`new`, §5.1 `status_evidence_n` 초과)
+    ///
+    /// 둘 다 `first_seen`은 과거에 머무르므로 `first_seen > lastCoachSeenAt` 배지가 그
+    /// 카드를 놓친다. ③(#155)이 같은 전이를 알림 경로(`diff_findings`→`coach:finding`)에서
+    /// 살려낸 것과 **같은 실패 모드**다 — 상태 전이는 저장이 아니라 알림 경로에서 샌다.
+    /// 배지가 이 전이까지 세야 하는지는 §2.3의 미결이다. 세야 한다면 활성화 시각을 **따로**
+    /// 실을 것 — 이 컬럼을 노출 시점으로 바꾸면 더 이상 "처음 본 시각"이 아니게 되고,
+    /// 콘텐츠 쪽 `content_first_seen`과 의미가 어긋난다.
     pub first_seen: Option<String>,
     pub last_seen: Option<String>,
     pub occurrences: u64,
@@ -4795,6 +4819,41 @@ mod tests {
         assert_eq!(
             payload["first_seen"], "2026-08-01T00:00:00Z",
             "프론트로 가는 payload에 실려야 한다"
+        );
+    }
+
+    #[test]
+    fn hidden_content_claims_no_first_seen_until_it_can_be_seen() {
+        // `rank`는 음수 점수 항목을 걸러내지 않고(`content.rs` `rank` — 필터 없음)
+        // `replace_content_items`가 그대로 저장하지만, `list_content`는 `score >= 0`만
+        // 노출한다. 그래서 **화면에 뜬 적 없는** 항목에 처음 본 시각을 찍어두면, 프론티어가
+        // 진행돼 그 팁이 자격을 얻는 순간(`SCORE_SUPPRESS`/거리 감점 → `SCORE_FRONTIER_BOOST`)
+        // 이미 과거 시각을 들고 있어 최신순 스트림 하단에 묻히고 「안 본 개수」에도 안 잡힌다.
+        let store = SqliteStore::open_in_memory().unwrap();
+
+        // 1일차 — 태그 게이트에 걸린 점수. 저장되지만 노출되지 않는다.
+        store
+            .replace_content_items(&[(news_item("tip-x"), -600)], "2026-08-01T00:00:00Z", &[])
+            .unwrap();
+        assert!(
+            store.list_content("2026-08-01T00:00:00Z", 14.0, false).unwrap().is_empty(),
+            "음수 점수는 노출되지 않는다는 전제 — 깨지면 이 테스트는 아무것도 증명하지 않는다"
+        );
+
+        // 3일차 — 프론티어가 옮겨와 자격을 얻는다. 사용자가 처음 보는 시각은 지금이다.
+        store
+            .replace_content_items(&[(news_item("tip-x"), 500)], "2026-08-03T00:00:00Z", &[])
+            .unwrap();
+        let row = store
+            .list_content("2026-08-03T00:00:00Z", 14.0, false)
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == "tip-x")
+            .unwrap();
+        assert_eq!(
+            row.first_seen.as_deref(),
+            Some("2026-08-03T00:00:00Z"),
+            "노출 자격을 얻은 시각이 처음 본 시각이어야 한다"
         );
     }
 
