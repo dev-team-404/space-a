@@ -275,6 +275,26 @@ describe('toLearnCardView', () => {
     expect(toLearnCardView(content({ deadline: '2026-08-31' })).deadline).toBe('2026-08-31');
     expect(toLearnCardView(content()).deadline).toBeNull();
   });
+  // 배움 카드도 문법 A와 같은 📊 근거 슬롯을 갖는다 — 커리큘럼=지도, 내 로그=GPS.
+  // store의 enrich_personal이 이미 모든 행에 채워 보내주므로 LLM이 필요 없다.
+  it('personal이 있으면 근거 슬롯에 싣는다', () => {
+    const v = toLearnCardView(
+      content({ trigger_tags: [], personal: '당신 로그: 서브에이전트 사용 없음' }),
+    );
+    expect(v.evidence).toBe('당신 로그: 서브에이전트 사용 없음');
+  });
+  it('personal이 없으면 슬롯을 생략한다 — 0이나 추정치를 지어내지 않는다', () => {
+    expect(toLearnCardView(content({ trigger_tags: [], personal: null })).evidence).toBeNull();
+    expect(toLearnCardView(content({ trigger_tags: [], personal: '   ' })).evidence).toBeNull();
+    expect(toLearnCardView(content({ trigger_tags: [] })).evidence).toBeNull();
+  });
+  it('근거는 요약을 대체하지 않는다 — 둘 다 남는다', () => {
+    const v = toLearnCardView(
+      content({ trigger_tags: [], body: '일반 설명', personal: '당신 로그: 스킬 47회' }),
+    );
+    expect(v.evidence).toBe('당신 로그: 스킬 47회');
+    expect(v.summary).toBe('일반 설명');
+  });
 });
 
 // ⑥ §6.4 — 고정 슬롯. "확신 없으면 null"·"경과 기한은 고정 안 함"은 negative-space라

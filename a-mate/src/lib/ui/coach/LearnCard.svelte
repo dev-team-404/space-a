@@ -31,6 +31,8 @@
     <button class="x" title="이 항목 그만 보기" onclick={() => onDismiss(view.id)}>✕</button>
   </header>
   <h3>{view.title}</h3>
+  <!-- 📊 근거는 문법 A(LogCard)와 같은 슬롯 — 일반론 위에 "내 경우엔 이렇다"를 얹는다 -->
+  {#if view.evidence}<p class="evidence">📊 {view.evidence}</p>{/if}
   {#if view.summary}<p class="summary">{view.summary}</p>{/if}
   {#if view.sourceUrl && showLinks}
     <a class="more" href={view.sourceUrl} onclick={(e) => { e.preventDefault(); open(view.sourceUrl!); }}>
@@ -68,6 +70,8 @@
   .ack + .x { margin-left: 0; }
   .x:hover { color: var(--accent-strong); }
   h3 { margin: 0; font-size: 14px; color: var(--ink); font-weight: 700; line-height: 1.4; }
+  /* 문법 A(LogCard)의 .evidence와 같은 규격 — 두 카드의 근거 줄이 같아 보여야 한다 */
+  .evidence { margin: 0; font-size: 12px; color: var(--ink); line-height: 1.6; white-space: pre-line; }
   .summary { margin: 0; font-size: 12px; color: var(--ink-soft); line-height: 1.7; white-space: pre-line; }
   /* 문법 B는 전문 링크가 주 CTA — 문법 A의 각주 링크와 반대다 (스펙 §4.2) */
   .more { font-size: 12px; color: var(--accent-strong); text-decoration: none; font-weight: 600; width: fit-content; }

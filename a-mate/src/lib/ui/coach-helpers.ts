@@ -135,6 +135,8 @@ export interface LearnCardView {
   id: string;
   badge: string;
   title: string;
+  /** 📊 근거 — store의 `enrich_personal`이 채운 "당신 로그: …" 실측 한 줄. 없으면 null. */
+  evidence: string | null;
   summary: string | null;
   sourceUrl: string | null;
   /** 유효 기한 `YYYY-MM-DD` — 고정 슬롯의 기한 칩 (⑥ §6.4). 없으면 null. */
@@ -207,6 +209,11 @@ export function toLearnCardView(c: ContentItem): LearnCardView {
     id: c.id,
     badge,
     title: orNull(c.title_ko) ?? c.title,
+    // 📊 근거 — 커리큘럼은 지도, 내 로그는 GPS. 문법 A와 같은 슬롯을 써서 두 카드가
+    // "근거 → 내용" 구조로 수렴한다. 재료는 store가 이미 채워 보내는 결정론 수치라
+    // LLM이 필요 없고 매 조회마다 최신이다 — 캐시가 굳지 않는다.
+    // 재료가 없으면 줄을 생략한다(근거 칩과 같은 규칙: 0·추정치를 지어내지 않는다).
+    evidence: orNull(c.personal),
     summary: orNull(c.summary_ko) ?? orNull(c.body),
     sourceUrl: orNull(c.source_url),
     deadline: orNull(c.deadline),
