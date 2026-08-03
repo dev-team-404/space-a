@@ -38,5 +38,5 @@ cargo test           # Rust 테스트 (워크스페이스 전체)
 
 ## 참고
 
-- 셋업·트러블슈팅: [docs/design/a-mate/build-and-run.md](../docs/design/a-mate/build-and-run.md)
+- 셋업·트러블슈팅: [docs/architecture/a-mate/build-and-run.md](../docs/architecture/a-mate/build-and-run.md)
 - 설계 스펙·구현 계획: [docs/design/a-mate/](../docs/design/a-mate/) 아래 `specs/`, `plans/`

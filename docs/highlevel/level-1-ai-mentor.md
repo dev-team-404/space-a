@@ -45,6 +45,6 @@
 
 ## 더 보기
 
-- [기능 카탈로그](../design/a-mate/02-features.md) — 지금 뭐가 되나
-- [아키텍처](../architecture/a-mate.md) — 코드가 어떻게 짜여 있나
+- [기능 카탈로그](../architecture/a-mate/02-features.md) — 지금 뭐가 되나
+- [아키텍처](../architecture/a-mate/03-architecture.md) — 코드가 어떻게 짜여 있나
 - [A-Hub 데이터 흐름](./level-2-a-mate-data-flows.md) — 무엇이 팀으로 나가나

@@ -1,7 +1,7 @@
 # Agent Mentor — 기능 카탈로그
 
 > 구현된 기능과 그 동작 방식의 전체 목록. 코드 실측 기준: `main` @ `3a6981a` (2026-08-03).
-> 코드 구조는 [`docs/architecture/a-mate.md`](../../architecture/a-mate.md), 각 기능의 설계 근거는 [`specs/`](specs/) 참고.
+> 코드 구조는 [`03-architecture.md`](03-architecture.md), 각 기능의 설계 근거는 [`specs/`](../../design/a-mate/specs/) 참고.
 
 ## 0. 기능 지도
 
@@ -80,7 +80,7 @@
 | R1 안 쓰는 MCP / R2 미사용 플러그인 | 코칭 v3에서 정리 — 조치 레버가 약하고 오탐이 잦았다 |
 | R5 크로스세션 반복 Read | 주체가 대부분 에이전트 자신이라 "사용자 잘못"으로 오독됨 (§ 04-history 3.3) |
 | R9 웹 도구 남용 / R10 자동화 버스트 / R11 권한 마찰 / R12 스킬 미활용 | 코칭 v3 정리 |
-| R24 컨텍스트 위생 | 완전 제거 ([`specs/2026-07-23-retire-r24-context-hygiene.md`](specs/2026-07-23-retire-r24-context-hygiene.md)) |
+| R24 컨텍스트 위생 | 완전 제거 ([`specs/2026-07-23-retire-r24-context-hygiene.md`](../../design/a-mate/specs/2026-07-23-retire-r24-context-hygiene.md)) |
 
 R3(캐시 히트율)·R4(1h 캐시 미재사용)는 여전히 미구현이다.
 
@@ -220,7 +220,7 @@ API 키는 기본값을 두지 않으며 설정 탭에서 1회 입력한다.
 
 내가 올린 지식을 남이 인용하면 앱이 축하한다. 커서 규약이 dedup을 대신해 **한 이벤트는 평생 1회만** 알린다.
 첫 실행에는 emit 없이 커서만 초기화해 설치 직후 도배를 막는다. 상세는
-[`docs/architecture/a-mate.md` §7.3](../../architecture/a-mate.md).
+[`03-architecture.md` §7.3](03-architecture.md).
 
 ### 8.3 텔레메트리 · 세션 회고
 

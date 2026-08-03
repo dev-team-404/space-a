@@ -113,7 +113,7 @@ space-a/
 
 | 핵심 기능 (Pillar) | 위치 | 문서 |
 |---|---|---|
-| AI 사용 코칭 | [`a-mate/`](./a-mate/) | [빌드·실행](./docs/design/a-mate/build-and-run.md) |
+| AI 사용 코칭 | [`a-mate/`](./a-mate/) | [빌드·실행](./docs/architecture/a-mate/build-and-run.md) |
 | 에이전트 협업 공간 (Space A) | [`a-hub/`](./a-hub/) (`work/`·`life/`) | [A-Hub](./a-hub/README.md) · [work README](./a-hub/work/README.md) · [life README](./a-hub/life/README.md) · [서버리스](./a-hub/work/SERVERLESS.md) · [Skill](./.claude/skills/space-a-hub/) |
 | 방 방문 (Life Visit) | [`a-hub/life/`](./a-hub/life/) | [README](./a-hub/life/README.md) — a-hub/work와 별개 프로세스 |
 | 커뮤니티 시각화 | [`a-lens/`](./a-lens/) | [a-lens 설계](./docs/design/a-lens/) |
@@ -124,7 +124,7 @@ space-a/
 
 | 컴포넌트 | 배포 방식 | 상세 문서 |
 |---|---|---|
-| **A-Mate** (데스크톱 앱) | WSL에서 `release-amate.sh`로 서명 빌드 → 공개 릴리스 저장소 발행 → 설치본이 **앱 내 자동 업데이트** | [build-and-run "릴리스"](./docs/design/a-mate/build-and-run.md) · [scripts README](./a-mate/scripts/README.md) |
+| **A-Mate** (데스크톱 앱) | WSL에서 `release-amate.sh`로 서명 빌드 → 공개 릴리스 저장소 발행 → 설치본이 **앱 내 자동 업데이트** | [build-and-run "릴리스"](./docs/architecture/a-mate/build-and-run.md) · [scripts README](./a-mate/scripts/README.md) |
 | **A-Hub `work/`** (업무 백엔드) | **서버(컨테이너)=프로덕션** · 서버리스(Lambda)=개발 | [work README](./a-hub/work/README.md) · [SERVERLESS.md](./a-hub/work/SERVERLESS.md) |
 | **A-Hub `life/`** (Life Server) | OCI VM 상주 운영 (Docker Compose, 사외 테스트) | [life/DEPLOY.md](./a-hub/life/DEPLOY.md) |
 
@@ -145,4 +145,4 @@ bash a-mate/scripts/release-amate.sh 0.2.0             # 실제 발행
 (`gh repo create dev-team-404/a-mate-releases --public --add-readme` — **빈 저장소면
 릴리스가 draft로 떨어져 자동 업데이트가 안 된다**)과 팀 공용 서명 키 배치
 (`~/.tauri/a-mate-updater.{key,pass}`)가 필요하다 —
-자세한 셋업은 [build-and-run "릴리스" 섹션](./docs/design/a-mate/build-and-run.md)을 참고.
+자세한 셋업은 [build-and-run "릴리스" 섹션](./docs/architecture/a-mate/build-and-run.md)을 참고.

@@ -5,14 +5,20 @@ SPACE-A 프로젝트 문서 모음입니다. (현재 설계 단계)
 > **사람용 문서는 [highlevel/](./highlevel/)부터.** 개요 → 기능별로 레벨을 따라 읽으세요.
 > 시작점: [highlevel/level-0.md](./highlevel/level-0.md)
 
-| 문서 | 내용 |
-|------|------|
-| [highlevel/](./highlevel/) | **사람이 읽는 레벨 문서** (개요 → 기능 → 상세) |
-| [architecture/](./architecture/) | 컴포넌트별 **현행 아키텍처** (코드 실측 기준, 단일 출처) |
-| [design/](./design/) | 팀원별 컴포넌트 설계 안 (상세·원본) |
-| [adr/](./adr/) | Architecture Decision Records (확정된 주요 결정 기록) |
-| [archive/](./archive/) | 완료·폐기된 작업 문서 (원 경로 미러, **기본 탐색 제외**) |
-| [../contracts/](../contracts/) | 컴포넌트 간 **경계 계약** (C1/C2) — 기계가 읽는 스키마와 픽스처 |
+문서는 **"현행"과 "시점"** 두 종류다. 이 구분이 디렉터리로 드러난다
+([ADR 0027](./adr/0027-separate-current-state-docs-from-design.md)).
+
+| 문서 | 성격 | 내용 |
+|------|------|------|
+| [highlevel/](./highlevel/) | **현행** | 사람이 읽는 레벨 문서 (개요 → 기능 → 상세) |
+| [architecture/](./architecture/) | **현행** | 컴포넌트별 "지금 이렇게 되어 있다" — 제품·기능·구조·연혁·빌드 |
+| [design/](./design/) | **시점** | 설계 안 + `<component>/{specs,plans,brainstorming}` 작업 문서 |
+| [adr/](./adr/) | **시점** | Architecture Decision Records (확정된 결정) |
+| [archive/](./archive/) | **시점** | 완료·폐기된 작업 문서 (원 경로 미러, **기본 탐색 제외**) |
+| [../contracts/](../contracts/) | — | 컴포넌트 간 **경계 계약** (C1/C2) — 기계가 읽는 스키마와 픽스처 |
+
+> **어디에 쓸지 헷갈리면** — "코드가 바뀌면 이 문서도 고쳐야 하나?"
+> 그렇다 → `architecture/`. 아니다(그때의 결정·계획 기록) → `design/`·`adr/`.
 
 ## ADR 목록
 
@@ -47,20 +53,27 @@ SPACE-A 프로젝트 문서 모음입니다. (현재 설계 단계)
 | [0024](./adr/0024-image-engine-material-boundary.md) | 이미지 엔진에 일기 파생 추상 장면까지 허용한다 (오늘의 컷) | **a-mate** |
 | [0025](./adr/0025-neighbour-content-transmission-boundary.md) | 이웃의 공개 일기 발췌를 내 텍스트 엔진에 전송한다 (방문 일기) | **a-mate** |
 | [0026](./adr/0026-front-door-outbound-publication.md) | 로컬 생성 대문(사진·한마디)을 공개범위 게이트 없이 life 서버에 게시한다 | **a-mate** |
+| [0027](./adr/0027-separate-current-state-docs-from-design.md) | 현행 상태 문서를 `docs/architecture/`로 분리한다 | 공통 |
 
 > ⚠ 0003이 두 개다(a-lens 스택 / 방 배치 지오메트리). 새 ADR을 쓸 때 번호가 겹치지 않게 확인한다.
 
-## 설계 문서
+## Pillar별 문서
 
-| Pillar | 문서 | 담당 |
-|---|---|---|
-| 1. AI 사용 코칭 | [design/a-mate/](./design/a-mate/) · [architecture/a-mate.md](./architecture/a-mate.md) | 구현: [`a-mate/`](../a-mate/) ([빌드 가이드](./design/a-mate/build-and-run.md)) |
-| 2. 에이전트 자율 협업 공간 | [design/a-hub/](./design/a-hub/) | msalt |
-| 3. 커뮤니티 시각화 | [design/a-lens/](./design/a-lens/) | 김주영 |
+| Pillar | 현행 (지금 이렇다) | 시점 (설계·작업 문서) | 담당 |
+|---|---|---|---|
+| 1. AI 사용 코칭 | [architecture/a-mate/](./architecture/a-mate/) ([빌드](./architecture/a-mate/build-and-run.md)) | [design/a-mate/](./design/a-mate/) | 구현: [`a-mate/`](../a-mate/) |
+| 2. 에이전트 자율 협업 공간 | — (미이관) | [design/a-hub/](./design/a-hub/) | msalt |
+| 3. 커뮤니티 시각화 | — (미이관) | [design/a-lens/](./design/a-lens/) | 김주영 |
+
+> a-hub·a-lens는 현행 문서가 아직 `design/` 안에 있습니다. 담당자가 필요할 때
+> [ADR 0027](./adr/0027-separate-current-state-docs-from-design.md)의 규칙으로 옮기면 됩니다.
 
 ## 문서 작성 규칙
 
-- 설계 안은 `design/`에 자유롭게 작성합니다.
+- **어디에 쓸지**: "코드가 바뀌면 이 문서도 고쳐야 하나?" → 그렇다면 `architecture/<component>/`,
+  아니라면(그때의 결정·계획) `design/`·`adr/`.
+- **현행 문서는 같은 PR에서 갱신합니다.** 코드를 바꾸면서 사실이 달라지면 그 PR 안에서 고칩니다.
+- **작업 문서는 소급 수정하지 않습니다.** spec·plan·ADR은 그때의 기록입니다.
 - 되돌리기 어려운 중요한 결정이 확정되면 `adr/`에 ADR 형식으로 남깁니다.
 - 컴포넌트 간 계약이 바뀌면 `contracts/`가 정답입니다 — 문서와 어긋나면 파일을 따릅니다.
 - 작업 문서(spec/plan/kickoff)는 해당 컴포넌트의 `design/<component>/{specs,plans,brainstorming}`에,
