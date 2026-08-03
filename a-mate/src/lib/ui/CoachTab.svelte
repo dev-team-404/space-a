@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { listFindings, listContent, onContentReady, onNewFindings, onScanDone, setFindingStatus, sessionsCtx, generateSkillDraft, saveSkillDraft, getSettings, coachTip, setContentStatus, type CoachFinding, type ContentItem, type SessionCtxItem, type SkillDraft } from '../api';
+  import { listFindings, listContent, onContentReady, onNewFindings, onScanDone, setFindingStatus, sessionsCtx, generateSkillDraft, saveSkillDraft, getSettings, setContentStatus, type CoachFinding, type ContentItem, type SessionCtxItem, type SkillDraft } from '../api';
   import SessionModal from './SessionModal.svelte';
   import LogCard from './coach/LogCard.svelte';
   import LearnCard from './coach/LearnCard.svelte';
-  import { ctxLine, partitionCoachItems, sessionIdsOf, toDisposedRows, totalSessionsOf, type DisposedRow } from './coach-helpers';
+  import { ctxLine, loadPinAcks, partitionCoachItems, pinnedNewsItem, savePinAcks, sessionIdsOf, toDisposedRows, toLearnCardView, totalSessionsOf, type DisposedRow } from './coach-helpers';
 
   let { focusKey = null, onChanged }: { focusKey?: string | null; onChanged?: () => void } = $props();
 
@@ -33,8 +33,25 @@
   // 쿨다운으로 이미 걸러 주므로 그대로 두고, 처분 줄만 별도로 받는다.
   let allTips = $state<ContentItem[]>([]);
 
+  // 기한 공지 고정 슬롯 (스펙 §6.4) — 유효 기한 + 미확인일 때만, 최대 1건.
+  // 판정은 coach-helpers의 순수 함수에 있다(이 저장소엔 컴포넌트 테스트 라이브러리가 없다).
+  let pinAcks = $state<string[]>(loadPinAcks());
+  const localToday = () => {
+    const d = new Date();
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
+  const pinned = $derived(pinnedNewsItem(tips, pinAcks, localToday()));
+  const pinnedView = $derived(pinned ? toLearnCardView(pinned) : null);
+
+  function ackPin(id: string) {
+    pinAcks = [...pinAcks, id];
+    savePinAcks(pinAcks);
+  }
+
   // 근거 출처로 두 섹션을 가른다 (스펙 §3). 분기 로직은 전부 coach-helpers의 순수 함수에 있다.
-  const sections = $derived(partitionCoachItems(active, tips));
+  // 고정된 항목은 빼고 넘긴다 — 카드 상한(CONTENT_CARD_LIMIT)은 여기 한 곳에서만 적용된다.
+  const sections = $derived(partitionCoachItems(active, tips.filter((t) => t.id !== pinned?.id)));
   const findingByKey = $derived(new Map(active.map((f) => [f.dedup_key, f])));
   // 7일 창은 시간이 흘러야 닫히는데 `Date.now()`는 반응성 의존이 아니다. 스캔은 로그 감시
   // 디바운스라 Claude Code 활동이 없으면 아예 돌지 않으므로, 탭을 띄워둔 채 경계를 넘으면
@@ -51,22 +68,6 @@
   // 내부망이면 외부 링크를 숨긴다 (옛 컨테이너에서 이관 — 두 카드가 각각 부르지 않도록 여기서 한 번만)
   let showLinks = $state(true);
   getSettings().then((s) => (showLinks = s.docs_reachable !== 'false')).catch(() => {});
-
-  // 엔진 맞춤 코칭 — 배움 섹션 최상단 1건에만. personal 항목은 이미 로그 섹션으로 갈라져 여기 오지 않는다.
-  // $derived로 두어 top이 그대로면 effect가 다시 돌지 않는다 (dismiss마다 재호출 방지). 캐시화는 PR⑥.
-  const learnTop = $derived(tips.find((t) => !(t.trigger_tags?.includes('personal') ?? false)) ?? null);
-  let coaching = $state<string | null>(null);
-  let coachLoading = $state(false);
-  $effect(() => {
-    const top = learnTop;
-    coaching = null;
-    if (!top) return;
-    coachLoading = true;
-    coachTip(top)
-      .then((s) => { coaching = s?.trim() || null; })
-      .catch(() => { coaching = null; })
-      .finally(() => { coachLoading = false; });
-  });
 
   async function dismissLearn(id: string) {
     try { await setContentStatus(id, 'dismissed'); } catch { /* 무시 */ }
@@ -97,9 +98,10 @@
     return () => { subs.forEach((s) => s.then((u) => u())); };
   });
 
-  // 홈 '절약 top3'에서 진입 시 해당 카드로 스크롤 (스펙 §2)
+  // 홈 위젯·알림에서 진입 시 해당 카드로 스크롤 (스펙 §2).
+  // 소식 알림(§6.5)은 finding이 하나도 없어도 착지해야 하므로 tips도 대기 대상에 넣는다.
   $effect(() => {
-    if (!focusKey || all.length === 0) return;
+    if (!focusKey || (all.length === 0 && tips.length === 0)) return;
     const el = document.querySelector(`[data-key="${CSS.escape(focusKey)}"]`);
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     open = focusKey;
@@ -202,6 +204,12 @@
 <svelte:window onkeydown={(e) => { if (e.key === 'Escape' && draft) draft = null; }} />
 
 <section class="coach">
+  <!-- 스펙 §6.4: 기한 공지 고정 슬롯 — 섹션보다 위, 최대 1건.
+       [확인]을 누르거나 기한이 지나면 아래 「배움 · 소식」의 일반 카드로 강등된다. -->
+  {#if pinnedView}
+    <LearnCard view={pinnedView} {showLinks} pinned onAck={ackPin} onDismiss={dismissLearn} />
+  {/if}
+
   <!-- 스펙 §3: 「내 로그에서」가 0건이면 섹션 헤더 대신 빈 상태 문구를 쓰고
        「배움 · 소식」이 자연히 상단에 온다 — 배움 카드 유무와 무관하다. -->
   {#if sections.log.length === 0}
@@ -273,13 +281,8 @@
 
   {#if sections.learn.length > 0}
     <h2 class="section">배움 · 소식</h2>
-    {#each sections.learn as v, i (v.id)}
-      <LearnCard
-        view={v}
-        {showLinks}
-        coaching={i === 0 ? (coachLoading ? '맞춤 코칭 생각 중…' : coaching) : null}
-        onDismiss={dismissLearn}
-      />
+    {#each sections.learn as v (v.id)}
+      <LearnCard view={v} {showLinks} onDismiss={dismissLearn} />
     {/each}
   {/if}
 

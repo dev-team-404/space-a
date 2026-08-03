@@ -1,4 +1,4 @@
-export type BubbleKind = 'finding' | 'diary' | 'occasion' | 'chatter' | 'visit';
+export type BubbleKind = 'finding' | 'diary' | 'occasion' | 'chatter' | 'visit' | 'announcement';
 
 export interface Bubble {
   kind: BubbleKind;
@@ -27,6 +27,19 @@ export function findingBubble(
     tab: 'coach',
     target: top.dedup_key,
     text: `${honorific}, ${line}${more}`,
+  };
+}
+
+/** ⑥ 새 공지 (스펙 §6.5) — 정적 템플릿(LLM 불필요). rows는 점수 내림차순이라 [0]이 대표.
+ *  같은 공지를 다시 알리지 않는 것은 백엔드의 통지 기록이 보장한다. */
+export function announcementBubble(rows: { id: string; title: string }[], honorific: string): Bubble {
+  const head = rows[0];
+  const more = rows.length > 1 ? ` 외 ${rows.length - 1}건` : '';
+  return {
+    kind: 'announcement',
+    tab: 'coach',
+    target: head.id,
+    text: `${honorific}, 새 소식이 왔어요 — ${head.title}${more}`,
   };
 }
 

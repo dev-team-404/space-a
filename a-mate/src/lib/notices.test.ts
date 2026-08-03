@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { diaryNotice, findingNotice, guestbookNotice, noticeDest, noticeStamp, occasionNotice, pushNotice, visitNotice, type Notice } from './notices';
+import { announcementNotice, diaryNotice, findingNotice, guestbookNotice, noticeDest, noticeStamp, occasionNotice, pushNotice, visitNotice, type Notice } from './notices';
 
 const n = (text: string): Notice => ({ ts: '2026-07-05T10:00:00Z', kind: 'finding', text });
 
@@ -53,6 +53,21 @@ describe('notice 팩토리', () => {
     expect(noticeDest(one)).toBeNull();
     const many = visitNotice([{ visitor_name: '가' }, { visitor_name: '나' }], '2026-07-29T10:00:00Z');
     expect(many.text).toBe('가님 외 1명이 방에 다녀갔어요');
+  });
+  it('announcement: 새 공지 문구 + 첫 공지 id가 target + 코칭 탭 dest', () => {
+    const one = announcementNotice(
+      [{ id: 'cc-announce-fable', title: 'Fable 5 팀 플랜 포함' }],
+      '2026-08-03T10:00:00Z',
+    );
+    expect(one.kind).toBe('announcement');
+    expect(one.text).toBe('새 소식 — Fable 5 팀 플랜 포함');
+    expect(noticeDest(one)).toEqual({ tab: 'coach', target: 'cc-announce-fable' });
+    const many = announcementNotice(
+      [{ id: 'a', title: '가' }, { id: 'b', title: '나' }],
+      '2026-08-03T10:00:00Z',
+    );
+    expect(many.text).toBe('새 소식 2건 — 가 외');
+    expect(many.target).toBe('a');
   });
   it('guestbook: N건 문구 + 최신 entry_id target + 방명록 탭 dest', () => {
     const one = guestbookNotice([{ entry_id: 'e1', author_name: '준녕' }], '2026-07-29T10:00:00Z');

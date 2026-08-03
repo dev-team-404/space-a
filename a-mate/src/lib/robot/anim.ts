@@ -15,6 +15,7 @@ export function resolveState(input: { bubbleKind: BubbleKind | null; hour: numbe
     case 'finding': return 'alert';
     case 'diary':
     case 'occasion':
+    case 'announcement': // 소식은 좋은 일 — 지적(alert)과 톤이 다르다
     case 'visit': return 'happy';
     case 'chatter': return 'talk';
     default: return input.hour >= 1 && input.hour < 7 ? 'sleep' : 'idle';

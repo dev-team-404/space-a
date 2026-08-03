@@ -1,7 +1,7 @@
 <script lang="ts">
   import { noticeDest, noticeStamp, type Notice, type NoticeDest } from '../../notices';
   let { notices, onGoto }: { notices: Notice[]; onGoto: (dest: NoticeDest) => void } = $props();
-  const ICON: Record<Notice['kind'], string> = { finding: '💡', diary: '📓', occasion: '🎉', visit: '👋', guestbook: '✍️', reuse: '🌱' };
+  const ICON: Record<Notice['kind'], string> = { finding: '💡', diary: '📓', occasion: '🎉', visit: '👋', guestbook: '✍️', reuse: '🌱', announcement: '📣' };
   // 포맷 로직은 notices.ts의 순수 함수에 있다 — 이 저장소엔 컴포넌트 테스트 라이브러리가 없다.
   const now = new Date();
 </script>
