@@ -804,7 +804,7 @@ function hubIssuesHTML(data: SpaceView): string {
 // 있는 LLM 한 줄 서사를 줄 설명으로 쓴다. (허브에 다단계 타임라인·재사용 사슬은 없다)
 let trailPerson: string | null = null // 선택된 사람의 agent_id
 // 카드가 수십~수백 건이라 한 번에 다 그리면 아래 붙는 것들이 스크롤 밖으로 밀린다.
-const TRAIL_PAGE = 20
+const TRAIL_PAGE = 15
 let trailPage = 0
 let trailPageKey = '' // 사람·프로젝트가 바뀌었는지 판정하는 키 (바뀌면 첫 쪽으로)
 
