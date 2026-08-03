@@ -77,10 +77,16 @@
   const disposed = $derived(toDisposedRows(all, allTips, nowMs));
 
   // 탭이 열려 있는 동안 목록이 바뀌면 그때그때 본 것으로 친다 (§2.3).
-  // 상한 적용 **전**의 활성 전부를 저장하되 수명이 끝난 공지는 뺀다 — 셸의 배지가 같은 기준으로 센다.
+  // 상한 적용 **전**의 활성 전부를 저장한다 — 셸의 배지가 같은 기준으로 센다.
   // onChanged로 셸을 깨우지 않으면 저장만 되고 배지는 그대로 남는다.
+  //
+  // ⚠ 콘텐츠 쪽은 **`live`(= listContent(false) 기반)** 여야 한다. `allTips`는
+  // `listContent(true)`라 `score < 0`(통달 축·태그 미스·먼 축)이나 축 쿨다운으로 **숨는**
+  // 행까지 담는데, 셸 배지는 `listContent(false)`만 센다. 그것까지 「봤다」고 저장하면
+  // 프론티어가 이동해 점수가 음수→양수로 바뀌는 순간(§3.2에 실재하는 경로) 이미 seen에
+  // 들어 있어 배지가 그 카드를 영영 놓친다. finding은 status로만 갈리므로 `all`로 충분하다.
   $effect(() => {
-    saveSeenCoachKeys(activeCoachKeys(all, liveContent(allTips, today, nowMs)));
+    saveSeenCoachKeys(activeCoachKeys(all, live));
     onChanged?.();
   });
 
