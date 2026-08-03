@@ -56,6 +56,7 @@ export type SpaceIssue = {
   category?: string // LLM 분류
   summary?: string // LLM 요약
   narrative?: string // LLM 한 줄 서사
+  project?: string | null // a-mate가 실어 보낸 저장소 이름 (마커 없는 옛 기록은 null)
 }
 
 export type KnowledgeDoc = {
@@ -70,6 +71,7 @@ export type KnowledgeDoc = {
   reuse_count: number
   category?: string // LLM 분류 (문제해결/설계·스펙/…)
   narrative?: string // LLM 한 줄 서사
+  project?: string | null // a-mate가 실어 보낸 저장소 이름 (마커 없는 옛 문서는 null)
 }
 
 export type SpaceHighlight = {

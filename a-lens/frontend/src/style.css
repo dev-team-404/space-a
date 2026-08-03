@@ -140,6 +140,9 @@ button { font: inherit; cursor: pointer; }
   object-fit: cover; object-position: top center; background: #262b33;
 }
 .trail-who b { font-size: 14px; }
+/* 프로젝트 초점 칩 — 오른쪽 끝으로 밀어 이름과 경쟁하지 않게. 지도 태그보다 한 단계 작다:
+   여기서는 고르는 물건이 아니라 '지금 걸린 범위'를 알리고 푸는 물건이다. */
+.trail-proj { margin-left: auto; flex: none; padding: 4px 10px; font-size: 12px; }
 .trail-stats {
   display: flex; flex-wrap: wrap; gap: 10px;
   font-size: 12px; color: #d5dbe4; margin-bottom: 8px;
