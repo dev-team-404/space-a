@@ -803,6 +803,10 @@ function hubIssuesHTML(data: SpaceView): string {
 // 지내는가"가 읽힌다. 데이터가 허락하는 범위: 이슈·문서를 원본 agent_id로 묶고, 이미
 // 있는 LLM 한 줄 서사를 줄 설명으로 쓴다. (허브에 다단계 타임라인·재사용 사슬은 없다)
 let trailPerson: string | null = null // 선택된 사람의 agent_id
+// 카드가 수십~수백 건이라 한 번에 다 그리면 아래 붙는 것들이 스크롤 밖으로 밀린다.
+const TRAIL_PAGE = 15
+let trailPage = 0
+let trailPageKey = '' // 사람·프로젝트가 바뀌었는지 판정하는 키 (바뀌면 첫 쪽으로)
 
 /** 이 사람이 남긴 것인가 — 표시 이름은 흔들리므로(Life 이름·'a-mate/' 접두어) id를 우선한다. */
 function isBy(agent: SpaceAgent, actorId: string | undefined, actorName: string): boolean {
@@ -828,6 +832,12 @@ function trailItems(data: SpaceView, agent: SpaceAgent): TrailItem[] {
     if (b.at) return 1
     return docSeq(b.doc?.doc_id ?? '') - docSeq(a.doc?.doc_id ?? '')
   })
+}
+
+/** 이 기록이 달고 있는 프로젝트. 마커가 없으면 빈 문자열 — **'분류 안 됨'과 '다른 프로젝트'는
+ *  다른 상태**라 아래에서 따로 센다. 추정은 하지 않는다(백엔드 `_projects`와 같은 규율). */
+function trailProject(item: TrailItem): string {
+  return ((item.kind === 'issue' ? item.issue?.project : item.doc?.project) || '').trim()
 }
 
 function trailRowHTML(item: TrailItem): string {
@@ -890,7 +900,15 @@ function trailPickerHTML(data: SpaceView): string {
 function hubTrailHTML(data: SpaceView): string {
   const agent = data.agents.find((a) => a.agent_id === trailPerson)
   if (!agent) return trailPickerHTML(data)
-  const items = trailItems(data, agent)
+  // 프로젝트 지도에서 사람을 열었으면 그 프로젝트의 기록만 남긴다 — 지도와 목록이 같은 범위를
+  // 봐야 "이 선이 무슨 일에서 나왔나"를 이어서 읽을 수 있다. 뺀 것은 아래 한 줄로 밝힌다.
+  const all = trailItems(data, agent)
+  const items = collabProject ? all.filter((t) => trailProject(t) === collabProject) : all
+  // 뺀 기록은 두 부류다: 다른 프로젝트 것과, 마커가 없어 어디 것인지 모르는 것.
+  // 합쳐서 'N건 제외'라고만 하면 "이 사람은 다른 일을 했다"로 읽히는데 대부분은 후자다.
+  const cut = collabProject ? all.filter((t) => trailProject(t) !== collabProject) : []
+  const unclassified = cut.filter((t) => !trailProject(t)).length
+  const elsewhere = cut.length - unclassified
   const issues = items.filter((t) => t.kind === 'issue')
   const resolved = issues.filter((t) => t.issue?.status === 'resolved').length
   const docs = items.length - issues.length
@@ -898,23 +916,58 @@ function hubTrailHTML(data: SpaceView): string {
   const icon = agent.mascot_url
     ? `<img class="trail-face" src="${esc(agent.mascot_url)}" alt="" onerror="this.remove()" />`
     : ''
-  const head = `
+  // 이 사람이 프로젝트별로 남긴 기록 수 (키 ''는 미분류). 지도 아래 태그 줄이 이걸로 그려진다 —
+  // 태그의 수와 누르면 나올 카드 수가 **같은 값**이어야 태그가 약속을 지킨다.
+  const tally = new Map<string, number>()
+  for (const t of all) {
+    const p = trailProject(t)
+    tally.set(p, (tally.get(p) ?? 0) + 1)
+  }
+  // 신원 줄은 섹션 밖에 세운다 — '← 전체'는 이 화면의 나가는 문이라 맨 위에 있어야 하고,
+  // 아래 두 섹션(이어진 선·작업 기록) 중 어느 쪽에도 속하지 않는다.
+  // 프로젝트 칩은 여기 두지 않는다 — 지도 아래 태그 줄이 같은 상태를 이미 보여주고 해제도 맡는다.
+  const identity = `
     <div class="trail-person">
       <button class="sub-tab" data-person="">← 전체</button>
       ${icon}
       <div class="trail-who"><b>${esc(agent.name)}</b>
         <div class="muted small">${esc(agent.hub_name && agent.hub_name !== agent.name ? agent.hub_name : agent.agent_id)}</div></div>
-    </div>
+    </div>`
+  // 집계·제외 줄은 카드 목록을 설명하는 것이므로 목록과 같은 섹션에 둔다.
+  const head = `
     <div class="trail-stats">
       <span>이슈 <b>${issues.length}</b>${issues.length ? ` · 해결 <b>${resolved}</b>` : ''}</span>
       <span>문서 <b>${docs}</b></span>
       ${last ? `<span class="muted">최근 ${esc(issueTimeLabel(last))}</span>` : ''}
-    </div>`
+    </div>
+    ${
+      cut.length
+        ? `<div class="muted small collab-notes">이 사람의 다른 기록 ${cut.length}건 제외 — ${[
+            unclassified ? `프로젝트 미분류 ${unclassified}건` : '',
+            elsewhere ? `다른 프로젝트 ${elsewhere}건` : '',
+          ]
+            .filter(Boolean)
+            .join(' · ')}</div>`
+        : ''
+    }`
+
+  // 쪽 나누기 — 사람·프로젝트가 바뀌면 첫 쪽으로. 호출부 여섯 군데에서 리셋을 챙기는 대신
+  // 여기서 키로 판정한다(빠뜨릴 수 없다). 30초 폴링은 키가 같으므로 보던 쪽에 그대로 머문다.
+  const pageKey = `${agent.agent_id}|${collabProject ?? ''}`
+  if (trailPageKey !== pageKey) {
+    trailPageKey = pageKey
+    trailPage = 0
+  }
+  const pages = Math.max(1, Math.ceil(items.length / TRAIL_PAGE))
+  if (trailPage > pages - 1) trailPage = pages - 1 // 폴링으로 기록이 줄면 빈 쪽에 남는다
+  const from = trailPage * TRAIL_PAGE
+  const shown = items.slice(from, from + TRAIL_PAGE)
 
   // 시간 버킷 헤더 — 이슈 흐름과 같은 구획(오늘/어제/이번 주/이전). 시각 없는 문서는 '기록' 묶음.
+  // 버킷은 **이 쪽 안에서만** 센다: 쪽이 넘어가도 그 쪽의 첫 줄이 어느 구획인지 다시 말해준다.
   let body = ''
   let bucket = ''
-  for (const item of items) {
+  for (const item of shown) {
     const b = item.at ? timeBucket(item.at) : '시각 미상'
     if (b !== bucket) {
       bucket = b
@@ -922,9 +975,35 @@ function hubTrailHTML(data: SpaceView): string {
     }
     body += trailRowHTML(item)
   }
-  if (!items.length) body = '<p class="muted small">아직 남긴 기록이 없어요</p>'
-  // 한 사람을 열었으면 지도도 그 사람 기준으로 좁혀 붙인다 (누구와 이어졌나).
-  return hubSection('작업 기록', 'Work Trail', head + body) + hubCollabHTML(data, agent.agent_id)
+  if (!items.length) {
+    body = `<p class="muted small">${
+      collabProject
+        ? `${esc(collabProject)}에는 이 사람이 남긴 기록이 없어요`
+        : '아직 남긴 기록이 없어요'
+    }</p>`
+  }
+  // 한 사람을 열었으면 지도를 목록보다 **위에** 둔다 — "이 사람이 누구와 이어졌나"를 먼저 읽고
+  // 그 근거를 아래 카드에서 확인하는 순서다. (사람을 안 고른 화면은 반대로 목록이 먼저다.)
+  return (
+    identity +
+    hubCollabHTML(data, agent.agent_id, tally) +
+    hubSection('작업 기록', 'Work Trail', head + body + trailPagerHTML(items.length, pages))
+  )
+}
+
+/** 쪽 이동 줄. 한 쪽에 다 들어가면 그리지 않는다 — 누를 것이 없는 컨트롤은 소음이다. */
+function trailPagerHTML(total: number, pages: number): string {
+  if (pages < 2) return ''
+  const from = trailPage * TRAIL_PAGE
+  const to = Math.min(total, from + TRAIL_PAGE)
+  const first = trailPage === 0
+  const lastPage = trailPage >= pages - 1
+  return `
+    <div class="trail-pager">
+      <button class="sub-tab" data-tpage="${trailPage - 1}"${first ? ' disabled' : ''}>← 이전</button>
+      <span class="muted small">${from + 1}–${to} / ${total}건 · ${trailPage + 1}/${pages}쪽</span>
+      <button class="sub-tab" data-tpage="${trailPage + 1}"${lastPage ? ' disabled' : ''}>다음 →</button>
+    </div>`
 }
 
 // ── 지식 문서 필터 (지식 재사용 '책장' · 문서함 공용) ──
@@ -1327,18 +1406,31 @@ function showCollabPop(e: CollabEdge, data: SpaceView, name: (id: string) => str
 
 /** 협업 지도 한 덩이. `focus`(사람 id)를 주면 그 사람에 걸린 선만 남긴다 —
  *  작업 기록에서 한 사람을 열었을 때 "이 사람이 누구와 이어졌나"만 보여주기 위해서. */
-function hubCollabHTML(data: SpaceView, focus?: string | null): string {
+function hubCollabHTML(
+  data: SpaceView,
+  focus?: string | null,
+  tally?: Map<string, number>,
+): string {
   const all: CollabGraph | null | undefined = data.collab
   if (!all) {
     return hubSection('협업 지도', 'Collaboration Map', '<p class="muted small">아직 계산 전이에요</p>')
   }
   // 프로젝트 태그를 고르면 그 프로젝트만의 지도로 갈아 끼운다 (서버가 같은 잣대로 만든 부분집합).
-  // 사람 초점이 있을 때는 태그를 걸지 않는다 — 그 사람 얘기에 프로젝트 필터까지 겹치면 읽기 어렵다.
+  // 사람 초점과 겹쳐 걸린다 — 프로젝트로 좁힌 지도에서 사람을 열면 그 프로젝트 안에서 그 사람이
+  // 누구와 이어졌는지가 나와야 하고, 옆의 작업 기록도 같은 범위를 본다.
   const projects = all.projects
-  const picked = focus ? null : projects?.nodes.find((p) => p.id === collabProject)
+  const picked = projects?.nodes.find((p) => p.id === collabProject)
   const base: CollabGraph = picked?.graph ? { ...all, ...picked.graph } : all
-  const title = focus ? '이 사람과 이어진 선' : picked ? `협업 지도 · ${picked.id}` : '협업 지도'
-  const tags = focus ? '' : collabTagsHTML(projects)
+  const title = focus
+    ? picked
+      ? `이 사람과 이어진 선 · ${picked.id}`
+      : '이 사람과 이어진 선'
+    : picked
+      ? `협업 지도 · ${picked.id}`
+      : '협업 지도'
+  // 태그 줄은 초점일 때도 건다 — 다만 `tally`가 있으면 그 사람이 실제로 남긴 프로젝트만,
+  // 그 사람의 건수로. 지도 바로 아래이자 작업 기록 바로 위라, 누르면 무엇이 좁혀지는지가 붙어 있다.
+  const tags = collabTagsHTML(projects, tally)
   // 초점이 있으면 그 사람에 걸린 선과 상대만. 없으면 (프로젝트 범위의) 전체.
   const edges = focus ? base.edges.filter((e) => e.source === focus || e.target === focus) : base.edges
   const keep = new Set(edges.flatMap((e) => [e.source, e.target]))
@@ -1346,16 +1438,22 @@ function hubCollabHTML(data: SpaceView, focus?: string | null): string {
   const nodes = focus ? base.nodes.filter((n) => keep.has(n.id)) : base.nodes
   const g: CollabGraph = { nodes, edges, stats: base.stats }
   if (!nodes.length) {
-    const msg = picked
-      ? '이 프로젝트에는 아직 지도에 그릴 사람이 없어요'
-      : '이 방에 활동 기록이 있는 사람이 아직 없어요'
+    const msg =
+      focus && picked
+        ? '이 사람은 이 프로젝트에 남긴 기록이 없어요'
+        : picked
+          ? '이 프로젝트에는 아직 지도에 그릴 사람이 없어요'
+          : '이 방에 활동 기록이 있는 사람이 아직 없어요'
     return hubSection(title, 'Collaboration Map', `<p class="muted small">${msg}</p>${tags}`)
   }
   if (focus && edges.length === 0) {
+    // 태그를 빼면 안 된다 — 선이 없는 프로젝트를 고른 순간 되돌아갈 버튼까지 사라진다.
     return hubSection(
       title,
       'Collaboration Map',
-      '<p class="muted small">아직 이어진 선이 없어요 — 지금까지는 혼자 일했어요</p>',
+      `<p class="muted small">아직 이어진 선이 없어요 — ${
+        picked ? '이 프로젝트에서는 혼자 일했어요' : '지금까지는 혼자 일했어요'
+      }</p>${tags}`,
     )
   }
   const nameOf = (id: string) => all.nodes.find((n) => n.id === id)?.name ?? id
@@ -1439,12 +1537,19 @@ function projectSlots(nodes: CollabProjects['nodes']): Map<string, number> {
  *  프로젝트는 a-mate가 세션의 git 저장소 이름을 문서에 실어 보낸 **사실**이다. 주제어로
  *  추측한 것이 아니므로 주제 겹침(점선)과 섞지 않는다. 마커가 없는 옛 문서는 태그를 만들지
  *  않고 '분류 안 됨'으로 수만 적는다 — 소급 적용이 없어서지 프로젝트가 없어서가 아니다. */
-function collabTagsHTML(projects?: CollabProjects): string {
+function collabTagsHTML(projects?: CollabProjects, tally?: Map<string, number>): string {
   if (!projects) return ''
   const { nodes, unknown_docs: unknown } = projects
   if (!nodes.length && !unknown) return ''
+  // 한 사람을 열었으면 **그 사람이 실제로 남긴 프로젝트만**, 그 사람의 건수로 센다.
+  // 방 전체 태그를 그대로 두면 남이 한 프로젝트가 걸려 있고, 눌러봤자 빈 목록이 나온다.
+  // 수는 방의 문서 수가 아니라 '누르면 나올 카드 수'다 — 태그는 그 약속을 지켜야 한다.
+  const listed = tally ? nodes.filter((p) => tally.get(p.id)) : nodes
+  const unknownN = tally ? (tally.get('') ?? 0) : unknown
+  if (!listed.length && !unknownN) return ''
+  // 색 자리는 **방 전체 목록**에서 뽑는다 — 사람마다 부분집합이 달라도 같은 프로젝트는 같은 색.
   const slots = projectSlots(nodes)
-  const chips = [...nodes]
+  const chips = [...listed]
     .sort((a, b) => (slots.get(a.id) ?? 0) - (slots.get(b.id) ?? 0))
     .map((p) => {
       const on = collabProject === p.id
@@ -1453,14 +1558,16 @@ function collabTagsHTML(projects?: CollabProjects): string {
       // 색이 모자라면 새 색을 만들지 않고 회색으로 접는다 — 억지로 만든 9번째 색은
       // 옆 색과 구분이 안 돼 오히려 "다른 프로젝트인데 같은 색"이 된다.
       const dot = slot < PROJECT_COLORS.length ? PROJECT_COLORS[slot] : '#8e98a8'
+      const n = tally ? (tally.get(p.id) ?? 0) : p.docs
+      const tip = tally ? `이 사람의 기록 ${n}건` : `문서 ${p.docs}건 · 사람 ${who}명`
       return `<button class="collab-tag${on ? ' on' : ''}" data-cproj="${esc(p.id)}"
-        style="--proj:${dot}" aria-pressed="${on}" title="문서 ${p.docs}건 · 사람 ${who}명">
-        <i class="collab-tag-dot"></i>${esc(p.id)}<b>${p.docs}</b></button>`
+        style="--proj:${dot}" aria-pressed="${on}" title="${tip}">
+        <i class="collab-tag-dot"></i>${esc(p.id)}<b>${n}</b></button>`
     })
     .join('')
   // 미분류는 버튼이 아니다 — 누를 수 있으면 "그런 프로젝트가 있다"는 뜻이 되어버린다.
-  const rest = unknown
-    ? `<span class="collab-tag none" title="a-mate가 프로젝트를 실어 보내기 전에 발행된 문서">분류 안 됨<b>${unknown}</b></span>`
+  const rest = unknownN
+    ? `<span class="collab-tag none" title="a-mate가 프로젝트를 실어 보내기 전에 발행된 기록">분류 안 됨<b>${unknownN}</b></span>`
     : ''
   // 안내 문구는 두지 않는다 — 색과 눌린 상태가 이미 "누를 수 있다"를 말한다.
   return `<div class="collab-tags">${chips}${rest}</div>`
@@ -1600,6 +1707,15 @@ function renderHub(data: SpaceView) {
     el.addEventListener('click', () => {
       trailPerson = el.dataset.person || null
       renderHub(data)
+    })
+  })
+  // 작업 기록 쪽 이동. 다시 그린 뒤 목록 머리로 올려준다 — 안 그러면 다음 쪽의 중간부터 보인다.
+  hubBody.querySelectorAll<HTMLElement>('[data-tpage]').forEach((el) => {
+    el.addEventListener('click', () => {
+      if ((el as HTMLButtonElement).disabled) return
+      trailPage = Number(el.dataset.tpage)
+      renderHub(data)
+      hubBody.querySelector('.trail-stats')?.scrollIntoView({ block: 'start' })
     })
   })
   // 작업 기록의 이슈 줄 → 이슈 상세 모달 (문서 줄은 아래 .doc-item과 같은 data-doc를 쓴다)
@@ -1903,6 +2019,9 @@ async function renderLife(spaceId: string) {
   // 방에 들어오면 '작업 기록'부터 — 사람 목록과 협업 지도가 이 방을 가장 먼저 설명한다.
   hubTab = 'trail'
   trailPerson = null // 앞서 보던 사람이 남아 있으면 방을 바꿔도 그 사람 화면이 열린다
+  // 프로젝트 초점도 같이 푼다 — 이제 작업 기록까지 거르므로, 이 방에 없는 프로젝트가 남아 있으면
+  // 지도만 조용히 방 전체로 돌아가고 목록은 아무 이유 없이 비는 상태가 된다.
+  collabProject = null
   renderHub(data)
 }
 
