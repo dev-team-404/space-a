@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-08-03
+---
+
 # 코칭 탭 단일 스트림 (B) 구현 계획
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -8,7 +13,7 @@
 
 **Tech Stack:** Svelte 5 (runes) · TypeScript · Vitest · Tauri v2
 
-**근거 스펙:** [`docs/design/a-mate/specs/2026-08-02-coaching-tab-single-stream-design.md`](../specs/2026-08-02-coaching-tab-single-stream-design.md) — §2가 확정된 결정, §3이 실측한 코드베이스 사실, §4가 다섯 질문의 확정된 답이다. 절 번호는 그 문서를 가리킨다.
+**근거 스펙:** [`docs/archive/design/a-mate/specs/2026-08-02-coaching-tab-single-stream-design.md`](../specs/2026-08-02-coaching-tab-single-stream-design.md) — §2가 확정된 결정, §3이 실측한 코드베이스 사실, §4가 다섯 질문의 확정된 답이다. 절 번호는 그 문서를 가리킨다.
 
 ## Global Constraints
 
