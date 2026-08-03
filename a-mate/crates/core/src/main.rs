@@ -71,6 +71,11 @@ fn cmd_curate(store: &SqliteStore) -> Result<()> {
             n
         }
     };
+    // 로컬 공지(⑥ 스펙 §6.1) — 네트워크 0, 파일 읽기. 파이프라인과 같은 재료를 CLI에도.
+    let mut feed = feed;
+    let announcements = agent_mentor::announcements::collect_local_announcements();
+    eprintln!("feed: 로컬 공지 {}건", announcements.len());
+    feed.extend(agent_mentor::announcements::announcement_items(&announcements));
     let now = chrono::Utc::now().to_rfc3339();
     // E — 마켓플레이스 카탈로그(② 미설치 추천 재료)도 파이프라인과 동일하게 fetch(실패 시 빈).
     let (catalog, _) = ops::fetch_marketplace_catalog(&ops::FeedPlan::all());
