@@ -1,6 +1,11 @@
+---
+status: done
+archived: 2026-08-03
+---
+
 # 코칭 탭 단일 스트림 PR A (Rust) 구현 계획 — `first_seen` 노출과 보존
 
-> **근거 스펙:** [2026-08-02-coaching-tab-single-stream-design.md](../specs/2026-08-02-coaching-tab-single-stream-design.md) §3.1~§3.3(A 명세) · §5(PR 분할) · §2.2·§2.3(A가 가능하게 하는 것)
+> **근거 스펙:** [2026-08-02-coaching-tab-single-stream-design.md](../../../../design/a-mate/specs/2026-08-02-coaching-tab-single-stream-design.md) §3.1~§3.3(A 명세) · §5(PR 분할) · §2.2·§2.3(A가 가능하게 하는 것)
 > **범위:** Rust만. 프론트(`api.ts` 타입·정렬·배지·홈 위젯)는 **B의 몫**이다.
 
 **Goal:** 코칭 스트림이 `first_seen` 하나로 최신순 정렬(§2.2)과 안 본 개수 배지(§2.3)를 만들 수 있게, Rust가 그 값을 **노출**하고 콘텐츠 프룬으로부터 **보존**한다.
@@ -34,11 +39,11 @@
 **Interfaces:**
 - Produces: `FindingRow.first_seen: Option<String>` — B의 정렬·배지 재료.
 
-- [ ] **Step 1: 실패 테스트** — 직렬화 payload에 실리고, 재스캔(`ON CONFLICT`) 후에도 원래 값을 지킨다
-- [ ] **Step 2: RED 확인** — `cargo test -p agent_mentor finding_first_seen` → 컴파일 실패(필드 없음)
-- [ ] **Step 3: 최소 구현** — `FindingRow`에 필드 추가, `list_findings_current`의 SELECT·매핑에 `first_seen` 추가
-- [ ] **Step 4: GREEN 확인**
-- [ ] **Step 5: 커밋** — `feat(agent): expose finding first_seen to the frontend`
+- [x] **Step 1: 실패 테스트** — 직렬화 payload에 실리고, 재스캔(`ON CONFLICT`) 후에도 원래 값을 지킨다
+- [x] **Step 2: RED 확인** — `cargo test -p agent_mentor finding_first_seen` → 컴파일 실패(필드 없음)
+- [x] **Step 3: 최소 구현** — `FindingRow`에 필드 추가, `list_findings_current`의 SELECT·매핑에 `first_seen` 추가
+- [x] **Step 4: GREEN 확인**
+- [x] **Step 5: 커밋** — `feat(agent): expose finding first_seen to the frontend`
 
 ---
 
@@ -67,17 +72,17 @@ CREATE TABLE IF NOT EXISTS content_first_seen (id TEXT PRIMARY KEY, ts TEXT NOT 
 두 단계로 나눠 돈다 — 노출이 먼저 GREEN이 돼야 보존 테스트가 "값이 틀렸다"로 실패할 수 있다(테이블 없이 실패하면 컴파일 에러라 RED의 질이 떨어진다).
 
 **2-1 노출**
-- [ ] **Step 1: 실패 테스트** — 큐레이션 1회 뒤 `list_content` 행의 직렬화 payload에 `first_seen`이 실린다
-- [ ] **Step 2: RED 확인** — `first_seen`이 `null`이라 실패
-- [ ] **Step 3: 최소 구현** — `ContentRow.first_seen` + `CONTENT_COLS`에 `c.first_seen` (보존 테이블 없이)
-- [ ] **Step 4: GREEN 확인**
+- [x] **Step 1: 실패 테스트** — 큐레이션 1회 뒤 `list_content` 행의 직렬화 payload에 `first_seen`이 실린다
+- [x] **Step 2: RED 확인** — `first_seen`이 `null`이라 실패
+- [x] **Step 3: 최소 구현** — `ContentRow.first_seen` + `CONTENT_COLS`에 `c.first_seen` (보존 테이블 없이)
+- [x] **Step 4: GREEN 확인**
 
 **2-2 보존**
-- [ ] **Step 5: 실패 테스트(A의 핵심)** — 프룬으로 행이 지워졌다 돌아와도 `first_seen`이 원래 값
-- [ ] **Step 6: RED 확인** — 재삽입 시각이 나와 실패
-- [ ] **Step 7: 최소 구현** — 보존 테이블 + `INSERT OR IGNORE` + `LEFT JOIN`/`COALESCE`
-- [ ] **Step 8: GREEN 확인** — 콘텐츠 관련 기존 테스트 전부 포함
-- [ ] **Step 9: 커밋** — `feat(agent): preserve content first_seen across prune`
+- [x] **Step 5: 실패 테스트(A의 핵심)** — 프룬으로 행이 지워졌다 돌아와도 `first_seen`이 원래 값
+- [x] **Step 6: RED 확인** — 재삽입 시각이 나와 실패
+- [x] **Step 7: 최소 구현** — 보존 테이블 + `INSERT OR IGNORE` + `LEFT JOIN`/`COALESCE`
+- [x] **Step 8: GREEN 확인** — 콘텐츠 관련 기존 테스트 전부 포함
+- [x] **Step 9: 커밋** — `feat(agent): preserve content first_seen across prune`
 
 ---
 
@@ -96,11 +101,11 @@ INSERT OR IGNORE INTO content_first_seen (id, ts)
 
 백필이 없으면 기존 사용자는 마이그레이션 후 **첫 프룬에서** `first_seen`을 잃는다(`INSERT OR IGNORE`가 그때의 `now_ts`를 찍으므로) — A가 고치려는 버그가 그대로 남는다. `INSERT OR IGNORE`라 idempotent하므로 버전 게이트 없이 매 실행 무해하다.
 
-- [ ] **Step 1: 실패 테스트** — 구 스키마 DB(보존 테이블 없음, 행 있음)를 열면 ① `events`/`sessions`/`ingest_state`/`daily_rollup` 행 수가 **테이블별로** 보존되고 ② 기존 `first_seen`이 백필된다
-- [ ] **Step 2: RED 확인**
-- [ ] **Step 3: 최소 구현**
-- [ ] **Step 4: GREEN 확인** — `cargo test` 전체
-- [ ] **Step 5: 커밋** — `feat(agent): backfill content first_seen without recollecting`
+- [x] **Step 1: 실패 테스트** — 구 스키마 DB(보존 테이블 없음, 행 있음)를 열면 ① `events`/`sessions`/`ingest_state`/`daily_rollup` 행 수가 **테이블별로** 보존되고 ② 기존 `first_seen`이 백필된다
+- [x] **Step 2: RED 확인**
+- [x] **Step 3: 최소 구현**
+- [x] **Step 4: GREEN 확인** — `cargo test` 전체
+- [x] **Step 5: 커밋** — `feat(agent): backfill content first_seen without recollecting`
 
 ---
 
@@ -110,15 +115,25 @@ INSERT OR IGNORE INTO content_first_seen (id, ts)
 
 **⚠ ③ 실측 교훈:** 미검출이 나오면 "가드가 중복이네"로 넘기지 말고 **그 테스트가 이름값을 하는지** 다시 본다 — 다른 가드에 가려 정작 주장하는 걸 증명하지 못하고 있을 수 있다.
 
-- [ ] Task 1~3의 각 테스트에 대해 구현을 한 군데씩 뒤집어 RED를 재확인하고 되돌린다
-- [ ] `cargo test` · `npm test` 전체 녹색
+**실측 결과 — 4건 모두 검출됐다.** 각 뮤테이션은 확인 후 `git checkout --`으로 되돌렸다.
+
+| # | 뒤집은 것 | 잡은 테스트 | 실패 메시지 |
+|---|-----------|-------------|-------------|
+| M1 | 마이그레이션에 `DELETE FROM events; DELETE FROM ingest_state;` 추가 | `migrate_backfills_content_first_seen_without_recollect` | `events 행이 보존돼야 함 — 재수집 유발 금지(#146)` |
+| M2 | 프룬의 `DELETE FROM content_items` 제거 | `content_first_seen_survives_a_prune_and_return` | `프룬이 행을 지운다는 전제 — 깨지면 이 테스트는 아무것도 증명하지 않는다` |
+| M3 | `upsert_finding`의 `ON CONFLICT`가 `first_seen`을 갱신하도록 | `finding_first_seen_rides_in_the_payload_and_survives_rescan` | `left: "2026-08-03…"` (처음 본 시각이 밀렸다) |
+| M5 | 보존 테이블 쓰기를 `INSERT OR REPLACE`로 | `content_first_seen_survives_a_prune_and_return` | `left: Some("2026-08-03…")` |
+
+M2가 특히 중요하다 — 프룬 전제가 사라지면 핵심 테스트가 "아무것도 증명하지 않는" 상태가 되는데, 그 전제 자체에 가드를 세워 뒀기 때문에 조용히 무력화되지 않는다.
+
+**최종 테스트:** `cargo test` = 664(core) + 48(app) = **712 passed / 0 failed** (베이스라인 708 + 신규 4). `npm test` = **296 passed / 29 files** (프론트 미변경).
 
 ---
 
 ## Task 5: DoD
 
-- [ ] `docs-archive` 스킬로 **이 계획 문서**를 아카이브 (ADR 0013). 단일 스트림 **스펙 자체는 B가 남았으므로 아카이브하지 않는다.**
-- [ ] PR 생성 — 제목·본문 한국어
+- [x] `docs-archive` 스킬로 **이 계획 문서**를 아카이브 (ADR 0013). 단일 스트림 **스펙 자체는 B가 남았으므로 아카이브하지 않는다.**
+- [x] PR 생성 — 제목·본문 한국어
 
 ## A 다음에 남는 것
 
