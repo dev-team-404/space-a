@@ -3,7 +3,7 @@ status: superseded
 archived: 2026-07-19
 ---
 
-> 대체 문서: [coaching-v3-design](../../../../design/a-mate/specs/2026-07-19-coaching-v3-design.md)
+> 대체 문서: [coaching-v3-design](./2026-07-19-coaching-v3-design.md)
 
 # Agent Mentor — 코칭 지능(Coaching Intelligence) 설계
 

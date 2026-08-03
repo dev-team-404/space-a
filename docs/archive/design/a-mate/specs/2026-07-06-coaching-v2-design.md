@@ -3,7 +3,7 @@ status: superseded
 archived: 2026-07-19
 ---
 
-> 대체 문서: [coaching-v3-design](../../../../design/a-mate/specs/2026-07-19-coaching-v3-design.md)
+> 대체 문서: [coaching-v3-design](./2026-07-19-coaching-v3-design.md)
 
 # 코칭 v2 설계 스펙 — "실제 조치 가능한 것만 코칭한다"
 

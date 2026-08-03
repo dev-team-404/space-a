@@ -33,9 +33,8 @@ Windows·WSL의 Claude Code 사용 기록을 로컬에서 분석해, AI 코딩 �
 
 ## 더 깊이 보려면
 
-- [`specs/`](../../design/a-mate/specs/) — 기능별 설계 스펙 (합의 시점의 기록 — 현재 상태와 다를 수 있다)
-- [`plans/`](../../design/a-mate/plans/) — 스펙을 태스크로 분해한 구현 플랜
-- [`brainstorming/`](../../design/a-mate/brainstorming/) — 킥오프 시드 문서 (열린 질문 상태의 원본)
+- [`docs/design/a-mate/specs/`](../../design/a-mate/specs/) — **진행 중** 설계 스펙만 남는다 (완료되면 archive로)
+- [`docs/archive/design/a-mate/`](../../archive/design/a-mate/) — 완료된 스펙·플랜·킥오프 미러 (ADR 0013)
 - [`a-mate/CLAUDE.md`](../../../a-mate/CLAUDE.md) — 개발 제약 (Tauri v2 전용, Windows 전용, 어댑터 추상화 원칙)
 - [`docs/highlevel/level-2-a-mate-data-flows.md`](../../highlevel/level-2-a-mate-data-flows.md) — a-hub로 무엇이 나가는지
 

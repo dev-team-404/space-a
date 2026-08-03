@@ -6,7 +6,7 @@
 ## 1. 개발 방식
 
 **브레인스토밍 → 설계 스펙 → 구현 플랜 → 구현(PR) → 사용자 수동 E2E → 교훈을 다음 스펙에 반영**
-사이클로 개발됐다. 산출물 위치는 [`brainstorming/`](../../design/a-mate/brainstorming/) · [`specs/`](../../design/a-mate/specs/) · [`plans/`](../../design/a-mate/plans/).
+사이클로 개발됐다. 진행 중 문서는 [`docs/design/a-mate/specs/`](../../design/a-mate/specs/), 완료분은 [`docs/archive/design/a-mate/`](../../archive/design/a-mate/) 미러에 있다.
 
 특징적인 점: **실사용 E2E가 설계를 여러 번 뒤집었다** (§3). 스펙은 "합의 시점의 기록"이고,
 이후 결정이 바뀐 경우 후속 스펙이 이전 스펙을 명시적으로 참조하며 수정한다.
@@ -34,7 +34,7 @@
 | 07-20 | 세션 내 반복 지시 마이닝(R23) · **캐릭터 이미지 엔드포인트를 텍스트 엔진에서 분리** (#69) · life 스프라이트·응답성 대량 수정 |
 | 07-21 | **R6에 LLM 판정 도입** — 결정론 규칙 위에 `CoachingJudge` 계층. R23 은퇴 마이그레이션. 이벤트 논리 dedup(fork 인플레이션 제거) |
 | 07-22 | R7 재설계 + `R7Judge` · R24 신설 · **R10·R11 은퇴** · **테마 시스템**(스킨 4종 × light/dark) · **자동 업데이트**([ADR 0018](../../adr/0018-a-mate-auto-update-channel.md)) · life 소셜 기능 · 다이어리 휴일·프로젝트 스코핑 |
-| 07-23 | **R24 완전 제거**([spec](../../design/a-mate/specs/2026-07-23-retire-r24-context-hygiene.md)) · 마켓플레이스 큐레이션 (#95) |
+| 07-23 | **R24 완전 제거**([spec](../../archive/design/a-mate/specs/2026-07-23-retire-r24-context-hygiene.md)) · 마켓플레이스 큐레이션 (#95) |
 | 07-25 | 릴리스 스크립트 preflight 체계 (#99) · 설정 탭 재편(엔진·이미지·life 서버 흡수) |
 
 ### 2.3 3주차 (07-26 ~ 08-03) — 캐릭터·소셜·인정 루프

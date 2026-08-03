@@ -3,7 +3,7 @@
 - 상태: 채택
 - 날짜: 2026-07-22
 - 대상: a-mate(Agent Mentor) 배포·업데이트, 릴리스 저장소 구성
-- 관련: [설계 스펙](../design/a-mate/specs/2026-07-22-auto-update-design.md), [ADR 0013](0013-docs-lifecycle-and-archive.md)
+- 관련: [설계 스펙](../archive/design/a-mate/specs/2026-07-22-auto-update-design.md), [ADR 0013](0013-docs-lifecycle-and-archive.md)
 
 ## 배경
 

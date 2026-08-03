@@ -27,7 +27,7 @@
 - 두 벽은 화면 상단 전체까지 채우고, 뷰포트는 앞 절반을 잘라 가로형 비율로 바꾼다.
 
 상세 좌표와 마이그레이션 순서는
-[`2026-07-28-half-depth-life-room-design.md`](../design/a-mate/specs/2026-07-28-half-depth-life-room-design.md)를 따른다.
+[`2026-07-28-half-depth-life-room-design.md`](../archive/design/a-mate/specs/2026-07-28-half-depth-life-room-design.md)를 따른다.
 
 ## 결과
 

@@ -6,7 +6,7 @@
 - **결정 요지**: README의 핵심 서사(“A팀이 기록 → B팀이 검색·인용해 재사용”)가 **코드상 완결되지
   않은 상태**다. 세 지점(공유 화이트리스트 사멸 · 검색/인용 미호출 · ReuseEvent 조회 불가)을
   고쳐 루프를 닫고, **같은 사멸이 재발하지 않도록 불변식을 테스트로 고정**한다.
-- **관련**: [README](../../../../README.md) Pillar 1·2, [hub 지식 공유 스펙](../../overview-mentor/specs/2026-07-18-hub-knowledge-sharing-design.md),
+- **관련**: [README](../../../../README.md) Pillar 1·2, [hub 지식 공유 스펙](../../../archive/design/overview-mentor/specs/2026-07-18-hub-knowledge-sharing-design.md),
   [C1 계약](../../../../contracts/c1-mcp-tools.json)
 
 ## 1. 배경 — 관측된 문제

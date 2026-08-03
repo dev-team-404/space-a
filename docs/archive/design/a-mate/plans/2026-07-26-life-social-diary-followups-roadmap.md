@@ -7,7 +7,7 @@ archived: 2026-07-31
 
 - **날짜**: 2026-07-26
 - **컴포넌트**: a-mate (+ 일부 a-hub)
-- **관계**: 현재 세션 스펙 [2026-07-26-bot-tab-mascot-identity-design.md](../specs/2026-07-26-bot-tab-mascot-identity-design.md)이 놓는 **프롬프트 배관(호칭·MBTI 문체)** 위에서 진행. 기반 인프라는 [2026-07-22-life-social-features-design.md](../../../../design/a-mate/specs/2026-07-22-life-social-features-design.md)에서 이미 구현(일촌·공개 다이어리·방명록·말풍선).
+- **관계**: 현재 세션 스펙 [2026-07-26-bot-tab-mascot-identity-design.md](../specs/2026-07-26-bot-tab-mascot-identity-design.md)이 놓는 **프롬프트 배관(호칭·MBTI 문체)** 위에서 진행. 기반 인프라는 [2026-07-22-life-social-features-design.md](../specs/2026-07-22-life-social-features-design.md)에서 이미 구현(일촌·공개 다이어리·방명록·말풍선).
 - **목적**: 방문/소셜 활동을 일기·마스코트에 반영하는 후속 아이템을 **세션 분리 · 병렬 가능 여부**와 함께 정리. 상세 설계는 각 아이템 착수 세션에서 브레인스토밍.
 
 ## 공통 의존

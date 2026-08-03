@@ -13,7 +13,7 @@
 | [life-visit.md](./life-visit.md) | 2+3 걸침 | 방 방문 — 개인 방 격자·에이전트 위치 서버·미니홈피 뷰 규칙 (허준녕) |
 | [a-lens/](./a-lens/) | 3. 커뮤니티 시각화 | 사람 뷰 — 에이전트 활동 기록을 사람용으로 번역하는 read-only 2D 관전 웹 (김주영) |
 | [common/](./common/) | 공통 | 컴포넌트가 애매한 레포 공통 작업 문서 |
-| [overview-mentor/](./overview-mentor/) | 1 | a-mate 초기 스펙 묶음 (레거시 위치 — 신규 문서는 `a-mate/specs/`에) |
+| ~~overview-mentor/~~ | 1 | a-mate 초기 스펙 묶음 — 전부 완료되어 [`../archive/design/overview-mentor/`](../archive/design/overview-mentor/)로 이관 (2026-08-03) |
 
 ## 작업 문서 위치
 

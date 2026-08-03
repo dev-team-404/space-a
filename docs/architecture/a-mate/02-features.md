@@ -80,7 +80,7 @@
 | R1 안 쓰는 MCP / R2 미사용 플러그인 | 코칭 v3에서 정리 — 조치 레버가 약하고 오탐이 잦았다 |
 | R5 크로스세션 반복 Read | 주체가 대부분 에이전트 자신이라 "사용자 잘못"으로 오독됨 (§ 04-history 3.3) |
 | R9 웹 도구 남용 / R10 자동화 버스트 / R11 권한 마찰 / R12 스킬 미활용 | 코칭 v3 정리 |
-| R24 컨텍스트 위생 | 완전 제거 ([`specs/2026-07-23-retire-r24-context-hygiene.md`](../../design/a-mate/specs/2026-07-23-retire-r24-context-hygiene.md)) |
+| R24 컨텍스트 위생 | 완전 제거 ([`specs/2026-07-23-retire-r24-context-hygiene.md`](../../archive/design/a-mate/specs/2026-07-23-retire-r24-context-hygiene.md)) |
 
 R3(캐시 히트율)·R4(1h 캐시 미재사용)는 여전히 미구현이다.
 

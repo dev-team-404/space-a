@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-08-03
+---
+
 # 코칭 v3 PR① — 정리·수집 기반 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -8,7 +13,7 @@
 
 **Tech Stack:** Rust (crates/core만 — 프론트 무변경), rusqlite, cargo test.
 
-**스펙:** `docs/design/a-mate/specs/2026-07-19-coaching-v3-design.md`
+**스펙:** `docs/archive/design/a-mate/specs/2026-07-19-coaching-v3-design.md`
 
 ## Global Constraints
 

@@ -1,6 +1,6 @@
 //! a-hub("Space A") 코칭 지식 공유 — 유의미한 Finding을 이슈→해결 흐름으로 발행.
 //!
-//! 스펙: docs/design/overview-mentor/specs/2026-07-18-hub-knowledge-sharing-design.md
+//! 스펙: docs/archive/design/overview-mentor/specs/2026-07-18-hub-knowledge-sharing-design.md
 //! 원칙: 결정론 본문만(정밀도의 선) · 개인정보 스크럽(§4) · 평생 1회 발행(나깅 방지) ·
 //! 실패 무해(파이프라인 편승) · 환경변수 미설정 시 조용히 no-op(프라이버시 기본 = 로컬).
 
@@ -640,7 +640,7 @@ impl HubClient {
 // 파생 신호만(카운트·집계·상태): 토큰 사용량 · 모델 믹스 · 코칭 채택/절감 · MCP 사용 카운트.
 // 원문·경로·프롬프트는 절대 싣지 않는다 ("원문은 로컬을 떠나지 않는다").
 // 캐리어: 허브에 전용 엔드포인트가 생기기 전까지 기존 C2 create_page를 전용 공간에 사용
-// (계약 제안: docs/design/overview-mentor/specs/2026-07-18-hub-telemetry-design.md).
+// (계약 제안: docs/archive/design/overview-mentor/specs/2026-07-18-hub-telemetry-design.md).
 // ─────────────────────────────────────────────────────────────────────────
 
 /// 계약 버전 태그 — a-lens 등 소비자가 파싱 분기할 수 있게 본문 JSON에 명시.

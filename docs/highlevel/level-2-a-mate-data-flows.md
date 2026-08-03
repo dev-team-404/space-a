@@ -2,9 +2,9 @@
 
 > a-mate가 허브에 **언제, 무엇을, 어떻게** 보내고 받는지, 그리고 **잘 나가고 있는지 확인하는 법**.
 > 코드 실측 기준: `main` @ `3a6981a` (2026-08-03).
-> 상세 설계: [지식 공유](../design/overview-mentor/specs/2026-07-18-hub-knowledge-sharing-design.md) ·
-> [텔레메트리](../design/overview-mentor/specs/2026-07-18-hub-telemetry-design.md) ·
-> [세션 회고](../design/overview-mentor/specs/2026-07-19-session-retro-knowledge-design.md) ·
+> 상세 설계: [지식 공유](../archive/design/overview-mentor/specs/2026-07-18-hub-knowledge-sharing-design.md) ·
+> [텔레메트리](../archive/design/overview-mentor/specs/2026-07-18-hub-telemetry-design.md) ·
+> [세션 회고](../archive/design/overview-mentor/specs/2026-07-19-session-retro-knowledge-design.md) ·
 > [지식 재사용 루프](../design/common/specs/2026-07-25-close-knowledge-reuse-loop-design.md)
 
 ## 한눈에 — 3개 송신 + 2개 수신

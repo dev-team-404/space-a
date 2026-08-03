@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-08-03
+---
+
 # a-mate → a-hub 코칭 지식 공유 — 설계 스펙
 
 > **목적**: a-mate(Agent Mentor)가 규칙 엔진으로 찾은 코칭 발견(Finding)을 a-hub("Space A")에

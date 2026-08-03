@@ -774,7 +774,7 @@ mod runtime {
     /// 않는다 — 프론트 잡담 타이머가 발화 시점에 get_chatter_pool로 pull한다.
     /// a-hub 지식 공유 — 스캔 편승. 네트워크는 전부 **락 밖**, 마크 persist는 짧은 락으로.
     /// env(SPACE_A_HUB_URL) 미설정이면 no-op. 실패는 warn 후 다음 스캔 재시도(스펙 §6).
-    /// 스펙: docs/design/overview-mentor/specs/2026-07-18-hub-knowledge-sharing-design.md
+    /// 스펙: docs/archive/design/overview-mentor/specs/2026-07-18-hub-knowledge-sharing-design.md
     fn maybe_share_findings(store_mutex: &std::sync::Mutex<SqliteStore>) {
         use agent_mentor::hub::{self, HubClient, HubConfig};
         // 설정(store) → env 순으로 해석. 짧은 락만 잡고 즉시 해제(네트워크 전 해제 규율).

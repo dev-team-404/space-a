@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-08-03
+---
+
 **Life connection identity design**
 
 **Problem**

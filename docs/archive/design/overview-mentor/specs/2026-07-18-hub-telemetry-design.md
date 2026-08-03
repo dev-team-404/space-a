@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-08-03
+---
+
 # a-mate → a-hub 텔레메트리 — 설계 스펙 (계약 제안 포함)
 
 > **목적**: [목표 아키텍처(이슈 #46)](https://github.com/dev-team-404/space-a/issues/46)의

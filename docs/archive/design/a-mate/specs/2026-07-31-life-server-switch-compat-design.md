@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-08-03
+---
+
 # Life 서버 전환 하위호환 설계
 
 ## 문제
