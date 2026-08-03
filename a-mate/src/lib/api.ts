@@ -26,6 +26,8 @@ export interface Finding {
   est_tokens_saved: number;
   prescription: { kind: string; payload: unknown } | null;
   dedup_key: string;
+  /** 처음 관측한 시각 — ON CONFLICT가 갱신하지 않아 보존된다(스펙 §3.1). 단일 스트림 정렬축. */
+  first_seen?: string | null;
   last_seen: string | null;
   occurrences: number;
   status: string;
@@ -122,6 +124,8 @@ export interface ContentItem {
   status: 'new' | 'resolved' | 'dismissed';
   /** 처분 시각 — 「해결함」 7일 창 판정용(스펙 §5). 미처분이면 null. */
   status_ts?: string | null;
+  /** 처음 노출된 시각. 프룬으로 행이 지워졌다 돌아와도 `content_first_seen`이 지킨다(§3.2). */
+  first_seen?: string | null;
   /** 번역 캐시(⑥ §6.3) — 외국어 소스만 채워진다. 없으면 원문(title·body)으로 폴백. */
   summary_ko?: string | null;
   title_ko?: string | null;

@@ -149,6 +149,23 @@ const content = (over: Partial<ContentItem> = {}): ContentItem => ({
   score: 550, status: 'new', personal: null, ...over,
 });
 
+describe('뷰모델의 firstSeen', () => {
+  it('세 변환 모두 first_seen을 그대로 싣는다 — 정렬·상한의 유일한 축', () => {
+    expect(toLogCardView(finding({ first_seen: '2026-08-01T00:00:00Z' })).firstSeen)
+      .toBe('2026-08-01T00:00:00Z');
+    expect(toLessonCardView(content({ first_seen: '2026-08-02T00:00:00Z' })).firstSeen)
+      .toBe('2026-08-02T00:00:00Z');
+    expect(toLearnCardView(content({ trigger_tags: [], first_seen: '2026-08-03T00:00:00Z' })).firstSeen)
+      .toBe('2026-08-03T00:00:00Z');
+  });
+
+  it('값이 없으면 null — 없는 시각을 지어내지 않는다', () => {
+    expect(toLogCardView(finding()).firstSeen).toBeNull();
+    expect(toLessonCardView(content()).firstSeen).toBeNull();
+    expect(toLearnCardView(content({ trigger_tags: [] })).firstSeen).toBeNull();
+  });
+});
+
 describe('partitionCoachItems', () => {
   it('룰 finding과 personal 레슨은 로그 섹션, 나머지는 배움 섹션', () => {
     const { log, learn } = partitionCoachItems(

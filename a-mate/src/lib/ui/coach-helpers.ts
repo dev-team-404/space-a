@@ -129,6 +129,8 @@ export interface LogCardView {
   principle: string | null;
   action: string | null;
   sourceUrl: string | null;
+  /** 스트림 정렬축 (§2.2). 값이 없으면 null — 정렬에서 맨 뒤로 간다. */
+  firstSeen: string | null;
 }
 
 export interface LearnCardView {
@@ -141,6 +143,8 @@ export interface LearnCardView {
   sourceUrl: string | null;
   /** 유효 기한 `YYYY-MM-DD` — 고정 슬롯의 기한 칩 (⑥ §6.4). 없으면 null. */
   deadline: string | null;
+  /** 스트림 정렬축 (§2.2). 값이 없으면 null — 정렬에서 맨 뒤로 간다. */
+  firstSeen: string | null;
 }
 
 const severityIcon = (s: CoachFinding['severity']): string =>
@@ -164,6 +168,7 @@ export function toLogCardView(f: CoachFinding): LogCardView {
     principle: null,
     action: orNull(f.suggested_action),
     sourceUrl: null,
+    firstSeen: f.first_seen ?? null,
   };
 }
 
@@ -186,6 +191,7 @@ export function toLessonCardView(c: ContentItem): LogCardView {
     principle: parts.principle,
     action: parts.action,
     sourceUrl: orNull(c.source_url),
+    firstSeen: c.first_seen ?? null,
   };
 }
 
@@ -217,6 +223,7 @@ export function toLearnCardView(c: ContentItem): LearnCardView {
     summary: orNull(c.summary_ko) ?? orNull(c.body),
     sourceUrl: orNull(c.source_url),
     deadline: orNull(c.deadline),
+    firstSeen: c.first_seen ?? null,
   };
 }
 
