@@ -257,7 +257,7 @@ export function toLearnCardView(c: ContentItem): LearnCardView {
 }
 
 /** 기한 문자열이 실제 달력 날짜인가 — `2026-13-40`·`곧` 같은 오추출을 거른다. */
-function validDeadline(d: string): boolean {
+export function validDeadline(d: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
   const parsed = new Date(`${d}T00:00:00`);
   return !Number.isNaN(parsed.getTime()) && d.endsWith(String(parsed.getDate()).padStart(2, '0'));

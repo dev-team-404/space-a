@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { buildCoachStream, compareFirstSeen } from './coach-stream';
+import {
+  buildCoachStream, compareFirstSeen, isAnnouncementLive, liveContent, localDateString,
+} from './coach-stream';
 import { CONTENT_CARD_LIMIT } from './coach-helpers';
 import type { CoachFinding, ContentItem } from '../api';
 
@@ -22,6 +24,17 @@ const content = (over: Partial<ContentItem> = {}): ContentItem => ({
 /** 학습 카드 하나 — first_seen과 id만 다르게 찍는다 */
 const tip = (id: string, firstSeen: string | null, over: Partial<ContentItem> = {}): ContentItem =>
   content({ id, trigger_tags: [], dimension: 'automation', first_seen: firstSeen, ...over });
+
+/** 로컬 공지 하나. content 팩토리의 기본 태그가 personal이라 반드시 덮어쓴다. */
+const ann = (over: Partial<ContentItem> = {}): ContentItem =>
+  content({
+    id: 'cc-announce-x', kind: 'news', dimension: null,
+    trigger_tags: ['announcement'], title: '공지', body: '본문', ...over,
+  });
+
+const TODAY = '2026-08-10';
+const NOW_MS = Date.parse('2026-08-10T00:00:00Z');
+const daysBefore = (n: number) => new Date(NOW_MS - n * 24 * 60 * 60 * 1000).toISOString();
 
 describe('compareFirstSeen', () => {
   it('최신이 앞 — 내림차순이다', () => {
@@ -107,5 +120,72 @@ describe('buildCoachStream', () => {
     const a = buildCoachStream([], [tip('b', '2026-08-01T00:00:00Z'), tip('a', '2026-08-01T00:00:00Z')]);
     const b = buildCoachStream([], [tip('a', '2026-08-01T00:00:00Z'), tip('b', '2026-08-01T00:00:00Z')]);
     expect(a.map((c) => c.key)).toEqual(b.map((c) => c.key));
+  });
+});
+
+describe('isAnnouncementLive — 공지 수명 (§2.6)', () => {
+  it('공지가 아닌 항목은 이 규칙과 무관하다', () => {
+    expect(isAnnouncementLive(tip('T1', daysBefore(400)), TODAY, NOW_MS)).toBe(true);
+    expect(isAnnouncementLive(content({ first_seen: daysBefore(400) }), TODAY, NOW_MS)).toBe(true);
+  });
+
+  it('기한이 있으면 그 날까지 — 당일은 살아 있고 지나면 내린다', () => {
+    expect(isAnnouncementLive(ann({ deadline: '2026-08-10', first_seen: daysBefore(1) }), TODAY, NOW_MS)).toBe(true);
+    expect(isAnnouncementLive(ann({ deadline: '2026-08-09', first_seen: daysBefore(1) }), TODAY, NOW_MS)).toBe(false);
+  });
+
+  it('기한이 일수 규칙을 이긴다 — 「명시한 기간 동안만」이 우선이다', () => {
+    // 처음 본 지 30일이 지났지만 공지가 명시한 기한이 아직 남았다
+    const long = ann({ deadline: '2026-09-01', first_seen: daysBefore(30) });
+    expect(isAnnouncementLive(long, TODAY, NOW_MS)).toBe(true);
+  });
+
+  it('기한이 없으면 일반 공지는 7일', () => {
+    expect(isAnnouncementLive(ann({ first_seen: daysBefore(6) }), TODAY, NOW_MS)).toBe(true);
+    expect(isAnnouncementLive(ann({ first_seen: daysBefore(8) }), TODAY, NOW_MS)).toBe(false);
+  });
+
+  it('기한이 없으면 장애 공지는 2일 — 「마지막으로 표시한」 스냅샷이라 만료를 알 수 없다', () => {
+    const emerg = (fs: string) => ann({ trigger_tags: ['announcement', 'notice'], first_seen: fs });
+    expect(isAnnouncementLive(emerg(daysBefore(1)), TODAY, NOW_MS)).toBe(true);
+    expect(isAnnouncementLive(emerg(daysBefore(3)), TODAY, NOW_MS)).toBe(false);
+    // 같은 나이라도 일반 공지는 아직 살아 있다 — 둘을 가르는 것이 이 규칙의 핵심이다
+    expect(isAnnouncementLive(ann({ first_seen: daysBefore(3) }), TODAY, NOW_MS)).toBe(true);
+  });
+
+  it('깨진 기한은 무시하고 일수 규칙으로 — LLM 오추출 방어', () => {
+    for (const bad of ['2026-13-40', '곧', '', '  ']) {
+      expect(isAnnouncementLive(ann({ deadline: bad, first_seen: daysBefore(8) }), TODAY, NOW_MS), bad).toBe(false);
+      expect(isAnnouncementLive(ann({ deadline: bad, first_seen: daysBefore(1) }), TODAY, NOW_MS), bad).toBe(true);
+    }
+  });
+
+  it('처음 본 시각을 모르면 보이는 쪽 — 시각이 없다고 카드를 뺏지 않는다', () => {
+    expect(isAnnouncementLive(ann({ first_seen: null }), TODAY, NOW_MS)).toBe(true);
+    expect(isAnnouncementLive(ann({ first_seen: '언젠가' }), TODAY, NOW_MS)).toBe(true);
+  });
+});
+
+describe('liveContent', () => {
+  it('수명이 끝난 공지만 걷어내고 나머지는 그대로 둔다', () => {
+    const rows = [
+      ann({ id: 'a-live', first_seen: daysBefore(1) }),
+      ann({ id: 'a-dead', first_seen: daysBefore(9) }),
+      tip('T-old', daysBefore(400)),
+    ];
+    expect(liveContent(rows, TODAY, NOW_MS).map((c) => c.id)).toEqual(['a-live', 'T-old']);
+  });
+
+  it('순서를 보존한다 — pinnedNewsItem이 score 내림차순을 전제한다', () => {
+    const rows = [ann({ id: 'p3', score: 325 }), ann({ id: 'p2', score: 321 }), ann({ id: 'p1', score: 320 })]
+      .map((c) => ({ ...c, first_seen: daysBefore(1) }));
+    expect(liveContent(rows, TODAY, NOW_MS).map((c) => c.id)).toEqual(['p3', 'p2', 'p1']);
+  });
+});
+
+describe('localDateString', () => {
+  it('로컬 날짜를 YYYY-MM-DD로 — deadline과 같은 축으로 비교하기 위해', () => {
+    expect(localDateString(new Date(2026, 7, 3))).toBe('2026-08-03');
+    expect(localDateString(new Date(2026, 11, 25))).toBe('2026-12-25');
   });
 });
