@@ -20,8 +20,9 @@
   }
 </script>
 
-<article class="card" class:warn={view.icon === '⚠'} data-key={view.key}>
+<article class="card" data-key={view.key}>
   <header>
+    <span class="badge">{view.badge}</span>
     <span class="title">{view.icon} {view.title}</span>
     {#if view.chip}<span class="chip">{view.chip}</span>{/if}
   </header>
@@ -42,9 +43,14 @@
     background: var(--frame-bg); border-radius: var(--radius-m); box-shadow: var(--shadow-soft);
     padding: 12px 14px; border-left: 4px solid var(--pastel-mint);
   }
-  .card.warn { border-left-color: var(--pastel-coral); }
-  header { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
-  .title { font-weight: 600; }
+  /* severity를 색으로 쓰지 않는다 — 라인 색이 분류를 뜻하기 때문이다 (§2.1).
+     severity는 제목 앞 아이콘(⚠/💡/ℹ)이 이미 나타낸다. */
+  header { display: flex; gap: 8px; align-items: baseline; }
+  .badge {
+    font-size: 10px; font-weight: 700; color: var(--accent-ink); white-space: nowrap; flex: none;
+    background: var(--pastel-mint); border-radius: 999px; padding: 3px 10px;
+  }
+  .title { font-weight: 600; flex: 1; }
   .chip {
     color: var(--ink-soft); font-size: 11px; white-space: nowrap; flex: none;
     background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 1px 7px;

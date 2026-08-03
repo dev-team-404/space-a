@@ -118,9 +118,41 @@ const DIM_LABEL: Record<string, string> = {
   orchestration: '작업 위임',
 };
 
+/** 카드 분류 — 좌측 라인 색과 배지가 이것을 나타낸다 (§2.1). */
+export type CoachKind = 'coaching' | 'learning' | 'news';
+
+export const KIND_LABEL: Record<CoachKind, string> = {
+  coaching: '코칭',
+  learning: '학습',
+  news: '소식',
+};
+
+/** 콘텐츠 항목의 분류. 룰 finding은 언제나 'coaching'이라 이 함수를 타지 않는다.
+ * `personal`을 먼저 보는 것이 중요하다 — 근거가 내 로그면 출처가 무엇이든 코칭이다. */
+export function contentKind(c: ContentItem): CoachKind {
+  const has = (t: string) => c.trigger_tags?.includes(t) ?? false;
+  if (has('personal')) return 'coaching';
+  if (has('notice') || c.kind === 'news' || has('changelog')) return 'news';
+  return 'learning';
+}
+
+/** 분류 배지 옆 보조 칩 — 세부 출처. 없으면 null이고 그때는 렌더하지 않는다 (§4.1).
+ * 옛 폴백 `'배움'`은 분류 배지와 겹쳐 버렸다. 판정 순서는 옛 배지 로직 그대로다. */
+export function sourceChip(c: ContentItem): string | null {
+  const has = (t: string) => c.trigger_tags?.includes(t) ?? false;
+  if (has('notice')) return '공지';
+  if (c.kind === 'news' || has('changelog')) return null;
+  if (has('boris')) return 'Boris';
+  if (has('team')) return '팀';
+  if (c.dimension) return DIM_LABEL[c.dimension] ?? c.dimension;
+  return null;
+}
+
 export interface LogCardView {
   key: string;
   source: 'finding' | 'lesson';
+  /** 분류 배지 — 문법 A는 언제나 '코칭'이다 (§2.1). */
+  badge: string;
   icon: string;
   title: string;
   evidence: string | null;
@@ -129,11 +161,17 @@ export interface LogCardView {
   principle: string | null;
   action: string | null;
   sourceUrl: string | null;
+  /** 스트림 정렬축 (§2.2). 값이 없으면 null — 정렬에서 맨 뒤로 간다. */
+  firstSeen: string | null;
 }
 
 export interface LearnCardView {
   id: string;
+  kind: CoachKind;
+  /** 분류 배지 — '학습' 또는 '소식'. 옛 7종 배지를 대체한다 (§4.1). */
   badge: string;
+  /** 보조 칩 — 공지·Boris·팀·축 라벨. 없으면 렌더하지 않는다. */
+  chip: string | null;
   title: string;
   /** 📊 근거 — store의 `enrich_personal`이 채운 "당신 로그: …" 실측 한 줄. 없으면 null. */
   evidence: string | null;
@@ -141,6 +179,8 @@ export interface LearnCardView {
   sourceUrl: string | null;
   /** 유효 기한 `YYYY-MM-DD` — 고정 슬롯의 기한 칩 (⑥ §6.4). 없으면 null. */
   deadline: string | null;
+  /** 스트림 정렬축 (§2.2). 값이 없으면 null — 정렬에서 맨 뒤로 간다. */
+  firstSeen: string | null;
 }
 
 const severityIcon = (s: CoachFinding['severity']): string =>
@@ -156,6 +196,7 @@ export function toLogCardView(f: CoachFinding): LogCardView {
   return {
     key: f.dedup_key,
     source: 'finding',
+    badge: KIND_LABEL.coaching,
     icon: severityIcon(f.severity),
     title: coachTitle(f.rule_id, f.evidence),
     evidence: orNull(f.detail),
@@ -164,6 +205,7 @@ export function toLogCardView(f: CoachFinding): LogCardView {
     principle: null,
     action: orNull(f.suggested_action),
     sourceUrl: null,
+    firstSeen: f.first_seen ?? null,
   };
 }
 
@@ -178,6 +220,7 @@ export function toLessonCardView(c: ContentItem): LogCardView {
   return {
     key: c.id,
     source: 'lesson',
+    badge: KIND_LABEL.coaching,
     icon: '💡',
     title: c.title,
     evidence: lines.length === 0 ? null : lines.join('\n'),
@@ -186,6 +229,7 @@ export function toLessonCardView(c: ContentItem): LogCardView {
     principle: parts.principle,
     action: parts.action,
     sourceUrl: orNull(c.source_url),
+    firstSeen: c.first_seen ?? null,
   };
 }
 
@@ -193,21 +237,12 @@ export function toLessonCardView(c: ContentItem): LogCardView {
  * 번역 캐시(`title_ko`·`summary_ko`, ⑥ §6.3)가 있으면 그것을 쓰고, 없으면 원문으로 폴백한다 —
  * 엔진 미설정 사용자에게도 영어 원문이 그대로 값을 남긴다(소식은 코칭이 아니라 정보 전달). */
 export function toLearnCardView(c: ContentItem): LearnCardView {
-  const has = (t: string) => c.trigger_tags?.includes(t) ?? false;
-  const badge = has('notice')
-    ? '공지' // lastShownEmergencyTip — 장애 안내라 프로모(「소식」)와 갈린다 (§6.1)
-    : c.kind === 'news' || has('changelog')
-      ? '소식'
-      : has('boris')
-        ? 'Boris'
-        : has('team')
-          ? '팀'
-          : c.dimension
-            ? (DIM_LABEL[c.dimension] ?? c.dimension)
-            : '배움';
+  const kind = contentKind(c);
   return {
     id: c.id,
-    badge,
+    kind,
+    badge: KIND_LABEL[kind],
+    chip: sourceChip(c),
     title: orNull(c.title_ko) ?? c.title,
     // 📊 근거 — 커리큘럼은 지도, 내 로그는 GPS. 문법 A와 같은 슬롯을 써서 두 카드가
     // "근거 → 내용" 구조로 수렴한다. 재료는 store가 이미 채워 보내는 결정론 수치라
@@ -217,11 +252,12 @@ export function toLearnCardView(c: ContentItem): LearnCardView {
     summary: orNull(c.summary_ko) ?? orNull(c.body),
     sourceUrl: orNull(c.source_url),
     deadline: orNull(c.deadline),
+    firstSeen: c.first_seen ?? null,
   };
 }
 
 /** 기한 문자열이 실제 달력 날짜인가 — `2026-13-40`·`곧` 같은 오추출을 거른다. */
-function validDeadline(d: string): boolean {
+export function validDeadline(d: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
   const parsed = new Date(`${d}T00:00:00`);
   return !Number.isNaN(parsed.getTime()) && d.endsWith(String(parsed.getDate()).padStart(2, '0'));
@@ -274,40 +310,22 @@ export function savePinAcks(ids: string[]): string[] {
  * 같이 없애면 카드가 수십 장으로 불어난다 — 상한은 여기서 유지한다. 룰 finding은 대상이 아니다.
  *
  * ⑥에서 4 → 6. 로컬 공지라는 소스가 하나 늘어, 4를 유지하면 공지 2건이 배움 카드를 전부
- * 밀어낸다. **자르는 지점은 여전히 여기 한 곳뿐이다**(백엔드엔 LIMIT이 없다).
+ * 밀어낸다. **자르는 지점은 여전히 한 곳뿐이다**(백엔드엔 LIMIT이 없다) — 단일 스트림
+ * 재설계 이후 그 자리는 `coach-stream`의 `buildCoachStream`이고, 자르는 축은 score가
+ * 아니라 `first_seen`이다(§4.2 — 정렬축과 어긋나면 최신 항목이 통째로 사라진다).
  * 고정 슬롯(최대 1건)은 이 상한 밖의 별도 칸이라 호출부가 미리 빼고 넘긴다. */
 export const CONTENT_CARD_LIMIT = 6;
 
-/** 「내 로그에서」로 가는 콘텐츠 = 개인 실전 레슨. 문법 A라 처분·수명 규칙을 함께 받는다. */
+/** 개인 실전 레슨 = 문법 A라 처분·수명 규칙을 함께 받는다(§2.1의 「코칭」 분류). */
 const isPersonal = (c: ContentItem) => c.trigger_tags?.includes('personal') ?? false;
-
-/** 근거 출처로 두 섹션을 가른다 (스펙 §3).
- * 「내 로그에서」 = 룰 finding + `personal` 태그 콘텐츠. finding을 앞에 둔다 —
- * 처방·행동 버튼이 붙어 바로 실행 가능한 쪽이기 때문.
- * 상한은 score 순 상위 N건에 먼저 적용한 뒤 가른다(두 섹션 합계 기준 — 옛 컨테이너와 동일). */
-export function partitionCoachItems(
-  findings: CoachFinding[],
-  content: ContentItem[],
-): { log: LogCardView[]; learn: LearnCardView[] } {
-  // 처분된 항목은 카드가 아니라 하단 접힌 줄이다 — 4건 상한의 자리도 잡아먹지 않게 먼저 거른다.
-  // 탭 신규 배지·알림 집계도 같은 기준(백엔드 status='new')을 쓴다.
-  const top = content.filter((c) => c.status === 'new').slice(0, CONTENT_CARD_LIMIT);
-  return {
-    log: [
-      ...findings.filter((f) => f.status === 'new').map(toLogCardView),
-      ...top.filter(isPersonal).map(toLessonCardView),
-    ],
-    learn: top.filter((c) => !isPersonal(c)).map(toLearnCardView),
-  };
-}
 
 // ── 처분 줄 (스펙 §5) ─────────────────────────────────────────────────────
 //
 // 두 처분은 뜻이 다르므로 수명도 다르다.
 //   해결함 = "조치했다" → 7일간 접힌 줄로 남아 되돌릴 수 있고, 재발하면 활성 복귀(백엔드 §5.1)
 //   무시   = "알지만 지금은 안 한다" → 영구히 접힌 줄. 같은 묶음까지 침묵
-// 표시 **위치**는 잠정이다 — 단일 스트림 재설계가 섹션을 없애며 다시 정한다. 여기 있는 것은
-// "어떤 줄이 어떤 라벨로 보이는가"의 판정뿐이라 위치가 바뀌어도 그대로 쓰인다.
+// 표시 **위치는 스트림 아래로 확정**됐다(§2.5). 여기 있는 것은 "어떤 줄이 어떤 라벨로
+// 보이는가"의 판정뿐이라 위치와 무관하게 그대로 쓰인다.
 
 /** 「해결함」 접힌 줄이 남는 기간 — 실수로 눌렀을 때의 복구 창. 이후엔 화면에서만 사라지고
  * DB 행은 재발 감지를 위해 보존된다(지우면 룰이 다음 스캔에 같은 카드를 새로 만든다). */

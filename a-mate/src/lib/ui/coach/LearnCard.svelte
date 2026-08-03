@@ -21,9 +21,10 @@
 </script>
 
 <!-- data-key: 홈 알림·말풍선 딥링크가 이 카드로 스크롤한다 (LogCard와 같은 규약) -->
-<article class="card" class:pinned data-key={view.id}>
+<article class="card" class:pinned class:learning={view.kind === 'learning'} data-key={view.id}>
   <header>
     <span class="badge">{view.badge}</span>
+    {#if view.chip}<span class="chip">{view.chip}</span>{/if}
     {#if deadlineChip}<span class="deadline">{deadlineChip}</span>{/if}
     {#if pinned && onAck}
       <button class="ack" onclick={() => onAck(view.id)}>확인</button>
@@ -47,12 +48,19 @@
     padding: 12px 14px; border: 1px solid var(--line); border-left: 3px solid var(--accent);
     display: flex; flex-direction: column; gap: 6px;
   }
+  /* 라인 색이 분류를 뜻한다 (§2.1). 기본은 소식(--accent), 학습은 라벤더. */
+  .card.learning { border-left-color: var(--pastel-lav); }
   /* 고정 슬롯은 기한이 있는 한 건뿐 — 테두리로만 구분하고 문법은 그대로 둔다 (스펙 §6.4) */
   .card.pinned { border: 1px solid var(--accent); border-left-width: 3px; }
   header { display: flex; align-items: center; gap: 8px; }
   .badge {
     font-size: 10px; font-weight: 700; color: var(--accent-ink); white-space: nowrap;
     background: var(--pastel-mint); border-radius: 999px; padding: 3px 10px;
+  }
+  /* 보조 칩 — 세부 출처(공지·Boris·팀·축 라벨). 분류 배지보다 한 단 낮은 위계다 (§4.1) */
+  .chip {
+    font-size: 10px; color: var(--ink-soft); white-space: nowrap;
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px;
   }
   .deadline {
     font-size: 10px; font-weight: 700; color: var(--accent-strong); white-space: nowrap;

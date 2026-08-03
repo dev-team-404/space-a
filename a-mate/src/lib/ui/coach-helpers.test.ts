@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CONTENT_CARD_LIMIT, RESOLVED_WINDOW_DAYS, coachTitle, ctxLine, disposedLabel, evidenceChip,
-  isDisposedVisible, isHiddenFinding, partitionCoachItems, pinnedNewsItem, sessionIdsOf,
-  splitLessonBody, toDisposedRows, toLearnCardView, toLessonCardView, toLogCardView,
-  totalSessionsOf,
+  RESOLVED_WINDOW_DAYS, coachTitle, contentKind, ctxLine, disposedLabel, evidenceChip,
+  isDisposedVisible, isHiddenFinding, pinnedNewsItem, sessionIdsOf, sourceChip, splitLessonBody,
+  toDisposedRows, toLearnCardView, toLessonCardView, toLogCardView, totalSessionsOf,
 } from './coach-helpers';
 import type { CoachFinding, ContentItem, SessionCtxItem } from '../api';
 
@@ -149,46 +148,25 @@ const content = (over: Partial<ContentItem> = {}): ContentItem => ({
   score: 550, status: 'new', personal: null, ...over,
 });
 
-describe('partitionCoachItems', () => {
-  it('룰 finding과 personal 레슨은 로그 섹션, 나머지는 배움 섹션', () => {
-    const { log, learn } = partitionCoachItems(
-      [finding()],
-      [content(), content({ id: 'T-L1-1', trigger_tags: [], dimension: 'context_hygiene', title: '내장 팁' })],
-    );
-    expect(log.map((v) => v.key)).toEqual(['R6|Windows|ab', 'lesson-struggle']);
-    expect(learn.map((v) => v.id)).toEqual(['T-L1-1']);
+describe('뷰모델의 firstSeen', () => {
+  it('세 변환 모두 first_seen을 그대로 싣는다 — 정렬·상한의 유일한 축', () => {
+    expect(toLogCardView(finding({ first_seen: '2026-08-01T00:00:00Z' })).firstSeen)
+      .toBe('2026-08-01T00:00:00Z');
+    expect(toLessonCardView(content({ first_seen: '2026-08-02T00:00:00Z' })).firstSeen)
+      .toBe('2026-08-02T00:00:00Z');
+    expect(toLearnCardView(content({ trigger_tags: [], first_seen: '2026-08-03T00:00:00Z' })).firstSeen)
+      .toBe('2026-08-03T00:00:00Z');
   });
-  it('finding이 레슨보다 앞에 온다', () => {
-    const { log } = partitionCoachItems([finding()], [content()]);
-    expect(log[0].source).toBe('finding');
-    expect(log[1].source).toBe('lesson');
-  });
-  it('한쪽이 비어도 동작한다', () => {
-    expect(partitionCoachItems([], []).log).toEqual([]);
-    expect(partitionCoachItems([], []).learn).toEqual([]);
-  });
-  // list_content는 LIMIT 없이 score>=0인 행을 전부 준다. 자르는 지점은 여기 한 곳뿐이다.
-  // ⑥에서 소스(로컬 공지)가 하나 늘어 상한을 4 → 6으로 올렸다.
-  it('콘텐츠는 상위 CONTENT_CARD_LIMIT건까지만 카드가 된다', () => {
-    const many = Array.from({ length: 9 }, (_, i) => content({ id: `T-${i}`, trigger_tags: [] }));
-    const { log, learn } = partitionCoachItems([finding()], many);
-    expect(learn.map((v) => v.id)).toEqual(['T-0', 'T-1', 'T-2', 'T-3', 'T-4', 'T-5']);
-    expect(log).toHaveLength(1); // 룰 finding은 상한과 무관
-  });
-  it('상한은 두 섹션 합계에 적용된다', () => {
-    const { log, learn } = partitionCoachItems([], [
-      content({ id: 'L1' }),
-      content({ id: 'L2' }),
-      content({ id: 'T1', trigger_tags: [] }),
-      content({ id: 'T2', trigger_tags: [] }),
-      content({ id: 'T3', trigger_tags: [] }),
-      content({ id: 'T4', trigger_tags: [] }),
-      content({ id: 'T5', trigger_tags: [] }),
-    ]);
-    expect(log.map((v) => v.key)).toEqual(['L1', 'L2']);
-    expect(learn.map((v) => v.id)).toEqual(['T1', 'T2', 'T3', 'T4']);
+
+  it('값이 없으면 null — 없는 시각을 지어내지 않는다', () => {
+    expect(toLogCardView(finding()).firstSeen).toBeNull();
+    expect(toLessonCardView(content()).firstSeen).toBeNull();
+    expect(toLearnCardView(content({ trigger_tags: [] })).firstSeen).toBeNull();
   });
 });
+
+// `partitionCoachItems`(2단 섹션 분할)는 단일 스트림 재설계로 호출부를 잃고 삭제됐다.
+// 그 테스트가 지키던 주장 — 분류·상한·처분 제외 — 은 `coach-stream.test.ts`로 옮겨갔다.
 
 describe('toLogCardView', () => {
   it('finding을 문법 A 슬롯으로 정규화한다', () => {
@@ -233,23 +211,108 @@ describe('toLogCardView', () => {
   });
 });
 
+describe('contentKind — 세 분류 유도 (§2.1)', () => {
+  it('personal 태그 레슨은 코칭 — 근거가 내 로그다', () => {
+    expect(contentKind(content({ trigger_tags: ['personal', 'plan'] }))).toBe('coaching');
+  });
+
+  it('notice·changelog·kind=news는 소식', () => {
+    expect(contentKind(content({ trigger_tags: ['notice'] }))).toBe('news');
+    expect(contentKind(content({ trigger_tags: ['changelog'] }))).toBe('news');
+    expect(contentKind(content({ trigger_tags: [], kind: 'news' }))).toBe('news');
+  });
+
+  it('커리큘럼·Boris·팀·그 밖은 학습', () => {
+    expect(contentKind(content({ trigger_tags: [], dimension: 'automation' }))).toBe('learning');
+    expect(contentKind(content({ trigger_tags: ['boris'] }))).toBe('learning');
+    expect(contentKind(content({ trigger_tags: ['team'] }))).toBe('learning');
+    expect(contentKind(content({ trigger_tags: [] }))).toBe('learning');
+  });
+
+  it('personal이 news보다 세다 — 내 로그 근거가 출처보다 우선한다', () => {
+    expect(contentKind(content({ trigger_tags: ['personal', 'changelog'] }))).toBe('coaching');
+  });
+});
+
+describe('sourceChip — 배지에서 갈라낸 세부 출처 (§4.1)', () => {
+  it('축 라벨을 살린다 — 본문 어디에도 없는 유일한 표시', () => {
+    expect(sourceChip(content({ trigger_tags: [], dimension: 'automation' }))).toBe('워크플로 자동화');
+    expect(sourceChip(content({ trigger_tags: [], dimension: 'context_hygiene' }))).toBe('컨텍스트 정리');
+  });
+
+  it('모르는 축은 원래 값을 그대로 — 매핑이 비어도 정보를 잃지 않는다', () => {
+    expect(sourceChip(content({ trigger_tags: [], dimension: 'unknown_axis' }))).toBe('unknown_axis');
+  });
+
+  it('공지·Boris·팀은 칩으로 남는다', () => {
+    expect(sourceChip(content({ trigger_tags: ['notice'] }))).toBe('공지');
+    expect(sourceChip(content({ trigger_tags: ['boris'] }))).toBe('Boris');
+    expect(sourceChip(content({ trigger_tags: ['team'] }))).toBe('팀');
+  });
+
+  it('일반 소식과 출처 없는 배움은 칩이 없다 — 폴백 「배움」을 버렸다', () => {
+    expect(sourceChip(content({ trigger_tags: ['changelog'] }))).toBeNull();
+    expect(sourceChip(content({ trigger_tags: [], kind: 'news' }))).toBeNull();
+    expect(sourceChip(content({ trigger_tags: [] }))).toBeNull();
+  });
+});
+
+describe('카드 뷰모델의 배지·칩', () => {
+  it('문법 B는 분류 이름을 배지로, 세부 출처를 칩으로 싣는다', () => {
+    const v = toLearnCardView(content({ trigger_tags: [], dimension: 'automation' }));
+    expect(v.kind).toBe('learning');
+    expect(v.badge).toBe('학습');
+    expect(v.chip).toBe('워크플로 자동화');
+  });
+
+  it('긴급 공지는 소식 배지 + 공지 칩', () => {
+    const v = toLearnCardView(content({ trigger_tags: ['notice'] }));
+    expect(v.badge).toBe('소식');
+    expect(v.chip).toBe('공지');
+  });
+
+  it('문법 A는 언제나 코칭 배지 — finding도 레슨도', () => {
+    expect(toLogCardView(finding()).badge).toBe('코칭');
+    expect(toLessonCardView(content()).badge).toBe('코칭');
+  });
+});
+
 describe('toLearnCardView', () => {
-  it('출처별 배지', () => {
-    expect(toLearnCardView(content({ kind: 'news', trigger_tags: ['changelog'] })).badge).toBe('소식');
-    expect(toLearnCardView(content({ trigger_tags: ['boris'] })).badge).toBe('Boris');
-    expect(toLearnCardView(content({ trigger_tags: ['team'] })).badge).toBe('팀');
-    expect(toLearnCardView(content({ trigger_tags: [], dimension: 'skill_reuse' })).badge).toBe('스킬로 반복 줄이기');
-    expect(toLearnCardView(content({ trigger_tags: [], dimension: null })).badge).toBe('배움');
+  // 배지는 분류 3종으로 고정되고 세부 출처는 칩으로 내려갔다 (§4.1).
+  it('출처는 배지가 아니라 칩으로 남는다', () => {
+    const news = toLearnCardView(content({ kind: 'news', trigger_tags: ['changelog'] }));
+    expect(news.badge).toBe('소식');
+    expect(news.chip).toBeNull();
+
+    const boris = toLearnCardView(content({ trigger_tags: ['boris'] }));
+    expect(boris.badge).toBe('학습');
+    expect(boris.chip).toBe('Boris');
+
+    const team = toLearnCardView(content({ trigger_tags: ['team'] }));
+    expect(team.badge).toBe('학습');
+    expect(team.chip).toBe('팀');
+
+    const axis = toLearnCardView(content({ trigger_tags: [], dimension: 'skill_reuse' }));
+    expect(axis.badge).toBe('학습');
+    expect(axis.chip).toBe('스킬로 반복 줄이기');
+
+    // 옛 폴백 '배움'은 분류 배지와 겹쳐 버렸다 — 칩이 없는 것이 곧 "출처 없음"이다.
+    const plain = toLearnCardView(content({ trigger_tags: [], dimension: null }));
+    expect(plain.badge).toBe('학습');
+    expect(plain.chip).toBeNull();
   });
   it('본문이 비면 summary는 null', () => {
     expect(toLearnCardView(content({ trigger_tags: [], body: '  ' })).summary).toBeNull();
   });
   // ⑥ §6.1 — 긴급 팁(lastShownEmergencyTip)만 「공지」로 갈린다. 나머지 로컬 공지는 「소식」.
-  it('로컬 공지는 소식, 긴급 팁은 공지 배지', () => {
-    expect(toLearnCardView(content({ kind: 'news', trigger_tags: ['announcement'] })).badge).toBe('소식');
-    expect(
-      toLearnCardView(content({ kind: 'news', trigger_tags: ['announcement', 'notice'] })).badge,
-    ).toBe('공지');
+  it('로컬 공지는 소식, 긴급 팁은 소식 배지 + 공지 칩', () => {
+    const plain = toLearnCardView(content({ kind: 'news', trigger_tags: ['announcement'] }));
+    expect(plain.badge).toBe('소식');
+    expect(plain.chip).toBeNull();
+
+    const urgent = toLearnCardView(content({ kind: 'news', trigger_tags: ['announcement', 'notice'] }));
+    expect(urgent.badge).toBe('소식');
+    expect(urgent.chip).toBe('공지');
   });
   // ⑥ §6.3 — 번역이 있으면 그것을, 없으면 원문을 그대로 (엔진 미설정 사용자 폴백).
   it('번역 캐시가 있으면 제목·요약을 대체하고, 없으면 원문으로 폴백한다', () => {
@@ -339,24 +402,8 @@ describe('pinnedNewsItem', () => {
   });
 });
 
-describe('고정 슬롯과 카드 상한', () => {
-  // 상한은 한 곳(partitionCoachItems)에서만 자른다. 고정 슬롯은 그 밖의 별도 1칸이라,
-  // 호출부가 고정된 항목을 빼고 넘긴다.
-  it('고정된 항목을 제외하고 넘기면 배움 목록에 중복되지 않는다', () => {
-    const rows = [
-      content({ id: 'pin', kind: 'news', trigger_tags: ['announcement'], deadline: '2026-08-31' }),
-      content({ id: 'T1', trigger_tags: [] }),
-    ];
-    const pinned = pinnedNewsItem(rows, [], '2026-08-03');
-    const { learn } = partitionCoachItems([], rows.filter((r) => r.id !== pinned?.id));
-    expect(learn.map((v) => v.id)).toEqual(['T1']);
-  });
-  it('소스가 하나 늘어 상한을 6으로 올렸다', () => {
-    expect(CONTENT_CARD_LIMIT).toBe(6);
-    const many = Array.from({ length: 9 }, (_, i) => content({ id: `T-${i}`, trigger_tags: [] }));
-    expect(partitionCoachItems([], many).learn).toHaveLength(6);
-  });
-});
+// 「고정 슬롯과 카드 상한」 두 케이스도 `coach-stream.test.ts`로 옮겼다 — 상한을 적용하는
+// 자리가 그쪽이라 고정 항목을 빼고 넘기는 규약도 거기서 검증하는 것이 맞다.
 
 // ── 처분 줄 (스펙 §5) ─────────────────────────────────────────────────────
 // 이 저장소엔 컴포넌트 테스트 라이브러리가 없다(@testing-library/svelte·jsdom 부재).
@@ -436,28 +483,5 @@ describe('toDisposedRows', () => {
   });
 });
 
-describe('처분 항목은 활성 집계에서 빠진다', () => {
-  it('처분된 finding·레슨은 카드로 만들지 않는다 — 탭 신규 배지·알림 집계와 같은 기준', () => {
-    const { log, learn } = partitionCoachItems(
-      [finding({ status: 'resolved', status_ts: daysAgo(1) })],
-      [
-        content({ status: 'dismissed' }),
-        content({ id: 'T-1', trigger_tags: [], status: 'resolved' }),
-      ],
-    );
-    expect(log).toEqual([]);
-    expect(learn).toEqual([]);
-  });
-  // 상한 자체는 ⑥에서 4 → 6으로 올랐다(소스 하나 추가). 이 테스트가 지키려는 건
-  // 그 숫자가 아니라 "처분된 항목은 상한을 먹지 않는다"라 상수 기준으로 쓴다.
-  it('처분된 항목이 카드 상한의 자리를 잡아먹지 않는다', () => {
-    const many = [
-      ...Array.from({ length: 3 }, (_, i) => content({ id: `D-${i}`, trigger_tags: [], status: 'dismissed' })),
-      ...Array.from({ length: CONTENT_CARD_LIMIT + 2 }, (_, i) => content({ id: `T-${i}`, trigger_tags: [] })),
-    ];
-    const { learn } = partitionCoachItems([], many);
-    expect(learn.map((v) => v.id)).toEqual(
-      Array.from({ length: CONTENT_CARD_LIMIT }, (_, i) => `T-${i}`),
-    );
-  });
-});
+// 「처분 항목은 활성 집계에서 빠진다」 두 케이스는 `coach-stream.test.ts`로 옮겼다 —
+// 카드 목록을 만드는 자리가 `partitionCoachItems`에서 `buildCoachStream`으로 바뀌었다.

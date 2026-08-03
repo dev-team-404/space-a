@@ -1,9 +1,10 @@
 <script lang="ts">
   import {
-    getSettings, getWeekSummary, listFindings,
-    onScanDone, onScanProgress, onSettingsChanged, runScanNow,
-    type CoachFinding, type DayStat, type ScanProgress, type Summary,
+    getSettings, getWeekSummary, listContent, listFindings,
+    onContentReady, onScanDone, onScanProgress, onSettingsChanged, runScanNow,
+    type CoachFinding, type ContentItem, type DayStat, type ScanProgress, type Summary,
   } from '../api';
+  import { liveContent, localDateString, toWidgetRows } from './coach-stream';
   import { loadNotices, type Notice, type NoticeDest } from '../notices';
   import WeekTrend from './home/WeekTrend.svelte';
   import ModelMix from './home/ModelMix.svelte';
@@ -25,6 +26,25 @@
   let progress = $state<ScanProgress | null>(null);
   let days = $state<DayStat[]>([]);
   let findings = $state<CoachFinding[]>([]);
+  let tips = $state<ContentItem[]>([]);
+  // 수명이 끝난 공지는 위젯에서도 뺀다 (§2.6) — 탭과 어긋나면 "홈에 있는데 탭에 없다"가 생긴다.
+  //
+  // ⚠ 시계를 $state로 들어야 한다. `$derived` 안의 `new Date()`는 반응성 의존이 아니라
+  // findings·tips가 바뀔 때까지 만료가 굳는데, 홈에 머문 채 기한을 넘기면 **CoachTab은
+  // 자체 시계로 이미 치운 행**이 위젯에만 남는다. 그걸 누르면 도착지에 카드가 없어
+  // focusKey가 아무것도 못 찾고 딥링크가 죽는다. 날짜는 분 눈금으로 변화만 확인하고,
+  // nowMs는 분마다 갱신한다(공지 TTL이 2·7일이라 이 정밀도면 넉넉하다).
+  let today = $state(localDateString(new Date()));
+  let nowMs = $state(Date.now());
+  $effect(() => {
+    const id = setInterval(() => {
+      const d = localDateString(new Date());
+      if (d !== today) today = d;
+      nowMs = Date.now();
+    }, 60_000);
+    return () => clearInterval(id);
+  });
+  const coachRows = $derived(toWidgetRows(findings, liveContent(tips, today, nowMs)));
   let notices = $state<Notice[]>([]);
   let honorific = $state('주인'); // owner_title — MiniLife 정적 대사에 반영
   const topAdvice = $derived(findings.length > 0 ? findings[0].suggested_action : null);
@@ -36,12 +56,13 @@
   checkHub();
 
   async function load() {
-    const [d, f, settings] = await Promise.all([
+    const [d, f, c, settings] = await Promise.all([
       getWeekSummary().catch(() => [] as DayStat[]),
       listFindings(false).catch(() => [] as CoachFinding[]),
+      listContent(false).catch(() => [] as ContentItem[]),
       getSettings().catch(() => ({}) as Record<string, string>),
     ]);
-    days = d; findings = f;
+    days = d; findings = f; tips = c;
     honorific = settings['owner_title']?.trim() || '주인';
     notices = loadNotices();
   }
@@ -51,6 +72,10 @@
     const subs = [
       onScanProgress((p) => { scanning = true; progress = p; }),
       onScanDone(() => { scanning = false; progress = null; load(); }),
+      // `scan:done`은 `maybe_curate_content` **전에** 나가므로 이것만 들으면 위젯이 큐레이션
+      // 결과를 한 스캔 뒤처져 본다(추가·삭제 둘 다). 빈 목록일 때도 무조건 emit되므로
+      // payload는 보지 않는다.
+      onContentReady(() => load()),
       onSettingsChanged(() => checkHub()),
     ];
     window.addEventListener('focus', checkHub);
@@ -82,7 +107,7 @@
   <div class="grid">
     <WeekTrend {days} />
     <ModelMix />
-    <SaveTop3 {findings} onGoto={onGotoCoach} />
+    <SaveTop3 rows={coachRows} onGoto={onGotoCoach} />
     <NoticeLog {notices} onGoto={onGotoNotice} />
   </div>
   {/if}

@@ -11,7 +11,7 @@ archived: 2026-08-03
 
 **참조 스펙**
 - `docs/archive/design/a-mate/specs/2026-08-02-coaching-tab-unification-design.md` — §6 전체(6.1~6.6), §9(에러 처리), §10(테스트), §11(PR⑥)
-- `docs/design/a-mate/specs/2026-08-02-coaching-tab-single-stream-design.md` — §5의 **C**(홈 알림 타임스탬프)
+- `docs/archive/design/a-mate/specs/2026-08-02-coaching-tab-single-stream-design.md` — §5의 **C**(홈 알림 타임스탬프)
 
 **Architecture:** 이 저장소엔 컴포넌트 테스트 라이브러리가 없다(`package.json`에 vitest + svelte-check뿐).
 따라서 **판정 로직은 전부 `.ts` 순수 함수**로 빼고 Svelte는 그리기만 한다(PR②가 세운 규약).

@@ -5,7 +5,7 @@ archived: 2026-08-03
 
 # 코칭 탭 단일 스트림 PR A (Rust) 구현 계획 — `first_seen` 노출과 보존
 
-> **근거 스펙:** [2026-08-02-coaching-tab-single-stream-design.md](../../../../design/a-mate/specs/2026-08-02-coaching-tab-single-stream-design.md) §3.1~§3.3(A 명세) · §5(PR 분할) · §2.2·§2.3(A가 가능하게 하는 것)
+> **근거 스펙:** [2026-08-02-coaching-tab-single-stream-design.md](../specs/2026-08-02-coaching-tab-single-stream-design.md) §3.1~§3.3(A 명세) · §5(PR 분할) · §2.2·§2.3(A가 가능하게 하는 것)
 > **범위:** Rust만. 프론트(`api.ts` 타입·정렬·배지·홈 위젯)는 **B의 몫**이다.
 
 **Goal:** 코칭 스트림이 `first_seen` 하나로 최신순 정렬(§2.2)과 안 본 개수 배지(§2.3)를 만들 수 있게, Rust가 그 값을 **노출**하고 콘텐츠 프룬으로부터 **보존**한다.

@@ -1,20 +1,19 @@
 <script lang="ts">
-  import type { CoachFinding } from '../../api';
-  let { findings, onGoto }: { findings: CoachFinding[]; onGoto: (dedupKey: string) => void } = $props();
-  const top3 = $derived(findings.slice(0, 3)); // 커맨드가 정렬을 보장 — 앞에서 3건
+  import type { CoachWidgetRow } from '../coach-stream';
+  let { rows, onGoto }: { rows: CoachWidgetRow[]; onGoto: (key: string) => void } = $props();
 </script>
 
 <div class="widget">
   <h3>지금 볼 코칭</h3>
-  {#if top3.length === 0}
+  {#if rows.length === 0}
     <p class="empty">지금은 지적할 게 없어요. 완벽해요!</p>
   {:else}
     <ol>
-      {#each top3 as f, i (f.dedup_key)}
+      {#each rows as r (r.key)}
         <li>
-          <button onclick={() => onGoto(f.dedup_key)}>
-            <span class="rank">{i + 1}</span>
-            <span class="action">{f.suggested_action}</span>
+          <button class={r.kind} onclick={() => onGoto(r.key)}>
+            <span class="badge">{r.badge}</span>
+            <span class="action">{r.oneLine}</span>
           </button>
         </li>
       {/each}
@@ -32,8 +31,13 @@
     border: none; cursor: pointer; font: inherit; font-size: 12px;
     background: var(--pastel-cream); color: var(--ink);
     border-radius: var(--radius-s); padding: 7px 10px;
+    /* 탭과 같은 시각 언어 — 좌측 라인 색이 분류를 뜻한다 (§2.4) */
+    border-left: 3px solid var(--pastel-mint);
   }
+  li button.learning { border-left-color: var(--pastel-lav); }
+  li button.news { border-left-color: var(--accent); }
   li button:hover { background: var(--pastel-lav); }
-  .rank { color: var(--accent-strong); font-weight: 700; }
+  /* 순위 숫자를 분류 배지로 바꿨다 — 스트림이 시간순이라 1·2·3에 뜻이 없다 */
+  .badge { color: var(--accent-strong); font-weight: 700; white-space: nowrap; flex: none; }
   .action { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
