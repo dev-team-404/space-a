@@ -803,6 +803,10 @@ function hubIssuesHTML(data: SpaceView): string {
 // 지내는가"가 읽힌다. 데이터가 허락하는 범위: 이슈·문서를 원본 agent_id로 묶고, 이미
 // 있는 LLM 한 줄 서사를 줄 설명으로 쓴다. (허브에 다단계 타임라인·재사용 사슬은 없다)
 let trailPerson: string | null = null // 선택된 사람의 agent_id
+// 카드가 수십~수백 건이라 한 번에 다 그리면 아래 붙는 것들이 스크롤 밖으로 밀린다.
+const TRAIL_PAGE = 20
+let trailPage = 0
+let trailPageKey = '' // 사람·프로젝트가 바뀌었는지 판정하는 키 (바뀌면 첫 쪽으로)
 
 /** 이 사람이 남긴 것인가 — 표시 이름은 흔들리므로(Life 이름·'a-mate/' 접두어) id를 우선한다. */
 function isBy(agent: SpaceAgent, actorId: string | undefined, actorName: string): boolean {
@@ -915,14 +919,18 @@ function hubTrailHTML(data: SpaceView): string {
   // 프로젝트 초점은 사람 이름 옆 칩으로 세운다 — 목록이 왜 짧은지가 목록 바로 위에 있어야 한다.
   // 지도의 눌린 태그와 같은 `data-cproj`를 달아 해제도 기존 핸들러가 그대로 맡는다.
   const chip = collabProject ? projectChipHTML(data, collabProject) : ''
-  const head = `
+  // 신원 줄은 섹션 밖에 세운다 — '← 전체'는 이 화면의 나가는 문이라 맨 위에 있어야 하고,
+  // 아래 두 섹션(이어진 선·작업 기록) 중 어느 쪽에도 속하지 않는다.
+  const identity = `
     <div class="trail-person">
       <button class="sub-tab" data-person="">← 전체</button>
       ${icon}
       <div class="trail-who"><b>${esc(agent.name)}</b>
         <div class="muted small">${esc(agent.hub_name && agent.hub_name !== agent.name ? agent.hub_name : agent.agent_id)}</div></div>
       ${chip}
-    </div>
+    </div>`
+  // 집계·제외 줄은 카드 목록을 설명하는 것이므로 목록과 같은 섹션에 둔다.
+  const head = `
     <div class="trail-stats">
       <span>이슈 <b>${issues.length}</b>${issues.length ? ` · 해결 <b>${resolved}</b>` : ''}</span>
       <span>문서 <b>${docs}</b></span>
@@ -939,10 +947,23 @@ function hubTrailHTML(data: SpaceView): string {
         : ''
     }`
 
+  // 쪽 나누기 — 사람·프로젝트가 바뀌면 첫 쪽으로. 호출부 여섯 군데에서 리셋을 챙기는 대신
+  // 여기서 키로 판정한다(빠뜨릴 수 없다). 30초 폴링은 키가 같으므로 보던 쪽에 그대로 머문다.
+  const pageKey = `${agent.agent_id}|${collabProject ?? ''}`
+  if (trailPageKey !== pageKey) {
+    trailPageKey = pageKey
+    trailPage = 0
+  }
+  const pages = Math.max(1, Math.ceil(items.length / TRAIL_PAGE))
+  if (trailPage > pages - 1) trailPage = pages - 1 // 폴링으로 기록이 줄면 빈 쪽에 남는다
+  const from = trailPage * TRAIL_PAGE
+  const shown = items.slice(from, from + TRAIL_PAGE)
+
   // 시간 버킷 헤더 — 이슈 흐름과 같은 구획(오늘/어제/이번 주/이전). 시각 없는 문서는 '기록' 묶음.
+  // 버킷은 **이 쪽 안에서만** 센다: 쪽이 넘어가도 그 쪽의 첫 줄이 어느 구획인지 다시 말해준다.
   let body = ''
   let bucket = ''
-  for (const item of items) {
+  for (const item of shown) {
     const b = item.at ? timeBucket(item.at) : '시각 미상'
     if (b !== bucket) {
       bucket = b
@@ -957,8 +978,28 @@ function hubTrailHTML(data: SpaceView): string {
         : '아직 남긴 기록이 없어요'
     }</p>`
   }
-  // 한 사람을 열었으면 지도도 그 사람 기준으로 좁혀 붙인다 (누구와 이어졌나).
-  return hubSection('작업 기록', 'Work Trail', head + body) + hubCollabHTML(data, agent.agent_id)
+  // 한 사람을 열었으면 지도를 목록보다 **위에** 둔다 — "이 사람이 누구와 이어졌나"를 먼저 읽고
+  // 그 근거를 아래 카드에서 확인하는 순서다. (사람을 안 고른 화면은 반대로 목록이 먼저다.)
+  return (
+    identity +
+    hubCollabHTML(data, agent.agent_id) +
+    hubSection('작업 기록', 'Work Trail', head + body + trailPagerHTML(items.length, pages))
+  )
+}
+
+/** 쪽 이동 줄. 한 쪽에 다 들어가면 그리지 않는다 — 누를 것이 없는 컨트롤은 소음이다. */
+function trailPagerHTML(total: number, pages: number): string {
+  if (pages < 2) return ''
+  const from = trailPage * TRAIL_PAGE
+  const to = Math.min(total, from + TRAIL_PAGE)
+  const first = trailPage === 0
+  const lastPage = trailPage >= pages - 1
+  return `
+    <div class="trail-pager">
+      <button class="sub-tab" data-tpage="${trailPage - 1}"${first ? ' disabled' : ''}>← 이전</button>
+      <span class="muted small">${from + 1}–${to} / ${total}건 · ${trailPage + 1}/${pages}쪽</span>
+      <button class="sub-tab" data-tpage="${trailPage + 1}"${lastPage ? ' disabled' : ''}>다음 →</button>
+    </div>`
 }
 
 // ── 지식 문서 필터 (지식 재사용 '책장' · 문서함 공용) ──
@@ -1662,6 +1703,15 @@ function renderHub(data: SpaceView) {
     el.addEventListener('click', () => {
       trailPerson = el.dataset.person || null
       renderHub(data)
+    })
+  })
+  // 작업 기록 쪽 이동. 다시 그린 뒤 목록 머리로 올려준다 — 안 그러면 다음 쪽의 중간부터 보인다.
+  hubBody.querySelectorAll<HTMLElement>('[data-tpage]').forEach((el) => {
+    el.addEventListener('click', () => {
+      if ((el as HTMLButtonElement).disabled) return
+      trailPage = Number(el.dataset.tpage)
+      renderHub(data)
+      hubBody.querySelector('.trail-stats')?.scrollIntoView({ block: 'start' })
     })
   })
   // 작업 기록의 이슈 줄 → 이슈 상세 모달 (문서 줄은 아래 .doc-item과 같은 data-doc를 쓴다)
