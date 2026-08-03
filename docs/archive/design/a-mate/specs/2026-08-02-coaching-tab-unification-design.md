@@ -242,6 +242,11 @@ ALTER TABLE findings ADD COLUMN status_ts TEXT;             -- 처분 시각 (7�
 
 `set_finding_status`·`set_content_status`는 `now_ts`를 받아 함께 기록한다. `content_items`에는 §6.3의 `summary_ko`만 추가된다.
 
+> **구현 결과 (#155)** — `content_items`에도 `status_ts TEXT`를 **추가했다**. 이 설계는 findings 2컬럼만 잡았지만,
+> 레슨의 7일 창을 기존 `last_seen`으로는 계산할 수 없다: `replace_content_items`의 `ON CONFLICT`가 **재방출마다**
+> `last_seen`을 갱신해 창이 영영 만료되지 않는다. ⑥의 `summary_ko`와 겹치지 않는 별개 컬럼이다.
+> 세 컬럼 모두 컬럼 전용 마이그레이션이고, 재수집 테이블 행 수 보존을 테스트로 고정했다.
+
 **모두 컬럼 전용 마이그레이션이다.** `judgment_json` 추가(`store.rs:219`) 패턴을 따라 `events`/`sessions`/`ingest_state`/`daily_rollup`을 **절대 DELETE 하지 않는다**. 릴리스마다 콜드 스캔이 되돌아오는 기존 사고를 반복하지 않기 위한 명시 제약이다.
 
 ### 5.4 R6 앵커 드리프트 — 무시 우회 차단
@@ -289,12 +294,18 @@ FROM findings WHERE rule_id='R6' AND status='dismissed'
 | 상태 | findings | content_items | 의미 |
 |------|----------|---------------|------|
 | `new` | ✅ | ✅ | 노출 중 |
-| `shown` | — | ✅ | (기존, 미사용에 가까움 — 유지) |
+| `shown` | — | ~~✅~~ | **제거됨 (#155)** — 아래 참조 |
 | `resolved` | ✅ | **신규** | 해결함 (7일 후 화면에서 사라짐) |
 | `dismissed` | ✅ | ✅ | 무시 (영구, 같은 묶음까지 침묵) |
 | `pending`·`rejected` | ✅ | — | 판정 내부 상태 (노출 안 함) |
 
-프론트의 `isHiddenFinding`(`coach-helpers.ts:56`)이 이미 `resolved`/`dismissed`만 「숨긴 항목」으로 보므로 문법 A 카드 양쪽에 그대로 적용된다.
+프론트의 `isHiddenFinding`(`coach-helpers.ts`)이 이미 `resolved`/`dismissed`만 「숨긴 항목」으로 보므로 문법 A 카드 양쪽에 그대로 적용된다.
+
+> **구현 결과 (#155) — `shown`은 유지가 아니라 제거했다.** 단일 스트림 재설계 §3.4가 ③에 판단을 위임한 항목이다.
+> 레포 전체를 두 방법으로 교차 검색한 결과 `content_items.status`를 `'shown'`으로 **설정하는 코드가 한 곳도 없었다** —
+> 콘텐츠는 사용자가 닫기 전까지 영원히 `'new'`다. 남겨두면 `list_content`가 영구히 숨기는 상태로 카드를 밀어넣을 수
+> 있는데 되돌릴 UI가 없다(§1.2 D4와 같은 함정). 설정하는 코드가 없어 기존 DB에 그 값을 가진 행도 없었다.
+> 최종 어휘는 `new | resolved | dismissed`. 위 표의 「유지」는 옛 판단이다.
 
 ---
 
