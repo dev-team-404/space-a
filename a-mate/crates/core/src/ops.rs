@@ -646,7 +646,7 @@ mod tests {
 
         let first = run_rules(&store).unwrap();
         let key = first.iter().find(|f| f.rule_id == "R6").unwrap().dedup_key.clone();
-        assert!(store.set_finding_status(&key, "dismissed").unwrap());
+        assert!(store.set_finding_status(&key, "dismissed", "2026-08-03T00:00:00Z").unwrap());
 
         // 사전순으로 더 앞서는 변형 → 앵커(=dedup_key)가 바뀐다
         seed("s4", "aa 리뷰 코멘트 종합 검토해서 조치하자", 3);

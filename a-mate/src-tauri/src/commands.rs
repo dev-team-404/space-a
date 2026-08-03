@@ -319,8 +319,9 @@ pub fn set_finding_status(state: State<AppState>, dedup_key: String, status: Str
     if !valid_finding_status(&status) {
         return Err(format!("허용되지 않은 상태: {status}"));
     }
+    let now = chrono::Utc::now().to_rfc3339();
     let guard = lock(&state)?;
-    guard.set_finding_status(&dedup_key, &status)
+    guard.set_finding_status(&dedup_key, &status, &now)
         .map_err(|e| e.to_string())
         .and_then(|found| if found { Ok(()) } else { Err(format!("finding 없음: {dedup_key}")) })
 }

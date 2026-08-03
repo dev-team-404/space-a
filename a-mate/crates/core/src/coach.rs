@@ -20,10 +20,44 @@ pub fn fix_command(rule_id: &str, evidence: &Value) -> Option<String> {
     }
 }
 
+/// 「해결함」 시점에 스냅숏할 **룰별 근거 수치** (스펙 §5.1). 재발은 이 값을 *초과*했을 때만
+/// 인정한다 — 실제 행동이 또 있어야 늘어나는 값이라야 한다.
+///
+/// 프론트의 근거 칩(`coach-helpers.ts` `evidenceChip`)과 같은 키를 읽는다: 사용자가 카드에서
+/// 본 수치가 곧 기준선이 되도록. `occurrences`·`last_seen`은 스캔마다 갱신되는 스캔 지표라
+/// 여기 쓸 수 없다(§1.2 D5) — 썼다면 처분 60초 뒤 카드가 부활한다.
+///
+/// 재료가 없으면 `None`. 0으로 대체하지 않는다 — "0 초과"는 다음 스캔에 곧바로 참이 된다.
+pub fn recurrence_evidence_n(rule_id: &str, evidence: &Value) -> Option<i64> {
+    let key = match rule_id {
+        "R6" => "session_count",
+        "R7" => "total_sessions",
+        "R8" => "large_result_count",
+        _ => return None,
+    };
+    evidence.get(key)?.as_i64()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::fix_command;
+    use super::{fix_command, recurrence_evidence_n};
     use serde_json::json;
+
+    /// 스펙 §5.1 — 재발 기준선은 근거 칩과 **같은** 룰별 수치다. 실제 행동이 있어야 늘어난다.
+    #[test]
+    fn recurrence_baseline_reads_the_rule_specific_evidence_count() {
+        assert_eq!(recurrence_evidence_n("R6", &json!({"session_count": 4})), Some(4));
+        assert_eq!(recurrence_evidence_n("R7", &json!({"total_sessions": 5})), Some(5));
+        assert_eq!(recurrence_evidence_n("R8", &json!({"large_result_count": 12})), Some(12));
+    }
+
+    /// 재료가 없으면 None — 0으로 채우면 "0 초과"가 즉시 참이 되어 처분 직후 카드가 부활한다.
+    #[test]
+    fn recurrence_baseline_is_none_when_the_rule_or_key_is_unknown() {
+        assert_eq!(recurrence_evidence_n("R6", &json!({})), None);
+        assert_eq!(recurrence_evidence_n("R6", &json!({"session_count": "네개"})), None);
+        assert_eq!(recurrence_evidence_n("R99", &json!({"session_count": 4})), None);
+    }
 
     #[test]
     fn r1_r2_r7_commands() {

@@ -361,7 +361,7 @@ mod tests {
     /// finding을 저장하고 사용자 처분을 찍는다 (UI에서 「무시」/「해결함」을 누른 상태와 동치).
     fn dispose(store: &SqliteStore, f: &Finding, status: &str) {
         store.upsert_finding(f, &ts_at(0)).unwrap();
-        assert!(store.set_finding_status(&f.dedup_key, status).unwrap());
+        assert!(store.set_finding_status(&f.dedup_key, status, "2026-08-03T00:00:00Z").unwrap());
     }
 
     /// 한 묶음으로 뭉치는 패러프레이즈 3종 — 세션 3개.

@@ -413,7 +413,7 @@ mod tests {
         let store = SqliteStore::open_in_memory().unwrap();
         store.upsert_events(&[turn("s1", "u1", "claude-opus-4-8"), turn("s1","u2","claude-haiku-4-5")]).unwrap();
         store.upsert_finding(&finding("R1"), "2026-07-14T10:00:00Z").unwrap();
-        store.set_finding_status("R1|x", "dismissed").unwrap();
+        store.set_finding_status("R1|x", "dismissed", "2026-08-03T00:00:00Z").unwrap();
         let p = detect_profile(&store).unwrap();
         // R1 무시됨 → 컨텍스트 위생은 프론티어 아님
         assert_eq!(p.mastery(Dimension::ContextHygiene), Mastery::Mastered);
