@@ -304,17 +304,12 @@ export function savePinAcks(ids: string[]): string[] {
   return kept;
 }
 
-/** 큐레이션 콘텐츠가 카드가 되는 상한.
- * `store.list_content`는 LIMIT 없이 `score>=0`인 행을 전부 주고, 옛 「오늘의 배움」 컨테이너가
- * `items[0]` + `items.slice(1, 4)`로 4건만 보여줬다. 컨테이너를 해체하면서 그 상한까지
- * 같이 없애면 카드가 수십 장으로 불어난다 — 상한은 여기서 유지한다. 룰 finding은 대상이 아니다.
- *
- * ⑥에서 4 → 6. 로컬 공지라는 소스가 하나 늘어, 4를 유지하면 공지 2건이 배움 카드를 전부
- * 밀어낸다. **자르는 지점은 여전히 한 곳뿐이다**(백엔드엔 LIMIT이 없다) — 단일 스트림
- * 재설계 이후 그 자리는 `coach-stream`의 `buildCoachStream`이고, 자르는 축은 score가
- * 아니라 `first_seen`이다(§4.2 — 정렬축과 어긋나면 최신 항목이 통째로 사라진다).
- * 고정 슬롯(최대 1건)은 이 상한 밖의 별도 칸이라 호출부가 미리 빼고 넘긴다. */
-export const CONTENT_CARD_LIMIT = 6;
+// 옛 `CONTENT_CARD_LIMIT`(카드 상한, 4 → ⑥에서 6)은 **2026-08-03에 폐지**했다.
+// 상한을 둔 원래 이유는 삭제된 「오늘의 배움」 컨테이너가 `items[0] + items.slice(1,4)`로
+// 4건만 보여주던 동작을 잃지 않으려는 것이었는데, 그 전제는 목록이 *score 순*이라는 것이었다.
+// 단일 스트림이 정렬을 시간순으로 바꾸면서 꼬리의 뜻이 "이미 본 오래된 것"으로 달라졌고,
+// 실측에서는 커리큘럼 팁 4종·Boris·changelog가 통째로 상한 밖으로 밀렸다.
+// 근거와 대가는 `coach-stream.ts`의 `buildCoachStream` 주석에 있다.
 
 /** 개인 실전 레슨 = 문법 A라 처분·수명 규칙을 함께 받는다(§2.1의 「코칭」 분류). */
 const isPersonal = (c: ContentItem) => c.trigger_tags?.includes('personal') ?? false;

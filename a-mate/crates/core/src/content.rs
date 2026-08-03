@@ -1496,6 +1496,74 @@ mod tests {
         assert_eq!(status_ts, None);
     }
 
+    /// 축 쿨다운도 **처분 시각**을 봐야 한다. `last_seen`을 기준으로 하면, 처분된 행은
+    /// 프룬 대상이 아니라 매 큐레이션에 재방출되며 `ON CONFLICT`가 `last_seen`을 갱신하므로
+    /// 경과일이 늘 0에 붙어 **그 축이 영구히 침묵한다** — 주석의 "잠시 조용해짐"과 어긋난다.
+    /// 바로 위 `content_disposition_time_is_kept_apart_from_last_seen`과 같은 근본 원인이며,
+    /// 그때 처분 줄의 7일 창만 고치고 이 쿨다운은 함께 옮기지 않았다.
+    #[test]
+    fn dimension_cooldown_expires_even_while_the_dismissed_row_is_re_emitted() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        let tip = |id: &str| ContentItem {
+            id: id.into(), kind: ItemKind::Tip, title: "t".into(), body: "b".into(),
+            source_url: None, dimension: Some(Dimension::Automation),
+            trigger_tags: vec![], base_priority: 0,
+        };
+        let batch = [(tip("t-closed"), 500), (tip("t-alive"), 500)];
+
+        store.replace_content_items(&batch, "2026-08-01T00:00:00Z", &[]).unwrap();
+        store.set_content_status("t-closed", "dismissed", "2026-08-01T00:00:00Z").unwrap();
+
+        // 창 안(처분 4일 뒤) — 같은 축은 조용해야 한다
+        let visible = store.list_content("2026-08-05T00:00:00Z", 14.0, false).unwrap();
+        assert!(
+            !visible.iter().any(|r| r.id == "t-alive"),
+            "닫은 지 4일이면 같은 축이 억제돼야 한다",
+        );
+
+        // 그 사이 큐레이션이 계속 돌아 dismissed 행의 last_seen이 최신으로 갱신된다
+        store.replace_content_items(&batch, "2026-08-20T00:00:00Z", &[]).unwrap();
+
+        let visible = store.list_content("2026-08-20T00:00:00Z", 14.0, false).unwrap();
+        assert!(
+            visible.iter().any(|r| r.id == "t-alive"),
+            "처분 19일이 지났으면 축이 다시 열려야 한다 — last_seen 기준이면 영구 침묵한다",
+        );
+    }
+
+    /// 마이그레이션 이전 처분(`status_ts` NULL)은 축을 막지 않는다 — 언제 닫혔는지 알 수 없는
+    /// 행이 축을 영구히 잠그면 안 된다(③의 "기준선이 NULL인 행은 판정 대상이 아니다"와 같은 규율).
+    #[test]
+    fn dimension_cooldown_ignores_dispositions_with_no_recorded_time() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        let tip = |id: &str| ContentItem {
+            id: id.into(), kind: ItemKind::Tip, title: "t".into(), body: "b".into(),
+            source_url: None, dimension: Some(Dimension::Automation),
+            trigger_tags: vec![], base_priority: 0,
+        };
+        store
+            .replace_content_items(
+                &[(tip("t-closed"), 500), (tip("t-alive"), 500)],
+                "2026-08-01T00:00:00Z",
+                &[],
+            )
+            .unwrap();
+        // 처분 시각을 남기지 않던 옛 행을 재현한다
+        store
+            .conn
+            .execute(
+                "UPDATE content_items SET status='dismissed', status_ts=NULL WHERE id='t-closed'",
+                [],
+            )
+            .unwrap();
+
+        let visible = store.list_content("2026-08-02T00:00:00Z", 14.0, false).unwrap();
+        assert!(
+            visible.iter().any(|r| r.id == "t-alive"),
+            "처분 시각을 모르면 억제하지 않는다",
+        );
+    }
+
     #[test]
     fn changelog_collapses_many_versions_into_one_item_with_up_to_three_features() {
         let src = ClaudeChangelogSource::default();

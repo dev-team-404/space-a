@@ -1323,8 +1323,17 @@ impl SqliteStore {
     }
 
     /// 노출용 콘텐츠 목록. include_hidden=false면 status='new' + score≥0만,
-    /// 그리고 **태그(축) 쿨다운**: 같은 dimension의 dismissed 형제가 cooldown_days 이내면 억제
-    /// (팁 한 번 닫으면 그 축이 잠시 조용해짐 — 킥오프 §How 나깅 방지). 점수 내림차순.
+    /// 그리고 **태그(축) 쿨다운**: 같은 dimension의 dismissed 형제를 **처분한 지**
+    /// cooldown_days 이내면 억제 (팁 한 번 닫으면 그 축이 잠시 조용해짐 — 킥오프 §How
+    /// 나깅 방지). 점수 내림차순.
+    ///
+    /// **기준은 `status_ts`(처분 시각)이다 — `last_seen`을 쓰면 영구 침묵이 된다.**
+    /// 처분된 행은 프룬 대상이 아니라 매 큐레이션에 재방출되고 `ON CONFLICT`가 `last_seen`을
+    /// 갱신하므로, 그것을 기준으로 하면 경과일이 늘 0에 붙어 축이 영원히 열리지 않는다
+    /// (실측: 오래 전에 닫은 Boris 팁 하나가 `automation` 축 5건을 계속 가리고 있었다).
+    /// `status_ts`는 재방출이 밀지 않는다 — `content_disposition_time_is_kept_apart_from_last_seen`.
+    /// `status_ts`가 NULL인 옛 처분은 `julianday(NULL)`이 NULL이라 조건에서 빠져 **억제하지
+    /// 않는다**: 언제 닫혔는지 모르는 행이 축을 잠그면 안 된다(③의 NULL 기준선 규율과 동일).
     pub fn list_content(
         &self,
         now_ts: &str,
@@ -1348,7 +1357,7 @@ impl SqliteStore {
                  SELECT 1 FROM content_items d
                  WHERE d.status='dismissed' AND d.dimension IS NOT NULL
                    AND d.dimension IS c.dimension
-                   AND julianday(?1) - julianday(d.last_seen) < ?2
+                   AND julianday(?1) - julianday(d.status_ts) < ?2
                )
              ORDER BY c.score DESC, c.id",
             Self::CONTENT_COLS,

@@ -4,7 +4,7 @@
 // 배지 키 계산은 CoachTab이 아니라 App.svelte(셸)가 쓰므로 소비자도 다르다.
 import type { CoachFinding, ContentItem } from '../api';
 import {
-  CONTENT_CARD_LIMIT, contentKind, toLearnCardView, toLessonCardView, toLogCardView, validDeadline,
+  contentKind, toLearnCardView, toLessonCardView, toLogCardView, validDeadline,
   type CoachKind, type LearnCardView, type LogCardView,
 } from './coach-helpers';
 
@@ -31,9 +31,12 @@ export function compareFirstSeen(
 
 /** 활성 finding + 활성 콘텐츠를 한 줄로 조립한다.
  *
- * **상한은 콘텐츠에만, `first_seen` 기준으로** 적용한다(§4.2). score 기준으로 자르면
- * 자르는 축과 보여주는 축이 어긋나 "맨 위가 1시간 전인데 30분 전 항목이 없다"가 생긴다.
- * 룰 finding은 지금도 상한 대상이 아니다.
+ * **카드 상한은 없다** — 옛 `CONTENT_CARD_LIMIT`(6)을 2026-08-03에 폐지했다. 상한을 둔
+ * 원래 이유는 *score 순* 목록의 꼬리가 잡동사니라서였는데, 시간순 스트림에서 꼬리는
+ * "이미 본 오래된 것"이라 성질이 다르다. 반대로 대가는 컸다 — 실측에서 커리큘럼 팁 4종과
+ * Boris·changelog가 전부 상한 밖으로 밀려 **축 라벨 칩이 붙는 카드가 화면에서 사라졌다**.
+ * 폐지하면 배지(§2.3)가 세는 집합과 화면이 정확히 일치한다는 이득도 따라온다.
+ * 노출 자체의 필터는 백엔드가 갖는다(`list_content`의 `score >= 0` + 축 쿨다운).
  *
  * 고정 슬롯 항목은 호출부가 **미리 빼고** 넘긴다 — 그 항목은 스트림 밖 별도 칸이고(§2.5),
  * `pinnedNewsItem`이 score 순 배열을 전제하므로 정렬보다 먼저 골라내야 한다. */
@@ -41,11 +44,7 @@ export function buildCoachStream(
   findings: CoachFinding[],
   content: ContentItem[],
 ): StreamCard[] {
-  const capped = content
-    .filter((c) => c.status === 'new')
-    .slice()
-    .sort((a, b) => compareFirstSeen(a.first_seen, b.first_seen) || a.id.localeCompare(b.id))
-    .slice(0, CONTENT_CARD_LIMIT);
+  const active = content.filter((c) => c.status === 'new');
 
   const cards: StreamCard[] = [];
   for (const f of findings.filter((f) => f.status === 'new')) {
@@ -56,7 +55,7 @@ export function buildCoachStream(
       log: toLogCardView(f),
     });
   }
-  for (const c of capped) {
+  for (const c of active) {
     const kind = contentKind(c);
     const key = `content:${c.id}`;
     const firstSeen = c.first_seen ?? null;

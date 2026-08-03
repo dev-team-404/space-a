@@ -11,6 +11,12 @@
   --coral: #ffb3ad; --coral-ink: #6b241d;
   --cream: #ffe6bf; --cream-ink: #6b5218;
   --danger: #b74444;
+  /* 코칭 탭 분류 라인 — 카드 좌측 4px가 코칭/학습/소식을 가른다 (단일 스트림 §2.1).
+     **여기(스킨 공유)에 두는 것이 요건이다.** --accent 계열은 스킨마다 청/청록/적갈/보라로
+     바뀌어 lavender·peach 스킨에서 다른 분류와 겹치고, --pastel-* 는 레거시 별칭이라
+     --accent/--line 으로 해석돼 코칭·소식이 같은 색이 되고 학습은 테두리색이 된다.
+     hue를 하늘/살구/연분홍으로 벌려 3~4px 폭에서도 서로 구분된다. */
+  --kind-coaching: #8ec8f2; --kind-learning: #f5cc8a; --kind-news: #f2a8bd;
   --shadow-soft: 0 8px 24px rgba(20, 26, 45, 0.10);
   color-scheme: light;
 }
@@ -19,6 +25,8 @@
   --coral: #7a3a38; --coral-ink: #ffd9d5;
   --cream: #4a3f2a; --cream-ink: #ffe4b0;
   --danger: #f2a5a0;
+  /* 분류 라인 — 어두운 카드 위에서 같은 hue 관계를 유지하도록 한 단 밝게 잡는다. */
+  --kind-coaching: #b3dcff; --kind-learning: #ffe0ad; --kind-news: #ffc4d4;
   --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.40);
   color-scheme: dark;
 }

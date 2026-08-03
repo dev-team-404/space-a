@@ -3,7 +3,7 @@ import {
   activeCoachKeys, buildCoachStream, compareFirstSeen, isAnnouncementLive, liveContent,
   localDateString, parseSeenCoachKeys, toWidgetRows, unseenCoachCount,
 } from './coach-stream';
-import { CONTENT_CARD_LIMIT, pinnedNewsItem } from './coach-helpers';
+import { pinnedNewsItem } from './coach-helpers';
 import type { CoachFinding, ContentItem } from '../api';
 
 const finding = (over: Partial<CoachFinding> = {}): CoachFinding => ({
@@ -96,50 +96,39 @@ describe('buildCoachStream', () => {
     expect(stream).toEqual([]);
   });
 
-  it('상한은 콘텐츠에만, 그리고 first_seen 기준으로 자른다 (§4.2)', () => {
-    // 오래된 고득점 팁이 상한을 채우고 방금 온 항목이 뒤에 있는 배치.
-    // score 기준으로 자르면 최신 항목이 통째로 사라진다.
-    const older = Array.from({ length: CONTENT_CARD_LIMIT }, (_, i) =>
+  // 카드 상한(옛 `CONTENT_CARD_LIMIT = 6`)은 2026-08-03에 **폐지**했다. 시간순 스트림에서
+  // 꼬리는 "이미 본 오래된 것"이라 잘라낼 이유가 약한 반면, 실측에서 커리큘럼 팁 4종과
+  // Boris·changelog가 전부 상한 밖으로 밀려 **축 라벨 칩이 붙는 카드가 화면에서 사라졌다.**
+  it('활성 항목을 자르지 않는다 — 상한을 폐지했다', () => {
+    const many = Array.from({ length: 12 }, (_, i) =>
+      tip(`t-${i}`, `2026-07-${String(i + 10).padStart(2, '0')}T00:00:00Z`));
+    const findings = Array.from({ length: 3 }, (_, i) =>
+      finding({ dedup_key: `F${i}`, first_seen: '2026-08-02T00:00:00Z' }));
+    const stream = buildCoachStream(findings, many);
+    expect(stream).toHaveLength(15);
+    // 옛 상한이 6이었으므로 그 경계를 넘는 것 자체가 이 테스트의 주장이다
+    expect(stream.filter((c) => c.key.startsWith('content:'))).toHaveLength(12);
+  });
+
+  it('오래된 고득점 팁도 남는다 — 상한이 없으니 점수와 무관하게 시간순 자리만 잡는다', () => {
+    const older = Array.from({ length: 8 }, (_, i) =>
       tip(`old-${i}`, '2026-08-01T00:00:00Z', { score: 500 }));
     const fresh = tip('fresh', '2026-08-09T00:00:00Z', { score: 300 });
     const stream = buildCoachStream([], [...older, fresh]);
-    expect(stream).toHaveLength(CONTENT_CARD_LIMIT);
+    expect(stream).toHaveLength(9);
     expect(stream[0].key).toBe('content:fresh');
   });
 
-  it('룰 finding은 상한 대상이 아니다 — 콘텐츠가 상한을 채워도 전부 남는다', () => {
-    const many = Array.from({ length: CONTENT_CARD_LIMIT + 3 }, (_, i) =>
-      tip(`t-${i}`, `2026-08-0${(i % 9) + 1}T00:00:00Z`));
-    const findings = Array.from({ length: 5 }, (_, i) =>
-      finding({ dedup_key: `F${i}`, first_seen: '2026-08-02T00:00:00Z' }));
-    const stream = buildCoachStream(findings, many);
-    expect(stream.filter((c) => c.key.startsWith('finding:'))).toHaveLength(5);
-    expect(stream.filter((c) => c.key.startsWith('content:'))).toHaveLength(CONTENT_CARD_LIMIT);
-  });
-
-  // 아래 넷은 `partitionCoachItems`가 지키던 주장을 이어받은 것이다(그 함수는 이 PR에서
-  // 호출부를 잃고 삭제됐다). 성질이 사라진 게 아니라 주장하는 자리가 옮겨왔다.
-  it('처분된 항목이 상한 자리를 잡아먹지 않는다 — 거르기가 자르기보다 먼저다', () => {
+  // 아래는 `partitionCoachItems`가 지키던 주장을 이어받은 것이다(그 함수는 삭제됐다).
+  // 성질이 사라진 게 아니라 주장하는 자리가 옮겨왔다.
+  it('처분된 항목은 활성 목록에 섞이지 않는다 — 분류를 유도하기 전에 거른다', () => {
     const rows = [
-      // 처분 항목이 **더 최신**이라 자르기가 먼저면 상위 세 자리를 먹는다
       ...Array.from({ length: 3 }, (_, i) => tip(`D-${i}`, '2026-08-09T00:00:00Z', { status: 'dismissed' })),
-      ...Array.from({ length: CONTENT_CARD_LIMIT }, (_, i) => tip(`T-${i}`, '2026-08-08T00:00:00Z')),
+      ...Array.from({ length: 4 }, (_, i) => tip(`T-${i}`, '2026-08-08T00:00:00Z')),
     ];
     const stream = buildCoachStream([], rows);
-    expect(stream).toHaveLength(CONTENT_CARD_LIMIT);
+    expect(stream).toHaveLength(4);
     expect(stream.every((c) => c.key.startsWith('content:T-'))).toBe(true);
-  });
-
-  it('코칭 레슨도 콘텐츠 상한을 함께 먹는다 — 분류별로 따로 세지 않는다', () => {
-    const rows = [
-      ...Array.from({ length: 2 }, (_, i) => content({ id: `L${i}`, first_seen: '2026-08-09T00:00:00Z' })),
-      ...Array.from({ length: CONTENT_CARD_LIMIT }, (_, i) => tip(`T-${i}`, '2026-08-08T00:00:00Z')),
-    ];
-    expect(buildCoachStream([], rows)).toHaveLength(CONTENT_CARD_LIMIT);
-  });
-
-  it('상한은 6이다 — ⑥에서 소스(로컬 공지)가 하나 늘어 4에서 올렸다', () => {
-    expect(CONTENT_CARD_LIMIT).toBe(6);
   });
 
   it('빈 입력이면 빈 스트림', () => {
@@ -255,10 +244,11 @@ describe('activeCoachKeys — 배지가 세는 대상 (§2.3)', () => {
     expect(keys).toEqual([]);
   });
 
-  it('상한을 적용하기 전의 활성 전부를 센다 (§2.3)', () => {
-    const many = Array.from({ length: CONTENT_CARD_LIMIT + 4 }, (_, i) =>
-      tip(`t-${i}`, '2026-08-01T00:00:00Z'));
-    expect(activeCoachKeys([], many)).toHaveLength(CONTENT_CARD_LIMIT + 4);
+  it('활성 항목 전부를 센다 — 배지와 화면이 같은 집합을 본다 (§2.3)', () => {
+    const many = Array.from({ length: 10 }, (_, i) => tip(`t-${i}`, '2026-08-01T00:00:00Z'));
+    expect(activeCoachKeys([], many)).toHaveLength(10);
+    // 상한 폐지 후 스트림도 같은 수를 그린다 — 배지 N인데 화면 M행인 불일치가 없어졌다
+    expect(buildCoachStream([], many)).toHaveLength(10);
   });
 });
 

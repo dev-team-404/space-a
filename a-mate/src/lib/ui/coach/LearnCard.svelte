@@ -45,13 +45,22 @@
 <style>
   .card {
     background: var(--frame-bg); border-radius: var(--radius-m); box-shadow: var(--shadow-soft);
-    padding: 12px 14px; border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    padding: 12px 14px; border: 1px solid var(--line);
+    /* 기본은 「소식」 (§2.1). 문법 A(LogCard)와 같은 4px로 맞춰 두 문법의 라인이
+       한 줄 스트림에서 같은 굵기로 읽히게 한다. 색 근거는 theme.css 주석. */
+    border-left: 4px solid var(--kind-news);
     display: flex; flex-direction: column; gap: 6px;
   }
-  /* 라인 색이 분류를 뜻한다 (§2.1). 기본은 소식(--accent), 학습은 라벤더. */
-  .card.learning { border-left-color: var(--pastel-lav); }
-  /* 고정 슬롯은 기한이 있는 한 건뿐 — 테두리로만 구분하고 문법은 그대로 둔다 (스펙 §6.4) */
-  .card.pinned { border: 1px solid var(--accent); border-left-width: 3px; }
+  .card.learning { border-left-color: var(--kind-learning); }
+  /* 고정 슬롯은 기한이 있는 한 건뿐 — 테두리로만 구분하고 문법은 그대로 둔다 (스펙 §6.4).
+     ⚠ **좌측은 건드리지 않는다.** 그 자리는 분류색(§2.1)이고, `border` 단축 속성으로 덮으면
+     특정성이 `.card`보다 높아 색과 4px 폭을 둘 다 잃는다 — peach 스킨에서는 `--accent`가
+     `--kind-learning`과 거의 같아 고정된 소식 카드가 학습으로 읽힌다(Codex 리뷰 P2). */
+  .card.pinned {
+    border-top-color: var(--accent);
+    border-right-color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
   header { display: flex; align-items: center; gap: 8px; }
   .badge {
     font-size: 10px; font-weight: 700; color: var(--accent-ink); white-space: nowrap;
