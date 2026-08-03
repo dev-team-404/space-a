@@ -3,7 +3,16 @@
   let { notices, onGoto }: { notices: Notice[]; onGoto: (dest: NoticeDest) => void } = $props();
   const ICON: Record<Notice['kind'], string> = { finding: '💡', diary: '📓', occasion: '🎉', visit: '👋', guestbook: '✍️', reuse: '🌱', announcement: '📣' };
   // 포맷 로직은 notices.ts의 순수 함수에 있다 — 이 저장소엔 컴포넌트 테스트 라이브러리가 없다.
-  const now = new Date();
+  // 상주 앱이라 홈 탭이 자정을 넘겨 떠 있을 수 있다. `now`가 어제로 굳으면 판정이 뒤집힌다 —
+  // 어제 알림이 계속 HH:MM으로 보이고, 자정 직후 새 알림은 MM-DD가 된다. 날이 바뀔 때만 갱신한다.
+  let now = $state(new Date());
+  $effect(() => {
+    const id = setInterval(() => {
+      const d = new Date();
+      if (d.toDateString() !== now.toDateString()) now = d;
+    }, 60_000);
+    return () => clearInterval(id);
+  });
 </script>
 
 <div class="widget">

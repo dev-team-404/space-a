@@ -1130,6 +1130,11 @@ impl SqliteStore {
 
     /// 큐레이션 콘텐츠를 현재 랭킹으로 upsert. findings 선례처럼 **사용자 status는 보존**
     /// (dismissed는 재스캔에도 유지 — 나깅 방지). 점수·본문·last_seen만 갱신.
+    ///
+    /// 번역 캐시(`summary_ko`·`title_ko`·`deadline`)는 **원문이 그대로일 때만** 보존한다.
+    /// `cc-changelog-latest`처럼 id가 고정이고 내용만 갱신되는 소스가 있어(새 릴리스마다
+    /// title·body가 바뀐다), 무조건 보존하면 카드가 영영 낡은 한국어를 보여준다.
+    /// SET의 우변은 갱신 전 행 값으로 평가되므로 `content_items.title`이 **옛 제목**이다.
     pub fn replace_content_items(
         &self,
         ranked: &[(crate::content::ContentItem, i64)],
@@ -1145,7 +1150,13 @@ impl SqliteStore {
                     (id, kind, dimension, title, body, source_url, trigger_tags, score, status, first_seen, last_seen)
                  VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'new',?9,?9)
                  ON CONFLICT(id) DO UPDATE SET
-                    score=?8, title=?4, body=?5, source_url=?6, trigger_tags=?7, last_seen=?9",
+                    score=?8, title=?4, body=?5, source_url=?6, trigger_tags=?7, last_seen=?9,
+                    summary_ko=CASE WHEN content_items.title=?4 AND content_items.body=?5
+                                    THEN content_items.summary_ko ELSE NULL END,
+                    title_ko  =CASE WHEN content_items.title=?4 AND content_items.body=?5
+                                    THEN content_items.title_ko   ELSE NULL END,
+                    deadline  =CASE WHEN content_items.title=?4 AND content_items.body=?5
+                                    THEN content_items.deadline   ELSE NULL END",
                 params![item.id, item.kind.as_str(), dim, item.title, item.body,
                         item.source_url, tags, score, now_ts],
             )?;
@@ -4601,6 +4612,77 @@ mod tests {
         assert_eq!(row.deadline.as_deref(), Some("2026-08-31"));
         // 원문은 남는다 — 엔진 없는 사용자는 이 원문을 본다 (§6.3 "엔진 없으면 원문 그대로")
         assert_eq!(row.title, "Fable 5 promo");
+    }
+
+    #[test]
+    fn translation_cache_is_dropped_when_the_source_text_changes() {
+        // `cc-changelog-latest`처럼 **id가 고정이고 내용만 갱신되는** 소스가 있다
+        // (`content.rs` ClaudeChangelogSource — 새 릴리스마다 title·body가 바뀐다).
+        // 번역은 "그 원문의" 번역이라, 원문이 바뀌었는데 캐시가 남으면 카드가 영영
+        // 낡은 한국어를 보여준다 — 엔진 사용자에게만 나타나는 조용한 회귀다.
+        let store = SqliteStore::open_in_memory().unwrap();
+        let mk = |title: &str, body: &str| crate::content::ContentItem {
+            id: "cc-changelog-latest".into(),
+            kind: crate::content::ItemKind::News,
+            title: title.into(),
+            body: body.into(),
+            source_url: None,
+            dimension: None,
+            trigger_tags: vec!["changelog".into()],
+            base_priority: 0,
+        };
+        let translated = |s: &SqliteStore| {
+            s.list_content("2026-08-09T00:00:00Z", 14.0, false)
+                .unwrap()
+                .into_iter()
+                .find(|r| r.id == "cc-changelog-latest")
+                .unwrap()
+        };
+
+        store
+            .replace_content_items(&[(mk("새 기능 2건 (최신 v1)", "adds A · adds B"), 25)],
+                "2026-08-03T00:00:00Z", &[])
+            .unwrap();
+        store
+            .set_content_translation("cc-changelog-latest", Some("새 기능 2건"), "A와 B가 추가됐어요.", Some("2026-08-31"))
+            .unwrap();
+        assert!(store.content_needing_translation(10).unwrap().is_empty());
+
+        // 같은 원문으로 재큐레이션 — 캐시는 유지된다(매 스캔 재번역 금지)
+        store
+            .replace_content_items(&[(mk("새 기능 2건 (최신 v1)", "adds A · adds B"), 25)],
+                "2026-08-04T00:00:00Z", &[])
+            .unwrap();
+        assert!(
+            store.content_needing_translation(10).unwrap().is_empty(),
+            "원문이 그대로면 재번역하지 않는다"
+        );
+        assert_eq!(translated(&store).summary_ko.as_deref(), Some("A와 B가 추가됐어요."));
+
+        // 새 릴리스로 제목·본문이 바뀜 — 옛 번역·기한을 버리고 재번역 대상이 된다
+        store
+            .replace_content_items(&[(mk("새 기능 1건 (최신 v2)", "adds C"), 25)],
+                "2026-08-05T00:00:00Z", &[])
+            .unwrap();
+        let row = translated(&store);
+        assert_eq!(row.summary_ko, None, "원문이 바뀌면 옛 요약을 버린다");
+        assert_eq!(row.title_ko, None, "제목 번역도 함께");
+        assert_eq!(row.deadline, None, "기한도 옛 원문에서 뽑은 값이라 함께 버린다");
+        assert_eq!(
+            store.content_needing_translation(10).unwrap().len(),
+            1,
+            "다음 스캔에 재번역된다"
+        );
+
+        // 본문만 바뀌어도 마찬가지 (제목은 같은데 항목만 갱신되는 경우)
+        store
+            .set_content_translation("cc-changelog-latest", None, "C가 추가됐어요.", None)
+            .unwrap();
+        store
+            .replace_content_items(&[(mk("새 기능 1건 (최신 v2)", "adds D"), 25)],
+                "2026-08-06T00:00:00Z", &[])
+            .unwrap();
+        assert_eq!(translated(&store).summary_ko, None, "본문만 바뀌어도 버린다");
     }
 
     #[test]

@@ -41,7 +41,19 @@
     const p = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   };
-  const pinned = $derived(pinnedNewsItem(tips, pinAcks, localToday()));
+  // **기한 경과 자동 강등이 LLM 오추출의 안전망**이라(§6.4) 앱이 자정을 넘겨 켜져 있어도
+  // 실제로 발화해야 한다. `new Date()`는 반응형이 아니어서 $derived 안에 두면 tips·pinAcks가
+  // 바뀔 때까지 어제 날짜로 굳는다 — 스캔은 파일 변경 구동이라 유휴 상태에선 그 계기도 없다.
+  // 날짜를 상태로 들고 분 단위로 확인한다(절전·복귀·DST에 자정까지의 ms 계산보다 안전하다).
+  let today = $state(localToday());
+  $effect(() => {
+    const id = setInterval(() => {
+      const d = localToday();
+      if (d !== today) today = d;
+    }, 60_000);
+    return () => clearInterval(id);
+  });
+  const pinned = $derived(pinnedNewsItem(tips, pinAcks, today));
   const pinnedView = $derived(pinned ? toLearnCardView(pinned) : null);
 
   function ackPin(id: string) {
