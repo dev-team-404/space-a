@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CONTENT_CARD_LIMIT, RESOLVED_WINDOW_DAYS, coachTitle, contentKind, ctxLine, disposedLabel,
-  evidenceChip, isDisposedVisible, isHiddenFinding, partitionCoachItems, pinnedNewsItem,
-  sessionIdsOf, sourceChip, splitLessonBody, toDisposedRows, toLearnCardView, toLessonCardView,
-  toLogCardView, totalSessionsOf,
+  RESOLVED_WINDOW_DAYS, coachTitle, contentKind, ctxLine, disposedLabel, evidenceChip,
+  isDisposedVisible, isHiddenFinding, pinnedNewsItem, sessionIdsOf, sourceChip, splitLessonBody,
+  toDisposedRows, toLearnCardView, toLessonCardView, toLogCardView, totalSessionsOf,
 } from './coach-helpers';
 import type { CoachFinding, ContentItem, SessionCtxItem } from '../api';
 
@@ -166,46 +165,8 @@ describe('뷰모델의 firstSeen', () => {
   });
 });
 
-describe('partitionCoachItems', () => {
-  it('룰 finding과 personal 레슨은 로그 섹션, 나머지는 배움 섹션', () => {
-    const { log, learn } = partitionCoachItems(
-      [finding()],
-      [content(), content({ id: 'T-L1-1', trigger_tags: [], dimension: 'context_hygiene', title: '내장 팁' })],
-    );
-    expect(log.map((v) => v.key)).toEqual(['R6|Windows|ab', 'lesson-struggle']);
-    expect(learn.map((v) => v.id)).toEqual(['T-L1-1']);
-  });
-  it('finding이 레슨보다 앞에 온다', () => {
-    const { log } = partitionCoachItems([finding()], [content()]);
-    expect(log[0].source).toBe('finding');
-    expect(log[1].source).toBe('lesson');
-  });
-  it('한쪽이 비어도 동작한다', () => {
-    expect(partitionCoachItems([], []).log).toEqual([]);
-    expect(partitionCoachItems([], []).learn).toEqual([]);
-  });
-  // list_content는 LIMIT 없이 score>=0인 행을 전부 준다. 자르는 지점은 여기 한 곳뿐이다.
-  // ⑥에서 소스(로컬 공지)가 하나 늘어 상한을 4 → 6으로 올렸다.
-  it('콘텐츠는 상위 CONTENT_CARD_LIMIT건까지만 카드가 된다', () => {
-    const many = Array.from({ length: 9 }, (_, i) => content({ id: `T-${i}`, trigger_tags: [] }));
-    const { log, learn } = partitionCoachItems([finding()], many);
-    expect(learn.map((v) => v.id)).toEqual(['T-0', 'T-1', 'T-2', 'T-3', 'T-4', 'T-5']);
-    expect(log).toHaveLength(1); // 룰 finding은 상한과 무관
-  });
-  it('상한은 두 섹션 합계에 적용된다', () => {
-    const { log, learn } = partitionCoachItems([], [
-      content({ id: 'L1' }),
-      content({ id: 'L2' }),
-      content({ id: 'T1', trigger_tags: [] }),
-      content({ id: 'T2', trigger_tags: [] }),
-      content({ id: 'T3', trigger_tags: [] }),
-      content({ id: 'T4', trigger_tags: [] }),
-      content({ id: 'T5', trigger_tags: [] }),
-    ]);
-    expect(log.map((v) => v.key)).toEqual(['L1', 'L2']);
-    expect(learn.map((v) => v.id)).toEqual(['T1', 'T2', 'T3', 'T4']);
-  });
-});
+// `partitionCoachItems`(2단 섹션 분할)는 단일 스트림 재설계로 호출부를 잃고 삭제됐다.
+// 그 테스트가 지키던 주장 — 분류·상한·처분 제외 — 은 `coach-stream.test.ts`로 옮겨갔다.
 
 describe('toLogCardView', () => {
   it('finding을 문법 A 슬롯으로 정규화한다', () => {
@@ -441,24 +402,8 @@ describe('pinnedNewsItem', () => {
   });
 });
 
-describe('고정 슬롯과 카드 상한', () => {
-  // 상한은 한 곳(partitionCoachItems)에서만 자른다. 고정 슬롯은 그 밖의 별도 1칸이라,
-  // 호출부가 고정된 항목을 빼고 넘긴다.
-  it('고정된 항목을 제외하고 넘기면 배움 목록에 중복되지 않는다', () => {
-    const rows = [
-      content({ id: 'pin', kind: 'news', trigger_tags: ['announcement'], deadline: '2026-08-31' }),
-      content({ id: 'T1', trigger_tags: [] }),
-    ];
-    const pinned = pinnedNewsItem(rows, [], '2026-08-03');
-    const { learn } = partitionCoachItems([], rows.filter((r) => r.id !== pinned?.id));
-    expect(learn.map((v) => v.id)).toEqual(['T1']);
-  });
-  it('소스가 하나 늘어 상한을 6으로 올렸다', () => {
-    expect(CONTENT_CARD_LIMIT).toBe(6);
-    const many = Array.from({ length: 9 }, (_, i) => content({ id: `T-${i}`, trigger_tags: [] }));
-    expect(partitionCoachItems([], many).learn).toHaveLength(6);
-  });
-});
+// 「고정 슬롯과 카드 상한」 두 케이스도 `coach-stream.test.ts`로 옮겼다 — 상한을 적용하는
+// 자리가 그쪽이라 고정 항목을 빼고 넘기는 규약도 거기서 검증하는 것이 맞다.
 
 // ── 처분 줄 (스펙 §5) ─────────────────────────────────────────────────────
 // 이 저장소엔 컴포넌트 테스트 라이브러리가 없다(@testing-library/svelte·jsdom 부재).
@@ -538,28 +483,5 @@ describe('toDisposedRows', () => {
   });
 });
 
-describe('처분 항목은 활성 집계에서 빠진다', () => {
-  it('처분된 finding·레슨은 카드로 만들지 않는다 — 탭 신규 배지·알림 집계와 같은 기준', () => {
-    const { log, learn } = partitionCoachItems(
-      [finding({ status: 'resolved', status_ts: daysAgo(1) })],
-      [
-        content({ status: 'dismissed' }),
-        content({ id: 'T-1', trigger_tags: [], status: 'resolved' }),
-      ],
-    );
-    expect(log).toEqual([]);
-    expect(learn).toEqual([]);
-  });
-  // 상한 자체는 ⑥에서 4 → 6으로 올랐다(소스 하나 추가). 이 테스트가 지키려는 건
-  // 그 숫자가 아니라 "처분된 항목은 상한을 먹지 않는다"라 상수 기준으로 쓴다.
-  it('처분된 항목이 카드 상한의 자리를 잡아먹지 않는다', () => {
-    const many = [
-      ...Array.from({ length: 3 }, (_, i) => content({ id: `D-${i}`, trigger_tags: [], status: 'dismissed' })),
-      ...Array.from({ length: CONTENT_CARD_LIMIT + 2 }, (_, i) => content({ id: `T-${i}`, trigger_tags: [] })),
-    ];
-    const { learn } = partitionCoachItems([], many);
-    expect(learn.map((v) => v.id)).toEqual(
-      Array.from({ length: CONTENT_CARD_LIMIT }, (_, i) => `T-${i}`),
-    );
-  });
-});
+// 「처분 항목은 활성 집계에서 빠진다」 두 케이스는 `coach-stream.test.ts`로 옮겼다 —
+// 카드 목록을 만드는 자리가 `partitionCoachItems`에서 `buildCoachStream`으로 바뀌었다.

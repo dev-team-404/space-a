@@ -3,7 +3,7 @@ import {
   activeCoachKeys, buildCoachStream, compareFirstSeen, isAnnouncementLive, liveContent,
   localDateString, parseSeenCoachKeys, unseenCoachCount,
 } from './coach-stream';
-import { CONTENT_CARD_LIMIT } from './coach-helpers';
+import { CONTENT_CARD_LIMIT, pinnedNewsItem } from './coach-helpers';
 import type { CoachFinding, ContentItem } from '../api';
 
 const finding = (over: Partial<CoachFinding> = {}): CoachFinding => ({
@@ -117,10 +117,54 @@ describe('buildCoachStream', () => {
     expect(stream.filter((c) => c.key.startsWith('content:'))).toHaveLength(CONTENT_CARD_LIMIT);
   });
 
+  // 아래 넷은 `partitionCoachItems`가 지키던 주장을 이어받은 것이다(그 함수는 이 PR에서
+  // 호출부를 잃고 삭제됐다). 성질이 사라진 게 아니라 주장하는 자리가 옮겨왔다.
+  it('처분된 항목이 상한 자리를 잡아먹지 않는다 — 거르기가 자르기보다 먼저다', () => {
+    const rows = [
+      // 처분 항목이 **더 최신**이라 자르기가 먼저면 상위 세 자리를 먹는다
+      ...Array.from({ length: 3 }, (_, i) => tip(`D-${i}`, '2026-08-09T00:00:00Z', { status: 'dismissed' })),
+      ...Array.from({ length: CONTENT_CARD_LIMIT }, (_, i) => tip(`T-${i}`, '2026-08-08T00:00:00Z')),
+    ];
+    const stream = buildCoachStream([], rows);
+    expect(stream).toHaveLength(CONTENT_CARD_LIMIT);
+    expect(stream.every((c) => c.key.startsWith('content:T-'))).toBe(true);
+  });
+
+  it('코칭 레슨도 콘텐츠 상한을 함께 먹는다 — 분류별로 따로 세지 않는다', () => {
+    const rows = [
+      ...Array.from({ length: 2 }, (_, i) => content({ id: `L${i}`, first_seen: '2026-08-09T00:00:00Z' })),
+      ...Array.from({ length: CONTENT_CARD_LIMIT }, (_, i) => tip(`T-${i}`, '2026-08-08T00:00:00Z')),
+    ];
+    expect(buildCoachStream([], rows)).toHaveLength(CONTENT_CARD_LIMIT);
+  });
+
+  it('상한은 6이다 — ⑥에서 소스(로컬 공지)가 하나 늘어 4에서 올렸다', () => {
+    expect(CONTENT_CARD_LIMIT).toBe(6);
+  });
+
+  it('빈 입력이면 빈 스트림', () => {
+    expect(buildCoachStream([], [])).toEqual([]);
+  });
+
   it('first_seen이 같으면 키로 안정 정렬한다 — 새로고침마다 순서가 튀지 않게', () => {
     const a = buildCoachStream([], [tip('b', '2026-08-01T00:00:00Z'), tip('a', '2026-08-01T00:00:00Z')]);
     const b = buildCoachStream([], [tip('a', '2026-08-01T00:00:00Z'), tip('b', '2026-08-01T00:00:00Z')]);
     expect(a.map((c) => c.key)).toEqual(b.map((c) => c.key));
+  });
+});
+
+describe('고정 슬롯과 카드 상한', () => {
+  // 상한은 한 곳(buildCoachStream)에서만 자른다. 고정 슬롯은 그 밖의 별도 1칸이라,
+  // 호출부(CoachTab)가 고정된 항목을 빼고 넘긴다 (§2.2 파이프라인).
+  it('고정된 항목을 제외하고 넘기면 스트림에 중복되지 않는다', () => {
+    const rows = [
+      ann({ id: 'pin', deadline: '2026-08-31', first_seen: '2026-08-09T00:00:00Z' }),
+      tip('T1', '2026-08-08T00:00:00Z'),
+    ];
+    const pinned = pinnedNewsItem(rows, [], TODAY);
+    expect(pinned?.id).toBe('pin');
+    const stream = buildCoachStream([], rows.filter((r) => r.id !== pinned?.id));
+    expect(stream.map((c) => c.key)).toEqual(['content:T1']);
   });
 });
 

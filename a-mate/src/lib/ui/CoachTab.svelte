@@ -3,7 +3,8 @@
   import SessionModal from './SessionModal.svelte';
   import LogCard from './coach/LogCard.svelte';
   import LearnCard from './coach/LearnCard.svelte';
-  import { ctxLine, loadPinAcks, partitionCoachItems, pinnedNewsItem, savePinAcks, sessionIdsOf, toDisposedRows, toLearnCardView, totalSessionsOf, type DisposedRow } from './coach-helpers';
+  import { ctxLine, loadPinAcks, pinnedNewsItem, savePinAcks, sessionIdsOf, toDisposedRows, toLearnCardView, totalSessionsOf, type DisposedRow } from './coach-helpers';
+  import { activeCoachKeys, buildCoachStream, liveContent, localDateString, saveSeenCoachKeys } from './coach-stream';
 
   let { focusKey = null, onChanged }: { focusKey?: string | null; onChanged?: () => void } = $props();
 
@@ -36,45 +37,52 @@
   // 기한 공지 고정 슬롯 (스펙 §6.4) — 유효 기한 + 미확인일 때만, 최대 1건.
   // 판정은 coach-helpers의 순수 함수에 있다(이 저장소엔 컴포넌트 테스트 라이브러리가 없다).
   let pinAcks = $state<string[]>(loadPinAcks());
-  const localToday = () => {
-    const d = new Date();
-    const p = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-  };
   // **기한 경과 자동 강등이 LLM 오추출의 안전망**이라(§6.4) 앱이 자정을 넘겨 켜져 있어도
   // 실제로 발화해야 한다. `new Date()`는 반응형이 아니어서 $derived 안에 두면 tips·pinAcks가
   // 바뀔 때까지 어제 날짜로 굳는다 — 스캔은 파일 변경 구동이라 유휴 상태에선 그 계기도 없다.
   // 날짜를 상태로 들고 분 단위로 확인한다(절전·복귀·DST에 자정까지의 ms 계산보다 안전하다).
-  let today = $state(localToday());
+  let today = $state(localDateString(new Date()));
   $effect(() => {
     const id = setInterval(() => {
-      const d = localToday();
+      const d = localDateString(new Date());
       if (d !== today) today = d;
     }, 60_000);
     return () => clearInterval(id);
   });
-  const pinned = $derived(pinnedNewsItem(tips, pinAcks, today));
-  const pinnedView = $derived(pinned ? toLearnCardView(pinned) : null);
-
-  function ackPin(id: string) {
-    pinAcks = savePinAcks([...pinAcks, id]);
-  }
-
-  // 근거 출처로 두 섹션을 가른다 (스펙 §3). 분기 로직은 전부 coach-helpers의 순수 함수에 있다.
-  // 고정된 항목은 빼고 넘긴다 — 카드 상한(CONTENT_CARD_LIMIT)은 여기 한 곳에서만 적용된다.
-  const sections = $derived(partitionCoachItems(active, tips.filter((t) => t.id !== pinned?.id)));
-  const findingByKey = $derived(new Map(active.map((f) => [f.dedup_key, f])));
-  // 7일 창은 시간이 흘러야 닫히는데 `Date.now()`는 반응성 의존이 아니다. 스캔은 로그 감시
-  // 디바운스라 Claude Code 활동이 없으면 아예 돌지 않으므로, 탭을 띄워둔 채 경계를 넘으면
-  // 만료된 줄이 그대로 남는다. 창이 7일이라 시계는 1시간 눈금이면 충분하다.
+  // 처분 줄의 7일 창과 공지 수명(§2.6)은 시간이 흘러야 닫히는데 `Date.now()`는 반응성 의존이
+  // 아니다. 스캔은 로그 감시 디바운스라 Claude Code 활동이 없으면 아예 돌지 않으므로, 탭을
+  // 띄워둔 채 경계를 넘으면 만료된 줄이 그대로 남는다. 창이 7일이라 1시간 눈금이면 충분하다.
   let nowMs = $state(Date.now());
   $effect(() => {
     const t = setInterval(() => (nowMs = Date.now()), 60 * 60 * 1000);
     return () => clearInterval(t);
   });
 
+  // 수명이 끝난 공지를 먼저 걷어낸다 (§2.6) — 스트림·고정 슬롯·배지가 같은 목록을 본다.
+  // `liveContent`는 filter라 score 내림차순이 보존된다(pinnedNewsItem의 전제).
+  const live = $derived(liveContent(tips, today, nowMs));
+  const pinned = $derived(pinnedNewsItem(live, pinAcks, today));
+  const pinnedView = $derived(pinned ? toLearnCardView(pinned) : null);
+
+  function ackPin(id: string) {
+    pinAcks = savePinAcks([...pinAcks, id]);
+  }
+
+  // 한 줄 스트림 (§2.2) — 고정 항목은 미리 뺀다. `pinnedNewsItem`이 score 순 배열을
+  // 전제하므로(⑥ §6.4의 priority 규칙) **정렬보다 먼저** 골라내야 한다.
+  const stream = $derived(buildCoachStream(active, live.filter((t) => t.id !== pinned?.id)));
+  const findingByKey = $derived(new Map(active.map((f) => [f.dedup_key, f])));
+
   // 처분 줄 (스펙 §5) — 해결함은 7일, 무시는 영구. 판정은 전부 순수 함수 쪽에 있다.
   const disposed = $derived(toDisposedRows(all, allTips, nowMs));
+
+  // 탭이 열려 있는 동안 목록이 바뀌면 그때그때 본 것으로 친다 (§2.3).
+  // 상한 적용 **전**의 활성 전부를 저장하되 수명이 끝난 공지는 뺀다 — 셸의 배지가 같은 기준으로 센다.
+  // onChanged로 셸을 깨우지 않으면 저장만 되고 배지는 그대로 남는다.
+  $effect(() => {
+    saveSeenCoachKeys(activeCoachKeys(all, liveContent(allTips, today, nowMs)));
+    onChanged?.();
+  });
 
   // 내부망이면 외부 링크를 숨긴다 (옛 컨테이너에서 이관 — 두 카드가 각각 부르지 않도록 여기서 한 번만)
   let showLinks = $state(true);
@@ -221,17 +229,15 @@
     <LearnCard view={pinnedView} {showLinks} pinned onAck={ackPin} onDismiss={dismissLearn} />
   {/if}
 
-  <!-- 스펙 §3: 「내 로그에서」가 0건이면 섹션 헤더 대신 빈 상태 문구를 쓰고
-       「배움 · 소식」이 자연히 상단에 온다 — 배움 카드 유무와 무관하다. -->
-  {#if sections.log.length === 0}
+  <!-- 섹션 헤더 없음 — 분류는 좌측 라인 색·배지가 나타낸다 (§2.1). 정렬은 first_seen 내림차순. -->
+  {#if stream.length === 0}
     <p class="empty">지적할 게 없어요, 주인. 완벽해요!</p>
   {/if}
 
-  {#if sections.log.length > 0}
-    <h2 class="section">내 로그에서 <span class="count">{sections.log.length}</span></h2>
-    {#each sections.log as v (v.key)}
-      {@const f = findingByKey.get(v.key)}
-      <LogCard view={v} {showLinks}>
+  {#each stream as c (c.key)}
+    {#if c.kind === 'coaching'}
+      {@const f = findingByKey.get(c.log.key)}
+      <LogCard view={c.log} {showLinks}>
         {#snippet extra()}
           {#if f && f.scope_kind === 'session' && sessionLine(f)}
             <p class="session">📂 {sessionLine(f)}</p>
@@ -269,9 +275,9 @@
             <button onclick={() => mark(f.dedup_key, 'dismissed')}>무시</button>
           {:else}
             <!-- 개인 레슨도 같은 두 처분 — 「해결함」은 방출이 멈추면 정리되고(§5.2),
-                 「무시」는 영구다. 둘 다 하단 접힌 줄에서 실행취소할 수 있다. -->
-            <button onclick={() => markLesson(v.key, 'resolved')}>해결함</button>
-            <button onclick={() => markLesson(v.key, 'dismissed')}>무시</button>
+                 「무시」는 영구다. 둘 다 하단 처분 줄에서 실행취소할 수 있다. -->
+            <button onclick={() => markLesson(c.log.key, 'resolved')}>해결함</button>
+            <button onclick={() => markLesson(c.log.key, 'dismissed')}>무시</button>
           {/if}
         {/snippet}
         {#snippet footer()}
@@ -287,18 +293,14 @@
           {/if}
         {/snippet}
       </LogCard>
-    {/each}
-  {/if}
-
-  {#if sections.learn.length > 0}
-    <h2 class="section">배움 · 소식</h2>
-    {#each sections.learn as v (v.id)}
-      <LearnCard view={v} {showLinks} onDismiss={dismissLearn} />
-    {/each}
-  {/if}
+    {:else}
+      <LearnCard view={c.learn} {showLinks} onDismiss={dismissLearn} />
+    {/if}
+  {/each}
 
   <!-- 처분 줄 (스펙 §5) — 토글 없이 바로 노출한다. "내가 뭘 처분했는지"가 보여야 「해결함」이
-       사라지는 게 아니라 접히는 것임을 알 수 있다. 표시 **위치**는 단일 스트림 재설계가 정한다. -->
+       사라지는 게 아니라 접히는 것임을 알 수 있다. **위치는 스트림 아래로 확정**됐다(§2.5):
+       처분 줄의 시각은 status_ts, 카드의 시각은 first_seen이라 한 줄에 섞으면 순서의 뜻이 무너진다. -->
   {#if disposed.length > 0}
     {#each disposed as d (`${d.source}:${d.key}`)}
       <div class="disposed" data-key={d.key} title={d.detail ?? ''}>
@@ -346,11 +348,6 @@
 <style>
   .coach { padding: 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
   .empty { color: var(--ink-soft); }
-  .section {
-    margin: 6px 0 0; font-size: 12px; font-weight: 700; color: var(--ink-soft);
-    display: flex; align-items: baseline; gap: 6px;
-  }
-  .section .count { font-size: 11px; color: var(--accent-strong); }
   /* 카드 본문 스타일은 LogCard/LearnCard로 이관됐다. 여기 남은 건 처분 줄뿐. */
   .disposed {
     display: flex; align-items: baseline; gap: 8px;

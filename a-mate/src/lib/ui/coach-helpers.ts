@@ -310,40 +310,22 @@ export function savePinAcks(ids: string[]): string[] {
  * 같이 없애면 카드가 수십 장으로 불어난다 — 상한은 여기서 유지한다. 룰 finding은 대상이 아니다.
  *
  * ⑥에서 4 → 6. 로컬 공지라는 소스가 하나 늘어, 4를 유지하면 공지 2건이 배움 카드를 전부
- * 밀어낸다. **자르는 지점은 여전히 여기 한 곳뿐이다**(백엔드엔 LIMIT이 없다).
+ * 밀어낸다. **자르는 지점은 여전히 한 곳뿐이다**(백엔드엔 LIMIT이 없다) — 단일 스트림
+ * 재설계 이후 그 자리는 `coach-stream`의 `buildCoachStream`이고, 자르는 축은 score가
+ * 아니라 `first_seen`이다(§4.2 — 정렬축과 어긋나면 최신 항목이 통째로 사라진다).
  * 고정 슬롯(최대 1건)은 이 상한 밖의 별도 칸이라 호출부가 미리 빼고 넘긴다. */
 export const CONTENT_CARD_LIMIT = 6;
 
-/** 「내 로그에서」로 가는 콘텐츠 = 개인 실전 레슨. 문법 A라 처분·수명 규칙을 함께 받는다. */
+/** 개인 실전 레슨 = 문법 A라 처분·수명 규칙을 함께 받는다(§2.1의 「코칭」 분류). */
 const isPersonal = (c: ContentItem) => c.trigger_tags?.includes('personal') ?? false;
-
-/** 근거 출처로 두 섹션을 가른다 (스펙 §3).
- * 「내 로그에서」 = 룰 finding + `personal` 태그 콘텐츠. finding을 앞에 둔다 —
- * 처방·행동 버튼이 붙어 바로 실행 가능한 쪽이기 때문.
- * 상한은 score 순 상위 N건에 먼저 적용한 뒤 가른다(두 섹션 합계 기준 — 옛 컨테이너와 동일). */
-export function partitionCoachItems(
-  findings: CoachFinding[],
-  content: ContentItem[],
-): { log: LogCardView[]; learn: LearnCardView[] } {
-  // 처분된 항목은 카드가 아니라 하단 접힌 줄이다 — 4건 상한의 자리도 잡아먹지 않게 먼저 거른다.
-  // 탭 신규 배지·알림 집계도 같은 기준(백엔드 status='new')을 쓴다.
-  const top = content.filter((c) => c.status === 'new').slice(0, CONTENT_CARD_LIMIT);
-  return {
-    log: [
-      ...findings.filter((f) => f.status === 'new').map(toLogCardView),
-      ...top.filter(isPersonal).map(toLessonCardView),
-    ],
-    learn: top.filter((c) => !isPersonal(c)).map(toLearnCardView),
-  };
-}
 
 // ── 처분 줄 (스펙 §5) ─────────────────────────────────────────────────────
 //
 // 두 처분은 뜻이 다르므로 수명도 다르다.
 //   해결함 = "조치했다" → 7일간 접힌 줄로 남아 되돌릴 수 있고, 재발하면 활성 복귀(백엔드 §5.1)
 //   무시   = "알지만 지금은 안 한다" → 영구히 접힌 줄. 같은 묶음까지 침묵
-// 표시 **위치**는 잠정이다 — 단일 스트림 재설계가 섹션을 없애며 다시 정한다. 여기 있는 것은
-// "어떤 줄이 어떤 라벨로 보이는가"의 판정뿐이라 위치가 바뀌어도 그대로 쓰인다.
+// 표시 **위치는 스트림 아래로 확정**됐다(§2.5). 여기 있는 것은 "어떤 줄이 어떤 라벨로
+// 보이는가"의 판정뿐이라 위치와 무관하게 그대로 쓰인다.
 
 /** 「해결함」 접힌 줄이 남는 기간 — 실수로 눌렀을 때의 복구 창. 이후엔 화면에서만 사라지고
  * DB 행은 재발 감지를 위해 보존된다(지우면 룰이 다음 스캔에 같은 카드를 새로 만든다). */
