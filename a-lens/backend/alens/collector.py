@@ -827,6 +827,12 @@ def _hub_snapshot() -> dict:
     for ev in reuse_events:
         title = _display_title(page_title.get(ev["doc_id"], ev["doc_id"]))
         scope = "다른 팀의" if ev["cross_team"] else "팀의"
+        # 프런트의 ReuseEvent.summary는 **필수**다(frontend/src/api.ts). 더미 경로는 채우는데
+        # 허브 경로가 안 채워서, 재사용이 실제로 생기면 '지식 재사용' 탭이 렌더 중 예외로 죽고
+        # 탭 칩만 바뀐 채 본문이 그대로 남는다. 두 경로가 같은 문장을 쓰도록 여기서 채운다.
+        # (허브 실데이터의 재사용이 0건이라 지금까지 드러나지 않았다 — a-lens/CLAUDE.md 참조)
+        summary = f"{ev['by']}님의 에이전트가 {scope} 지식 『{title}』을 재사용했습니다"
+        ev["summary"] = summary
         events.append(
             {
                 "type": "reused",
@@ -838,7 +844,7 @@ def _hub_snapshot() -> dict:
                 "by": ev["by"],  # 재사용'한' 사람
                 "title": title,
                 "at": ev["at"],
-                "summary": f"{ev['by']}님의 에이전트가 {scope} 지식 『{title}』을 재사용했습니다",
+                "summary": summary,
             }
         )
 

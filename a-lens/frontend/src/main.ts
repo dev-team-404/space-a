@@ -1061,13 +1061,15 @@ function hubReuseHTML(data: SpaceView): string {
   const eventItems = events.length
     ? events
         .slice(0, 30)
+        // summary는 계약상 필수지만 `?? ''`로 받는다 — 한 이벤트에 빠져도 esc()가 던져서
+        // 탭 본문 전체가 렌더 중 사라지는 것보다 그 줄만 비는 편이 낫다.
         .map((e) => {
           const dir = e.source_space === data.space_id ? '이 방의 지식이 재사용됨' : '타팀 지식을 재사용'
           const at = kstTime(e.at)
           return `
         <div class="feed-card" data-reuse-doc="${esc(e.doc_id ?? '')}">
           <div class="fc-title">🔄 ${dir}${at ? ` <span class="tl-at">${at}</span>` : ''}</div>
-          <div class="doc-summary">${esc(e.summary)}</div>
+          <div class="doc-summary">${esc(e.summary ?? '')}</div>
         </div>`
         })
         .join('')
