@@ -6,6 +6,25 @@ export interface Notice {
   target?: string;
 }
 
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** 알림 박스 타임스탬프 (단일 스트림 스펙 §5 C).
+ * 오늘은 `HH:MM`, 그 외는 `MM-DD` — 어제 알림과 오늘 알림이 화면에서 구분돼야 한다.
+ * `full`은 호버(title 속성)용이라 언제나 전체를 담는다.
+ *
+ * `now`를 **인자로 받는다**: 함수 안에서 `new Date()`를 만들면 "오늘"의 기준이
+ * 테스트에서 고정되지 않아 자정 근처에 간헐적으로 깨진다. */
+export function noticeStamp(ts: string, now: Date): { label: string; full: string } {
+  const d = new Date(ts);
+  const hhmm = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const mmdd = `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  return { label: sameDay ? hhmm : mmdd, full: `${d.getFullYear()}-${mmdd} ${hhmm}` };
+}
+
 const MAX = 20;
 const KEY = 'agent-mentor.notices';
 

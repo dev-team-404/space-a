@@ -1,11 +1,9 @@
 <script lang="ts">
-  import { noticeDest, type Notice, type NoticeDest } from '../../notices';
+  import { noticeDest, noticeStamp, type Notice, type NoticeDest } from '../../notices';
   let { notices, onGoto }: { notices: Notice[]; onGoto: (dest: NoticeDest) => void } = $props();
   const ICON: Record<Notice['kind'], string> = { finding: '💡', diary: '📓', occasion: '🎉', visit: '👋', guestbook: '✍️', reuse: '🌱' };
-  const hhmm = (ts: string) => {
-    const d = new Date(ts);
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  };
+  // 포맷 로직은 notices.ts의 순수 함수에 있다 — 이 저장소엔 컴포넌트 테스트 라이브러리가 없다.
+  const now = new Date();
 </script>
 
 <div class="widget">
@@ -16,6 +14,7 @@
     <ul>
       {#each notices.slice(0, 6) as n (n.ts + n.text)}
         {@const dest = noticeDest(n)}
+        {@const stamp = noticeStamp(n.ts, now)}
         <li>
           <span>{ICON[n.kind]}</span>
           {#if dest}
@@ -23,7 +22,7 @@
           {:else}
             <span class="text">{n.text}</span>
           {/if}
-          <time>{hhmm(n.ts)}</time>
+          <time datetime={n.ts} title={stamp.full}>{stamp.label}</time>
         </li>
       {/each}
     </ul>
