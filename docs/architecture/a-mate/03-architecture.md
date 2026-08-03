@@ -2,8 +2,8 @@
 
 > **범위** — Pillar 1 데스크톱 앱 `a-mate`(제품명 Agent Mentor)의 현재 구조.
 > 코드베이스 실측 기준: `main` @ `3a6981a` (2026-08-03).
-> 설계 근거·이력은 [`docs/design/a-mate/`](../design/a-mate/) 아래 `specs/`·`plans/`를 참고한다.
-> 이 문서는 **지금 코드가 어떻게 생겼는가**만 다루고, 왜 그렇게 정했는지는 각 spec과 [ADR](../adr/)에 있다.
+> 설계 근거·이력은 [`docs/design/a-mate/`](../../design/a-mate/) 아래 `specs/`·`plans/`를 참고한다.
+> 이 문서는 **지금 코드가 어떻게 생겼는가**만 다루고, 왜 그렇게 정했는지는 각 spec과 [ADR](../../adr/)에 있다.
 
 ---
 
@@ -136,7 +136,7 @@ a-mate/
 
 ### 4.1 `SourceAdapter` — 다른 AI 에이전트 지원
 
-[`crates/core/src/adapter.rs`](../../a-mate/crates/core/src/adapter.rs)
+[`crates/core/src/adapter.rs`](../../../a-mate/crates/core/src/adapter.rs)
 
 ```rust
 pub trait SourceAdapter {
@@ -148,12 +148,12 @@ pub trait SourceAdapter {
 
 - 유일 구현은 `ClaudeCodeAdapter`. 파싱은 관대하게 — 미지 스키마는 로깅만 하고 하드 실패하지 않는다.
 - 규칙·저장·다이어리는 **`NormalizedEvent`만 본다.** 다른 에이전트 지원은 어댑터 구현체 하나를 추가하는 문제로 환원된다.
-- 호스트 열거는 [`hosts.rs`](../../a-mate/crates/core/src/hosts.rs) — Windows `%USERPROFILE%\.claude` +
+- 호스트 열거는 [`hosts.rs`](../../../a-mate/crates/core/src/hosts.rs) — Windows `%USERPROFILE%\.claude` +
   `wsl.exe -l -q`(UTF-16 디코드)로 모든 distro의 `\\wsl.localhost\<distro>\home\*\.claude`를 자동 발견한다.
 
 ### 4.2 `Engine` — LLM 교체
 
-[`crates/core/src/diary/engine.rs`](../../a-mate/crates/core/src/diary/engine.rs)
+[`crates/core/src/diary/engine.rs`](../../../a-mate/crates/core/src/diary/engine.rs)
 
 ```rust
 pub trait Engine {
@@ -171,7 +171,7 @@ pub trait Engine {
 
 ### 4.3 `Rule` — 코칭 규칙
 
-[`crates/core/src/rules/`](../../a-mate/crates/core/src/rules/)
+[`crates/core/src/rules/`](../../../a-mate/crates/core/src/rules/)
 
 ```rust
 pub trait Rule { fn id(&self) -> &str; fn evaluate(&self, store: &SqliteStore) -> Vec<Finding>; }
@@ -239,7 +239,7 @@ DB는 `app_data_dir/agent-mentor.db` 하나. `AGENT_MENTOR_DATA_DIR`로 덮어�
 
 ## 6. Tauri 표면
 
-### 6.1 커맨드 (77개, [`commands.rs`](../../a-mate/src-tauri/src/commands.rs))
+### 6.1 커맨드 (77개, [`commands.rs`](../../../a-mate/src-tauri/src/commands.rs))
 
 | 그룹 | 대표 커맨드 |
 |---|---|
@@ -284,8 +284,8 @@ a-mate가 밖으로 나가는 경로는 4개뿐이고, 전부 **꺼져 있어도
 
 | 대상 | 모듈 | 내용 |
 |---|---|---|
-| **a-hub / work** (팀 지식) | [`hub.rs`](../../a-mate/crates/core/src/hub.rs) | 발견 공유·검색·인용·재사용 조회 |
-| **a-hub / life** (미니홈피) | [`life_client.rs`](../../a-mate/crates/core/src/life_client.rs) | 방·방문·방명록·프로필·이미지 동기화 |
+| **a-hub / work** (팀 지식) | [`hub.rs`](../../../a-mate/crates/core/src/hub.rs) | 발견 공유·검색·인용·재사용 조회 |
+| **a-hub / life** (미니홈피) | [`life_client.rs`](../../../a-mate/crates/core/src/life_client.rs) | 방·방문·방명록·프로필·이미지 동기화 |
 | **LLM 엔진** | `diary/engine.rs` | 일기·한마디·잡담·채팅·판정 |
 | **이미지 모델** | `sprite.rs` | 마스코트 스프라이트·오늘의 컷 생성 |
 
@@ -417,7 +417,7 @@ cargo test --workspace ; npm test
 
 **플랫폼은 Windows 전용**이다. 빌드·실행은 네이티브 PowerShell/cmd에서 하고,
 WSL 안에서 빌드하지 않는다(WSL은 분석 대상일 뿐).
-셋업·트러블슈팅은 [`docs/design/a-mate/build-and-run.md`](../design/a-mate/build-and-run.md) 참고.
+셋업·트러블슈팅은 [`build-and-run.md`](build-and-run.md) 참고.
 
 ---
 
@@ -425,9 +425,11 @@ WSL 안에서 빌드하지 않는다(WSL은 분석 대상일 뿐).
 
 | 문서 | 내용 |
 |---|---|
-| [`docs/design/a-mate/01-product.md`](../design/a-mate/01-product.md) | 제품 정의 |
-| [`docs/design/a-mate/02-features.md`](../design/a-mate/02-features.md) | 기능 목록 |
-| [`docs/design/a-mate/03-architecture.md`](../design/a-mate/03-architecture.md) | 이 문서의 전신 (2026-07-10 실측 — **일부 내용이 오래됨**) |
-| [`docs/design/a-mate/build-and-run.md`](../design/a-mate/build-and-run.md) | 빌드·실행·트러블슈팅 |
-| [`a-mate/CLAUDE.md`](../../a-mate/CLAUDE.md) | 개발 제약 |
-| [`contracts/`](../../contracts/) | a-hub와의 경계 계약 (C1/C2/C4) |
+| [`README.md`](README.md) | a-mate 문서 묶음 안내 |
+| [`01-product.md`](01-product.md) | 제품 정의·포지셔닝·설계 원칙 |
+| [`02-features.md`](02-features.md) | 기능 카탈로그 |
+| [`04-history-and-roadmap.md`](04-history-and-roadmap.md) | 개발 연혁·교훈·로드맵 |
+| [`build-and-run.md`](build-and-run.md) | 빌드·실행·트러블슈팅 |
+| [`docs/design/a-mate/`](../../design/a-mate/) | 설계 스펙·구현 플랜 (시점 기록) |
+| [`a-mate/CLAUDE.md`](../../../a-mate/CLAUDE.md) | 개발 제약 |
+| [`contracts/`](../../../contracts/) | a-hub와의 경계 계약 (C1/C2/C4) |

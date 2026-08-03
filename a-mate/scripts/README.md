@@ -24,7 +24,7 @@ bash a-mate/scripts/release-amate.sh 0.2.0             # 실제 발행
 `AMATE_KEY_FILE`, `AMATE_KEY_PASS_FILE`.
 
 > 최초 1회 셋업(공개 릴리스 저장소 생성·팀 공용 서명 키 배치)과 전체 릴리스 플로우·주의사항은
-> [build-and-run.md의 "릴리스" 섹션](../../docs/design/a-mate/build-and-run.md#릴리스--자동-업데이트-채널로-발행)을 참고.
+> [build-and-run.md의 "릴리스" 섹션](../../docs/architecture/a-mate/build-and-run.md#릴리스--자동-업데이트-채널로-발행)을 참고.
 
 ### `test-release-amate.sh` — 프리플라이트 단위/통합 테스트
 

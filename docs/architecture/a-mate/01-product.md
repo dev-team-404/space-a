@@ -1,7 +1,7 @@
 # Agent Mentor — 제품 소개
 
 > 이 문서는 프로젝트를 처음 접하는 사람을 위한 소개입니다.
-> 상세 설계는 [`specs/`](specs/), 구현 계획은 [`plans/`](plans/)에 있으며, 이 문서는 그 전체를 압축한 개요입니다.
+> 상세 설계는 [`specs/`](../../design/a-mate/specs/), 구현 계획은 [`plans/`](../../design/a-mate/plans/)에 있으며, 이 문서는 그 전체를 압축한 개요입니다.
 > 코드 실측 기준: `main` @ `3a6981a` (2026-08-03).
 
 ## 1. 한 줄 요약
@@ -29,8 +29,8 @@
 
 > **당신의 AI 코딩 여정을 (에이전트의 시점에서) 저널링하며, 그 안에서 코칭하는 동반자.**
 
-SPACE-A 전체에서는 **Pillar 1**을 맡는다. Pillar 2([a-hub](../a-hub/))가 팀 지식·소셜 공간을,
-Pillar 3([a-lens](../a-lens/))가 커뮤니티 시각화를 담당하고, a-mate는 그 둘에 데이터를 공급하는
+SPACE-A 전체에서는 **Pillar 1**을 맡는다. Pillar 2([a-hub](../../design/a-hub/))가 팀 지식·소셜 공간을,
+Pillar 3([a-lens](../../design/a-lens/))가 커뮤니티 시각화를 담당하고, a-mate는 그 둘에 데이터를 공급하는
 **개인 쪽 끝단**이다.
 
 ## 3. 경쟁 지형과 포지셔닝
@@ -127,6 +127,6 @@ Claude Code의 JSONL 스키마는 비공식이고 릴리스마다 바뀐다. 어
 | 문서 | 내용 |
 |---|---|
 | [02-features.md](02-features.md) | 기능 카탈로그 — 수집·규칙·다이어리·큐레이션·마스코트·팀 연동·미니홈피 |
-| [`docs/architecture/a-mate.md`](../../architecture/a-mate.md) | 전체 구조 — 크레이트, 스캔 사이클, 추상화 심, 커맨드/이벤트 표면 |
+| [`03-architecture.md`](03-architecture.md) | 전체 구조 — 크레이트, 스캔 사이클, 추상화 심, 커맨드/이벤트 표면 |
 | [04-history-and-roadmap.md](04-history-and-roadmap.md) | 개발 연혁(타임라인), E2E에서 얻은 교훈, 남은 백로그와 확장 아이디어 |
 | [build-and-run.md](build-and-run.md) | 사전 요구사항·빌드·실행·트러블슈팅 |

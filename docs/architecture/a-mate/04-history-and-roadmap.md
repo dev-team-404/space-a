@@ -6,7 +6,7 @@
 ## 1. 개발 방식
 
 **브레인스토밍 → 설계 스펙 → 구현 플랜 → 구현(PR) → 사용자 수동 E2E → 교훈을 다음 스펙에 반영**
-사이클로 개발됐다. 산출물 위치는 [`brainstorming/`](brainstorming/) · [`specs/`](specs/) · [`plans/`](plans/).
+사이클로 개발됐다. 산출물 위치는 [`brainstorming/`](../../design/a-mate/brainstorming/) · [`specs/`](../../design/a-mate/specs/) · [`plans/`](../../design/a-mate/plans/).
 
 특징적인 점: **실사용 E2E가 설계를 여러 번 뒤집었다** (§3). 스펙은 "합의 시점의 기록"이고,
 이후 결정이 바뀐 경우 후속 스펙이 이전 스펙을 명시적으로 참조하며 수정한다.
@@ -34,7 +34,7 @@
 | 07-20 | 세션 내 반복 지시 마이닝(R23) · **캐릭터 이미지 엔드포인트를 텍스트 엔진에서 분리** (#69) · life 스프라이트·응답성 대량 수정 |
 | 07-21 | **R6에 LLM 판정 도입** — 결정론 규칙 위에 `CoachingJudge` 계층. R23 은퇴 마이그레이션. 이벤트 논리 dedup(fork 인플레이션 제거) |
 | 07-22 | R7 재설계 + `R7Judge` · R24 신설 · **R10·R11 은퇴** · **테마 시스템**(스킨 4종 × light/dark) · **자동 업데이트**([ADR 0018](../../adr/0018-a-mate-auto-update-channel.md)) · life 소셜 기능 · 다이어리 휴일·프로젝트 스코핑 |
-| 07-23 | **R24 완전 제거**([spec](specs/2026-07-23-retire-r24-context-hygiene.md)) · 마켓플레이스 큐레이션 (#95) |
+| 07-23 | **R24 완전 제거**([spec](../../design/a-mate/specs/2026-07-23-retire-r24-context-hygiene.md)) · 마켓플레이스 큐레이션 (#95) |
 | 07-25 | 릴리스 스크립트 preflight 체계 (#99) · 설정 탭 재편(엔진·이미지·life 서버 흡수) |
 
 ### 2.3 3주차 (07-26 ~ 08-03) — 캐릭터·소셜·인정 루프
@@ -47,7 +47,7 @@
 | 07-29 | 방문 **수신 폴링**(커서 diff) · 방문 알림 · 다이어리에 방문 서사 반영 |
 | 07-30 | **현관 공개**([ADR 0026](../../adr/0026-front-door-outbound-publication.md)) — 내 한마디·컷을 방 앞에 건다 |
 | 07-31 | 다이어리 활동 패널 · **svelte-check 도입** · 창 크기 고정 |
-| 08-02 | 미니룸 테마 5종 · **코칭 탭 단일 스트림**(로그 카드 + 배움 카드, [spec](specs/2026-08-02-coaching-tab-single-stream-design.md)) · 피드 TTL · R6 dismiss 억제 |
+| 08-02 | 미니룸 테마 5종 · **코칭 탭 단일 스트림**(로그 카드 + 배움 카드, [spec](../../design/a-mate/specs/2026-08-02-coaching-tab-single-stream-design.md)) · 피드 TTL · R6 dismiss 억제 |
 | 08-03 | 로컬 공지 소스 · content `first_seen` 수명주기 · disposition 수명주기 · **[인정 루프 (#157)](https://github.com/dev-team-404/space-a/pull/157)** |
 
 큰 흐름: **백엔드 크레이트 → Tauri 셸·프론트 → E2E 기반 코칭 신뢰 회복(v2/v2.1) → 페르소나 보이스 →
@@ -96,7 +96,7 @@ LLM이 "이게 진짜 지적할 만한가"를 판정하는 2단 구조다. 지�
 inventory+rules를 통째로 기다려 898ms가 나온 사례도 있다.
 → 락을 **단계·파일 단위로** 잡고 놓고, `hand_off()`로 대기자에게 양보하며,
 스캔마다 `longest lock hold`를 로그로 남긴다. 자세한 것은
-[architecture §9](../../architecture/a-mate.md).
+[architecture §9](03-architecture.md).
 
 ### 3.8 외부 피드는 "앞에서 자르면" 영원히 낡는다 (2026-08-03)
 
