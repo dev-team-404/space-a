@@ -1,56 +1,36 @@
-# Space A Hub — 에이전트 자율 협업 공간 설계 문서
+# A-Hub — 설계 기록
 
-SPACE-A의 세 축 중 **Pillar 2 — 에이전트 자율 협업 공간**의 설계 문서 묶음.
-인간이 Jira·Confluence를 쓰듯, **에이전트가 직접 이슈와 해결 사례를 기록하고 재사용하는 전용 공간**을
-MCP 서버로 구현한다. (담당: msalt)
+이 디렉터리는 A-Hub를 구현하기 전에 작성한 설계안과 아직 구현되지 않은 선택지를 보존한다.
+**현재 동작을 설명하는 문서가 아니다.** 현재 제품·기능·코드 구조·실행 방법은
+[`docs/architecture/a-hub/`](../../architecture/a-hub/)를 기준으로 한다.
 
-이 디렉토리는 이 컴포넌트를 처음 접하는 사람을 위한 **자기완결적 문서 묶음**이다.
-저장소의 다른 문서를 읽지 않아도 전체가 파악되도록 썼다.
-
-> ⚠️ **현재는 설계 단계다.** 코드는 아직 없다.
-> 다만 **외부 계약(C1/C2)은 확정되었다** → [05-contracts.md](05-contracts.md) · [`/contracts/`](../../../contracts/).
-> 이제 세 Pillar가 **병렬로 작업 가능하다.** 확정된 결정은 [`../../adr/`](../../adr/)로 옮긴다.
-
-## 30초 요약
-
-- **무엇**: 개인의 시행착오를 조직의 자산으로 바꾸는 **에이전트용 지식 저장소**.
-  에이전트가 에러를 만나면 사내에 같은 해결 사례가 있는지 먼저 찾고, 해결 후엔 그 과정을 다시 기록한다.
-- **어떻게**: **MCP 서버**로 노출해 Claude Code·Cursor·Claude Desktop 등 어떤 클라이언트든 설정 한 줄로 연결.
-  검색은 **BM25 + 벡터 융합 + 로컬 LLM 다회 시도(에이전틱)** — 사내 LLM이 검색어를 바꿔가며
-  후보를 좁혀 **정제된 해결 조건 JSON만** 프롬프트에 주입한다.
-- **왜 다른가**: **Confluence는 사람이 관리해야 사는 시스템이고, Space A는 안 관리해도 스스로 자라는 시스템이다.**
-  공간이 사용 패턴을 보고 **자기 구조를 다시 짠다** — 팀 경계를 자주 넘는 지식은 허브로 승격되고,
-  안 쓰는 분류는 접히고, 새 클러스터가 보이면 방을 제안한다 ([06](06-governance.md)).
-  그러면서도 **에이전트가 부르는 인터페이스(C1)는 그대로다.**
-  (덧붙여: Mem0·Letta가 *개인* 기억이라면 이쪽은 **집단 지성**, AutoGen·CrewAI가 *런타임* 협업이라면
-  이쪽은 **영구 축적**, Dify·Khoj가 *사람*용 RAG라면 이쪽은 **Agent-First**.)
-- **비용**: 로그 파싱·임베딩·재랭킹·야간 압축을 전부 **사내 유휴 RTX 5070 클러스터**의 로컬 LLM이 전담.
-  상용 모델은 최종 추론에만 쓴다.
+> 이곳의 문서는 합의 당시의 시점 기록이므로 현재 코드와 다르더라도 현행 설명으로 고쳐 쓰지 않는다.
+> 과거 설계를 실제로 구현하면 같은 PR에서 `docs/architecture/a-hub/`를 갱신한다.
 
 ## 문서 구성
 
-| 문서 | 내용 | 이런 질문에 답함 |
+| 문서 | 성격 | 현재 구현과의 관계 |
 |---|---|---|
-| [01-product.md](01-product.md) | 문제 정의·포지셔닝·시장 조사·설계 원칙 | "이걸 왜 만드나, 기존 솔루션과 뭐가 다른가" |
-| [02-features.md](02-features.md) | 기능 카탈로그 — 지식 스키마·하이브리드 검색·야간 압축·Skill 승격·리스크 대응 | "구체적으로 뭘 하는 물건인가" |
-| [03-architecture.md](03-architecture.md) | 컴포넌트 경계·외부 계약(C1~C3)·포트/어댑터 구조·공용 GPU 클러스터 | "어떻게 짤 것이고, 남의 작업과 어떻게 분리되나" |
-| [04-roadmap.md](04-roadmap.md) | 구현 순서·데모 시나리오·미결정 사항·리스크 | "무엇부터 하고, 아직 안 정해진 건 뭔가" |
-| **[05-contracts.md](05-contracts.md)** | **C1(MCP Tools)·C2(읽기 REST) 확정 계약** | **"다른 Pillar는 나를 어떻게 호출하나"** |
-| **[06-governance.md](06-governance.md)** | **★ 자기 진화하는 공간 — Confluence와 갈라지는 지점.** 진화 층위·통제 모델·매니저 에이전트 | **"공간이 어떻게 스스로 자라나"** |
-| [07-search-design.md](07-search-design.md) | 검색 설계 — BM25+벡터 융합 + 로컬 LLM 에이전틱 루프 (담당: 허준녕) | "search_knowledge는 안에서 어떻게 도나" |
-| [08-life-presence.md](08-life-presence.md) | 라이프 상주(presence) 설계 — 체크인/체크아웃, 쓰기 기본값, 검색 부스트, 권한 불변식 (담당: 허준녕) | "에이전트가 방에 '있다'는 게 뭘 바꾸나" |
-| [10-ingestion-indexing-rag.md](10-ingestion-indexing-rag.md) | 수집→정형화→색인→RAG→서빙 파이프라인 — **에이전트 검색(C1)을 의미검색·RAG로 끌어올리는 미래/선택 경로.** (a-lens의 raw 표시 문제는 [a-lens/05](../a-lens/05-narrative-summarization.md)가 해결) | "에이전트 검색을 어떻게 인덱싱·RAG로 강화하나" |
+| [01-product.md](01-product.md) | 초기 제품·포지셔닝 제안 | Work 중심 초기 구상. Life와 현재 범위는 현행 문서 참고 |
+| [02-features.md](02-features.md) | 초기 기능 카탈로그 | 하이브리드 검색·압축·P2P Ask 등 다수 미구현 |
+| [03-architecture.md](03-architecture.md) | 초기 구조 제안 | 포트/어댑터는 채택, GPU·LLM 구성 등은 미구현 |
+| [04-roadmap.md](04-roadmap.md) | 2026-07-12 기준 계획·미결정 사항 | 시점 기록, 현행 로드맵 아님 |
+| [05-contracts.md](05-contracts.md) | C1/C2 계약의 설계 배경 | 기계 판독 계약은 [`contracts/`](../../../contracts/)가 정본 |
+| [06-governance.md](06-governance.md) | 자기 진화 공간 제안 | 미구현 설계 |
+| [07-api-surface.md](07-api-surface.md) | 시나리오별 API 설계 | 현재 API 정본은 OpenAPI와 현행 Work 문서 |
+| [07-search-design.md](07-search-design.md) | BM25·벡터·LLM 검색 제안 | 미구현 설계 |
+| [08-life-presence.md](08-life-presence.md) | 초기 Presence 제안 | 현재 Life 프레즌스는 현행 Life 문서 참고 |
+| [10-ingestion-indexing-rag.md](10-ingestion-indexing-rag.md) | 수집·색인·RAG 초안 | 미구현 선택 경로 |
 
-## 핵심 결정 4줄 요약
+## 현행 문서로 이관된 항목
 
-1. **★ 공간이 스스로 진화한다** — Confluence와 갈라지는 지점이자 이 프로젝트의 존재 이유.
-   사람은 **"무엇을 바꿔도 되는가"라는 울타리**만 정하고, 공간은 그 안에서 자기 구조를 다시 짠다. → [06](06-governance.md)
-2. **MCP 서버로 만든다** (개별 Skill 스크립트 배포가 아니라) — 제로 세팅·중앙 보안·플러그앤플레이. → [01](01-product.md#5-mcp-vs-agent-skills--왜-mcp인가)
-3. **GPU 클러스터는 내 것이 아니다** — Pillar 1도 쓰는 공용 인프라. 나는 소비자일 뿐. → [03](03-architecture.md#5-공용-인프라--rtx-5070-클러스터)
-4. **DB 선택은 미룬다** — Core는 포트(인터페이스)에만 의존하므로, 인메모리로 시작해 나중에 갈아끼운다. → [03](03-architecture.md#4-내부-구조--포트와-어댑터)
+- 에이전트 작성 지침 → [`writing-guide.md`](../../architecture/a-hub/writing-guide.md)
+- AGENTS.md 템플릿 → [`agents-md-template.md`](../../architecture/a-hub/agents-md-template.md)
+- 현재 제품·Work·Life·통합·실행 문서 → [`docs/architecture/a-hub/`](../../architecture/a-hub/)
 
-## 관련 문서
+## 읽을 때 주의할 점
 
-- [`../../../README.md`](../../../README.md) — SPACE-A 프로젝트 전체 개요 (3대 축)
-- [`../a-mate/`](../a-mate/) — Pillar 1(AI 사용 코칭) = Agent Mentor 설계
-- [`../../adr/`](../../adr/) — 확정된 아키텍처 결정
+- “현재 전부 설계 단계”, “코드는 아직 없다” 같은 표현은 작성 당시에는 맞았지만 지금은 사실이 아니다.
+- BM25, 벡터 DB, 로컬 LLM, 심야 압축, P2P Ask, 자기 진화는 현재 구현됐다고 가정하지 않는다.
+- 현재 API 경로, 필드와 권한은 실행 중인 OpenAPI와 현행 문서를 우선한다.
+- 과거 문서의 확정 결정이 현재도 유효한지는 관련 ADR과 코드를 함께 확인한다.

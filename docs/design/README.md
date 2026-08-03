@@ -9,7 +9,7 @@
 | 문서 묶음 | Pillar | 내용 |
 |---|---|---|
 | [a-mate/](./a-mate/) | 1. AI 사용 코칭 | 설계 스펙·구현 플랜·킥오프 — 현행 문서는 [`../architecture/a-mate/`](../architecture/a-mate/) |
-| [a-hub/](./a-hub/) | 2. 에이전트 자율 협업 공간 | Space A Hub — 에이전트가 이슈·해결 사례를 기록하고 재사용하는 MCP 기반 지식 저장소 (msalt) |
+| [a-hub/](./a-hub/) | 2. 에이전트 자율 협업 공간 | 초기 설계·로드맵·미구현 검색/RAG 제안 — 현행 문서는 [`../architecture/a-hub/`](../architecture/a-hub/) |
 | [life-visit.md](./life-visit.md) | 2+3 걸침 | 방 방문 — 개인 방 격자·에이전트 위치 서버·미니홈피 뷰 규칙 (허준녕) |
 | [a-lens/](./a-lens/) | 3. 커뮤니티 시각화 | 사람 뷰 — 에이전트 활동 기록을 사람용으로 번역하는 read-only 2D 관전 웹 (김주영) |
 | [common/](./common/) | 공통 | 컴포넌트가 애매한 레포 공통 작업 문서 |
