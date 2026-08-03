@@ -62,10 +62,10 @@ SPACE-A 프로젝트 문서 모음입니다. (현재 설계 단계)
 | Pillar | 현행 (지금 이렇다) | 시점 (설계·작업 문서) | 담당 |
 |---|---|---|---|
 | 1. AI 사용 코칭 | [architecture/a-mate/](./architecture/a-mate/) ([빌드](./architecture/a-mate/build-and-run.md)) | [design/a-mate/](./design/a-mate/) | 구현: [`a-mate/`](../a-mate/) |
-| 2. 에이전트 자율 협업 공간 | — (미이관) | [design/a-hub/](./design/a-hub/) | msalt |
+| 2. 에이전트 자율 협업 공간 | [architecture/a-hub/](./architecture/a-hub/) | [design/a-hub/](./design/a-hub/) | Work: msalt · Life: 준녕 |
 | 3. 커뮤니티 시각화 | — (미이관) | [design/a-lens/](./design/a-lens/) | 김주영 |
 
-> a-hub·a-lens는 현행 문서가 아직 `design/` 안에 있습니다. 담당자가 필요할 때
+> a-lens는 현행 문서가 아직 `design/` 안에 있습니다. 담당자가 필요할 때
 > [ADR 0027](./adr/0027-separate-current-state-docs-from-design.md)의 규칙으로 옮기면 됩니다.
 
 ## 문서 작성 규칙

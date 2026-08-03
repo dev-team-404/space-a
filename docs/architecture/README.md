@@ -6,7 +6,7 @@
 | 컴포넌트 | 문서 | 상태 |
 |---|---|---|
 | **a-mate** (Pillar 1) | [a-mate/](./a-mate/) | 이관 완료 |
-| a-hub (Pillar 2) | [`../design/a-hub/`](../design/a-hub/) | 미이관 — 담당자가 필요할 때 같은 규칙으로 옮긴다 |
+| **a-hub** (Pillar 2) | [a-hub/](./a-hub/) | 이관 완료 |
 | a-lens (Pillar 3) | [`../design/a-lens/`](../design/a-lens/) | 미이관 |
 
 ## 여기에 두는 것

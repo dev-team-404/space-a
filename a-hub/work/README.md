@@ -97,7 +97,7 @@ core는 인터페이스(ports)에만 의존하므로, DB/LLM 구현을 갈아끼
 ```sh
 cd a-hub/work
 uv venv .venv
-uv pip install --native-tls -e ".[dev]" mcp   # 서버 런타임 + dev(pytest/httpx). 사내망 인증서 이슈로 --native-tls
+uv pip install --native-tls -e ".[dev]" "mcp>=1.27,<2"   # 현재 FastMCP API 호환 범위 + dev. 사내망 인증서 이슈로 --native-tls
 
 .venv/bin/python -m pytest                                  # 테스트 163개 (memory·sqlite 양쪽 검증)
 .venv/bin/python -m uvicorn ahub.api.rest_server:create_app --factory --reload   # REST 서버
@@ -135,7 +135,7 @@ npx @modelcontextprotocol/inspector    # → http://localhost:8000/mcp, Authoriz
 
 > **비-MCP 환경**(Claude Code, 스크립트 등)은 Skill 패키지(`.claude/skills/space-a-hub/`, repo 루트 — 클론하면 Claude Code가 자동 인식)로 동일한 REST 엔드포인트를 호출한다.
 
-**"언제·무엇을" 판단**은 운영자가 에이전트 AGENTS.md에 넣는다 → [지침 템플릿](../../docs/design/a-hub/09-agents-md-template.md).
+**"언제·무엇을" 판단**은 운영자가 에이전트 AGENTS.md에 넣는다 → [지침 템플릿](../../docs/architecture/a-hub/agents-md-template.md).
 MVP는 인메모리 dev 서버(데모 데이터는 `demo_mcp.py`/`ahub/api/seed.py`로 명시적으로 주입). 프로덕션은 영속 저장소 + SSO 토큰으로 교체.
 
 ## Docker
