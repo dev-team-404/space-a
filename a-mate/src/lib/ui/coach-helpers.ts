@@ -118,9 +118,41 @@ const DIM_LABEL: Record<string, string> = {
   orchestration: '작업 위임',
 };
 
+/** 카드 분류 — 좌측 라인 색과 배지가 이것을 나타낸다 (§2.1). */
+export type CoachKind = 'coaching' | 'learning' | 'news';
+
+export const KIND_LABEL: Record<CoachKind, string> = {
+  coaching: '코칭',
+  learning: '학습',
+  news: '소식',
+};
+
+/** 콘텐츠 항목의 분류. 룰 finding은 언제나 'coaching'이라 이 함수를 타지 않는다.
+ * `personal`을 먼저 보는 것이 중요하다 — 근거가 내 로그면 출처가 무엇이든 코칭이다. */
+export function contentKind(c: ContentItem): CoachKind {
+  const has = (t: string) => c.trigger_tags?.includes(t) ?? false;
+  if (has('personal')) return 'coaching';
+  if (has('notice') || c.kind === 'news' || has('changelog')) return 'news';
+  return 'learning';
+}
+
+/** 분류 배지 옆 보조 칩 — 세부 출처. 없으면 null이고 그때는 렌더하지 않는다 (§4.1).
+ * 옛 폴백 `'배움'`은 분류 배지와 겹쳐 버렸다. 판정 순서는 옛 배지 로직 그대로다. */
+export function sourceChip(c: ContentItem): string | null {
+  const has = (t: string) => c.trigger_tags?.includes(t) ?? false;
+  if (has('notice')) return '공지';
+  if (c.kind === 'news' || has('changelog')) return null;
+  if (has('boris')) return 'Boris';
+  if (has('team')) return '팀';
+  if (c.dimension) return DIM_LABEL[c.dimension] ?? c.dimension;
+  return null;
+}
+
 export interface LogCardView {
   key: string;
   source: 'finding' | 'lesson';
+  /** 분류 배지 — 문법 A는 언제나 '코칭'이다 (§2.1). */
+  badge: string;
   icon: string;
   title: string;
   evidence: string | null;
@@ -135,7 +167,11 @@ export interface LogCardView {
 
 export interface LearnCardView {
   id: string;
+  kind: CoachKind;
+  /** 분류 배지 — '학습' 또는 '소식'. 옛 7종 배지를 대체한다 (§4.1). */
   badge: string;
+  /** 보조 칩 — 공지·Boris·팀·축 라벨. 없으면 렌더하지 않는다. */
+  chip: string | null;
   title: string;
   /** 📊 근거 — store의 `enrich_personal`이 채운 "당신 로그: …" 실측 한 줄. 없으면 null. */
   evidence: string | null;
@@ -160,6 +196,7 @@ export function toLogCardView(f: CoachFinding): LogCardView {
   return {
     key: f.dedup_key,
     source: 'finding',
+    badge: KIND_LABEL.coaching,
     icon: severityIcon(f.severity),
     title: coachTitle(f.rule_id, f.evidence),
     evidence: orNull(f.detail),
@@ -183,6 +220,7 @@ export function toLessonCardView(c: ContentItem): LogCardView {
   return {
     key: c.id,
     source: 'lesson',
+    badge: KIND_LABEL.coaching,
     icon: '💡',
     title: c.title,
     evidence: lines.length === 0 ? null : lines.join('\n'),
@@ -199,21 +237,12 @@ export function toLessonCardView(c: ContentItem): LogCardView {
  * 번역 캐시(`title_ko`·`summary_ko`, ⑥ §6.3)가 있으면 그것을 쓰고, 없으면 원문으로 폴백한다 —
  * 엔진 미설정 사용자에게도 영어 원문이 그대로 값을 남긴다(소식은 코칭이 아니라 정보 전달). */
 export function toLearnCardView(c: ContentItem): LearnCardView {
-  const has = (t: string) => c.trigger_tags?.includes(t) ?? false;
-  const badge = has('notice')
-    ? '공지' // lastShownEmergencyTip — 장애 안내라 프로모(「소식」)와 갈린다 (§6.1)
-    : c.kind === 'news' || has('changelog')
-      ? '소식'
-      : has('boris')
-        ? 'Boris'
-        : has('team')
-          ? '팀'
-          : c.dimension
-            ? (DIM_LABEL[c.dimension] ?? c.dimension)
-            : '배움';
+  const kind = contentKind(c);
   return {
     id: c.id,
-    badge,
+    kind,
+    badge: KIND_LABEL[kind],
+    chip: sourceChip(c),
     title: orNull(c.title_ko) ?? c.title,
     // 📊 근거 — 커리큘럼은 지도, 내 로그는 GPS. 문법 A와 같은 슬롯을 써서 두 카드가
     // "근거 → 내용" 구조로 수렴한다. 재료는 store가 이미 채워 보내는 결정론 수치라

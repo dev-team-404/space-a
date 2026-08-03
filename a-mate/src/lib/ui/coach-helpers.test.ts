@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CONTENT_CARD_LIMIT, RESOLVED_WINDOW_DAYS, coachTitle, ctxLine, disposedLabel, evidenceChip,
-  isDisposedVisible, isHiddenFinding, partitionCoachItems, pinnedNewsItem, sessionIdsOf,
-  splitLessonBody, toDisposedRows, toLearnCardView, toLessonCardView, toLogCardView,
-  totalSessionsOf,
+  CONTENT_CARD_LIMIT, RESOLVED_WINDOW_DAYS, coachTitle, contentKind, ctxLine, disposedLabel,
+  evidenceChip, isDisposedVisible, isHiddenFinding, partitionCoachItems, pinnedNewsItem,
+  sessionIdsOf, sourceChip, splitLessonBody, toDisposedRows, toLearnCardView, toLessonCardView,
+  toLogCardView, totalSessionsOf,
 } from './coach-helpers';
 import type { CoachFinding, ContentItem, SessionCtxItem } from '../api';
 
@@ -250,23 +250,108 @@ describe('toLogCardView', () => {
   });
 });
 
+describe('contentKind — 세 분류 유도 (§2.1)', () => {
+  it('personal 태그 레슨은 코칭 — 근거가 내 로그다', () => {
+    expect(contentKind(content({ trigger_tags: ['personal', 'plan'] }))).toBe('coaching');
+  });
+
+  it('notice·changelog·kind=news는 소식', () => {
+    expect(contentKind(content({ trigger_tags: ['notice'] }))).toBe('news');
+    expect(contentKind(content({ trigger_tags: ['changelog'] }))).toBe('news');
+    expect(contentKind(content({ trigger_tags: [], kind: 'news' }))).toBe('news');
+  });
+
+  it('커리큘럼·Boris·팀·그 밖은 학습', () => {
+    expect(contentKind(content({ trigger_tags: [], dimension: 'automation' }))).toBe('learning');
+    expect(contentKind(content({ trigger_tags: ['boris'] }))).toBe('learning');
+    expect(contentKind(content({ trigger_tags: ['team'] }))).toBe('learning');
+    expect(contentKind(content({ trigger_tags: [] }))).toBe('learning');
+  });
+
+  it('personal이 news보다 세다 — 내 로그 근거가 출처보다 우선한다', () => {
+    expect(contentKind(content({ trigger_tags: ['personal', 'changelog'] }))).toBe('coaching');
+  });
+});
+
+describe('sourceChip — 배지에서 갈라낸 세부 출처 (§4.1)', () => {
+  it('축 라벨을 살린다 — 본문 어디에도 없는 유일한 표시', () => {
+    expect(sourceChip(content({ trigger_tags: [], dimension: 'automation' }))).toBe('워크플로 자동화');
+    expect(sourceChip(content({ trigger_tags: [], dimension: 'context_hygiene' }))).toBe('컨텍스트 정리');
+  });
+
+  it('모르는 축은 원래 값을 그대로 — 매핑이 비어도 정보를 잃지 않는다', () => {
+    expect(sourceChip(content({ trigger_tags: [], dimension: 'unknown_axis' }))).toBe('unknown_axis');
+  });
+
+  it('공지·Boris·팀은 칩으로 남는다', () => {
+    expect(sourceChip(content({ trigger_tags: ['notice'] }))).toBe('공지');
+    expect(sourceChip(content({ trigger_tags: ['boris'] }))).toBe('Boris');
+    expect(sourceChip(content({ trigger_tags: ['team'] }))).toBe('팀');
+  });
+
+  it('일반 소식과 출처 없는 배움은 칩이 없다 — 폴백 「배움」을 버렸다', () => {
+    expect(sourceChip(content({ trigger_tags: ['changelog'] }))).toBeNull();
+    expect(sourceChip(content({ trigger_tags: [], kind: 'news' }))).toBeNull();
+    expect(sourceChip(content({ trigger_tags: [] }))).toBeNull();
+  });
+});
+
+describe('카드 뷰모델의 배지·칩', () => {
+  it('문법 B는 분류 이름을 배지로, 세부 출처를 칩으로 싣는다', () => {
+    const v = toLearnCardView(content({ trigger_tags: [], dimension: 'automation' }));
+    expect(v.kind).toBe('learning');
+    expect(v.badge).toBe('학습');
+    expect(v.chip).toBe('워크플로 자동화');
+  });
+
+  it('긴급 공지는 소식 배지 + 공지 칩', () => {
+    const v = toLearnCardView(content({ trigger_tags: ['notice'] }));
+    expect(v.badge).toBe('소식');
+    expect(v.chip).toBe('공지');
+  });
+
+  it('문법 A는 언제나 코칭 배지 — finding도 레슨도', () => {
+    expect(toLogCardView(finding()).badge).toBe('코칭');
+    expect(toLessonCardView(content()).badge).toBe('코칭');
+  });
+});
+
 describe('toLearnCardView', () => {
-  it('출처별 배지', () => {
-    expect(toLearnCardView(content({ kind: 'news', trigger_tags: ['changelog'] })).badge).toBe('소식');
-    expect(toLearnCardView(content({ trigger_tags: ['boris'] })).badge).toBe('Boris');
-    expect(toLearnCardView(content({ trigger_tags: ['team'] })).badge).toBe('팀');
-    expect(toLearnCardView(content({ trigger_tags: [], dimension: 'skill_reuse' })).badge).toBe('스킬로 반복 줄이기');
-    expect(toLearnCardView(content({ trigger_tags: [], dimension: null })).badge).toBe('배움');
+  // 배지는 분류 3종으로 고정되고 세부 출처는 칩으로 내려갔다 (§4.1).
+  it('출처는 배지가 아니라 칩으로 남는다', () => {
+    const news = toLearnCardView(content({ kind: 'news', trigger_tags: ['changelog'] }));
+    expect(news.badge).toBe('소식');
+    expect(news.chip).toBeNull();
+
+    const boris = toLearnCardView(content({ trigger_tags: ['boris'] }));
+    expect(boris.badge).toBe('학습');
+    expect(boris.chip).toBe('Boris');
+
+    const team = toLearnCardView(content({ trigger_tags: ['team'] }));
+    expect(team.badge).toBe('학습');
+    expect(team.chip).toBe('팀');
+
+    const axis = toLearnCardView(content({ trigger_tags: [], dimension: 'skill_reuse' }));
+    expect(axis.badge).toBe('학습');
+    expect(axis.chip).toBe('스킬로 반복 줄이기');
+
+    // 옛 폴백 '배움'은 분류 배지와 겹쳐 버렸다 — 칩이 없는 것이 곧 "출처 없음"이다.
+    const plain = toLearnCardView(content({ trigger_tags: [], dimension: null }));
+    expect(plain.badge).toBe('학습');
+    expect(plain.chip).toBeNull();
   });
   it('본문이 비면 summary는 null', () => {
     expect(toLearnCardView(content({ trigger_tags: [], body: '  ' })).summary).toBeNull();
   });
   // ⑥ §6.1 — 긴급 팁(lastShownEmergencyTip)만 「공지」로 갈린다. 나머지 로컬 공지는 「소식」.
-  it('로컬 공지는 소식, 긴급 팁은 공지 배지', () => {
-    expect(toLearnCardView(content({ kind: 'news', trigger_tags: ['announcement'] })).badge).toBe('소식');
-    expect(
-      toLearnCardView(content({ kind: 'news', trigger_tags: ['announcement', 'notice'] })).badge,
-    ).toBe('공지');
+  it('로컬 공지는 소식, 긴급 팁은 소식 배지 + 공지 칩', () => {
+    const plain = toLearnCardView(content({ kind: 'news', trigger_tags: ['announcement'] }));
+    expect(plain.badge).toBe('소식');
+    expect(plain.chip).toBeNull();
+
+    const urgent = toLearnCardView(content({ kind: 'news', trigger_tags: ['announcement', 'notice'] }));
+    expect(urgent.badge).toBe('소식');
+    expect(urgent.chip).toBe('공지');
   });
   // ⑥ §6.3 — 번역이 있으면 그것을, 없으면 원문을 그대로 (엔진 미설정 사용자 폴백).
   it('번역 캐시가 있으면 제목·요약을 대체하고, 없으면 원문으로 폴백한다', () => {
