@@ -1263,6 +1263,7 @@ mod tests {
             est_tokens_saved: est,
             prescription: None,
             dedup_key: dedup.into(),
+            first_seen: None,
             last_seen: None,
             occurrences: occ,
             status: status.into(),

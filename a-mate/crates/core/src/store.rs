@@ -923,7 +923,7 @@ impl SqliteStore {
         let sql = format!(
             "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                     evidence_json, est_tokens_saved, prescription_json, dedup_key,
-                    last_seen, occurrences, status, judgment_json, status_ts
+                    last_seen, occurrences, status, judgment_json, status_ts, first_seen
              FROM findings {}
              ORDER BY est_tokens_saved DESC, dedup_key",
             if include_hidden { "" } else { "WHERE status='new'" }
@@ -940,19 +940,20 @@ impl SqliteStore {
                 r.get::<_, String>(12)?,
                 r.get::<_, Option<String>>(13)?,
                 r.get::<_, Option<String>>(14)?,
+                r.get::<_, Option<String>>(15)?,
             ))
         })?;
         let mut out = Vec::new();
         for row in rows {
             let (rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                  evidence_json, est, prescription_json, dedup_key, last_seen, occ, status,
-                 judgment_raw, status_ts) = row?;
+                 judgment_raw, status_ts, first_seen) = row?;
             out.push(FindingRow {
                 rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                 evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
                 est_tokens_saved: est as u64,
                 prescription: prescription_json.and_then(|s| serde_json::from_str(&s).ok()),
-                dedup_key, last_seen,
+                dedup_key, first_seen, last_seen,
                 occurrences: occ as u64,
                 status,
                 status_ts,
@@ -2139,7 +2140,7 @@ impl SqliteStore {
             .query_row(
                 "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                         evidence_json, est_tokens_saved, prescription_json, dedup_key,
-                        last_seen, occurrences, status, judgment_json, status_ts
+                        last_seen, occurrences, status, judgment_json, status_ts, first_seen
                  FROM findings WHERE dedup_key=?1",
                 params![dedup_key],
                 |r| {
@@ -2153,6 +2154,7 @@ impl SqliteStore {
                         r.get::<_, String>(12)?,
                         r.get::<_, Option<String>>(13)?,
                         r.get::<_, Option<String>>(14)?,
+                        r.get::<_, Option<String>>(15)?,
                     ))
                 },
             )
@@ -2160,13 +2162,13 @@ impl SqliteStore {
         Ok(row.map(
             |(rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
               evidence_json, est, prescription_json, dedup_key, last_seen, occ, status,
-              judgment_raw, status_ts)| {
+              judgment_raw, status_ts, first_seen)| {
                 FindingRow {
                     rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                     evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
                     est_tokens_saved: est as u64,
                     prescription: prescription_json.and_then(|s| serde_json::from_str(&s).ok()),
-                    dedup_key, last_seen,
+                    dedup_key, first_seen, last_seen,
                     occurrences: occ as u64,
                     status,
                     status_ts,
@@ -2416,6 +2418,9 @@ pub struct FindingRow {
     pub est_tokens_saved: u64,
     pub prescription: Option<serde_json::Value>,
     pub dedup_key: String,
+    /// 처음 관측한 시각 — `upsert_finding`의 ON CONFLICT가 갱신하지 않아 "처음 본 시각"으로
+    /// 남는다. 단일 스트림의 최신순 정렬·「안 본 개수」 배지가 쓰는 재료 (§3.1·§3.3).
+    pub first_seen: Option<String>,
     pub last_seen: Option<String>,
     pub occurrences: u64,
     pub status: String,
@@ -3370,6 +3375,42 @@ mod tests {
         assert_eq!(severity, "info");
         assert!(prescription_json.is_none());
         assert_eq!(status, "dismissed");
+    }
+
+    #[test]
+    fn finding_first_seen_rides_in_the_payload_and_survives_rescan() {
+        // 단일 스트림 §3.1·§3.3 — `first_seen`은 B의 최신순 정렬(§2.2)과 「안 본 개수」
+        // 배지(§2.3)가 쓰는 유일한 시간 재료다. `last_seen`·`occurrences`가 스캔 지표라 못
+        // 쓰이는 것과 달리 여기 ON CONFLICT는 `first_seen`을 갱신하지 않아 "처음 본 시각"으로
+        // 남는다. 값이 남는 성질과, **직렬화 payload에 실제로 실리는지**를 함께 못 박는다
+        // (`CoachFinding`이 이 구조체를 flatten해 프론트로 보낸다).
+        let store = SqliteStore::open_in_memory().unwrap();
+        let f = Finding {
+            rule_id: "R10".into(),
+            severity: Severity::Warn,
+            scope_host: Some("Windows".into()),
+            scope_project: Some("p".into()),
+            scope_kind: "project".into(),
+            scope_ref: "p".into(),
+            evidence: serde_json::json!({"n": 1}),
+            est_tokens_saved: 500,
+            prescription: None,
+            dedup_key: "R10|W|p".into(),
+        };
+        store.upsert_finding(&f, "2026-08-01T00:00:00Z").unwrap();
+        store.upsert_finding(&f, "2026-08-03T00:00:00Z").unwrap(); // 다음 스캔
+
+        let rows = store.list_findings_current(false).unwrap();
+        let row = rows.iter().find(|r| r.dedup_key == "R10|W|p").unwrap();
+        let payload = serde_json::to_value(row).unwrap();
+        assert_eq!(
+            payload["first_seen"], "2026-08-01T00:00:00Z",
+            "재스캔이 처음 본 시각을 밀지 않고, 그 값이 프론트 payload에 실려야 한다"
+        );
+        assert_eq!(
+            payload["last_seen"], "2026-08-03T00:00:00Z",
+            "last_seen은 갱신된다 — 두 값이 구별돼야 정렬 재료가 된다"
+        );
     }
 
     // ── 처분·수명 모델 (스펙 §5) ────────────────────────────────────────────
