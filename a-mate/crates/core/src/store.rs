@@ -260,6 +260,16 @@ fn migrate(conn: &Connection) -> Result<()> {
              ALTER TABLE content_items ADD COLUMN deadline TEXT;",
         )?;
     }
+    // 단일 스트림 §3.2 — `content_first_seen` 백필. 테이블 자체는 SCHEMA의
+    // `CREATE TABLE IF NOT EXISTS`가 만들므로, 여기서는 **묵은 행의 값만 옮긴다**: 백필이
+    // 없으면 기존 사용자는 마이그레이션 후 **첫 프룬에서** 처음 본 시각을 잃는다(그때
+    // `INSERT OR IGNORE`가 찍는 값은 원래 시각이 아니라 그 큐레이션의 now_ts다).
+    // `INSERT OR IGNORE`라 멱등이므로 버전 게이트 없이 매 실행해도 무해하다.
+    // 수집 테이블은 건드리지 않는다 — DELETE를 붙이면 콜드 스캔이 되돌아온다(#146).
+    conn.execute_batch(
+        "INSERT OR IGNORE INTO content_first_seen (id, ts)
+           SELECT id, first_seen FROM content_items WHERE first_seen IS NOT NULL;",
+    )?;
     // v3.1 재수집 — IDE 합성 블록(<ide_opened_file> 등) 프롬프트 오염 수정이 라인 재해석을 요구.
     // 스키마 변화가 없어 PRAGMA user_version(=1)으로 1회 트리거. 오염 preview에서 파생된
     // R6 finding만 삭제 (repeated_prompt가 '<'로 시작 = 합성 마커 확정).
@@ -4894,6 +4904,53 @@ mod tests {
                 .exists([]).unwrap();
             assert!(exists, "content_items.{col} 이 추가돼야 함");
         }
+    }
+
+    #[test]
+    fn migrate_backfills_content_first_seen_without_recollect() {
+        // §3.2 — 보존 테이블은 **스키마 추가 + 백필**뿐이다. 여기에 DELETE를 붙이면
+        // 릴리스마다 콜드 스캔이 되돌아온다(#146). judgment_json·summary_ko 전례대로
+        // 수집 테이블 행 수가 보존되는지 **테이블별로** 명시 검증한다.
+        //
+        // 백필이 없으면 기존 사용자는 마이그레이션 후 첫 프룬에서 first_seen을 잃는다 —
+        // 그때 INSERT OR IGNORE가 찍는 값은 원래 시각이 아니라 그 큐레이션의 now_ts다.
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("mfs.db");
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(SCHEMA).unwrap();
+            // 보존 테이블이 없던 시절로 되돌린다 (구 스키마 재현)
+            conn.execute_batch(
+                "DROP TABLE content_first_seen;
+                 PRAGMA user_version = 8;
+                 INSERT INTO content_items (id, kind, title, body, first_seen, last_seen)
+                   VALUES ('t1','tip','제목','본문','2026-07-20T00:00:00Z','2026-08-02T00:00:00Z');
+                 INSERT INTO events (dedup_key, session_id, host, project_id, source_offset, kind)
+                   VALUES ('e1','s1','Windows','p',0,'assistant_turn');
+                 INSERT INTO sessions (session_id, host, project_id) VALUES ('s1','Windows','p');
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 42);
+                 INSERT INTO daily_rollup (host, project_id, date) VALUES ('Windows','p','2026-08-02');",
+            )
+            .unwrap();
+        }
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행
+        for table in ["events", "sessions", "ingest_state", "daily_rollup", "content_items"] {
+            let n: i64 = store
+                .conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 1, "{table} 행이 보존돼야 함 — 재수집 유발 금지(#146)");
+        }
+        let backfilled: Option<String> = store
+            .conn
+            .query_row("SELECT ts FROM content_first_seen WHERE id='t1'", [], |r| r.get(0))
+            .optional()
+            .unwrap();
+        assert_eq!(
+            backfilled.as_deref(),
+            Some("2026-07-20T00:00:00Z"),
+            "묵은 행의 처음 본 시각이 보존 테이블로 옮겨져야 한다"
+        );
     }
 
     #[test]
