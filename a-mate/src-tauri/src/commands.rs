@@ -161,8 +161,12 @@ pub(crate) fn valid_finding_status(s: &str) -> bool {
     matches!(s, "new" | "resolved" | "dismissed")
 }
 
+/// 콘텐츠 처분 어휘 (스펙 §5.6). 개인 실전 레슨이 문법 A로 넘어오며 findings와 같은
+/// `resolved`/`dismissed` 두 처분을 갖는다. 옛 `shown`은 **설정하는 코드가 없는 죽은 값**이라
+/// 함께 걷어냈다 — 남겨두면 list_content가 영구히 숨기는 상태로 카드를 밀어넣을 수 있고
+/// 되돌릴 UI가 없다.
 pub(crate) fn valid_content_status(s: &str) -> bool {
-    matches!(s, "new" | "shown" | "dismissed")
+    matches!(s, "new" | "resolved" | "dismissed")
 }
 
 /// occasionBubble("오늘 …이래요! 🎉")은 축하 톤이라 추모일(mood=solemn, 예: 현충일)엔 부적절 →
@@ -1344,8 +1348,11 @@ mod tests {
 
     #[test]
     fn content_status_validation_and_empty_list() {
-        assert!(valid_content_status("new") && valid_content_status("shown") && valid_content_status("dismissed"));
-        assert!(!valid_content_status("resolved") && !valid_content_status(""));
+        // 스펙 §5.6 — 개인 레슨이 문법 A로 넘어오며 `resolved`(해결함)가 findings와 같은 어휘로 들어온다.
+        assert!(valid_content_status("new") && valid_content_status("resolved") && valid_content_status("dismissed"));
+        // `shown`은 죽은 값이라 어휘에서 뺀다 — 설정하는 코드가 어디에도 없고(단일 스트림 재설계 §3.4),
+        // 허용해두면 list_content가 영구히 숨기는 상태에 카드를 밀어넣을 수 있다(복구 UI 없음).
+        assert!(!valid_content_status("shown") && !valid_content_status("resolved_") && !valid_content_status(""));
         let store = SqliteStore::open_in_memory().unwrap();
         assert!(content_inner(&store, false).unwrap().is_empty());
     }

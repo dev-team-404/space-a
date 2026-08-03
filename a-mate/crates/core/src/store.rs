@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS findings (
   evidence_json TEXT NOT NULL, est_tokens_saved INTEGER DEFAULT 0,
   prescription_json TEXT, status TEXT NOT NULL DEFAULT 'new',
   first_seen TEXT, last_seen TEXT, occurrences INTEGER DEFAULT 1,
-  judgment_json TEXT
+  judgment_json TEXT,
+  status_evidence_n INTEGER, status_ts TEXT
 );
 CREATE TABLE IF NOT EXISTS mcp_inventory (
   host TEXT NOT NULL, project_id TEXT NOT NULL, server TEXT NOT NULL,
@@ -85,7 +86,8 @@ CREATE TABLE IF NOT EXISTS content_items (
   kind TEXT NOT NULL, dimension TEXT, title TEXT NOT NULL, body TEXT NOT NULL,
   source_url TEXT, trigger_tags TEXT NOT NULL DEFAULT '[]',
   score INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'new',
-  first_seen TEXT, last_seen TEXT
+  first_seen TEXT, last_seen TEXT,
+  status_ts TEXT
 );
 CREATE TABLE IF NOT EXISTS personal_skill_inventory (
   host TEXT NOT NULL, scope TEXT NOT NULL, name TEXT NOT NULL,
@@ -217,6 +219,25 @@ fn migrate(conn: &Connection) -> Result<()> {
         .exists([])?;
     if !has_judgment {
         conn.execute_batch("ALTER TABLE findings ADD COLUMN judgment_json TEXT;")?;
+    }
+    // 처분·수명 모델(PR③ 스펙 §5.3) — 컬럼 전용. `status_evidence_n`은 「해결함」 시점의 룰별
+    // 근거 수치 스냅숏(재발 판정용), `status_ts`는 처분 시각(해결함 7일 창 계산용)이다.
+    // judgment_json 선례대로 **재수집을 유발하지 않는다** — 기존 행은 NULL로 남고,
+    // NULL 스냅숏은 재발 판정에서 제외되어 묵은 카드가 한꺼번에 되살아나지 않는다(§5.1).
+    let has_status_evidence = conn
+        .prepare("SELECT 1 FROM pragma_table_info('findings') WHERE name='status_evidence_n'")?
+        .exists([])?;
+    if !has_status_evidence {
+        conn.execute_batch(
+            "ALTER TABLE findings ADD COLUMN status_evidence_n INTEGER;
+             ALTER TABLE findings ADD COLUMN status_ts TEXT;",
+        )?;
+    }
+    let has_content_status_ts = conn
+        .prepare("SELECT 1 FROM pragma_table_info('content_items') WHERE name='status_ts'")?
+        .exists([])?;
+    if !has_content_status_ts {
+        conn.execute_batch("ALTER TABLE content_items ADD COLUMN status_ts TEXT;")?;
     }
     // v3.1 재수집 — IDE 합성 블록(<ide_opened_file> 등) 프롬프트 오염 수정이 라인 재해석을 요구.
     // 스키마 변화가 없어 PRAGMA user_version(=1)으로 1회 트리거. 오염 preview에서 파생된
@@ -3643,6 +3664,67 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].dedup_key, "keep21");
         assert_eq!(rows[0].status, "dismissed");
+    }
+
+    /// 스펙 §5.3 — 처분·수명 컬럼은 **컬럼 전용** 마이그레이션이다. judgment_json 선례를 따라
+    /// events/sessions/ingest_state/daily_rollup을 절대 비우지 않는다. 마이그레이션이 전량
+    /// 재수집을 유발해 릴리스마다 콜드 스캔이 되돌아오던 사고(#146)의 재발 방지 가드.
+    #[test]
+    fn migrate_adds_status_lifecycle_columns_without_recollecting() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("mstatus.db");
+        let old = SCHEMA
+            .replace(",\n  status_evidence_n INTEGER, status_ts TEXT", "")
+            .replace(",\n  status_ts TEXT\n);", "\n);");
+        assert!(old.len() < SCHEMA.len(), "처분·수명 컬럼 치환 실패 — SCHEMA 문자열 확인");
+
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(&old).unwrap();
+            // user_version=8 = 현행 최신. 이전 파괴적 분기는 건너뛰고 새 컬럼 분기만 단독 발화한다.
+            conn.execute_batch(
+                "PRAGMA user_version = 8;
+                 INSERT INTO events (dedup_key, session_id, host, project_id, source_offset, kind)
+                   VALUES ('e:0','s1','Windows','p',0,'assistant_turn');
+                 INSERT INTO sessions (session_id, host, project_id, agent, first_ts, last_ts)
+                   VALUES ('s1','Windows','p','claude-code','2026-08-01T00:00:00Z','2026-08-01T00:00:00Z');
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 42);
+                 INSERT INTO daily_rollup (host, project_id, date, session_count)
+                   VALUES ('Windows','p','2026-08-01',1);
+                 INSERT INTO content_items (id, kind, title, body, status)
+                   VALUES ('lesson-cache','tip','t','b','dismissed');",
+            )
+            .unwrap();
+        }
+
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행
+
+        for (table, col) in [
+            ("findings", "status_evidence_n"),
+            ("findings", "status_ts"),
+            ("content_items", "status_ts"),
+        ] {
+            let exists = store
+                .conn
+                .prepare(&format!("SELECT 1 FROM pragma_table_info('{table}') WHERE name='{col}'"))
+                .unwrap()
+                .exists([])
+                .unwrap();
+            assert!(exists, "{table}.{col} 컬럼이 추가돼야 함");
+        }
+        for table in ["events", "sessions", "ingest_state", "daily_rollup"] {
+            let n: i64 = store
+                .conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 1, "{table} 행은 컬럼 전용 마이그레이션에서 보존돼야 함");
+        }
+        // 사용자 처분 기록도 보존
+        let status: String = store
+            .conn
+            .query_row("SELECT status FROM content_items WHERE id='lesson-cache'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(status, "dismissed");
     }
 
     #[test]
