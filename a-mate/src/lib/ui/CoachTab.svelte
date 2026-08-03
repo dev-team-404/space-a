@@ -45,8 +45,7 @@
   const pinnedView = $derived(pinned ? toLearnCardView(pinned) : null);
 
   function ackPin(id: string) {
-    pinAcks = [...pinAcks, id];
-    savePinAcks(pinAcks);
+    pinAcks = savePinAcks([...pinAcks, id]);
   }
 
   // 근거 출처로 두 섹션을 가른다 (스펙 §3). 분기 로직은 전부 coach-helpers의 순수 함수에 있다.

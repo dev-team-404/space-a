@@ -253,9 +253,12 @@ export function loadPinAcks(): string[] {
   }
 }
 
-/** 최근 것부터 상한을 둬 무한히 자라지 않게 한다. */
-export function savePinAcks(ids: string[]): void {
-  localStorage.setItem(PIN_ACK_KEY, JSON.stringify(ids.slice(-30)));
+/** 최근 것부터 상한을 둬 무한히 자라지 않게 한다. 실제로 저장된 목록을 돌려주므로
+ *  호출부의 상태와 localStorage가 어긋나지 않는다. */
+export function savePinAcks(ids: string[]): string[] {
+  const kept = ids.slice(-30);
+  localStorage.setItem(PIN_ACK_KEY, JSON.stringify(kept));
+  return kept;
 }
 
 /** 큐레이션 콘텐츠가 카드가 되는 상한.

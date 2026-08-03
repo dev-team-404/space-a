@@ -93,11 +93,15 @@ export function reuseNotice(notes: { space: string; cross_team: boolean }[], ts:
   return { ts, kind: 'reuse', text };
 }
 
-/** ⑥ 새 공지 알림 (스펙 §6.5) — rows는 점수 내림차순(백엔드 랭킹 순서 유지). */
-export function announcementNotice(rows: { id: string; title: string }[], ts: string): Notice {
+/** ⑥ 새 공지 알림 (스펙 §6.5) — rows는 점수 내림차순(백엔드 랭킹 순서 유지).
+ *  번역이 끝난 뒤에 오는 이벤트라 `title_ko`가 있으면 그것을 쓴다 — 없으면 영어 원제목. */
+export function announcementNotice(
+  rows: { id: string; title: string; title_ko?: string | null }[],
+  ts: string,
+): Notice {
   const head = rows[0];
-  const text =
-    rows.length > 1 ? `새 소식 ${rows.length}건 — ${head.title} 외` : `새 소식 — ${head.title}`;
+  const title = head.title_ko?.trim() || head.title;
+  const text = rows.length > 1 ? `새 소식 ${rows.length}건 — ${title} 외` : `새 소식 — ${title}`;
   return { ts, kind: 'announcement', text, target: head.id };
 }
 

@@ -68,6 +68,12 @@ describe('notice 팩토리', () => {
     );
     expect(many.text).toBe('새 소식 2건 — 가 외');
     expect(many.target).toBe('a');
+    // 번역이 끝난 뒤 오는 이벤트라 한국어 제목이 있으면 그것을 쓴다
+    const ko = announcementNotice(
+      [{ id: 'a', title: 'Fable 5 is now standard', title_ko: '페이블 5, 팀 플랜 기본 포함' }],
+      '2026-08-03T10:00:00Z',
+    );
+    expect(ko.text).toBe('새 소식 — 페이블 5, 팀 플랜 기본 포함');
   });
   it('guestbook: N건 문구 + 최신 entry_id target + 방명록 탭 dest', () => {
     const one = guestbookNotice([{ entry_id: 'e1', author_name: '준녕' }], '2026-07-29T10:00:00Z');

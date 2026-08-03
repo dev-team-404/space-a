@@ -412,6 +412,14 @@ mod runtime {
     /// 탭을 새로 만들지 않고 기존 인프라(마스코트 말풍선 + 알림 로그)에 얹는다.
     /// 노출 목록(`list_content`)에 있는 것만 대상이다 — 사용자가 이미 닫은 공지는 알리지 않는다.
     fn maybe_notify_announcements(app: &AppHandle, store_mutex: &std::sync::Mutex<SqliteStore>) {
+        use std::sync::atomic::Ordering;
+        // ⓪ 알림 창이 구독을 끝내기 전에는 알리지 않는다. emit은 수신자가 0이어도 Ok라,
+        // 여기서 통지 기록만 전진하면 그 공지는 영영 알림이 오지 않는다(인바운드 폴링 선례).
+        // 기록을 그대로 두면 다음 스캔이 다시 시도하고, `notices_ready`가 켜지는 순간에도
+        // `poll_inbound_now`가 한 번 만회한다. 카드 자체는 이미 코칭 탭에 있으므로 손실 없음.
+        if !app.state::<AppState>().notices_ready.load(Ordering::SeqCst) {
+            return;
+        }
         let now = chrono::Utc::now().to_rfc3339();
         let fresh = match store_mutex.lock() {
             Ok(store) => {
@@ -1348,13 +1356,15 @@ mod runtime {
     /// 스캔 재시도. 커서 저장은 emit 성공 후 — 실패 시 커서 미갱신으로 재-emit된다.
     /// 구서버(visits 404)는 이번 실행 동안 방문 폴링만 비활성(maybe_reply_guestbook
     /// INCOMPATIBLE 선례). 기존 maybe_reply_guestbook은 건드리지 않는다(묶음 ② 충돌 억제).
-    /// 알림 창이 구독을 끝냈다고 신고한 직후의 1회 폴링. 스캔은 파일 변경 구동(주기 타이머
+    /// 알림 창이 구독을 끝냈다고 신고한 직후의 1회 만회. 스캔은 파일 변경 구동(주기 타이머
     /// 없음)이라 준비 이전에 스캔이 지나갔으면 다음 변경까지 소식이 안 온다 — 그 공백을 메운다.
+    /// 같은 게이트(`notices_ready`)를 기다리는 새 공지 알림(⑥ §6.5)도 여기서 함께 만회한다.
     /// 네트워크를 타므로 커맨드 스레드를 막지 않게 별 스레드에서.
     pub fn poll_inbound_now(app: AppHandle) {
         std::thread::spawn(move || {
             let state = app.state::<AppState>();
             maybe_poll_inbound(&app, &state.store);
+            maybe_notify_announcements(&app, &state.store);
         });
     }
 

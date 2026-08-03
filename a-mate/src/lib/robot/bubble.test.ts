@@ -25,6 +25,13 @@ describe('bubble 팩토리', () => {
     const many = announcementBubble([{ id: 'a', title: '가' }, { id: 'b', title: '나' }], '대장');
     expect(many.text).toContain('외 1건');
     expect(many.target).toBe('a');
+    // 번역이 끝난 뒤 오는 이벤트라 한국어 제목이 있으면 그것을 말한다
+    const ko = announcementBubble(
+      [{ id: 'a', title: 'Fable 5 is now standard', title_ko: '페이블 5, 팀 플랜 기본 포함' }],
+      '주인',
+    );
+    expect(ko.text).toContain('페이블 5, 팀 플랜 기본 포함');
+    expect(ko.text).not.toContain('Fable 5 is now standard');
   });
   it('advice: detail을 싣고 dedup_key를 딥링크 target으로', () => {
     const b = adviceBubble({ dedup_key: 'k1', detail: '`playwright`가 상주하는데 호출 0회' }, '주인');
