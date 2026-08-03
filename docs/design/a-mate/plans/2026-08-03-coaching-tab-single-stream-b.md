@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 코칭 탭의 2단 섹션(「내 로그에서」/「배움 · 소식」)을 `first_seen` 내림차순 한 줄 스트림으로 바꾸고, 분류는 좌측 라인 색·배지·보조 칩으로만 나타낸다.
+**Goal:** 코칭 탭의 2단 섹션(「내 로그에서」/「배움 · 소식」)을 `first_seen` 내림차순 한 줄 스트림으로 바꾸고, 분류는 좌측 라인 색·배지·보조 칩으로만 나타낸다. 아울러 공지에 수명을 줘 **해소된 장애 안내가 최상단에 눌러앉지 않게** 한다(§2.6).
 
 **Architecture:** 판정·조립 로직은 전부 순수 함수에 둔다 — 항목→뷰모델 변환은 기존 `coach-helpers.ts`에, 뷰모델들→스트림·배지 조립은 신규 `coach-stream.ts`에. Svelte 컴포넌트는 렌더만 한다(이 저장소엔 컴포넌트 테스트 라이브러리가 없어 렌더 검증이 불가능하므로, 검증 가능한 것을 전부 순수 함수로 밀어내는 것이 유일한 안전망이다). Rust는 건드리지 않는다.
 
@@ -31,7 +31,7 @@
 |------|------|------|
 | `a-mate/src/lib/api.ts` | Tauri 커맨드 바인딩·payload 타입 | 수정 — `first_seen` 선언 |
 | `a-mate/src/lib/ui/coach-helpers.ts` | **항목 → 카드 뷰모델** 변환, 처분 판정 | 수정 — 분류·보조 칩·`firstSeen` |
-| `a-mate/src/lib/ui/coach-stream.ts` | **뷰모델들 → 한 줄 스트림·배지 키** 조립 | **신규** |
+| `a-mate/src/lib/ui/coach-stream.ts` | **뷰모델들 → 한 줄 스트림·배지 키** 조립, 공지 수명 판정 | **신규** |
 | `a-mate/src/lib/ui/coach-stream.test.ts` | 위의 단위 테스트 | **신규** |
 | `a-mate/src/lib/ui/CoachTab.svelte` | 코칭 탭 렌더 | 수정 — 섹션 제거, 스트림 |
 | `a-mate/src/lib/ui/coach/LogCard.svelte` | 문법 A 카드 | 수정 — 분류 배지, `.warn` 제거 |
@@ -646,7 +646,220 @@ git commit -m "feat(agent): assemble the coach stream sorted and capped by first
 
 ---
 
-### Task 4: 탭 배지 — 활성 키 집합 diff
+### Task 4: 공지 수명 — 기한이 있으면 그때까지, 없으면 며칠
+
+해소된 장애 공지가 최고 점수(325)로 최상단에 남는 것을 실환경에서 발견해 들어온 요구다(§2.6). 공지 데이터엔 **발행 시각이 없어** `first_seen`("우리가 처음 본 때")으로 잰다.
+
+**Files:**
+- Modify: `a-mate/src/lib/ui/coach-helpers.ts` — `validDeadline`을 export로
+- Modify: `a-mate/src/lib/ui/coach-stream.ts`
+- Modify: `a-mate/src/lib/ui/coach-stream.test.ts`
+
+**Interfaces:**
+- Consumes: Task 3의 `coach-stream.ts`
+- Produces:
+  - `ANNOUNCEMENT_TTL_DAYS = 7`, `EMERGENCY_TTL_DAYS = 2`
+  - `isAnnouncementLive(c: ContentItem, today: string, nowMs: number): boolean`
+  - `liveContent(content: ContentItem[], today: string, nowMs: number): ContentItem[]`
+  - `localDateString(d: Date): string`
+  - `coach-helpers`의 `validDeadline(d: string): boolean` — private에서 export로 승격
+
+**설계 결정**: `liveContent`는 **수명만** 거른다. `status` 필터는 하지 않는다 — `listContent(false)`가 백엔드에서 이미 `status='new'`만 주고, `buildCoachStream`·`activeCoachKeys`가 각자 방어적으로 한 번 더 본다. 그리고 **`filter`라 순서를 보존**하므로 `pinnedNewsItem`이 전제하는 score 내림차순이 깨지지 않는다(§2.2 파이프라인).
+
+- [ ] **Step 1: 실패하는 테스트를 쓴다**
+
+`coach-stream.test.ts`의 `tip` 헬퍼 아래에 공지 팩토리와 시계 상수를 더한다:
+
+```ts
+/** 로컬 공지 하나. content 팩토리의 기본 태그가 personal이라 반드시 덮어쓴다. */
+const ann = (over: Partial<ContentItem> = {}): ContentItem =>
+  content({
+    id: 'cc-announce-x', kind: 'news', dimension: null,
+    trigger_tags: ['announcement'], title: '공지', body: '본문', ...over,
+  });
+
+const TODAY = '2026-08-10';
+const NOW_MS = Date.parse('2026-08-10T00:00:00Z');
+const daysBefore = (n: number) => new Date(NOW_MS - n * 24 * 60 * 60 * 1000).toISOString();
+```
+
+파일 끝에 추가:
+
+```ts
+describe('isAnnouncementLive — 공지 수명 (§2.6)', () => {
+  it('공지가 아닌 항목은 이 규칙과 무관하다', () => {
+    expect(isAnnouncementLive(tip('T1', daysBefore(400)), TODAY, NOW_MS)).toBe(true);
+    expect(isAnnouncementLive(content({ first_seen: daysBefore(400) }), TODAY, NOW_MS)).toBe(true);
+  });
+
+  it('기한이 있으면 그 날까지 — 당일은 살아 있고 지나면 내린다', () => {
+    expect(isAnnouncementLive(ann({ deadline: '2026-08-10', first_seen: daysBefore(1) }), TODAY, NOW_MS)).toBe(true);
+    expect(isAnnouncementLive(ann({ deadline: '2026-08-09', first_seen: daysBefore(1) }), TODAY, NOW_MS)).toBe(false);
+  });
+
+  it('기한이 일수 규칙을 이긴다 — 「명시한 기간 동안만」이 우선이다', () => {
+    // 처음 본 지 30일이 지났지만 공지가 명시한 기한이 아직 남았다
+    const long = ann({ deadline: '2026-09-01', first_seen: daysBefore(30) });
+    expect(isAnnouncementLive(long, TODAY, NOW_MS)).toBe(true);
+  });
+
+  it('기한이 없으면 일반 공지는 7일', () => {
+    expect(isAnnouncementLive(ann({ first_seen: daysBefore(6) }), TODAY, NOW_MS)).toBe(true);
+    expect(isAnnouncementLive(ann({ first_seen: daysBefore(8) }), TODAY, NOW_MS)).toBe(false);
+  });
+
+  it('기한이 없으면 장애 공지는 2일 — 「마지막으로 표시한」 스냅샷이라 만료를 알 수 없다', () => {
+    const emerg = (fs: string) => ann({ trigger_tags: ['announcement', 'notice'], first_seen: fs });
+    expect(isAnnouncementLive(emerg(daysBefore(1)), TODAY, NOW_MS)).toBe(true);
+    expect(isAnnouncementLive(emerg(daysBefore(3)), TODAY, NOW_MS)).toBe(false);
+    // 같은 나이라도 일반 공지는 아직 살아 있다 — 둘을 가르는 것이 이 규칙의 핵심이다
+    expect(isAnnouncementLive(ann({ first_seen: daysBefore(3) }), TODAY, NOW_MS)).toBe(true);
+  });
+
+  it('깨진 기한은 무시하고 일수 규칙으로 — LLM 오추출 방어', () => {
+    for (const bad of ['2026-13-40', '곧', '', '  ']) {
+      expect(isAnnouncementLive(ann({ deadline: bad, first_seen: daysBefore(8) }), TODAY, NOW_MS), bad).toBe(false);
+      expect(isAnnouncementLive(ann({ deadline: bad, first_seen: daysBefore(1) }), TODAY, NOW_MS), bad).toBe(true);
+    }
+  });
+
+  it('처음 본 시각을 모르면 보이는 쪽 — 시각이 없다고 카드를 뺏지 않는다', () => {
+    expect(isAnnouncementLive(ann({ first_seen: null }), TODAY, NOW_MS)).toBe(true);
+    expect(isAnnouncementLive(ann({ first_seen: '언젠가' }), TODAY, NOW_MS)).toBe(true);
+  });
+});
+
+describe('liveContent', () => {
+  it('수명이 끝난 공지만 걷어내고 나머지는 그대로 둔다', () => {
+    const rows = [
+      ann({ id: 'a-live', first_seen: daysBefore(1) }),
+      ann({ id: 'a-dead', first_seen: daysBefore(9) }),
+      tip('T-old', daysBefore(400)),
+    ];
+    expect(liveContent(rows, TODAY, NOW_MS).map((c) => c.id)).toEqual(['a-live', 'T-old']);
+  });
+
+  it('순서를 보존한다 — pinnedNewsItem이 score 내림차순을 전제한다', () => {
+    const rows = [ann({ id: 'p3', score: 325 }), ann({ id: 'p2', score: 321 }), ann({ id: 'p1', score: 320 })]
+      .map((c) => ({ ...c, first_seen: daysBefore(1) }));
+    expect(liveContent(rows, TODAY, NOW_MS).map((c) => c.id)).toEqual(['p3', 'p2', 'p1']);
+  });
+});
+
+describe('localDateString', () => {
+  it('로컬 날짜를 YYYY-MM-DD로 — deadline과 같은 축으로 비교하기 위해', () => {
+    expect(localDateString(new Date(2026, 7, 3))).toBe('2026-08-03');
+    expect(localDateString(new Date(2026, 11, 25))).toBe('2026-12-25');
+  });
+});
+```
+
+import 줄에 `ANNOUNCEMENT_TTL_DAYS`가 아니라 `isAnnouncementLive`, `liveContent`, `localDateString`을 더한다.
+
+- [ ] **Step 2: 테스트가 실패하는지 확인**
+
+```powershell
+npm test -- --run coach-stream
+```
+
+Expected: FAIL — `isAnnouncementLive is not a function`
+
+- [ ] **Step 3: `validDeadline`을 export로 올린다**
+
+`coach-helpers.ts`에서:
+
+```ts
+/** 기한 문자열이 실제 달력 날짜인가 — `2026-13-40`·`곧` 같은 오추출을 거른다. */
+export function validDeadline(d: string): boolean {
+```
+
+(`function` 앞에 `export`만 붙인다. 본문은 그대로.)
+
+- [ ] **Step 4: 수명 판정을 구현한다**
+
+`coach-stream.ts`의 import에 `validDeadline`을 더하고, 파일 끝에 추가:
+
+```ts
+// ── 공지 수명 (§2.6) ───────────────────────────────────────────────────────
+//
+// 공지는 시한부인데 **데이터에 발행 시각이 없다** — GrowthBook 캐시에도
+// `lastShownEmergencyTip`에도 날짜 필드가 없다. 우리가 가진 유일한 시각은
+// `first_seen`("우리가 처음 본 때")이라 그것으로 잰다.
+
+/** 기한 없는 일반 공지(프로모션·릴리스)가 화면에 남는 기간. */
+export const ANNOUNCEMENT_TTL_DAYS = 7;
+/** 기한 없는 장애 공지가 남는 기간. `lastShownEmergencyTip`은 「마지막으로 표시한」
+ * 스냅샷이지 「지금 유효한」 값이 아니고 Claude Code가 그 키를 지우지 않는다 —
+ * 해소된 장애가 영원히 최고 점수로 남는다. 만료 신호가 없으므로
+ * "장애는 길어야 하루이틀"이라는 성질로 대신한다. */
+export const EMERGENCY_TTL_DAYS = 2;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Rust `announcements::TAG_ANNOUNCEMENT`·`TAG_NOTICE`와 짝이다. */
+const TAG_ANNOUNCEMENT = 'announcement';
+const TAG_NOTICE = 'notice';
+
+const hasTag = (c: ContentItem, t: string) => c.trigger_tags?.includes(t) ?? false;
+
+/** 이 공지를 아직 보여줄까. 공지가 아닌 항목은 언제나 `true`(이 규칙의 대상이 아니다).
+ *
+ * 기한이 **일수 규칙을 이긴다** — 사용자가 정한 것은 "명시한 기간 동안만"이다.
+ * 기한을 모르거나 깨졌으면 일수로 떨어진다(기본 폐쇄가 아니라 기본 노출: 시각을
+ * 모른다고 카드를 뺏지 않는다 — `isDisposedVisible`과 같은 규약). */
+export function isAnnouncementLive(c: ContentItem, today: string, nowMs: number): boolean {
+  if (!hasTag(c, TAG_ANNOUNCEMENT)) return true;
+  const d = c.deadline?.trim();
+  if (d && validDeadline(d)) return d >= today;
+  if (!c.first_seen) return true;
+  const ts = Date.parse(c.first_seen);
+  if (Number.isNaN(ts)) return true;
+  const ttl = hasTag(c, TAG_NOTICE) ? EMERGENCY_TTL_DAYS : ANNOUNCEMENT_TTL_DAYS;
+  return nowMs - ts < ttl * DAY_MS;
+}
+
+/** 수명이 끝난 공지를 걷어낸다. **`status` 필터는 하지 않는다** — 백엔드
+ * `listContent(false)`가 이미 걸렀고 스트림·배지가 각자 한 번 더 본다.
+ * `filter`라 **순서가 보존**되므로 `pinnedNewsItem`이 전제하는 score 내림차순이 깨지지 않는다. */
+export function liveContent(content: ContentItem[], today: string, nowMs: number): ContentItem[] {
+  return content.filter((c) => isAnnouncementLive(c, today, nowMs));
+}
+
+/** 로컬 날짜 `YYYY-MM-DD`. `deadline`이 로컬 달력 날짜라 UTC로 비교하면 하루가 어긋난다. */
+export function localDateString(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+```
+
+- [ ] **Step 5: 테스트 통과 확인**
+
+```powershell
+npm test -- --run coach-stream
+```
+
+Expected: PASS
+
+- [ ] **Step 6: 뮤테이션 확인**
+
+`isAnnouncementLive`에서 `const ttl = hasTag(c, TAG_NOTICE) ? EMERGENCY_TTL_DAYS : ANNOUNCEMENT_TTL_DAYS;`를 `const ttl = ANNOUNCEMENT_TTL_DAYS;`로 잠시 바꾼다:
+
+```powershell
+npm test -- --run coach-stream
+```
+
+Expected: FAIL — 「기한이 없으면 장애 공지는 2일」이 깨진다. 되돌린다.
+
+- [ ] **Step 7: 커밋**
+
+```powershell
+npm test
+git add a-mate/src/lib/ui/coach-helpers.ts a-mate/src/lib/ui/coach-stream.ts a-mate/src/lib/ui/coach-stream.test.ts
+git commit -m "feat(agent): expire announcements by deadline or age"
+```
+
+---
+
+### Task 5: 탭 배지 — 활성 키 집합 diff
 
 `first_seen` 시각 비교로는 `pending`→`new`와 재발 복귀를 놓친다(§3.1·§4.5). 활성 키 집합으로 센다.
 
@@ -655,7 +868,7 @@ git commit -m "feat(agent): assemble the coach stream sorted and capped by first
 - Modify: `a-mate/src/lib/ui/coach-stream.test.ts`
 
 **Interfaces:**
-- Consumes: Task 3의 파일
+- Consumes: Task 3·4의 `coach-stream.ts`
 - Produces:
   - `activeCoachKeys(findings: CoachFinding[], content: ContentItem[]): string[]`
   - `unseenCoachCount(activeKeys: readonly string[], seen: readonly string[]): number`
@@ -837,7 +1050,7 @@ git commit -m "feat(agent): count unseen coach cards by active key set diff"
 
 ---
 
-### Task 5: 카드 컴포넌트 — 분류 배지·보조 칩·라인 색
+### Task 6: 카드 컴포넌트 — 분류 배지·보조 칩·라인 색
 
 라인 색이 분류를 뜻하므로 severity를 색으로 쓸 수 없다(§2.1).
 
@@ -933,13 +1146,13 @@ git commit -m "feat(agent): render kind badge, source chip and kind-colored rail
 
 ---
 
-### Task 6: `CoachTab` — 섹션을 걷어내고 한 줄로 깐다
+### Task 7: `CoachTab` — 섹션을 걷어내고 한 줄로 깐다
 
 **Files:**
 - Modify: `a-mate/src/lib/ui/CoachTab.svelte`
 
 **Interfaces:**
-- Consumes: Task 3의 `buildCoachStream`·`StreamCard`, Task 4의 `saveSeenCoachKeys`·`activeCoachKeys`
+- Consumes: Task 3의 `buildCoachStream`·`StreamCard`, Task 4의 `liveContent`·`localDateString`, Task 5의 `saveSeenCoachKeys`·`activeCoachKeys`
 - Produces: 렌더 변경만. `focusKey`·`onChanged` props는 그대로다.
 
 - [ ] **Step 1: import와 파생값을 바꾼다**
@@ -948,7 +1161,29 @@ git commit -m "feat(agent): render kind badge, source chip and kind-colored rail
 
 ```ts
   import { ctxLine, loadPinAcks, pinnedNewsItem, savePinAcks, sessionIdsOf, toDisposedRows, toLearnCardView, totalSessionsOf, type DisposedRow } from './coach-helpers';
-  import { activeCoachKeys, buildCoachStream, saveSeenCoachKeys } from './coach-stream';
+  import { activeCoachKeys, buildCoachStream, liveContent, localDateString, saveSeenCoachKeys } from './coach-stream';
+```
+
+`localToday` 지역 함수를 지우고 공용 함수를 쓴다 — Task 4가 같은 계산을 `localDateString`으로 내놨으므로 두 벌을 두지 않는다:
+
+```ts
+  let today = $state(localDateString(new Date()));
+  $effect(() => {
+    const id = setInterval(() => {
+      const d = localDateString(new Date());
+      if (d !== today) today = d;
+    }, 60_000);
+    return () => clearInterval(id);
+  });
+```
+
+`const pinned = $derived(pinnedNewsItem(tips, pinAcks, today));` 줄 **위**에 수명 필터를 넣고, 고정 슬롯이 그 결과를 보게 한다:
+
+```ts
+  // 수명이 끝난 공지를 먼저 걷어낸다 (§2.6) — 스트림·고정 슬롯·배지가 같은 목록을 본다.
+  // `liveContent`는 filter라 score 내림차순이 보존된다(pinnedNewsItem의 전제).
+  const live = $derived(liveContent(tips, today, nowMs));
+  const pinned = $derived(pinnedNewsItem(live, pinAcks, today));
 ```
 
 `const sections = $derived(partitionCoachItems(...))` 줄을 다음으로 **교체**한다:
@@ -956,8 +1191,10 @@ git commit -m "feat(agent): render kind badge, source chip and kind-colored rail
 ```ts
   // 한 줄 스트림 (§2.2) — 고정 항목은 미리 뺀다. `pinnedNewsItem`이 score 순 배열을
   // 전제하므로(⑥ §6.4의 priority 규칙) **정렬보다 먼저** 골라내야 한다.
-  const stream = $derived(buildCoachStream(active, tips.filter((t) => t.id !== pinned?.id)));
+  const stream = $derived(buildCoachStream(active, live.filter((t) => t.id !== pinned?.id)));
 ```
+
+⚠ `nowMs`(1시간 눈금 시계)와 `today`(분 단위 날짜) 선언이 `live`보다 **위에** 있어야 한다. 현재 파일에서 `nowMs`는 처분 줄 근처(아래쪽)에 선언돼 있으므로 **`pinned` 위로 끌어올린다.** `$derived`는 선언 순서를 따진다.
 
 `findingByKey`는 그대로 둔다 — 스트림 카드에서 원본 finding을 찾는 데 계속 쓴다.
 
@@ -967,9 +1204,9 @@ git commit -m "feat(agent): render kind badge, source chip and kind-colored rail
 
 ```ts
   // 탭이 열려 있는 동안 목록이 바뀌면 그때그때 본 것으로 친다 (§2.3).
-  // 상한 적용 **전**의 활성 전부를 저장한다 — 셸의 배지가 같은 기준으로 센다.
+  // 상한 적용 **전**의 활성 전부를 저장하되 수명이 끝난 공지는 뺀다 — 셸의 배지가 같은 기준으로 센다.
   $effect(() => {
-    saveSeenCoachKeys(activeCoachKeys(all, allTips));
+    saveSeenCoachKeys(activeCoachKeys(all, liveContent(allTips, today, nowMs)));
     onChanged?.();
   });
 ```
@@ -1085,13 +1322,13 @@ git commit -m "feat(agent): lay the coach tab out as one time-ordered stream"
 
 ---
 
-### Task 7: 셸 배지 — 「미처리 개수」에서 「안 본 개수」로
+### Task 8: 셸 배지 — 「미처리 개수」에서 「안 본 개수」로
 
 **Files:**
 - Modify: `a-mate/src/App.svelte`
 
 **Interfaces:**
-- Consumes: Task 4의 `activeCoachKeys`·`unseenCoachCount`·`loadSeenCoachKeys`
+- Consumes: Task 5의 `activeCoachKeys`·`unseenCoachCount`·`loadSeenCoachKeys`, Task 4의 `liveContent`·`localDateString`
 - Produces: 없음 (최종 소비자)
 
 - [ ] **Step 1: import를 더한다**
@@ -1099,7 +1336,7 @@ git commit -m "feat(agent): lay the coach tab out as one time-ordered stream"
 api import 목록에 `listContent`를 더하고(`listFindings` 옆), 새 import 줄을 추가한다:
 
 ```ts
-  import { activeCoachKeys, loadSeenCoachKeys, unseenCoachCount } from './lib/ui/coach-stream';
+  import { activeCoachKeys, liveContent, loadSeenCoachKeys, localDateString, unseenCoachCount } from './lib/ui/coach-stream';
 ```
 
 - [ ] **Step 2: 상태를 바꾼다**
@@ -1123,7 +1360,12 @@ api import 목록에 `listContent`를 더하고(`listFindings` 옆), 새 import 
       listFindings(false).catch(() => []),
       listContent(false).catch(() => []),
     ]);
-    coachKeys = activeCoachKeys(fs, cs);
+    // 수명이 끝난 공지는 화면에 없으므로 배지도 세지 않는다 (§2.6).
+    // 셸에는 CoachTab 같은 눈금 시계를 두지 않는다 — refresh()는 함수라 호출 시점에
+    // 계산되고(반응성 함정 없음), 스캔·큐레이션마다 다시 돈다. 유휴 상태로 자정을
+    // 넘겨 잠깐 낡는 것은 배지 정밀도로 감수한다.
+    const now = new Date();
+    coachKeys = activeCoachKeys(fs, liveContent(cs, localDateString(now), now.getTime()));
     // CoachTab이 열려 있는 동안 저장한 집합을 다시 읽는다 — 탭을 보면 배지가 0이 된다.
     seenCoachKeys = loadSeenCoachKeys();
 ```
@@ -1164,7 +1406,7 @@ git commit -m "feat(agent): switch the coach tab badge to an unseen count"
 
 ---
 
-### Task 8: 홈 「지금 볼 코칭」 위젯 — 세 분류 모두
+### Task 9: 홈 「지금 볼 코칭」 위젯 — 세 분류 모두
 
 지금은 finding만 본다(§3.5). 콘텐츠도 싣고 분류 배지를 붙인다(§2.4).
 
@@ -1175,7 +1417,7 @@ git commit -m "feat(agent): switch the coach tab badge to an unseen count"
 - Modify: `a-mate/src/lib/ui/HomeTab.svelte`
 
 **Interfaces:**
-- Consumes: Task 3의 `buildCoachStream`
+- Consumes: Task 3의 `buildCoachStream`, Task 4의 `liveContent`·`localDateString`
 - Produces:
   - `interface CoachWidgetRow { key: string; kind: CoachKind; badge: string; oneLine: string }`
   - `toWidgetRows(findings: CoachFinding[], content: ContentItem[], limit?: number): CoachWidgetRow[]`
@@ -1340,14 +1582,20 @@ Expected: PASS
 import에 `listContent`와 `type ContentItem`을 더하고, 새 import 줄을 추가한다:
 
 ```ts
-  import { toWidgetRows } from './coach-stream';
+  import { liveContent, localDateString, toWidgetRows } from './coach-stream';
 ```
 
 `let findings = $state<CoachFinding[]>([]);` 아래에 추가:
 
 ```ts
   let tips = $state<ContentItem[]>([]);
-  const coachRows = $derived(toWidgetRows(findings, tips));
+  // 수명이 끝난 공지는 위젯에서도 뺀다 (§2.6) — 탭과 어긋나면 "홈에 있는데 탭에 없다"가 생긴다.
+  // `new Date()`는 반응성 의존이 아니라 findings·tips가 바뀔 때만 다시 잰다. 공지 수명은
+  // 일 단위라 그 정밀도면 충분하고, 홈은 스캔·큐레이션마다 load()로 갱신된다.
+  const coachRows = $derived.by(() => {
+    const now = new Date();
+    return toWidgetRows(findings, liveContent(tips, localDateString(now), now.getTime()));
+  });
 ```
 
 `load()`의 `Promise.all` 배열에 `listContent(false).catch(() => [] as ContentItem[]),`를 더하고 구조 분해와 대입을 맞춘다:
@@ -1389,7 +1637,7 @@ git commit -m "feat(agent): show all three kinds in the home coach widget"
 
 ---
 
-### Task 9: 마무리 — 전체 검증과 DoD 아카이브
+### Task 10: 마무리 — 전체 검증과 DoD 아카이브
 
 **Files:**
 - Move: `docs/design/a-mate/specs/2026-08-02-coaching-tab-single-stream-design.md` → 아카이브
@@ -1418,6 +1666,12 @@ npm run tauri dev
 4. 고정 슬롯이 있으면 스트림 **위**에, 처분 줄이 있으면 **아래**에 있다
 5. 탭을 열면 코칭 배지가 사라진다 (처분하지 않아도)
 6. 홈 위젯 행을 누르면 해당 카드로 스크롤한다 — **세 분류 모두**
+7. **공지 수명(§2.6)** — 개발 PC의 실제 데이터로 확인할 수 있다. 세 공지 모두 `first_seen`이 `2026-08-03T06:45Z`이고 `deadline`이 `null`이므로:
+   - 장애 공지(`cc-announce-emergency-…`, 「공지」 칩)는 **2026-08-05 06:45 이후** 사라진다
+   - 나머지 둘은 **2026-08-10 06:45 이후** 사라진다
+   - 그 전에 확인하려면 시스템 시계를 옮기지 말고 DB에서 `first_seen`을 과거로 바꿔 본다:
+     `UPDATE content_items SET first_seen='2026-07-01T00:00:00+00:00' WHERE id LIKE 'cc-announce-%'`
+     (⚠ `content_first_seen` 보존 테이블이 조회에서 우선하므로 **그쪽도 같이** 바꿔야 한다 — §3.2의 `COALESCE(fs.ts, c.first_seen)`)
 
 - [ ] **Step 3: 스펙과 계획을 아카이브한다 (ADR 0013)**
 
