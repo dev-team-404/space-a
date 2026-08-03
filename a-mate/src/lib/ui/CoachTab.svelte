@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { listFindings, listContent, onContentReady, onNewFindings, setFindingStatus, sessionsCtx, generateSkillDraft, saveSkillDraft, getSettings, coachTip, setContentStatus, type CoachFinding, type ContentItem, type SessionCtxItem, type SkillDraft } from '../api';
+  import { listFindings, listContent, onContentReady, onNewFindings, onScanDone, setFindingStatus, sessionsCtx, generateSkillDraft, saveSkillDraft, getSettings, coachTip, setContentStatus, type CoachFinding, type ContentItem, type SessionCtxItem, type SkillDraft } from '../api';
   import SessionModal from './SessionModal.svelte';
   import LogCard from './coach/LogCard.svelte';
   import LearnCard from './coach/LearnCard.svelte';
@@ -78,7 +78,13 @@
   refresh();
   refreshTips();
   $effect(() => {
-    const subs = [onNewFindings(() => refresh()), onContentReady(() => refreshTips())];
+    // scan:done까지 듣는 이유: 재발로 되살아난 카드는 **기존 dedup_key**라 coach:finding의
+    // "새 finding" diff에 잡히지 않는다. 탭을 열어둔 채로도 복귀가 보이려면 스캔 끝에 다시 읽어야 한다.
+    const subs = [
+      onNewFindings(() => refresh()),
+      onScanDone(() => refresh()),
+      onContentReady(() => refreshTips()),
+    ];
     return () => { subs.forEach((s) => s.then((u) => u())); };
   });
 
