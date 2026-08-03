@@ -366,10 +366,16 @@ impl BorisTipsSource {
                 pairs.push((t, text_of(&el)));
             }
         }
-        pairs
+        // 사이트는 팁을 **오래된 것부터** 쌓고 새 팁을 아래에 덧붙인다(2026-08-03 실측 105개).
+        // 앞에서 take하면 창시자가 최신 모델을 권해도 우리는 계속 옛 모델 팁을 1순위로 띄운다.
+        // 뒤에서 잘라 최신 max_items개만 남긴다 — 문서 순서(오래된→새것)는 그대로 보존.
+        let kept: Vec<(String, String)> = pairs
             .into_iter()
             .filter(|(t, b)| !t.trim().is_empty() && !b.trim().is_empty())
-            .take(self.max_items)
+            .collect();
+        let drop_front = kept.len().saturating_sub(self.max_items);
+        kept.into_iter()
+            .skip(drop_front)
             .map(|(t, b)| {
                 let (dimension, mut trigger_tags) = classify_keywords(&format!("{t} {b}"));
                 trigger_tags.insert(0, "boris".into());
@@ -1572,6 +1578,23 @@ mod tests {
         assert!(items[0].title.contains("Real Tip") || items[0].title == "Real Tip",
             "고아 제목 폐기, 진짜 짝만: {}", items[0].title);
         assert!(items[0].body.contains("Real body"));
+    }
+
+    #[test]
+    fn boris_keeps_the_newest_tips_not_the_oldest() {
+        // 사이트는 팁을 **오래된 것부터** 쌓고 아래에 새 팁을 덧붙인다(2026-08-03 실측 105개).
+        // 앞에서 자르면 창시자가 최신 모델을 권하고 있어도 우리는 영원히 옛 모델 팁만 보여준다
+        // — 실제로 "Opus 4.5 with Thinking"이 3주 넘게 코칭 1순위로 떠 있었다.
+        let mut html = String::new();
+        for i in 1..=12 {
+            html.push_str(&format!(
+                r#"<div class="step-title">Tip {i}</div><div class="step-body">Body of tip {i}.</div>"#
+            ));
+        }
+        let src = BorisTipsSource { max_items: 3, ..Default::default() };
+        let items = src.parse_html(&html);
+        let titles: Vec<&str> = items.iter().map(|i| i.title.as_str()).collect();
+        assert_eq!(titles, vec!["Tip 10", "Tip 11", "Tip 12"], "최신 3개를 문서 순서대로");
     }
 
     #[test]

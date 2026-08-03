@@ -6,15 +6,19 @@ Windows·WSL의 Claude Code 사용 기록을 **로컬에서** 분석해, AI 코�
 > 폴더명 `a-mate`는 README의 **A-Mate** 축(Pillar 1)과 맞춘 것이다. 앱의 제품명·식별자는
 > 그대로 **Agent Mentor** / `agent-mentor`(Cargo 크레이트)·`dev.agentmentor.app`(tauri identifier)를 유지한다.
 
-- **제품·아키텍처 개요:** [`docs/design/a-mate/README.md`](../docs/design/a-mate/README.md)
-- **상세 빌드·실행 가이드:** [`docs/design/a-mate/build-and-run.md`](../docs/design/a-mate/build-and-run.md)
+- **제품 개요:** [`docs/design/a-mate/README.md`](../docs/design/a-mate/README.md)
+- **아키텍처:** [`docs/architecture/a-mate.md`](../docs/architecture/a-mate.md)
+- **기능 카탈로그:** [`docs/design/a-mate/02-features.md`](../docs/design/a-mate/02-features.md)
+- **빌드·실행 가이드:** [`docs/design/a-mate/build-and-run.md`](../docs/design/a-mate/build-and-run.md)
 
 무엇을 하나:
 
-- 과도한 고성능 모델 사용 감지 · 작은 모델로 대체 가능한 작업 추천
-- 미사용 MCP / 불필요한 도구 사용 감지
-- 반복 작업 중 Skill화 가능한 후보 추천
-- 일일 다이어리 리포트 · 실시간 코칭 팁 (트레이 상주)
+- **코칭** — MCP 대형 결과(R8) · 반복 지시의 스킬화(R6) · 모델 오남용(R7). 결정론 규칙 + LLM 판정
+- **오늘의 배움** — 공식 CHANGELOG · 창시자 팁 · 플러그인 카탈로그 · 팀 지식을 역량에 맞춰 랭킹
+- **1인칭 다이어리** · 오늘의 한마디 · 잡담 · 채팅 (LLM 엔진 설정 시)
+- **팀 지식 허브 연동** — 발견을 팀에 공유하고, 팀이 쓰면 알림으로 돌아온다(인정 루프)
+- **미니홈피** — 방 꾸미기 · 방문 · 방명록 (별도 서버)
+- 트레이 상주 · 마스코트 말풍선 · 자동 업데이트
 
 ## ⚠️ 실행 환경: 네이티브 Windows (WSL 아님)
 
@@ -72,10 +76,11 @@ npm run tauri dev    # Vite(포트 1420) 기동 → Rust 앱 빌드 → 앱 실�
 
 첫 실행은 Rust 크레이트를 전부 컴파일하므로 몇 분 걸릴 수 있습니다. 이후 실행은 빠릅니다.
 
-## (선택) LLM 엔진 설정 — 다이어리·채팅 코칭
+## (선택) LLM 엔진 설정 — 다이어리·채팅·판정
 
-`.env` 없이도 앱은 정상 부팅됩니다 (다이어리 → mock, 채팅 탭 → 설정 안내). 실제 LLM 코칭을 쓰려면
-**트레이 우클릭 → 설정**에서 엔드포인트를 입력하거나, `a-mate/`에 `.env`를 만드세요:
+`.env` 없이도 앱은 정상 부팅됩니다 (수집·규칙·UI는 완전 로컬로 동작하고, 서사·번역·판정만 쉽니다).
+실제 LLM 기능을 쓰려면 **트레이 우클릭 → 설정 → 연결**에서 엔드포인트를 입력하거나,
+`a-mate/`에 `.env`를 만드세요:
 
 ```powershell
 Copy-Item .env.example .env
@@ -88,7 +93,14 @@ AGENT_MENTOR_ENGINE_MODEL=gpt-4.1-mini             # 선택 (기본: gpt-4o-mini
 ```
 
 > 네이티브 Windows 프로세스이므로 프록시 주소는 **`localhost`**로 접속합니다 (`host.docker.internal` 불가).
-> `.env`는 dev 빌드에서만 자동 로드되며 `.gitignore` 대상입니다.
+> `.env`는 **dev 빌드에서만** 자동 로드되며 `.gitignore` 대상입니다 —
+> 릴리스 빌드에서는 설정 창 입력이 유일한 경로입니다.
+
+## (선택) 팀 지식 허브
+
+설정을 안 해도 **팀 기본값**(`https://spacea.msalt.net` / 공간 `sw-innov`)으로 붙습니다.
+API 키만 기본값이 없으니 **설정 → 연결 → 팀 지식 허브**에서 1회 입력하세요.
+끄려면 같은 화면의 공유 토글을 off로 두면 됩니다(이 opt-out은 환경변수·기본값으로 되살아나지 않습니다).
 
 ## 자주 쓰는 명령
 
