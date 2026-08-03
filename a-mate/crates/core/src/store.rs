@@ -92,6 +92,11 @@ CREATE TABLE IF NOT EXISTS content_items (
   -- 재큐레이션이 덮어쓰지 않는다(replace_content_items의 ON CONFLICT 목록에 없음).
   summary_ko TEXT, title_ko TEXT, deadline TEXT
 );
+-- 콘텐츠를 처음 노출한 시각 — `content_items`와 **분리해** 둔다 (단일 스트림 스펙 §3.2).
+-- 프룬(`replace_content_items` 끝)이 랭킹에서 빠진 `new` 행을 지우므로, 같은 행에 담으면
+-- 다시 랭킹에 들 때 INSERT가 새 시각을 찍어 어제 본 카드가 신규처럼 맨 위로 튄다.
+-- `content_items.status`에 'stale'을 더하는 대안은 피했다 — ③이 같은 어휘에 resolved를 넣었다.
+CREATE TABLE IF NOT EXISTS content_first_seen (id TEXT PRIMARY KEY, ts TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS personal_skill_inventory (
   host TEXT NOT NULL, scope TEXT NOT NULL, name TEXT NOT NULL,
   path TEXT NOT NULL, body_chars INTEGER DEFAULT 0,
@@ -1161,6 +1166,19 @@ impl SqliteStore {
                 params![item.id, item.kind.as_str(), dim, item.title, item.body,
                         item.source_url, tags, score, now_ts],
             )?;
+            // 처음 본 시각 보존 (§3.2) — 프룬이 위 행을 지워도 이 표는 남아, 다시 랭킹에
+            // 든 카드가 신규로 튀지 않는다. 두 번째 큐레이션부터는 IGNORE로 무시된다.
+            //
+            // ⚠ id가 고정이고 내용만 갱신되는 소스(`cc-changelog-latest`)에서도 **유지가
+            // 맞다.** 바로 위 번역 캐시는 "그 원문의" 번역이라 원문이 바뀌면 버려야 하지만,
+            // `first_seen`은 "처음 본 시각"이어서 내용 갱신과 무관하다. 대가로 **내용이
+            // 새로워진 고정-id 소식은 최신순 스트림 하단에 남는다** — 의도된 트레이드오프이고,
+            // 그 소스의 노출은 고정 슬롯이 담당한다(스펙 §4 질문 4). id만 보고 보존해 화면이
+            // 영영 낡았던 ⑥의 번역 캐시 버그와는 판단이 다르다는 것을 여기 명시해 둔다.
+            self.conn.execute(
+                "INSERT OR IGNORE INTO content_first_seen (id, ts) VALUES (?1, ?2)",
+                params![item.id, now_ts],
+            )?;
         }
         // 피드에서 사라진 아이템 프룬(2026-07-19): 소식·외부 팁은 일시적 — 랭킹에 없으면
         // 낡은 점수로 상단을 점령한다. 단, 사용자가 「무시」한(dismissed) 행은 쿨다운 기록이라 보존.
@@ -1212,21 +1230,31 @@ impl SqliteStore {
             score: r.get(7)?, status: r.get(8)?, status_ts: r.get(9)?,
             summary_ko: r.get(10)?, title_ko: r.get(11)?, deadline: r.get(12)?,
             personal: None, // list_content에서 enrich_personal로 채움
+            first_seen: r.get(13)?,
         })
     }
 
     /// `content_row_from`이 기대하는 컬럼 순서 — SELECT를 한 군데서만 정의한다.
+    /// `first_seen`은 **보존 테이블 우선**이다 (§3.2): 프룬으로 행이 지워졌다 돌아와도
+    /// 처음 본 시각을 지킨다. 보존 표에 없는 묵은 행은 자기 컬럼으로 폴백한다.
     const CONTENT_COLS: &'static str =
-        "id,kind,dimension,title,body,source_url,trigger_tags,score,status,status_ts,summary_ko,title_ko,deadline";
+        "c.id,c.kind,c.dimension,c.title,c.body,c.source_url,c.trigger_tags,c.score,c.status,\
+         c.status_ts,c.summary_ko,c.title_ko,c.deadline,COALESCE(fs.ts, c.first_seen)";
+
+    /// `CONTENT_COLS`가 전제하는 FROM 절. `id`가 양쪽 테이블에 있으므로 컬럼과 ORDER BY에
+    /// 모두 `c.` 접두사가 필요하다 — 빠뜨리면 `ambiguous column name`으로 런타임에 깨진다.
+    const CONTENT_FROM: &'static str =
+        "content_items c LEFT JOIN content_first_seen fs ON fs.id = c.id";
 
     /// 아직 번역되지 않은 외국어 소식 (스펙 §6.3). **한국어 소스는 애초에 담기지 않는다** —
     /// 이 목록이 비면 호출부가 Engine을 한 번도 부르지 않는다(= 아이템당 1회 보장).
     pub fn content_needing_translation(&self, limit: usize) -> Result<Vec<ContentRow>> {
         let mut stmt = self.conn.prepare(&format!(
-            "SELECT {} FROM content_items
-             WHERE status='new' AND summary_ko IS NULL
-             ORDER BY score DESC, id",
-            Self::CONTENT_COLS
+            "SELECT {} FROM {}
+             WHERE c.status='new' AND c.summary_ko IS NULL
+             ORDER BY c.score DESC, c.id",
+            Self::CONTENT_COLS,
+            Self::CONTENT_FROM
         ))?;
         let rows = stmt.query_map([], Self::content_row_from)?;
         Ok(rows
@@ -1284,24 +1312,26 @@ impl SqliteStore {
     ) -> Result<Vec<ContentRow>> {
         if include_hidden {
             let mut stmt = self.conn.prepare(&format!(
-                "SELECT {} FROM content_items ORDER BY score DESC, id",
-                Self::CONTENT_COLS
+                "SELECT {} FROM {} ORDER BY c.score DESC, c.id",
+                Self::CONTENT_COLS,
+                Self::CONTENT_FROM
             ))?;
             let rows = stmt.query_map([], Self::content_row_from)?;
             let out = rows.collect::<std::result::Result<Vec<_>, _>>()?;
             return Ok(self.enrich_personal(out));
         }
         let mut stmt = self.conn.prepare(&format!(
-            "SELECT {} FROM content_items c
-             WHERE status='new' AND score >= 0
+            "SELECT {} FROM {}
+             WHERE c.status='new' AND c.score >= 0
                AND NOT EXISTS (
                  SELECT 1 FROM content_items d
                  WHERE d.status='dismissed' AND d.dimension IS NOT NULL
                    AND d.dimension IS c.dimension
                    AND julianday(?1) - julianday(d.last_seen) < ?2
                )
-             ORDER BY score DESC, id",
-            Self::CONTENT_COLS
+             ORDER BY c.score DESC, c.id",
+            Self::CONTENT_COLS,
+            Self::CONTENT_FROM
         ))?;
         let rows = stmt.query_map(params![now_ts, cooldown_days], Self::content_row_from)?;
         let out = rows.collect::<std::result::Result<Vec<_>, _>>()?;
@@ -2380,6 +2410,8 @@ pub struct ContentRow {
     /// "당신 로그: …" — 사용자 실측 데이터로 접지한 근거 줄. list_content read 시점 계산.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub personal: Option<String>,
+    /// 처음 노출한 시각 — 단일 스트림의 최신순 정렬·「안 본 개수」 배지 재료 (§3.3).
+    pub first_seen: Option<String>,
 }
 
 /// `struggle_sessions`의 `interval_closed_before`에 주면 "닫힌 날짜 구간" 기준을 끈다 —
@@ -4724,6 +4756,81 @@ mod tests {
                 "2026-08-06T00:00:00Z", &[])
             .unwrap();
         assert_eq!(translated(&store).summary_ko, None, "본문만 바뀌어도 버린다");
+    }
+
+    /// 콘텐츠 `first_seen` 테스트들의 공용 재료 — 소식 1건.
+    fn news_item(id: &str) -> crate::content::ContentItem {
+        crate::content::ContentItem {
+            id: id.into(),
+            kind: crate::content::ItemKind::News,
+            title: "제목".into(),
+            body: "본문".into(),
+            source_url: None,
+            dimension: None,
+            trigger_tags: vec!["changelog".into()],
+            base_priority: 0,
+        }
+    }
+
+    #[test]
+    fn content_row_exposes_first_seen_in_the_payload() {
+        // §3.3 — 콘텐츠 카드도 finding과 같은 시간 재료를 실어야 한 스트림에 섞일 수 있다.
+        let store = SqliteStore::open_in_memory().unwrap();
+        store
+            .replace_content_items(&[(news_item("news-a"), 100)], "2026-08-01T00:00:00Z", &[])
+            .unwrap();
+
+        let rows = store.list_content("2026-08-01T00:00:00Z", 14.0, false).unwrap();
+        let payload = serde_json::to_value(&rows[0]).unwrap();
+        assert_eq!(
+            payload["first_seen"], "2026-08-01T00:00:00Z",
+            "프론트로 가는 payload에 실려야 한다"
+        );
+    }
+
+    #[test]
+    fn content_first_seen_survives_a_prune_and_return() {
+        // §3.2 — 이게 A의 핵심이다. 랭킹에서 빠진 `new` 행은 프룬으로 **삭제**되고, 다시
+        // 랭킹에 들면 INSERT가 새 `first_seen`을 찍는다. 순수 최신순 정렬(§2.2)에서는 그
+        // 리셋이 "어제 본 카드가 오늘 신규처럼 맨 위로 튀는" 현상으로 증폭된다.
+        // `content_first_seen` 보존 테이블이 원래 자리를 지켜야 한다.
+        let store = SqliteStore::open_in_memory().unwrap();
+        let seen = |s: &SqliteStore, id: &str| -> Option<String> {
+            s.list_content("2026-08-03T00:00:00Z", 14.0, false)
+                .unwrap()
+                .into_iter()
+                .find(|r| r.id == id)
+                .and_then(|r| r.first_seen)
+        };
+
+        // 1일차 — 처음 노출
+        store
+            .replace_content_items(&[(news_item("news-a"), 100)], "2026-08-01T00:00:00Z", &[])
+            .unwrap();
+        assert_eq!(seen(&store, "news-a").as_deref(), Some("2026-08-01T00:00:00Z"));
+
+        // 2일차 — 랭킹에서 빠져 프룬된다
+        store
+            .replace_content_items(&[(news_item("news-b"), 100)], "2026-08-02T00:00:00Z", &[])
+            .unwrap();
+        let survivors: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM content_items WHERE id='news-a'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            survivors, 0,
+            "프룬이 행을 지운다는 전제 — 깨지면 이 테스트는 아무것도 증명하지 않는다"
+        );
+
+        // 3일차 — 다시 랭킹에 든다. 처음 본 시각은 1일차여야 한다.
+        store
+            .replace_content_items(&[(news_item("news-a"), 100)], "2026-08-03T00:00:00Z", &[])
+            .unwrap();
+        assert_eq!(
+            seen(&store, "news-a").as_deref(),
+            Some("2026-08-01T00:00:00Z"),
+            "프룬됐다 돌아온 카드가 신규로 튀면 안 된다"
+        );
     }
 
     #[test]
