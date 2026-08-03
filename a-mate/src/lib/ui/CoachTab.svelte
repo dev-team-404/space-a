@@ -36,8 +36,17 @@
   // 근거 출처로 두 섹션을 가른다 (스펙 §3). 분기 로직은 전부 coach-helpers의 순수 함수에 있다.
   const sections = $derived(partitionCoachItems(active, tips));
   const findingByKey = $derived(new Map(active.map((f) => [f.dedup_key, f])));
+  // 7일 창은 시간이 흘러야 닫히는데 `Date.now()`는 반응성 의존이 아니다. 스캔은 로그 감시
+  // 디바운스라 Claude Code 활동이 없으면 아예 돌지 않으므로, 탭을 띄워둔 채 경계를 넘으면
+  // 만료된 줄이 그대로 남는다. 창이 7일이라 시계는 1시간 눈금이면 충분하다.
+  let nowMs = $state(Date.now());
+  $effect(() => {
+    const t = setInterval(() => (nowMs = Date.now()), 60 * 60 * 1000);
+    return () => clearInterval(t);
+  });
+
   // 처분 줄 (스펙 §5) — 해결함은 7일, 무시는 영구. 판정은 전부 순수 함수 쪽에 있다.
-  const disposed = $derived(toDisposedRows(all, allTips, Date.now()));
+  const disposed = $derived(toDisposedRows(all, allTips, nowMs));
 
   // 내부망이면 외부 링크를 숨긴다 (옛 컨테이너에서 이관 — 두 카드가 각각 부르지 않도록 여기서 한 번만)
   let showLinks = $state(true);
