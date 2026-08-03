@@ -120,3 +120,56 @@ export function localDateString(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
+
+// ── 탭 배지 (§2.3·§4.5) ────────────────────────────────────────────────────
+//
+// `first_seen > lastCoachSeenAt` 시각 비교는 쓰지 않는다. `first_seen`은 삽입 시각이라
+// `pending`→`new`와 재발 복귀(`resolved`→`new`)를 둘 다 놓치는데, 그 둘이야말로
+// 카드가 새로 보이기 시작하는 순간이다. 대신 "마지막으로 봤을 때 활성이던 키 집합"과
+// 비교한다 — 두 전이 모두 저장 시점에 활성이 아니었으므로 공짜로 잡힌다.
+
+const SEEN_KEYS_STORAGE = 'agent-mentor.coachSeenKeys';
+
+/** 배지가 세는 대상 = **상한 적용 전의 활성 항목 전부**(§2.3).
+ * 화면에 보이는 것만 세려면 고정 슬롯 판정(pinAcks·today)을 셸로 끌어와야 해서
+ * 배보다 배꼽이 커진다. 상한 밖 항목까지 "봤다"고 치는 대가는 작다.
+ * **수명이 끝난 공지는 호출부가 `liveContent`로 미리 뺀다** — 그쪽은 영영 안 보이므로
+ * 세면 탭을 열어도 배지가 사라지지 않는다. */
+export function activeCoachKeys(findings: CoachFinding[], content: ContentItem[]): string[] {
+  return [
+    ...findings.filter((f) => f.status === 'new').map((f) => `finding:${f.dedup_key}`),
+    ...content.filter((c) => c.status === 'new').map((c) => `content:${c.id}`),
+  ];
+}
+
+export function unseenCoachCount(
+  activeKeys: readonly string[],
+  seen: readonly string[],
+): number {
+  const s = new Set(seen);
+  return activeKeys.filter((k) => !s.has(k)).length;
+}
+
+/** 저장값 해석. **localStorage에서 떼어낸 이유는 테스트다** — 이 저장소의 vitest는
+ * node 환경이라 `localStorage`가 없어 `loadSeenCoachKeys`는 직접 검증할 수 없다. */
+export function parseSeenCoachKeys(raw: string | null): string[] {
+  try {
+    const v = JSON.parse(raw ?? '[]');
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function loadSeenCoachKeys(): string[] {
+  return parseSeenCoachKeys(localStorage.getItem(SEEN_KEYS_STORAGE));
+}
+
+/** **덮어쓴다** — 누적하면 처분·프룬으로 사라진 키가 영원히 남아 집합이 무한히 자란다.
+ * 실제로 저장된 목록을 돌려주므로 호출부 상태와 localStorage가 어긋나지 않는다
+ * (`savePinAcks`와 같은 규약). */
+export function saveSeenCoachKeys(keys: readonly string[]): string[] {
+  const kept = [...keys];
+  localStorage.setItem(SEEN_KEYS_STORAGE, JSON.stringify(kept));
+  return kept;
+}

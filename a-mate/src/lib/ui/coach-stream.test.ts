@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildCoachStream, compareFirstSeen, isAnnouncementLive, liveContent, localDateString,
+  activeCoachKeys, buildCoachStream, compareFirstSeen, isAnnouncementLive, liveContent,
+  localDateString, parseSeenCoachKeys, unseenCoachCount,
 } from './coach-stream';
 import { CONTENT_CARD_LIMIT } from './coach-helpers';
 import type { CoachFinding, ContentItem } from '../api';
@@ -187,5 +188,76 @@ describe('localDateString', () => {
   it('로컬 날짜를 YYYY-MM-DD로 — deadline과 같은 축으로 비교하기 위해', () => {
     expect(localDateString(new Date(2026, 7, 3))).toBe('2026-08-03');
     expect(localDateString(new Date(2026, 11, 25))).toBe('2026-12-25');
+  });
+});
+
+describe('activeCoachKeys — 배지가 세는 대상 (§2.3)', () => {
+  it('활성 finding과 활성 콘텐츠를 이름공간 붙인 키로 모은다', () => {
+    const keys = activeCoachKeys(
+      [finding({ dedup_key: 'F1' })],
+      [tip('T1', '2026-08-01T00:00:00Z')],
+    );
+    expect(keys).toEqual(['finding:F1', 'content:T1']);
+  });
+
+  it('처분·판정중 항목은 세지 않는다 — ③이 지키라고 한 성질', () => {
+    const keys = activeCoachKeys(
+      [finding({ dedup_key: 'F-r', status: 'resolved' }),
+       finding({ dedup_key: 'F-d', status: 'dismissed' }),
+       finding({ dedup_key: 'F-p', status: 'pending' }),
+       finding({ dedup_key: 'F-x', status: 'rejected' })],
+      [tip('T-d', '2026-08-01T00:00:00Z', { status: 'dismissed' })],
+    );
+    expect(keys).toEqual([]);
+  });
+
+  it('상한을 적용하기 전의 활성 전부를 센다 (§2.3)', () => {
+    const many = Array.from({ length: CONTENT_CARD_LIMIT + 4 }, (_, i) =>
+      tip(`t-${i}`, '2026-08-01T00:00:00Z'));
+    expect(activeCoachKeys([], many)).toHaveLength(CONTENT_CARD_LIMIT + 4);
+  });
+});
+
+describe('unseenCoachCount — 안 본 개수', () => {
+  it('본 적 없는 키만 센다', () => {
+    expect(unseenCoachCount(['a', 'b', 'c'], ['a'])).toBe(2);
+    expect(unseenCoachCount(['a', 'b'], ['a', 'b'])).toBe(0);
+  });
+
+  it('첫 실행이면 전부 안 본 것 — 처음 보는 게 맞다', () => {
+    expect(unseenCoachCount(['a', 'b'], [])).toBe(2);
+  });
+
+  it('사라진 키가 집합에 남아 있어도 개수를 늘리지 않는다', () => {
+    expect(unseenCoachCount(['a'], ['a', 'gone-1', 'gone-2'])).toBe(0);
+  });
+
+  it('resolved→new 복귀를 잡는다 — first_seen 비교가 놓치던 전이 (§4.5)', () => {
+    // 어제 「해결함」을 눌러 활성 집합에서 빠졌고, 오늘 재발로 같은 키가 돌아왔다.
+    // first_seen은 그대로 과거라 시각 비교로는 안 잡힌다.
+    const revived = finding({ dedup_key: 'F1', status: 'new', first_seen: '2026-07-01T00:00:00Z' });
+    const seenWhileResolved = activeCoachKeys([finding({ dedup_key: 'F1', status: 'resolved' })], []);
+    expect(seenWhileResolved).toEqual([]);
+    expect(unseenCoachCount(activeCoachKeys([revived], []), seenWhileResolved)).toBe(1);
+  });
+
+  it('pending→new 통과를 잡는다 — 판정이 며칠 걸려도', () => {
+    const seenWhilePending = activeCoachKeys([finding({ dedup_key: 'F2', status: 'pending' })], []);
+    const passed = finding({ dedup_key: 'F2', status: 'new', first_seen: '2026-07-01T00:00:00Z' });
+    expect(unseenCoachCount(activeCoachKeys([passed], []), seenWhilePending)).toBe(1);
+  });
+});
+
+describe('parseSeenCoachKeys — 저장값 해석 (localStorage 밖의 순수 부분)', () => {
+  it('문자열 배열만 통과시킨다', () => {
+    expect(parseSeenCoachKeys('["finding:F1","content:T1"]')).toEqual(['finding:F1', 'content:T1']);
+    expect(parseSeenCoachKeys('["a",42,null,"b"]')).toEqual(['a', 'b']);
+  });
+
+  it('없거나 깨진 값은 빈 배열 — 배지 때문에 앱이 죽지 않는다', () => {
+    expect(parseSeenCoachKeys(null)).toEqual([]);
+    expect(parseSeenCoachKeys('{oops')).toEqual([]);
+    expect(parseSeenCoachKeys('{"not":"an array"}')).toEqual([]);
+    expect(parseSeenCoachKeys('"just a string"')).toEqual([]);
   });
 });
