@@ -92,6 +92,11 @@ CREATE TABLE IF NOT EXISTS content_items (
   -- 재큐레이션이 덮어쓰지 않는다(replace_content_items의 ON CONFLICT 목록에 없음).
   summary_ko TEXT, title_ko TEXT, deadline TEXT
 );
+-- 콘텐츠를 처음 노출한 시각 — `content_items`와 **분리해** 둔다 (단일 스트림 스펙 §3.2).
+-- 프룬(`replace_content_items` 끝)이 랭킹에서 빠진 `new` 행을 지우므로, 같은 행에 담으면
+-- 다시 랭킹에 들 때 INSERT가 새 시각을 찍어 어제 본 카드가 신규처럼 맨 위로 튄다.
+-- `content_items.status`에 'stale'을 더하는 대안은 피했다 — ③이 같은 어휘에 resolved를 넣었다.
+CREATE TABLE IF NOT EXISTS content_first_seen (id TEXT PRIMARY KEY, ts TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS personal_skill_inventory (
   host TEXT NOT NULL, scope TEXT NOT NULL, name TEXT NOT NULL,
   path TEXT NOT NULL, body_chars INTEGER DEFAULT 0,
@@ -255,6 +260,16 @@ fn migrate(conn: &Connection) -> Result<()> {
              ALTER TABLE content_items ADD COLUMN deadline TEXT;",
         )?;
     }
+    // 단일 스트림 §3.2 — `content_first_seen` 백필. 테이블 자체는 SCHEMA의
+    // `CREATE TABLE IF NOT EXISTS`가 만들므로, 여기서는 **묵은 행의 값만 옮긴다**: 백필이
+    // 없으면 기존 사용자는 마이그레이션 후 **첫 프룬에서** 처음 본 시각을 잃는다(그때
+    // `INSERT OR IGNORE`가 찍는 값은 원래 시각이 아니라 그 큐레이션의 now_ts다).
+    // `INSERT OR IGNORE`라 멱등이므로 버전 게이트 없이 매 실행해도 무해하다.
+    // 수집 테이블은 건드리지 않는다 — DELETE를 붙이면 콜드 스캔이 되돌아온다(#146).
+    conn.execute_batch(
+        "INSERT OR IGNORE INTO content_first_seen (id, ts)
+           SELECT id, first_seen FROM content_items WHERE first_seen IS NOT NULL;",
+    )?;
     // v3.1 재수집 — IDE 합성 블록(<ide_opened_file> 등) 프롬프트 오염 수정이 라인 재해석을 요구.
     // 스키마 변화가 없어 PRAGMA user_version(=1)으로 1회 트리거. 오염 preview에서 파생된
     // R6 finding만 삭제 (repeated_prompt가 '<'로 시작 = 합성 마커 확정).
@@ -923,7 +938,7 @@ impl SqliteStore {
         let sql = format!(
             "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                     evidence_json, est_tokens_saved, prescription_json, dedup_key,
-                    last_seen, occurrences, status, judgment_json, status_ts
+                    last_seen, occurrences, status, judgment_json, status_ts, first_seen
              FROM findings {}
              ORDER BY est_tokens_saved DESC, dedup_key",
             if include_hidden { "" } else { "WHERE status='new'" }
@@ -940,19 +955,20 @@ impl SqliteStore {
                 r.get::<_, String>(12)?,
                 r.get::<_, Option<String>>(13)?,
                 r.get::<_, Option<String>>(14)?,
+                r.get::<_, Option<String>>(15)?,
             ))
         })?;
         let mut out = Vec::new();
         for row in rows {
             let (rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                  evidence_json, est, prescription_json, dedup_key, last_seen, occ, status,
-                 judgment_raw, status_ts) = row?;
+                 judgment_raw, status_ts, first_seen) = row?;
             out.push(FindingRow {
                 rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                 evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
                 est_tokens_saved: est as u64,
                 prescription: prescription_json.and_then(|s| serde_json::from_str(&s).ok()),
-                dedup_key, last_seen,
+                dedup_key, first_seen, last_seen,
                 occurrences: occ as u64,
                 status,
                 status_ts,
@@ -1160,6 +1176,30 @@ impl SqliteStore {
                 params![item.id, item.kind.as_str(), dim, item.title, item.body,
                         item.source_url, tags, score, now_ts],
             )?;
+            // 처음 본 시각 보존 (§3.2) — 프룬이 위 행을 지워도 이 표는 남아, 다시 랭킹에
+            // 든 카드가 신규로 튀지 않는다. 두 번째 큐레이션부터는 IGNORE로 무시된다.
+            //
+            // **노출 자격이 있는 항목만 찍는다.** `rank`는 음수 점수를 걸러내지 않으므로
+            // 여기엔 `list_content`가 `score >= 0`에서 숨기는 항목도 섞여 있다. 그것까지
+            // 찍으면 프론티어가 진행돼 그 팁이 자격을 얻는 순간(억제·거리 감점 → 프론티어
+            // 부스트) 이미 과거 시각을 들고 있어 최신순 하단에 묻히고 「안 본 개수」에도
+            // 안 잡힌다. 자격을 얻는 큐레이션에서 처음 찍히는 것이 맞다.
+            //
+            // 남는 한계: 축 쿨다운(같은 dimension의 dismissed 형제가 14일 이내)으로 숨는
+            // 항목은 **다른 행의 상태와 시각**에 달려 있어 쓰기 시점에 판단할 수 없다.
+            //
+            // ⚠ id가 고정이고 내용만 갱신되는 소스(`cc-changelog-latest`)에서도 **유지가
+            // 맞다.** 바로 위 번역 캐시는 "그 원문의" 번역이라 원문이 바뀌면 버려야 하지만,
+            // `first_seen`은 "처음 본 시각"이어서 내용 갱신과 무관하다. 대가로 **내용이
+            // 새로워진 고정-id 소식은 최신순 스트림 하단에 남는다** — 의도된 트레이드오프이고,
+            // 그 소스의 노출은 고정 슬롯이 담당한다(스펙 §4 질문 4). id만 보고 보존해 화면이
+            // 영영 낡았던 ⑥의 번역 캐시 버그와는 판단이 다르다는 것을 여기 명시해 둔다.
+            if *score >= 0 {
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO content_first_seen (id, ts) VALUES (?1, ?2)",
+                    params![item.id, now_ts],
+                )?;
+            }
         }
         // 피드에서 사라진 아이템 프룬(2026-07-19): 소식·외부 팁은 일시적 — 랭킹에 없으면
         // 낡은 점수로 상단을 점령한다. 단, 사용자가 「무시」한(dismissed) 행은 쿨다운 기록이라 보존.
@@ -1211,21 +1251,31 @@ impl SqliteStore {
             score: r.get(7)?, status: r.get(8)?, status_ts: r.get(9)?,
             summary_ko: r.get(10)?, title_ko: r.get(11)?, deadline: r.get(12)?,
             personal: None, // list_content에서 enrich_personal로 채움
+            first_seen: r.get(13)?,
         })
     }
 
     /// `content_row_from`이 기대하는 컬럼 순서 — SELECT를 한 군데서만 정의한다.
+    /// `first_seen`은 **보존 테이블 우선**이다 (§3.2): 프룬으로 행이 지워졌다 돌아와도
+    /// 처음 본 시각을 지킨다. 보존 표에 없는 묵은 행은 자기 컬럼으로 폴백한다.
     const CONTENT_COLS: &'static str =
-        "id,kind,dimension,title,body,source_url,trigger_tags,score,status,status_ts,summary_ko,title_ko,deadline";
+        "c.id,c.kind,c.dimension,c.title,c.body,c.source_url,c.trigger_tags,c.score,c.status,\
+         c.status_ts,c.summary_ko,c.title_ko,c.deadline,COALESCE(fs.ts, c.first_seen)";
+
+    /// `CONTENT_COLS`가 전제하는 FROM 절. `id`가 양쪽 테이블에 있으므로 컬럼과 ORDER BY에
+    /// 모두 `c.` 접두사가 필요하다 — 빠뜨리면 `ambiguous column name`으로 런타임에 깨진다.
+    const CONTENT_FROM: &'static str =
+        "content_items c LEFT JOIN content_first_seen fs ON fs.id = c.id";
 
     /// 아직 번역되지 않은 외국어 소식 (스펙 §6.3). **한국어 소스는 애초에 담기지 않는다** —
     /// 이 목록이 비면 호출부가 Engine을 한 번도 부르지 않는다(= 아이템당 1회 보장).
     pub fn content_needing_translation(&self, limit: usize) -> Result<Vec<ContentRow>> {
         let mut stmt = self.conn.prepare(&format!(
-            "SELECT {} FROM content_items
-             WHERE status='new' AND summary_ko IS NULL
-             ORDER BY score DESC, id",
-            Self::CONTENT_COLS
+            "SELECT {} FROM {}
+             WHERE c.status='new' AND c.summary_ko IS NULL
+             ORDER BY c.score DESC, c.id",
+            Self::CONTENT_COLS,
+            Self::CONTENT_FROM
         ))?;
         let rows = stmt.query_map([], Self::content_row_from)?;
         Ok(rows
@@ -1283,24 +1333,26 @@ impl SqliteStore {
     ) -> Result<Vec<ContentRow>> {
         if include_hidden {
             let mut stmt = self.conn.prepare(&format!(
-                "SELECT {} FROM content_items ORDER BY score DESC, id",
-                Self::CONTENT_COLS
+                "SELECT {} FROM {} ORDER BY c.score DESC, c.id",
+                Self::CONTENT_COLS,
+                Self::CONTENT_FROM
             ))?;
             let rows = stmt.query_map([], Self::content_row_from)?;
             let out = rows.collect::<std::result::Result<Vec<_>, _>>()?;
             return Ok(self.enrich_personal(out));
         }
         let mut stmt = self.conn.prepare(&format!(
-            "SELECT {} FROM content_items c
-             WHERE status='new' AND score >= 0
+            "SELECT {} FROM {}
+             WHERE c.status='new' AND c.score >= 0
                AND NOT EXISTS (
                  SELECT 1 FROM content_items d
                  WHERE d.status='dismissed' AND d.dimension IS NOT NULL
                    AND d.dimension IS c.dimension
                    AND julianday(?1) - julianday(d.last_seen) < ?2
                )
-             ORDER BY score DESC, id",
-            Self::CONTENT_COLS
+             ORDER BY c.score DESC, c.id",
+            Self::CONTENT_COLS,
+            Self::CONTENT_FROM
         ))?;
         let rows = stmt.query_map(params![now_ts, cooldown_days], Self::content_row_from)?;
         let out = rows.collect::<std::result::Result<Vec<_>, _>>()?;
@@ -2139,7 +2191,7 @@ impl SqliteStore {
             .query_row(
                 "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                         evidence_json, est_tokens_saved, prescription_json, dedup_key,
-                        last_seen, occurrences, status, judgment_json, status_ts
+                        last_seen, occurrences, status, judgment_json, status_ts, first_seen
                  FROM findings WHERE dedup_key=?1",
                 params![dedup_key],
                 |r| {
@@ -2153,6 +2205,7 @@ impl SqliteStore {
                         r.get::<_, String>(12)?,
                         r.get::<_, Option<String>>(13)?,
                         r.get::<_, Option<String>>(14)?,
+                        r.get::<_, Option<String>>(15)?,
                     ))
                 },
             )
@@ -2160,13 +2213,13 @@ impl SqliteStore {
         Ok(row.map(
             |(rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
               evidence_json, est, prescription_json, dedup_key, last_seen, occ, status,
-              judgment_raw, status_ts)| {
+              judgment_raw, status_ts, first_seen)| {
                 FindingRow {
                     rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                     evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
                     est_tokens_saved: est as u64,
                     prescription: prescription_json.and_then(|s| serde_json::from_str(&s).ok()),
-                    dedup_key, last_seen,
+                    dedup_key, first_seen, last_seen,
                     occurrences: occ as u64,
                     status,
                     status_ts,
@@ -2378,6 +2431,8 @@ pub struct ContentRow {
     /// "당신 로그: …" — 사용자 실측 데이터로 접지한 근거 줄. list_content read 시점 계산.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub personal: Option<String>,
+    /// 처음 노출한 시각 — 단일 스트림의 최신순 정렬·「안 본 개수」 배지 재료 (§3.3).
+    pub first_seen: Option<String>,
 }
 
 /// `struggle_sessions`의 `interval_closed_before`에 주면 "닫힌 날짜 구간" 기준을 끈다 —
@@ -2416,6 +2471,22 @@ pub struct FindingRow {
     pub est_tokens_saved: u64,
     pub prescription: Option<serde_json::Value>,
     pub dedup_key: String,
+    /// 처음 관측한 시각 — `upsert_finding`의 ON CONFLICT가 갱신하지 않아 "처음 본 시각"으로
+    /// 남는다. 단일 스트림의 최신순 정렬·「안 본 개수」 배지가 쓰는 재료 (§3.1·§3.3).
+    ///
+    /// ⚠ 이 값은 **삽입 시각이지 활성화 시각이 아니다.** 카드가 새로 보이기 시작하는 두
+    /// 전이가 이 값을 갱신하지 않는다:
+    /// ① R6·R7 세션 후보는 `pending`으로 삽입돼 **판정을 통과할 때** 비로소 노출된다
+    ///    (판정 실패는 `attempts < 3`까지 재시도되므로 그 창이 며칠일 수 있다)
+    /// ② 「해결함」 뒤 재발 복귀(`resolved`→`new`, §5.1 `status_evidence_n` 초과)
+    ///
+    /// 둘 다 `first_seen`은 과거에 머무르므로 `first_seen > lastCoachSeenAt` 배지가 그
+    /// 카드를 놓친다. ③(#155)이 같은 전이를 알림 경로(`diff_findings`→`coach:finding`)에서
+    /// 살려낸 것과 **같은 실패 모드**다 — 상태 전이는 저장이 아니라 알림 경로에서 샌다.
+    /// 배지가 이 전이까지 세야 하는지는 §2.3의 미결이다. 세야 한다면 활성화 시각을 **따로**
+    /// 실을 것 — 이 컬럼을 노출 시점으로 바꾸면 더 이상 "처음 본 시각"이 아니게 되고,
+    /// 콘텐츠 쪽 `content_first_seen`과 의미가 어긋난다.
+    pub first_seen: Option<String>,
     pub last_seen: Option<String>,
     pub occurrences: u64,
     pub status: String,
@@ -3370,6 +3441,42 @@ mod tests {
         assert_eq!(severity, "info");
         assert!(prescription_json.is_none());
         assert_eq!(status, "dismissed");
+    }
+
+    #[test]
+    fn finding_first_seen_rides_in_the_payload_and_survives_rescan() {
+        // 단일 스트림 §3.1·§3.3 — `first_seen`은 B의 최신순 정렬(§2.2)과 「안 본 개수」
+        // 배지(§2.3)가 쓰는 유일한 시간 재료다. `last_seen`·`occurrences`가 스캔 지표라 못
+        // 쓰이는 것과 달리 여기 ON CONFLICT는 `first_seen`을 갱신하지 않아 "처음 본 시각"으로
+        // 남는다. 값이 남는 성질과, **직렬화 payload에 실제로 실리는지**를 함께 못 박는다
+        // (`CoachFinding`이 이 구조체를 flatten해 프론트로 보낸다).
+        let store = SqliteStore::open_in_memory().unwrap();
+        let f = Finding {
+            rule_id: "R10".into(),
+            severity: Severity::Warn,
+            scope_host: Some("Windows".into()),
+            scope_project: Some("p".into()),
+            scope_kind: "project".into(),
+            scope_ref: "p".into(),
+            evidence: serde_json::json!({"n": 1}),
+            est_tokens_saved: 500,
+            prescription: None,
+            dedup_key: "R10|W|p".into(),
+        };
+        store.upsert_finding(&f, "2026-08-01T00:00:00Z").unwrap();
+        store.upsert_finding(&f, "2026-08-03T00:00:00Z").unwrap(); // 다음 스캔
+
+        let rows = store.list_findings_current(false).unwrap();
+        let row = rows.iter().find(|r| r.dedup_key == "R10|W|p").unwrap();
+        let payload = serde_json::to_value(row).unwrap();
+        assert_eq!(
+            payload["first_seen"], "2026-08-01T00:00:00Z",
+            "재스캔이 처음 본 시각을 밀지 않고, 그 값이 프론트 payload에 실려야 한다"
+        );
+        assert_eq!(
+            payload["last_seen"], "2026-08-03T00:00:00Z",
+            "last_seen은 갱신된다 — 두 값이 구별돼야 정렬 재료가 된다"
+        );
     }
 
     // ── 처분·수명 모델 (스펙 §5) ────────────────────────────────────────────
@@ -4685,6 +4792,116 @@ mod tests {
         assert_eq!(translated(&store).summary_ko, None, "본문만 바뀌어도 버린다");
     }
 
+    /// 콘텐츠 `first_seen` 테스트들의 공용 재료 — 소식 1건.
+    fn news_item(id: &str) -> crate::content::ContentItem {
+        crate::content::ContentItem {
+            id: id.into(),
+            kind: crate::content::ItemKind::News,
+            title: "제목".into(),
+            body: "본문".into(),
+            source_url: None,
+            dimension: None,
+            trigger_tags: vec!["changelog".into()],
+            base_priority: 0,
+        }
+    }
+
+    #[test]
+    fn content_row_exposes_first_seen_in_the_payload() {
+        // §3.3 — 콘텐츠 카드도 finding과 같은 시간 재료를 실어야 한 스트림에 섞일 수 있다.
+        let store = SqliteStore::open_in_memory().unwrap();
+        store
+            .replace_content_items(&[(news_item("news-a"), 100)], "2026-08-01T00:00:00Z", &[])
+            .unwrap();
+
+        let rows = store.list_content("2026-08-01T00:00:00Z", 14.0, false).unwrap();
+        let payload = serde_json::to_value(&rows[0]).unwrap();
+        assert_eq!(
+            payload["first_seen"], "2026-08-01T00:00:00Z",
+            "프론트로 가는 payload에 실려야 한다"
+        );
+    }
+
+    #[test]
+    fn hidden_content_claims_no_first_seen_until_it_can_be_seen() {
+        // `rank`는 음수 점수 항목을 걸러내지 않고(`content.rs` `rank` — 필터 없음)
+        // `replace_content_items`가 그대로 저장하지만, `list_content`는 `score >= 0`만
+        // 노출한다. 그래서 **화면에 뜬 적 없는** 항목에 처음 본 시각을 찍어두면, 프론티어가
+        // 진행돼 그 팁이 자격을 얻는 순간(`SCORE_SUPPRESS`/거리 감점 → `SCORE_FRONTIER_BOOST`)
+        // 이미 과거 시각을 들고 있어 최신순 스트림 하단에 묻히고 「안 본 개수」에도 안 잡힌다.
+        let store = SqliteStore::open_in_memory().unwrap();
+
+        // 1일차 — 태그 게이트에 걸린 점수. 저장되지만 노출되지 않는다.
+        store
+            .replace_content_items(&[(news_item("tip-x"), -600)], "2026-08-01T00:00:00Z", &[])
+            .unwrap();
+        assert!(
+            store.list_content("2026-08-01T00:00:00Z", 14.0, false).unwrap().is_empty(),
+            "음수 점수는 노출되지 않는다는 전제 — 깨지면 이 테스트는 아무것도 증명하지 않는다"
+        );
+
+        // 3일차 — 프론티어가 옮겨와 자격을 얻는다. 사용자가 처음 보는 시각은 지금이다.
+        store
+            .replace_content_items(&[(news_item("tip-x"), 500)], "2026-08-03T00:00:00Z", &[])
+            .unwrap();
+        let row = store
+            .list_content("2026-08-03T00:00:00Z", 14.0, false)
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == "tip-x")
+            .unwrap();
+        assert_eq!(
+            row.first_seen.as_deref(),
+            Some("2026-08-03T00:00:00Z"),
+            "노출 자격을 얻은 시각이 처음 본 시각이어야 한다"
+        );
+    }
+
+    #[test]
+    fn content_first_seen_survives_a_prune_and_return() {
+        // §3.2 — 이게 A의 핵심이다. 랭킹에서 빠진 `new` 행은 프룬으로 **삭제**되고, 다시
+        // 랭킹에 들면 INSERT가 새 `first_seen`을 찍는다. 순수 최신순 정렬(§2.2)에서는 그
+        // 리셋이 "어제 본 카드가 오늘 신규처럼 맨 위로 튀는" 현상으로 증폭된다.
+        // `content_first_seen` 보존 테이블이 원래 자리를 지켜야 한다.
+        let store = SqliteStore::open_in_memory().unwrap();
+        let seen = |s: &SqliteStore, id: &str| -> Option<String> {
+            s.list_content("2026-08-03T00:00:00Z", 14.0, false)
+                .unwrap()
+                .into_iter()
+                .find(|r| r.id == id)
+                .and_then(|r| r.first_seen)
+        };
+
+        // 1일차 — 처음 노출
+        store
+            .replace_content_items(&[(news_item("news-a"), 100)], "2026-08-01T00:00:00Z", &[])
+            .unwrap();
+        assert_eq!(seen(&store, "news-a").as_deref(), Some("2026-08-01T00:00:00Z"));
+
+        // 2일차 — 랭킹에서 빠져 프룬된다
+        store
+            .replace_content_items(&[(news_item("news-b"), 100)], "2026-08-02T00:00:00Z", &[])
+            .unwrap();
+        let survivors: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM content_items WHERE id='news-a'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(
+            survivors, 0,
+            "프룬이 행을 지운다는 전제 — 깨지면 이 테스트는 아무것도 증명하지 않는다"
+        );
+
+        // 3일차 — 다시 랭킹에 든다. 처음 본 시각은 1일차여야 한다.
+        store
+            .replace_content_items(&[(news_item("news-a"), 100)], "2026-08-03T00:00:00Z", &[])
+            .unwrap();
+        assert_eq!(
+            seen(&store, "news-a").as_deref(),
+            Some("2026-08-01T00:00:00Z"),
+            "프룬됐다 돌아온 카드가 신규로 튀면 안 된다"
+        );
+    }
+
     #[test]
     fn announcements_are_notified_once_per_id() {
         // §6.5 "새 공지 id가 처음 감지되면 … 한 번만 알린다"
@@ -4746,6 +4963,53 @@ mod tests {
                 .exists([]).unwrap();
             assert!(exists, "content_items.{col} 이 추가돼야 함");
         }
+    }
+
+    #[test]
+    fn migrate_backfills_content_first_seen_without_recollect() {
+        // §3.2 — 보존 테이블은 **스키마 추가 + 백필**뿐이다. 여기에 DELETE를 붙이면
+        // 릴리스마다 콜드 스캔이 되돌아온다(#146). judgment_json·summary_ko 전례대로
+        // 수집 테이블 행 수가 보존되는지 **테이블별로** 명시 검증한다.
+        //
+        // 백필이 없으면 기존 사용자는 마이그레이션 후 첫 프룬에서 first_seen을 잃는다 —
+        // 그때 INSERT OR IGNORE가 찍는 값은 원래 시각이 아니라 그 큐레이션의 now_ts다.
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("mfs.db");
+        {
+            let conn = Connection::open(&db).unwrap();
+            conn.execute_batch(SCHEMA).unwrap();
+            // 보존 테이블이 없던 시절로 되돌린다 (구 스키마 재현)
+            conn.execute_batch(
+                "DROP TABLE content_first_seen;
+                 PRAGMA user_version = 8;
+                 INSERT INTO content_items (id, kind, title, body, first_seen, last_seen)
+                   VALUES ('t1','tip','제목','본문','2026-07-20T00:00:00Z','2026-08-02T00:00:00Z');
+                 INSERT INTO events (dedup_key, session_id, host, project_id, source_offset, kind)
+                   VALUES ('e1','s1','Windows','p',0,'assistant_turn');
+                 INSERT INTO sessions (session_id, host, project_id) VALUES ('s1','Windows','p');
+                 INSERT INTO ingest_state (source_file, last_offset) VALUES ('f.jsonl', 42);
+                 INSERT INTO daily_rollup (host, project_id, date) VALUES ('Windows','p','2026-08-02');",
+            )
+            .unwrap();
+        }
+        let store = SqliteStore::open(&db).unwrap(); // migrate 실행
+        for table in ["events", "sessions", "ingest_state", "daily_rollup", "content_items"] {
+            let n: i64 = store
+                .conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(n, 1, "{table} 행이 보존돼야 함 — 재수집 유발 금지(#146)");
+        }
+        let backfilled: Option<String> = store
+            .conn
+            .query_row("SELECT ts FROM content_first_seen WHERE id='t1'", [], |r| r.get(0))
+            .optional()
+            .unwrap();
+        assert_eq!(
+            backfilled.as_deref(),
+            Some("2026-07-20T00:00:00Z"),
+            "묵은 행의 처음 본 시각이 보존 테이블로 옮겨져야 한다"
+        );
     }
 
     #[test]
