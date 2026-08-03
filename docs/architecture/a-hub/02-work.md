@@ -31,7 +31,7 @@ flowchart TB
     Service --> Port["Store port\ncore/ports.py"]
     Port --> Memory["InMemoryStore"]
     Port --> SQLite["SqliteStore"]
-    Port --> Dynamo["DynamoStore"]
+    Port --> Dynamo["DynamoDBStore"]
 ```
 
 `core`는 API와 저장소 구현을 import하지 않는다. `SpaceAService`가 권한과 상태 변경 규칙을 소유하고,
@@ -107,7 +107,7 @@ sequenceDiagram
 ```
 
 검색은 현재 제목과 본문의 **공백 단위 부분 문자열 검색**이다. 접근 가능한 활성 Page를 훑고,
-질의 단어 중 하나라도 포함된 Page를 요청 순서대로 제한 개수만 반환한다. 초기 설계의 BM25,
+질의 단어 중 하나라도 포함된 Page를 저장소가 반환한 순서대로 제한 개수만 반환한다. 초기 설계의 BM25,
 벡터 검색, LLM 재랭킹은 구현되어 있지 않다.
 
 ### 4.3 재사용과 인정 루프
@@ -118,14 +118,16 @@ Page를 Issue에 인용하면 ReuseEvent가 생기고 Issue 상태가 `knowledge
 
 ### 4.4 Page 생애주기
 
-- `active`: 검색과 일반 조회 대상
+- `active`: 검색과 Space 트리·목록의 노출 대상
 - `archived`: 보관됨
 - `superseded`: 같은 Space의 새 Page로 대체됨
 - `quarantined`: 품질 문제로 격리됨
 
 Page는 같은 Space 안에서 부모를 바꿀 수 있다. 자기 자신을 부모로 지정하거나 자손 아래로 이동해
 순환 트리를 만드는 요청은 거부한다. `visibility=org`는 모든 인증 사용자, `visibility=space`는 해당
-Space 멤버에게만 보인다.
+Space 멤버에게만 보인다. 단, 직접 `GET /pages/{id}`로 조회할 때는 가시성 권한만 확인하므로 ID를
+아는 사용자는 `archived`, `superseded`, `quarantined` Page도 읽을 수 있다. 이 상태들은 검색·목록
+제외 규칙이지 접근 차단이나 삭제가 아니다.
 
 ## 5. 진입점
 
@@ -164,6 +166,8 @@ MCP는 컨테이너 서버의 `/mcp`에 Streamable HTTP로 마운트된다. Lamb
 - 관리 API 일부는 Bearer 신원 없이 호출되며, 공유 API key가 설정된 경우 그 관문만 통과한다.
 - 세밀한 admin/editor/viewer 역할, Page·Issue별 ACL, SSO는 구현하지 않았다.
 - 멤버는 같은 Space의 Page를 편집·archive·supersede·quarantine할 수 있다.
+- API는 `visibility`를 `org` 또는 `space`로 검증하지 않는다. 임의 문자열도 저장되며 현재 조회
+  판정에서는 `org`가 아닌 값이 사실상 `space`처럼 동작한다.
 
 현재 권한 모델은 해커톤 범위의 coarse-grained 통제다. 프로덕션 수준의 권한 체계로 오해하면 안 된다.
 
@@ -183,6 +187,7 @@ SQLite는 `spaces`, `agents`, `tokens`, `issues`, `pages`, `reuse_events`와 ID 
 - 검색은 단순 부분 문자열 방식이며 의미 검색이 아니다.
 - Skill 후보는 issue-derived Page의 **동일 제목 개수**만 집계한다. 자동 Skill 생성은 하지 않는다.
 - 역할 기반 권한과 SSO가 없다.
+- `visibility` 허용값 검증이 없어 계약 밖의 문자열을 저장할 수 있다.
 - API key는 사용자별 비밀이 아니라 공유 관문이다.
 - 서버리스 구성은 MCP를 제공하지 않는다.
 - 현재 코드는 MCP 1.x API를 사용하지만 `pyproject.toml`에 `<2` 상한이 없어 새 설치가 2.x를 선택할 수 있다.
