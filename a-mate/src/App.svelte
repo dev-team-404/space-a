@@ -12,7 +12,8 @@
   import UpdateBanner from './lib/ui/UpdateBanner.svelte';
   import { runCheck } from './lib/ui/update-store.svelte';
   import {
-    getSummary, getDailyLine, getDailyCut, listFindings, onScanDone, onGotoTab, onChatShown, onDailyCutReady,
+    getSummary, getDailyLine, getDailyCut, listContent, listFindings, onContentReady, onScanDone,
+    onGotoTab, onChatShown, onDailyCutReady,
     onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, onUpdateCheckRequested,
     onLifeVisit, onGuestbookNew, onReuseCelebrated, onAnnouncementNew, noticesReady, lifeContentAccess, lifeGoto, lifeGuestbook,
     lifeSetDailyLine, lifeSyncDailyCut, lifeView,
@@ -27,6 +28,7 @@
     saveUnseen, seedGuestbookSeen,
   } from './lib/unseen';
   import { isTab, resolveTabAfterLifeChange, type Tab } from './lib/ui/tab-routing';
+  import { activeCoachKeys, liveContent, loadSeenCoachKeys, localDateString, unseenCoachCount } from './lib/ui/coach-stream';
   import { normalizeGroup, type SettingsGroup } from './lib/ui/settings/groups';
   import { diaryVisibility, syncAllSharedDiaries, syncSharedDiary } from './lib/diary-sharing';
   import { resolveHomeLine } from './lib/home-line';
@@ -151,7 +153,11 @@
   let cutCaption = $state<string | null>(null);
   // O1 — 카드에 그릴 문장. 방문 중이면 주인 게시분, 내 방이면 캡션 우선.
   const homeLine = $derived(resolveHomeLine({ visiting, ownerLine: ownerDailyLine, cutCaption, dailyLine }));
-  let activeCount = $state(0);
+  // N1 탭 뱃지 — 코칭은 「안 본 개수」다(§2.3). 처분하지 않아도 탭을 열면 사라진다.
+  // 시각 비교가 아니라 활성 키 집합 diff라 pending→new·재발 복귀도 잡힌다(§4.5).
+  let coachKeys = $state<string[]>([]);
+  let seenCoachKeys = $state<string[]>(loadSeenCoachKeys());
+  const unseenCoach = $derived(unseenCoachCount(coachKeys, seenCoachKeys));
   let coachFocus = $state<string | null>(null);
   let diaryFocus = $state<string | null>(null);
   let notices = $state<Notice[]>(loadNotices());
@@ -187,7 +193,18 @@
 
   async function refresh() {
     summary = await getSummary().catch(() => null);
-    activeCount = (await listFindings(false).catch(() => [])).length;
+    const [fs, cs] = await Promise.all([
+      listFindings(false).catch(() => []),
+      listContent(false).catch(() => []),
+    ]);
+    // 수명이 끝난 공지는 화면에 없으므로 배지도 세지 않는다 (§2.6).
+    // 셸에는 CoachTab 같은 눈금 시계를 두지 않는다 — refresh()는 함수라 호출 시점에
+    // 계산되고(반응성 함정 없음), 스캔·큐레이션마다 다시 돈다. 유휴 상태로 자정을
+    // 넘겨 잠깐 낡는 것은 배지 정밀도로 감수한다.
+    const now = new Date();
+    coachKeys = activeCoachKeys(fs, liveContent(cs, localDateString(now), now.getTime()));
+    // CoachTab이 열려 있는 동안 저장한 집합을 다시 읽는다 — 탭을 보면 배지가 0이 된다.
+    seenCoachKeys = loadSeenCoachKeys();
     // 조회 **전에** 게이트를 닫는다 — 두 조회 사이의 await에서 effect가 flush되면 아직 갱신되지
     // 않은 중간값(캡션만 비운 빈 문자열 등)이 게시돼 서버의 정상 문장을 지운다.
     homeReadOk = false;
@@ -198,6 +215,9 @@
   }
   refresh();
   onScanDone(() => refresh());
+  // 큐레이션이 끝나면 콘텐츠 쪽 활성 목록이 바뀐다 — 배지가 따라와야 한다.
+  // 빈 목록일 때도 무조건 emit되므로(§4.6) payload는 보지 않는다.
+  onContentReady(() => refresh());
   // 창이 숨겨진 동안 WebView2가 웹뷰를 정지시켜 JS가 20~30초씩 멈춘다(실측). 그동안 폴링도
   // refresh 도 서지 않아 창을 열면 낡은 화면이 남는다. document.visibilityState 는 숨겨져도
   // 'visible' 이라 visibilitychange 로는 이 순간을 잡을 수 없어, 네이티브가 보내는 신호를 쓴다.
@@ -369,7 +389,7 @@
         {#each visibleTabs as t (t.id)}
           <button class:active={tab === t.id} onclick={() => (tab = t.id)}>
             <span class="label">{t.label}</span>
-            {#if t.id === 'coach' && activeCount > 0}<span class="badge">{activeCount}</span>{/if}
+            {#if t.id === 'coach' && unseenCoach > 0}<span class="badge">{unseenCoach}</span>{/if}
             {#if t.id === 'diary' && unseenDiary > 0}<span class="badge">{unseenDiary}</span>{/if}
             {#if t.id === 'guestbook' && unseenGuestbook > 0}<span class="badge">{unseenGuestbook}</span>{/if}
           </button>
