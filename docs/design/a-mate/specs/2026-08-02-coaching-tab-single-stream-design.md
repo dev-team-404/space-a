@@ -1,8 +1,12 @@
 # 코칭 탭 단일 스트림 재설계 — 확정된 결정과 착수 전 확인 사항
 
-> **상태: 착수 보류.** PR③(처분·수명 모델)·PR⑥(소식 파이프라인)이 머지된 뒤에 시작한다.
+> **상태: 착수 가능 (⑥ 머지 직후).** 선행이던 PR③(처분·수명 모델, #155)은 머지됐고
+> PR⑥(소식 파이프라인, #156)이 이 문서와 같은 PR에 있다.
 > 이 문서는 구현 계획이 아니다 — 2026-08-02 세션에서 **확정한 결정과 그때 실측한 코드베이스 사실**을
 > 기록해 재조사를 막는 것이 목적이다. 착수 시 이 문서를 근거로 `writing-plans`로 계획을 쓴다.
+>
+> **2026-08-03 갱신**: §3의 실측은 `dd6a...`(#152) 기준이라 ③·⑥이 바꾼 것들이 낡아 있었다.
+> 바뀐 항목마다 어느 PR이 바꿨는지 표시해 두었다 — 표시가 없는 항목은 재검증 후에도 유효하다.
 
 **대체 관계**: 구현되면 [2026-08-02-coaching-tab-unification-design.md](../../../archive/design/a-mate/specs/2026-08-02-coaching-tab-unification-design.md)의 **§3(최종 구조)·§4.2(문법 B 배치)** 를 대체한다. 같은 스펙의 §4.1(문법 A 슬롯)·§5(수명)·§6(소식)은 그대로 유효하다 — ⑥이 6-PR의 마지막이라 그 스펙은 아카이브됐지만 이 문서가 참조하는 절들은 여전히 근거다.
 
@@ -43,6 +47,7 @@ PR②(#152)가 코칭 탭을 근거 출처로 **2단 섹션**(「내 로그에�
 | **소식** | `changelog`·`kind='news'` + 로컬 공지(⑥) | B (카드뉴스) | `--accent` |
 
 - **카드 문법은 PR②의 2종을 그대로 유지한다.** 코칭 카드는 근거·행동·처분 버튼이 필요하고 소식 카드는 전문 링크가 주 CTA라 담을 것이 근본적으로 다르다. 통합하면 「전문 보기」가 각주 링크와 같은 위계로 내려가 약해진다.
+  - **⑥ 이후 문법 B의 슬롯이 늘었다**(unification 스펙 §4.2 표에는 없는 것들): ①📊 근거 줄(`personal`, 문법 A와 같은 슬롯) ②기한 칩 `⏳ MM-DD까지` ③고정 슬롯의 `[확인]` 버튼. ①은 배움 카드에서 개인화가 사라지는 것을 막으려고 넣었고 — 두 문법이 "근거 → 내용"으로 수렴한다 — ②③은 §6.4 고정 슬롯 전용이다. 단일 스트림에서 문법 B를 다시 정리할 때 이 세 슬롯을 슬롯 표에 반영할 것.
 - **배지는 분류 이름 3종으로 고정한다.**
 - **라인 색이 분류를 뜻하므로 severity를 색으로 쓸 수 없다.** severity는 이미 아이콘(⚠/💡/ℹ)이 나타내므로 `LogCard`의 `.card.warn`(coral)을 제거한다.
 
@@ -89,13 +94,16 @@ unseen = cards.filter(c => c.firstSeen > lastCoachSeenAt).length
 
 ### 3.2 그런데 콘텐츠 프룬이 `first_seen`을 리셋한다 — 이게 유일한 진짜 작업
 
-`store.rs` `replace_content_items` 끝:
+`store.rs` `replace_content_items` 끝. **③·⑤로 조건이 바뀌었지만 결론은 그대로다** — 이제 SQL 한 방이 아니라 Rust에서 걸러 개별 DELETE 한다:
 
-```sql
-DELETE FROM content_items WHERE status='new' AND id NOT IN (…랭킹된 id…)
+```
+SELECT id, trigger_tags FROM content_items WHERE status IN ('new','resolved')
+  → 이번 랭킹에 있으면 보존
+  → TTL로 스킵한 소스의 태그를 가지면 보존(⑤)
+  → 나머지는 DELETE   ('resolved'는 ③이 추가 — 미방출 레슨 정리)
 ```
 
-랭킹에서 빠진 `new` 행은 **삭제된다.** 다시 랭킹에 들면 `INSERT`가 새 `first_seen`을 찍는다 → 어제 본 카드가 오늘 신규처럼 맨 위로 튄다. 순수 최신순 정렬이 이 흔들림을 **카드 순서가 제멋대로 튀는 현상**으로 증폭시킨다.
+랭킹에서 빠진 `new` 행은 **삭제된다.** 다시 랭킹에 들면 `INSERT`가 새 `first_seen`을 찍는다 → 어제 본 카드가 오늘 신규처럼 맨 위로 튄다. 순수 최신순 정렬이 이 흔들림을 **카드 순서가 제멋대로 튀는 현상**으로 증폭시킨다. ③이 `resolved`를 대상에 더해 **삭제 범위는 오히려 넓어졌다.**
 
 **권장 해법 — 별도 테이블로 격리:**
 
@@ -115,11 +123,12 @@ CREATE TABLE IF NOT EXISTS content_first_seen (id TEXT PRIMARY KEY, ts TEXT NOT 
 
 **이 한 번의 노출이 정렬과 배지 둘 다를 해결한다** — §2.3의 배지는 `first_seen`만 있으면 프론트만으로 구현된다.
 
-### 3.4 `content_items.status`의 `'shown'`은 죽은 어휘다
+### 3.4 ~~`content_items.status`의 `'shown'`은 죽은 어휘다~~ → ③에서 제거됨
 
-`commands.rs` `valid_content_status`가 `"new" | "shown" | "dismissed"`를 허용하지만 **`'shown'`을 설정하는 코드가 어디에도 없다.** 콘텐츠는 사용자가 닫기 전까지 영원히 `'new'`다.
+`valid_content_status`는 이제 `"new" | "resolved" | "dismissed"`다(`'shown'` 삭제, `'resolved'` 추가).
+설정하는 코드가 없는 데다 되돌릴 UI 없이 영구 숨김이 가능해 D4와 같은 함정이라 ③이 어휘에서 뺐다.
 
-→ 배지를 「안 본 개수」로 만들 때 `'shown'`을 살릴 필요가 없다. §2.3의 localStorage 방식이 더 싸다. (③이 status 어휘를 정리할 때 이 죽은 값을 함께 처리할지 판단할 것.)
+→ 배지를 「안 본 개수」로 만들 때 §2.3의 localStorage 방식을 그대로 쓴다 — 살릴 값이 애초에 없다.
 
 ### 3.5 현행 배지·홈 위젯은 finding만 본다
 
@@ -129,15 +138,17 @@ CREATE TABLE IF NOT EXISTS content_first_seen (id TEXT PRIMARY KEY, ts TEXT NOT 
 | `App.svelte` 탭 렌더 | `{#if t.id === 'coach' && activeCount > 0}` |
 | `home/SaveTop3.svelte` | `findings.slice(0, 3)` + `f.suggested_action` 렌더. `ContentItem`엔 `suggested_action`이 없다 → §2.4의 `oneLine` 필요 |
 
-### 3.6 스크롤 포커스에 `data-key`가 필요하다
+### 3.6 ~~스크롤 포커스에 `data-key`가 필요하다~~ → ⑥에서 추가됨
 
-홈 위젯 클릭 시 해당 카드로 스크롤하는 경로는 `CoachTab`의 `focusKey` → `document.querySelector('[data-key=…]')`다. **`LogCard`엔 `data-key`가 있지만 `LearnCard`엔 없다.** 위젯이 학습·소식 카드도 다루게 되면 `LearnCard`에도 추가해야 한다.
+홈 위젯 클릭 시 해당 카드로 스크롤하는 경로는 `CoachTab`의 `focusKey` → `document.querySelector('[data-key=…]')`다. `LogCard`·`LearnCard` **양쪽에 `data-key`가 있다** — ⑥이 새 공지 알림의 딥링크를 위해 `LearnCard`에 붙였고, 같은 이유로 `focusKey` 대기 조건도 `all.length === 0 && tips.length === 0`으로 완화했다(finding이 0건이어도 소식 카드로 착지해야 한다).
 
-### 3.7 콘텐츠 4건 상한은 프론트에만 있다
+### 3.7 콘텐츠 카드 상한은 프론트에만 있다 (⑥에서 4 → **6**)
 
-`store.list_content`에는 **LIMIT이 없다**(`status='new' AND score >= 0`인 행 전부). 상한은 `coach-helpers.ts`의 `CONTENT_CARD_LIMIT = 4`가 `partitionCoachItems`에서 가르기 전에 적용한다 — 삭제된 `TipCard`의 `items[0] + items.slice(1, 4)`를 이어받은 값이다.
+`store.list_content`에는 **LIMIT이 없다**(`status='new' AND score >= 0`인 행 전부). 상한은 `coach-helpers.ts`의 `CONTENT_CARD_LIMIT`가 `partitionCoachItems`에서 가르기 전에 적용한다 — 원래 삭제된 `TipCard`의 `items[0] + items.slice(1, 4)`를 이어받은 4였는데, ⑥이 소스(로컬 공지)를 하나 더하면서 **6으로 올렸다**(4를 두면 공지 2건이 배움 카드를 전부 밀어낸다).
 
-단일 스트림에서도 **이 상한을 유지할지 재검토할 것.** 세 분류가 한 줄에 섞이면 4건은 답답할 수 있다. 늘리려면 백엔드 LIMIT과 겹치지 않게 한 곳에서만 자른다.
+**고정 슬롯(최대 1건)은 이 상한 밖의 별도 칸**이다 — `CoachTab`이 고정된 항목을 빼고 `partitionCoachItems`에 넘긴다. 자르는 지점은 여전히 한 곳뿐이다.
+
+단일 스트림에서도 **이 상한을 유지할지 재검토할 것.** 늘리려면 백엔드 LIMIT과 겹치지 않게 한 곳에서만 자른다.
 
 ### 3.8 `enrich_personal`은 태그로 붙어 레슨 본문과 어긋날 수 있다
 
@@ -151,9 +162,10 @@ CREATE TABLE IF NOT EXISTS content_first_seen (id TEXT PRIMARY KEY, ts TEXT NOT 
 
 | # | 질문 | 비고 |
 |---|------|------|
-| 1 | 커리큘럼 팁의 사다리 축 라벨(`DIM_LABEL`: 「워크플로 자동화」 등)을 버릴까, 우측 보조 칩으로 남길까? | 배지가 분류 이름으로 고정되면 축 라벨이 갈 곳이 없다. Boris·팀은 본문 끝에 출처가 이미 있어 괜찮지만 축 라벨은 본문에 없어 완전히 사라진다 |
-| 2 | §3.7의 4건 상한을 단일 스트림에서도 유지할까? | |
-| 3 | ③이 확정할 처분 카드 표시(현행 「숨긴 항목 N개 보기」 토글)를 단일 스트림에서 어디에 둘까? | ③ 결과를 보고 정한다 |
+| 1 | 커리큘럼 팁의 사다리 축 라벨(`DIM_LABEL`: 「워크플로 자동화」 등)을 버릴까, 우측 보조 칩으로 남길까? | 배지가 분류 이름으로 고정되면 축 라벨이 갈 곳이 없다. Boris·팀은 본문 끝에 출처가 이미 있어 괜찮지만 축 라벨은 본문에 없어 완전히 사라진다. **⑥ 이후 배지가 하나 늘었다** — 긴급 팁(`lastShownEmergencyTip`)은 「공지」, 나머지 로컬 공지는 「소식」이다(unification 스펙 §6.1). 3분류로 고정하면 「공지」도 갈 곳이 없어지므로 축 라벨과 함께 판단할 것 |
+| 2 | §3.7의 카드 상한을 단일 스트림에서도 유지할까? | **전제가 바뀌었다** — ⑥이 4 → 6으로 올렸고, 고정 슬롯 1건은 상한 밖이다 |
+| 3 | ~~③이 확정할 처분 카드 표시를 단일 스트림에서 어디에 둘까?~~ | **③ 머지로 확정**: 토글 없이 **섹션 하단에 톤다운 접힌 줄**, 해결함 `✔`(7일)·무시 `◷`(영구), 각 줄에 `[실행취소]`. 섹션이 사라지면 이 줄들을 스트림 어디에 둘지가 남은 질문이다 |
+| 4 | 고정 슬롯(⑥ §6.4)을 단일 스트림에서 어떻게 다룰까? | 「전체 `first_seen` 내림차순 한 줄」(§2.2)과 「최상단 고정 1건」이 정면으로 부딪힌다. 스트림 위의 별도 칸으로 남길지, 정렬에 편입할지 정해야 한다 |
 
 ---
 
@@ -161,15 +173,15 @@ CREATE TABLE IF NOT EXISTS content_first_seen (id TEXT PRIMARY KEY, ts TEXT NOT 
 
 | PR | 내용 | 의존 |
 |----|------|------|
-| **A (Rust)** | `first_seen` serde 노출 + `content_first_seen` 보존 테이블 | ③·⑥ 머지 후 |
+| **A (Rust)** | `first_seen` serde 노출 + `content_first_seen` 보존 테이블 | ③ 머지 완료 · ⑥(#156) 머지 후 착수 |
 | **B (프론트)** | 단일 스트림·3분류·라인 색·탭 배지·홈 위젯 | A |
 
-**C — 홈 알림 박스 타임스탬프 (완전 독립, 언제든)**
-`home/NoticeLog.svelte`의 `hhmm()`이 항상 `HH:MM`만 찍어 어제 알림과 오늘 알림이 구분되지 않는다. 오늘=`HH:MM`, 과거=`MM-DD`로 바꾸고 `title` 속성에 날짜+시간 전체를 넣는다. **이 저장소엔 컴포넌트 테스트 라이브러리가 없으므로** 포맷 로직은 `notices.ts`의 순수 함수로 빼고 단위 테스트를 붙인다(PR②가 세운 규약).
+**~~C — 홈 알림 박스 타임스탬프~~ → ⑥(#156)에서 완료.**
+`noticeStamp(ts, now)`가 `notices.ts`의 순수 함수로 들어갔고 단위 테스트가 붙었다(오늘=`HH:MM`, 과거=`MM-DD`, `title`에 전체). **`now`를 인자로 받는 것이 핵심** — 함수 안에서 `new Date()`를 만들면 자정 근처에서 테스트가 간헐 실패한다. `NoticeLog`는 그 시계를 `$state`로 들고 분 단위로 날짜 변화만 확인한다(상주 앱이 자정을 넘겨도 판정이 굳지 않게 — Codex P2).
 
 ---
 
-## 6. ③·⑥ 계획에 생기는 여파
+## 6. ③·⑥ 결과 — 둘 다 완료
 
-- **③**: 「처분 카드를 섹션 하단 톤다운 줄로 이동」이 계획이었으나 섹션이 사라진다. ③은 처분·수명 **모델**(재발 감지·`status_evidence_n`·마이그레이션)에 집중하고, 표시 위치는 이 재설계에서 정하는 편이 낫다.
-- **⑥**: 로컬 공지가 「소식」 분류로 그대로 들어간다. 배지 문자열을 「공지」로 따로 둘지는 §4 질문 1과 함께 정한다.
+- **③(#155, 머지)**: 처분·수명 **모델**에 집중했다 — 재발은 `status_evidence_n` **초과** 판정, 레슨은 방출 기반 정리(프룬에 `resolved` 추가), `content_items.status_ts` 신설(`last_seen`은 재방출마다 갱신돼 7일 창이 안 닫힌다), `'shown'` 어휘 제거. 표시는 「섹션 하단 톤다운 줄」로 들어갔고 그 **위치**는 §4 질문 3으로 남았다.
+- **⑥(#156)**: 로컬 공지가 「소식」으로 들어간다. 새로 생긴 것 중 이 재설계가 흡수해야 할 것 — 배지 「공지」(§4 질문 1), 고정 슬롯(§4 질문 4), 문법 B의 늘어난 슬롯 3종(§2.1), 상한 6(§3.7). `content_items`에 `summary_ko`·`title_ko`·`deadline`이 생겼고 **번역 캐시는 원문이 바뀌면 버려진다** — A가 `content_first_seen` 보존 테이블을 만들 때 같은 함정(id 고정·내용 갱신 소스)을 확인할 것.
