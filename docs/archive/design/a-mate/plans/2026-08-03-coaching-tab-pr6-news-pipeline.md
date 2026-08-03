@@ -1,3 +1,8 @@
+---
+status: done
+archived: 2026-08-03
+---
+
 # 코칭 탭 통일 PR⑥ — 소식 파이프라인 구현 계획
 
 **Goal:** Claude Code가 `~/.claude.json`에 캐시해 둔 시작 공지를 코칭 탭 「배움 · 소식」에 모아두고,
@@ -5,7 +10,7 @@
 덤으로 홈 알림 박스의 타임스탬프가 어제/오늘을 구분하게 한다(단일 스트림 스펙 §5의 C).
 
 **참조 스펙**
-- `docs/design/a-mate/specs/2026-08-02-coaching-tab-unification-design.md` — §6 전체(6.1~6.6), §9(에러 처리), §10(테스트), §11(PR⑥)
+- `docs/archive/design/a-mate/specs/2026-08-02-coaching-tab-unification-design.md` — §6 전체(6.1~6.6), §9(에러 처리), §10(테스트), §11(PR⑥)
 - `docs/design/a-mate/specs/2026-08-02-coaching-tab-single-stream-design.md` — §5의 **C**(홈 알림 타임스탬프)
 
 **Architecture:** 이 저장소엔 컴포넌트 테스트 라이브러리가 없다(`package.json`에 vitest + svelte-check뿐).
@@ -180,6 +185,6 @@ export function noticeStamp(ts: string, now: Date): { label: string; full: strin
 ## DoD
 
 - `cargo test`·`npm test` 녹색(베이스라인 663 / 260 이상)
-- `docs-archive` 스킬로 이 계획 문서 + `specs/2026-08-02-coaching-tab-unification-design.md` 아카이브.
+- `docs-archive` 스킬로 이 계획 문서 + `docs/archive/design/a-mate/specs/2026-08-02-coaching-tab-unification-design.md` 아카이브.
   단일 스트림 스펙이 unification 스펙의 §4.1·§5를 계속 참조하므로 **링크가 깨지지 않는지 확인**한다.
   `specs/2026-08-02-coaching-tab-single-stream-design.md`는 착수 전이라 **아카이브하지 않는다**.
