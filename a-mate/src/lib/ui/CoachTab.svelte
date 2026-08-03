@@ -349,10 +349,6 @@
     background: var(--surface-inset); color: var(--text); border-radius: var(--radius-s);
     padding: 8px; overflow-x: auto; font-size: 11px; margin: 6px 0 0;
   }
-  .hidden-toggle {
-    align-self: flex-start; border: none; background: none; cursor: pointer;
-    font: inherit; font-size: 12px; color: var(--ink-soft); text-decoration: underline; padding: 0;
-  }
   .session-list { margin: 4px 0 0; padding: 0 0 0 8px; list-style: none; max-height: 180px; overflow-y: auto; }
   .session-list li { margin: 2px 0; }
   .session-list button {
