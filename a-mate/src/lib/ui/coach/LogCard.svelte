@@ -41,7 +41,10 @@
 <style>
   .card {
     background: var(--frame-bg); border-radius: var(--radius-m); box-shadow: var(--shadow-soft);
-    padding: 12px 14px; border-left: 4px solid var(--pastel-mint);
+    padding: 12px 14px;
+    /* 분류 = 「코칭」 (§2.1). 세 분류 라인은 `--kind-*` 토큰으로만 쓴다 —
+       정의와 근거는 theme.css의 「코칭 탭 분류 라인」 주석에 있다. */
+    border-left: 4px solid var(--kind-coaching);
   }
   /* severity를 색으로 쓰지 않는다 — 라인 색이 분류를 뜻하기 때문이다 (§2.1).
      severity는 제목 앞 아이콘(⚠/💡/ℹ)이 이미 나타낸다. */
