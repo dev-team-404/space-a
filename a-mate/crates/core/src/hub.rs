@@ -1206,6 +1206,7 @@ mod tests {
             last_seen: None,
             occurrences: occ,
             status: status.into(),
+            status_ts: None,
             judgment: None,
         }
     }

@@ -1246,6 +1246,121 @@ mod tests {
         assert_eq!(content_ids(&store), vec!["tip-new".to_string()]);
     }
 
+    // ── 개인 레슨의 방출 기반 정리 (스펙 §5.2) ──────────────────────────────
+    //
+    // 개인 레슨은 어제 데이터로 매일 다시 계산되므로 고치면 애초에 방출이 멈춘다.
+    // 룰 카드처럼 근거 수치 스냅숏을 둘 필요가 없다 — 미방출이 곧 "해결됐다"는 신호다.
+
+    fn status_of(store: &crate::store::SqliteStore, id: &str) -> Option<String> {
+        store
+            .conn
+            .query_row("SELECT status FROM content_items WHERE id=?1", [id], |r| r.get(0))
+            .ok()
+    }
+
+    #[test]
+    fn resolved_lesson_row_is_deleted_once_it_stops_being_emitted() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        let les = |id: &str| lesson(id, &["model"], "t".into(), "b".into(), "https://x");
+        store
+            .replace_content_items(&[(les("lesson-model"), 550)], "2026-08-01T00:00:00Z", &[])
+            .unwrap();
+        store.set_content_status("lesson-model", "resolved", "2026-08-01T10:00:00Z").unwrap();
+
+        // 다음 큐레이션: 조건이 사라져 이 레슨은 방출되지 않는다
+        store
+            .replace_content_items(&[(les("lesson-cache"), 550)], "2026-08-02T00:00:00Z", &[])
+            .unwrap();
+
+        assert_eq!(content_ids(&store), vec!["lesson-cache".to_string()]);
+    }
+
+    #[test]
+    fn a_re_emitted_lesson_comes_back_as_a_new_card() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        let les = |id: &str| lesson(id, &["model"], "t".into(), "b".into(), "https://x");
+        store
+            .replace_content_items(&[(les("lesson-model"), 550)], "2026-08-01T00:00:00Z", &[])
+            .unwrap();
+        store.set_content_status("lesson-model", "resolved", "2026-08-01T10:00:00Z").unwrap();
+        store
+            .replace_content_items(&[(les("lesson-cache"), 550)], "2026-08-02T00:00:00Z", &[])
+            .unwrap();
+
+        // 같은 문제가 다시 관측돼 재방출
+        store
+            .replace_content_items(&[(les("lesson-model"), 550)], "2026-08-03T00:00:00Z", &[])
+            .unwrap();
+
+        assert_eq!(status_of(&store, "lesson-model").as_deref(), Some("new"));
+    }
+
+    /// 계속 방출되는 동안에는 행을 지우지 않는다 — 지우면 곧바로 새 `new` 카드로 되살아나
+    /// 「해결함」이 무의미해진다. 화면에서 내리는 건 7일 창(프론트)의 몫이다.
+    #[test]
+    fn resolved_lesson_row_survives_while_it_is_still_emitted() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        let les = |id: &str| lesson(id, &["model"], "t".into(), "b".into(), "https://x");
+        store
+            .replace_content_items(&[(les("lesson-model"), 550)], "2026-08-01T00:00:00Z", &[])
+            .unwrap();
+        store.set_content_status("lesson-model", "resolved", "2026-08-01T10:00:00Z").unwrap();
+
+        store
+            .replace_content_items(&[(les("lesson-model"), 550)], "2026-08-02T00:00:00Z", &[])
+            .unwrap();
+
+        assert_eq!(status_of(&store, "lesson-model").as_deref(), Some("resolved"));
+    }
+
+    /// 「무시」는 미방출이어도 행을 남긴다 — 사용자 기록이자 축 쿨다운의 기준이다.
+    #[test]
+    fn dismissed_lesson_row_survives_when_not_emitted() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        let les = |id: &str| lesson(id, &["model"], "t".into(), "b".into(), "https://x");
+        store
+            .replace_content_items(&[(les("lesson-model"), 550)], "2026-08-01T00:00:00Z", &[])
+            .unwrap();
+        store.set_content_status("lesson-model", "dismissed", "2026-08-01T10:00:00Z").unwrap();
+
+        store
+            .replace_content_items(&[(les("lesson-cache"), 550)], "2026-08-02T00:00:00Z", &[])
+            .unwrap();
+
+        assert_eq!(status_of(&store, "lesson-model").as_deref(), Some("dismissed"));
+    }
+
+    /// 처분 시각은 `last_seen`과 별도 컬럼이어야 한다 — `last_seen`은 재방출마다 갱신되므로
+    /// 7일 창이 영영 만료되지 않는다.
+    #[test]
+    fn content_disposition_time_is_kept_apart_from_last_seen() {
+        let store = crate::store::SqliteStore::open_in_memory().unwrap();
+        let les = lesson("lesson-model", &["model"], "t".into(), "b".into(), "https://x");
+        store.replace_content_items(&[(les.clone(), 550)], "2026-08-01T00:00:00Z", &[]).unwrap();
+        store.set_content_status("lesson-model", "resolved", "2026-08-01T10:00:00Z").unwrap();
+
+        store.replace_content_items(&[(les, 550)], "2026-08-05T00:00:00Z", &[]).unwrap();
+
+        let (status_ts, last_seen): (Option<String>, Option<String>) = store
+            .conn
+            .query_row(
+                "SELECT status_ts, last_seen FROM content_items WHERE id='lesson-model'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(status_ts.as_deref(), Some("2026-08-01T10:00:00Z"), "재방출이 처분 시각을 밀면 안 됨");
+        assert_eq!(last_seen.as_deref(), Some("2026-08-05T00:00:00Z"));
+
+        // 실행취소는 처분 시각을 지운다
+        store.set_content_status("lesson-model", "new", "2026-08-05T01:00:00Z").unwrap();
+        let status_ts: Option<String> = store
+            .conn
+            .query_row("SELECT status_ts FROM content_items WHERE id='lesson-model'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(status_ts, None);
+    }
+
     #[test]
     fn changelog_collapses_many_versions_into_one_item_with_up_to_three_features() {
         let src = ClaudeChangelogSource::default();

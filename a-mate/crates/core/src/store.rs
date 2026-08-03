@@ -907,7 +907,7 @@ impl SqliteStore {
         let sql = format!(
             "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                     evidence_json, est_tokens_saved, prescription_json, dedup_key,
-                    last_seen, occurrences, status, judgment_json
+                    last_seen, occurrences, status, judgment_json, status_ts
              FROM findings {}
              ORDER BY est_tokens_saved DESC, dedup_key",
             if include_hidden { "" } else { "WHERE status='new'" }
@@ -923,12 +923,14 @@ impl SqliteStore {
                 r.get::<_, Option<String>>(10)?, r.get::<_, i64>(11)?,
                 r.get::<_, String>(12)?,
                 r.get::<_, Option<String>>(13)?,
+                r.get::<_, Option<String>>(14)?,
             ))
         })?;
         let mut out = Vec::new();
         for row in rows {
             let (rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
-                 evidence_json, est, prescription_json, dedup_key, last_seen, occ, status, judgment_raw) = row?;
+                 evidence_json, est, prescription_json, dedup_key, last_seen, occ, status,
+                 judgment_raw, status_ts) = row?;
             out.push(FindingRow {
                 rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                 evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
@@ -937,6 +939,7 @@ impl SqliteStore {
                 dedup_key, last_seen,
                 occurrences: occ as u64,
                 status,
+                status_ts,
                 judgment: judgment_raw.and_then(|s| serde_json::from_str(&s).ok()),
             });
         }
@@ -1132,7 +1135,9 @@ impl SqliteStore {
             )?;
         }
         // 피드에서 사라진 아이템 프룬(2026-07-19): 소식·외부 팁은 일시적 — 랭킹에 없으면
-        // 낡은 점수로 상단을 점령한다. 단, 사용자가 닫은(dismissed 등) 행은 쿨다운 기록이라 보존.
+        // 낡은 점수로 상단을 점령한다. 단, 사용자가 「무시」한(dismissed) 행은 쿨다운 기록이라 보존.
+        // 「해결함」(resolved)은 함께 프룬한다 — 개인 레슨의 수명은 **방출 기반**이라(스펙 §5.2)
+        // 미방출이 곧 "고쳐졌다"는 신호다. 나중에 다시 방출되면 새 `new` 카드로 돌아온다.
         // 프룬 범위는 **이번에 참여한 소스로 한정**한다(2026-08-02, 스펙 §7.1): TTL로 fetch를
         // 스킵한 소스는 이번 랭킹에 항목을 하나도 못 싣기 때문에, 함께 지우면 스킵할 때마다 그
         // 소스의 카드가 통째로 사라졌다가 TTL 만료 후 되살아난다.
@@ -1142,7 +1147,10 @@ impl SqliteStore {
             let stale: Vec<String> = {
                 let mut stmt = self
                     .conn
-                    .prepare("SELECT id, trigger_tags FROM content_items WHERE status='new'")?;
+                    .prepare(
+                        "SELECT id, trigger_tags FROM content_items
+                         WHERE status IN ('new','resolved')",
+                    )?;
                 let rows = stmt.query_map([], |r| {
                     Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
                 })?;
@@ -1173,7 +1181,7 @@ impl SqliteStore {
             id: r.get(0)?, kind: r.get(1)?, dimension: r.get(2)?,
             title: r.get(3)?, body: r.get(4)?, source_url: r.get(5)?,
             trigger_tags: serde_json::from_str(&tags_json).unwrap_or_default(),
-            score: r.get(7)?, status: r.get(8)?,
+            score: r.get(7)?, status: r.get(8)?, status_ts: r.get(9)?,
             personal: None, // list_content에서 enrich_personal로 채움
         })
     }
@@ -1189,7 +1197,7 @@ impl SqliteStore {
     ) -> Result<Vec<ContentRow>> {
         if include_hidden {
             let mut stmt = self.conn.prepare(
-                "SELECT id,kind,dimension,title,body,source_url,trigger_tags,score,status
+                "SELECT id,kind,dimension,title,body,source_url,trigger_tags,score,status,status_ts
                  FROM content_items ORDER BY score DESC, id",
             )?;
             let rows = stmt.query_map([], Self::content_row_from)?;
@@ -1197,7 +1205,7 @@ impl SqliteStore {
             return Ok(self.enrich_personal(out));
         }
         let mut stmt = self.conn.prepare(
-            "SELECT id,kind,dimension,title,body,source_url,trigger_tags,score,status
+            "SELECT id,kind,dimension,title,body,source_url,trigger_tags,score,status,status_ts
              FROM content_items c
              WHERE status='new' AND score >= 0
                AND NOT EXISTS (
@@ -1297,12 +1305,17 @@ impl SqliteStore {
         None
     }
 
-    /// status: 'new' | 'shown' | 'dismissed' (검증은 커맨드 층). dismiss 시 last_seen 갱신해
+    /// status: 'new' | 'resolved' | 'dismissed' (검증은 커맨드 층). dismiss 시 last_seen 갱신해
     /// 쿨다운 기준 시각으로 삼는다. 반환 = 해당 행 존재 여부.
+    ///
+    /// `status_ts`는 「해결함」 7일 창의 기준 시각이다 (스펙 §5). `last_seen`으로 대신할 수 없다 —
+    /// 재방출마다 `replace_content_items`가 갱신해 창이 영영 만료되지 않는다.
+    /// 개인 레슨은 방출 기반이라 근거 수치 스냅숏(`status_evidence_n`)은 두지 않는다(§5.2).
     pub fn set_content_status(&self, id: &str, status: &str, now_ts: &str) -> Result<bool> {
+        let status_ts = matches!(status, "resolved" | "dismissed").then_some(now_ts);
         let n = self.conn.execute(
-            "UPDATE content_items SET status=?2, last_seen=?3 WHERE id=?1",
-            params![id, status, now_ts],
+            "UPDATE content_items SET status=?2, last_seen=?3, status_ts=?4 WHERE id=?1",
+            params![id, status, now_ts, status_ts],
         )?;
         Ok(n > 0)
     }
@@ -2018,7 +2031,7 @@ impl SqliteStore {
             .query_row(
                 "SELECT rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                         evidence_json, est_tokens_saved, prescription_json, dedup_key,
-                        last_seen, occurrences, status, judgment_json
+                        last_seen, occurrences, status, judgment_json, status_ts
                  FROM findings WHERE dedup_key=?1",
                 params![dedup_key],
                 |r| {
@@ -2031,13 +2044,15 @@ impl SqliteStore {
                         r.get::<_, Option<String>>(10)?, r.get::<_, i64>(11)?,
                         r.get::<_, String>(12)?,
                         r.get::<_, Option<String>>(13)?,
+                        r.get::<_, Option<String>>(14)?,
                     ))
                 },
             )
             .optional()?;
         Ok(row.map(
             |(rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
-              evidence_json, est, prescription_json, dedup_key, last_seen, occ, status, judgment_raw)| {
+              evidence_json, est, prescription_json, dedup_key, last_seen, occ, status,
+              judgment_raw, status_ts)| {
                 FindingRow {
                     rule_id, severity, scope_host, scope_project, scope_kind, scope_ref,
                     evidence: serde_json::from_str(&evidence_json).unwrap_or(serde_json::Value::Null),
@@ -2046,6 +2061,7 @@ impl SqliteStore {
                     dedup_key, last_seen,
                     occurrences: occ as u64,
                     status,
+                    status_ts,
                     judgment: judgment_raw.and_then(|s| serde_json::from_str(&s).ok()),
                 }
             },
@@ -2240,6 +2256,8 @@ pub struct ContentRow {
     pub trigger_tags: Vec<String>,
     pub score: i64,
     pub status: String,
+    /// 처분 시각 — 「해결함」 7일 창 판정용 (스펙 §5). 미처분이면 None.
+    pub status_ts: Option<String>,
     /// "당신 로그: …" — 사용자 실측 데이터로 접지한 근거 줄. list_content read 시점 계산.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub personal: Option<String>,
@@ -2284,6 +2302,8 @@ pub struct FindingRow {
     pub last_seen: Option<String>,
     pub occurrences: u64,
     pub status: String,
+    /// 처분 시각 — 「해결함」 7일 창을 프론트가 판정하는 재료 (스펙 §5). 미처분이면 None.
+    pub status_ts: Option<String>,
     /// R6 판정 결과({worthy,reason,suggested_name,attempts,tokens}). 미판정이면 None.
     pub judgment: Option<serde_json::Value>,
 }
@@ -3409,6 +3429,32 @@ mod tests {
         assert_eq!(ts.as_deref(), Some("2026-08-03T09:00:00Z"), "처분 시각은 스캔이 밀지 않는다");
         assert!(store.list_findings_current(false).unwrap().is_empty(), "활성 목록엔 안 나온다");
         assert_eq!(store.list_findings_current(true).unwrap().len(), 1);
+    }
+
+    /// 7일 창은 프론트의 순수 함수가 판정한다(컴포넌트 테스트 라이브러리가 없어 세운 규약).
+    /// 그러려면 처분 시각이 목록 행에 실려야 한다 — 두 테이블 모두.
+    #[test]
+    fn disposition_time_is_carried_on_finding_and_content_rows() {
+        let store = SqliteStore::open_in_memory().unwrap();
+        store.upsert_finding(&r6_with_sessions("R6|W|a", 3), "2026-08-01T00:00:00Z").unwrap();
+        store.set_finding_status("R6|W|a", "resolved", "2026-08-03T09:00:00Z").unwrap();
+        let row = &store.list_findings_current(true).unwrap()[0];
+        assert_eq!(row.status_ts.as_deref(), Some("2026-08-03T09:00:00Z"));
+
+        let item = crate::content::ContentItem {
+            id: "lesson-model".into(),
+            kind: crate::content::ItemKind::Tip,
+            title: "t".into(),
+            body: "b".into(),
+            source_url: None,
+            dimension: None,
+            trigger_tags: vec!["personal".into()],
+            base_priority: 0,
+        };
+        store.replace_content_items(&[(item, 550)], "2026-08-01T00:00:00Z", &[]).unwrap();
+        store.set_content_status("lesson-model", "resolved", "2026-08-03T09:00:00Z").unwrap();
+        let rows = store.list_content("2026-08-03T10:00:00Z", 3.0, true).unwrap();
+        assert_eq!(rows[0].status_ts.as_deref(), Some("2026-08-03T09:00:00Z"));
     }
 
     #[test]
