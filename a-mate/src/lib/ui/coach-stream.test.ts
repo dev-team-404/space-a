@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   activeCoachKeys, buildCoachStream, compareFirstSeen, isAnnouncementLive, liveContent,
-  localDateString, parseSeenCoachKeys, unseenCoachCount,
+  localDateString, parseSeenCoachKeys, toWidgetRows, unseenCoachCount,
 } from './coach-stream';
 import { CONTENT_CARD_LIMIT, pinnedNewsItem } from './coach-helpers';
 import type { CoachFinding, ContentItem } from '../api';
@@ -289,6 +289,53 @@ describe('unseenCoachCount — 안 본 개수', () => {
     const seenWhilePending = activeCoachKeys([finding({ dedup_key: 'F2', status: 'pending' })], []);
     const passed = finding({ dedup_key: 'F2', status: 'new', first_seen: '2026-07-01T00:00:00Z' });
     expect(unseenCoachCount(activeCoachKeys([passed], []), seenWhilePending)).toBe(1);
+  });
+});
+
+describe('toWidgetRows — 홈 위젯 (§2.4)', () => {
+  it('세 분류를 모두 싣는다 — finding만 보던 현행을 대체한다', () => {
+    const rows = toWidgetRows(
+      [finding({ dedup_key: 'F1', first_seen: '2026-08-02T00:00:00Z' })],
+      [
+        tip('N1', '2026-08-03T00:00:00Z', { trigger_tags: ['changelog'], dimension: null, title: '릴리스 노트' }),
+        tip('L1', '2026-08-01T00:00:00Z', { title: 'hooks 쓰기' }),
+      ],
+    );
+    expect(rows.map((r) => r.kind)).toEqual(['news', 'coaching', 'learning']);
+    expect(rows.map((r) => r.badge)).toEqual(['소식', '코칭', '학습']);
+  });
+
+  it('코칭 finding의 한 줄은 처방이다', () => {
+    const [r] = toWidgetRows([finding({ suggested_action: '스킬로 묶으세요' })], []);
+    expect(r.oneLine).toBe('스킬로 묶으세요');
+  });
+
+  it('개인 레슨의 한 줄은 「이렇게」, 없으면 제목', () => {
+    const [withAction] = toWidgetRows([], [content({ id: 'L-a', first_seen: '2026-08-01T00:00:00Z' })]);
+    expect(withAction.oneLine).toBe('플랜 모드를 쓰세요.');
+
+    const [noAction] = toWidgetRows([], [
+      content({ id: 'L-b', body: '마커 없는 본문', title: '레슨 제목', first_seen: '2026-08-01T00:00:00Z' }),
+    ]);
+    expect(noAction.oneLine).toBe('레슨 제목');
+  });
+
+  it('학습·소식의 한 줄은 제목', () => {
+    const [r] = toWidgetRows([], [tip('T1', '2026-08-01T00:00:00Z', { title: 'hooks 쓰기' })]);
+    expect(r.oneLine).toBe('hooks 쓰기');
+  });
+
+  it('키는 접두사 없는 원래 키 — 카드의 data-key와 맞아야 딥링크가 착지한다', () => {
+    const rows = toWidgetRows(
+      [finding({ dedup_key: 'R6|Windows|ab', first_seen: '2026-08-02T00:00:00Z' })],
+      [tip('T1', '2026-08-01T00:00:00Z')],
+    );
+    expect(rows.map((r) => r.key)).toEqual(['R6|Windows|ab', 'T1']);
+  });
+
+  it('기본 상한은 3건', () => {
+    const many = Array.from({ length: 5 }, (_, i) => tip(`t-${i}`, `2026-08-0${i + 1}T00:00:00Z`));
+    expect(toWidgetRows([], many)).toHaveLength(3);
   });
 });
 

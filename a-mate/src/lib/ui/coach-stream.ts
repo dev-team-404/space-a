@@ -5,7 +5,7 @@
 import type { CoachFinding, ContentItem } from '../api';
 import {
   CONTENT_CARD_LIMIT, contentKind, toLearnCardView, toLessonCardView, toLogCardView, validDeadline,
-  type LearnCardView, type LogCardView,
+  type CoachKind, type LearnCardView, type LogCardView,
 } from './coach-helpers';
 
 /** 스트림의 한 칸. 분류에 따라 문법 A(log) 또는 문법 B(learn) 뷰모델을 싣는다.
@@ -172,4 +172,30 @@ export function saveSeenCoachKeys(keys: readonly string[]): string[] {
   const kept = [...keys];
   localStorage.setItem(SEEN_KEYS_STORAGE, JSON.stringify(kept));
   return kept;
+}
+
+// ── 홈 「지금 볼 코칭」 위젯 (§2.4) ─────────────────────────────────────────
+
+export interface CoachWidgetRow {
+  /** **접두사 없는** 원래 키 — 카드의 `data-key`와 같아야 딥링크가 그 카드에 착지한다. */
+  key: string;
+  kind: CoachKind;
+  badge: string;
+  oneLine: string;
+}
+
+/** 스트림 상위 N건을 위젯 행으로. 정렬·상한은 탭과 같은 규칙을 쓴다 — 두 화면이
+ * 어긋나면 "홈에 있는데 탭에 없다"가 생긴다. */
+export function toWidgetRows(
+  findings: CoachFinding[],
+  content: ContentItem[],
+  limit = 3,
+): CoachWidgetRow[] {
+  return buildCoachStream(findings, content)
+    .slice(0, limit)
+    .map((c) =>
+      c.kind === 'coaching'
+        ? { key: c.log.key, kind: c.kind, badge: c.log.badge, oneLine: c.log.action ?? c.log.title }
+        : { key: c.learn.id, kind: c.kind, badge: c.learn.badge, oneLine: c.learn.title },
+    );
 }

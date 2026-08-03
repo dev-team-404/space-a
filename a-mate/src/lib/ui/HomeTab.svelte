@@ -1,9 +1,10 @@
 <script lang="ts">
   import {
-    getSettings, getWeekSummary, listFindings,
+    getSettings, getWeekSummary, listContent, listFindings,
     onScanDone, onScanProgress, onSettingsChanged, runScanNow,
-    type CoachFinding, type DayStat, type ScanProgress, type Summary,
+    type CoachFinding, type ContentItem, type DayStat, type ScanProgress, type Summary,
   } from '../api';
+  import { liveContent, localDateString, toWidgetRows } from './coach-stream';
   import { loadNotices, type Notice, type NoticeDest } from '../notices';
   import WeekTrend from './home/WeekTrend.svelte';
   import ModelMix from './home/ModelMix.svelte';
@@ -25,6 +26,14 @@
   let progress = $state<ScanProgress | null>(null);
   let days = $state<DayStat[]>([]);
   let findings = $state<CoachFinding[]>([]);
+  let tips = $state<ContentItem[]>([]);
+  // 수명이 끝난 공지는 위젯에서도 뺀다 (§2.6) — 탭과 어긋나면 "홈에 있는데 탭에 없다"가 생긴다.
+  // `new Date()`는 반응성 의존이 아니라 findings·tips가 바뀔 때만 다시 잰다. 공지 수명은
+  // 일 단위라 그 정밀도면 충분하고, 홈은 스캔·큐레이션마다 load()로 갱신된다.
+  const coachRows = $derived.by(() => {
+    const now = new Date();
+    return toWidgetRows(findings, liveContent(tips, localDateString(now), now.getTime()));
+  });
   let notices = $state<Notice[]>([]);
   let honorific = $state('주인'); // owner_title — MiniLife 정적 대사에 반영
   const topAdvice = $derived(findings.length > 0 ? findings[0].suggested_action : null);
@@ -36,12 +45,13 @@
   checkHub();
 
   async function load() {
-    const [d, f, settings] = await Promise.all([
+    const [d, f, c, settings] = await Promise.all([
       getWeekSummary().catch(() => [] as DayStat[]),
       listFindings(false).catch(() => [] as CoachFinding[]),
+      listContent(false).catch(() => [] as ContentItem[]),
       getSettings().catch(() => ({}) as Record<string, string>),
     ]);
-    days = d; findings = f;
+    days = d; findings = f; tips = c;
     honorific = settings['owner_title']?.trim() || '주인';
     notices = loadNotices();
   }
@@ -82,7 +92,7 @@
   <div class="grid">
     <WeekTrend {days} />
     <ModelMix />
-    <SaveTop3 {findings} onGoto={onGotoCoach} />
+    <SaveTop3 rows={coachRows} onGoto={onGotoCoach} />
     <NoticeLog {notices} onGoto={onGotoNotice} />
   </div>
   {/if}
