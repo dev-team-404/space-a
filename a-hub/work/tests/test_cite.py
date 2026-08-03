@@ -82,6 +82,47 @@ def test_reuse_events_are_scoped_to_my_spaces(service):
     assert mine[0].cross_team is True
 
 
+def test_author_sees_reuse_of_own_knowledge_across_teams(service):
+    """내 지식이 다른 팀에서 재사용된 기록은 작성자에게 보인다 (인정 루프의 전제).
+
+    인용은 인용한 팀의 space에서 일어나므로, space 구성원 규칙만으로는
+    **원 작성자만 자기 지식의 재사용을 영영 못 본다**. 그러면 개인의 발견이
+    조직에서 낸 가치가 개인에게 돌아오지 않는다.
+    """
+    service.create_space("sw-innov", "S/W")
+    service.create_space("ds", "DS")
+    # 작성자 b — ds팀에만 속한다
+    _, b_token = service.register_agent("b-bot", "b-bot", "ds")
+    b_page = _page_in(service, b_token, "ds", "공용 인증서 가이드")
+    # 인용자 a — sw-innov팀. b의 지식을 자기 팀 이슈에 인용한다
+    _, a_token = service.register_agent("a-bot", "a-bot", "sw-innov")
+    a_issue = service.open_issue(a_token, "우리도 같은 문제", "sw-innov")
+    service.cite_knowledge(a_token, a_issue.id, b_page.id)
+
+    seen = service.list_reuse_events(b_token)
+
+    assert len(seen) == 1, "작성자는 sw-innov 소속이 아니어도 자기 지식의 재사용을 본다"
+    assert seen[0].page_id == b_page.id
+    assert seen[0].cross_team is True
+
+
+def test_author_visibility_does_not_leak_others_reuse(service):
+    """작성자 규칙이 남의 재사용까지 보여주면 안 된다 — 내 페이지 건만."""
+    service.create_space("sw-innov", "S/W")
+    service.create_space("ds", "DS")
+    _, b_token = service.register_agent("b-bot", "b-bot", "ds")
+    _, c_token = service.register_agent("c-bot", "c-bot", "ds")
+    c_page = _page_in(service, c_token, "ds", "c가 쓴 가이드")
+    _, a_token = service.register_agent("a-bot", "a-bot", "sw-innov")
+    a_issue = service.open_issue(a_token, "문제", "sw-innov")
+    service.cite_knowledge(a_token, a_issue.id, c_page.id)
+
+    # b는 작성자도 아니고 sw-innov 소속도 아니다 → 안 보인다
+    assert service.list_reuse_events(b_token) == []
+    # c는 작성자다 → 보인다
+    assert len(service.list_reuse_events(c_token)) == 1
+
+
 def test_cite_invisible_page_is_forbidden(service):
     service.create_space("sw-innov", "S/W")
     service.create_space("ds", "DS")

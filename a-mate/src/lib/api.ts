@@ -318,6 +318,10 @@ export const onLifeVisit = (cb: (rows: LifeVisit[]) => void): Promise<UnlistenFn
   listen<LifeVisit[]>('life:visit', (e) => cb(e.payload));
 export const onGuestbookNew = (cb: (rows: GuestbookEntry[]) => void): Promise<UnlistenFn> =>
   listen<GuestbookEntry[]>('guestbook:new', (e) => cb(e.payload));
+/** 인정 루프 — 내가 발행한 지식을 남이 인용했다. 팀 단위까지만 담긴다(개인명 없음). */
+export interface ReuseNote { page_id: string; space: string; cross_team: boolean; at: string }
+export const onReuseCelebrated = (cb: (rows: ReuseNote[]) => void): Promise<UnlistenFn> =>
+  listen<ReuseNote[]>('reuse:celebrated', (e) => cb(e.payload));
 /** 인바운드 소식 구독 완료 신고 — 백엔드가 이 신고 전에는 폴링하지 않는다(수신자 없는 emit = 영구 유실). */
 export const noticesReady = () => invoke<void>('notices_ready');
 /** 트레이 "업데이트 확인" → chat 창에서 수동 업데이트 체크를 트리거 */

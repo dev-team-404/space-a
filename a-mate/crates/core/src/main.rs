@@ -109,6 +109,56 @@ fn cmd_diary(store: &SqliteStore, date: Option<String>) -> Result<()> {
     Ok(())
 }
 
+/// 인정 루프 — 내가 발행한 지식을 남이 인용했는지 확인하고 축하 문구를 만든다.
+/// 앱의 `maybe_poll_reuse`와 같은 경로(조회 → diff → 노트 → 문구)를 헤드리스로 검증한다.
+fn cmd_reuse(store: &SqliteStore) -> Result<()> {
+    let Some(cfg) = agent_mentor::hub::HubConfig::resolve(store) else {
+        println!("reuse: 허브 미설정 — 건너뜀");
+        return Ok(());
+    };
+    let Some(token) = cfg.token.clone().or(store.get_setting("knowledge_hub_token")?) else {
+        println!("reuse: 토큰 없음 — 먼저 hub-share로 등록하세요");
+        return Ok(());
+    };
+    let mine = store.hub_published_page_ids()?;
+    println!("reuse: 내 발행분 {}건 — {:?}", mine.len(), mine);
+    if mine.is_empty() {
+        return Ok(());
+    }
+    let client = agent_mentor::hub::HubClient {
+        base_url: cfg.base_url.clone(),
+        api_key: cfg.api_key.clone(),
+        token,
+    };
+    let rows = match client.reuse_events(200)? {
+        Some(r) => r,
+        None => {
+            println!("reuse: 허브에 /reuse-events 없음(구버전 배포) — 건너뜀");
+            return Ok(());
+        }
+    };
+    let cursor = store.get_setting("inbound_reuse_cursor")?.filter(|v| !v.is_empty());
+    println!("reuse: 서버 이벤트 {}건, 커서 {:?}", rows.len(), cursor);
+
+    let (fresh, next) =
+        agent_mentor::inbound::select_new_reuses(&rows, &mine, &cfg.user_id, cursor.as_deref());
+    let notes: Vec<_> = fresh.iter().filter_map(agent_mentor::hub::to_reuse_note).collect();
+    match agent_mentor::hub::render_reuse_praise(&notes) {
+        Some(msg) => {
+            for n in &notes {
+                println!("  축하 대상: page {} · {} 팀 · cross_team={}", n.page_id, n.space, n.cross_team);
+            }
+            println!("🤖 {msg}");
+        }
+        None => println!("reuse: 새 재사용 없음 (조용히 넘어감)"),
+    }
+    if let Some(next) = next {
+        store.set_setting("inbound_reuse_cursor", &next)?;
+        println!("reuse: 커서 전진 → {next}");
+    }
+    Ok(())
+}
+
 /// a-hub 지식 공유 — 유의미 finding을 이슈→해결로 발행 (SPACE_A_HUB_URL 미설정 시 no-op).
 fn cmd_hub_share(store: &SqliteStore) -> Result<()> {
     let Some(cfg) = agent_mentor::hub::HubConfig::resolve(store) else {
@@ -267,6 +317,7 @@ fn main() -> Result<()> {
         "diary" => cmd_diary(&store, args.get(2).cloned())?,
         "skill-draft" => cmd_skill_draft(&store)?,
         "hub-share" => cmd_hub_share(&store)?,
+        "reuse" => cmd_reuse(&store)?,
         "telemetry" => cmd_telemetry(&store, args.get(2).cloned())?,
         "retro" => cmd_retro(&store)?,
         "all" => {

@@ -478,6 +478,22 @@ impl HubClient {
         r
     }
 
+    /// 재사용 이벤트 조회 (인정 루프). 구버전 허브는 이 경로가 없어 404를 준다 —
+    /// 호출자가 "기능 없음"으로 조용히 넘길 수 있도록 `Ok(None)`으로 구분해 돌려준다.
+    /// 그 외 오류는 Err (일시 장애 → 다음 스캔 재시도).
+    pub fn reuse_events(&self, limit: usize) -> Result<Option<Vec<Value>>> {
+        match self.req("GET", &format!("/reuse-events?limit={limit}")).call() {
+            Ok(resp) => {
+                let v: Value = resp.into_json()?;
+                Ok(Some(
+                    v.get("reuse_events").and_then(|r| r.as_array()).cloned().unwrap_or_default(),
+                ))
+            }
+            Err(ureq::Error::Status(404, _)) => Ok(None), // 미배포 허브 — 기능 없음
+            Err(e) => Err(anyhow!("hub reuse_events 실패: {e}")),
+        }
+    }
+
     /// 토큰 발급(등록). 같은 user_id 재등록 = 같은 계정 재사용 (허브 계약).
     /// 등록 자체는 Bearer가 필요 없으므로 token 없이 호출 가능.
     pub fn register(cfg: &HubConfig) -> Result<(String, String)> {
@@ -1047,6 +1063,50 @@ pub fn run_retro_push(
 
 /// pull 방향(팀 지식 → 큐레이션 피드) 소스. 토큰이 없으면 None —
 /// push 경로가 최초 register로 settings(knowledge_hub_token)를 채우면 그때부터 활성.
+// ─────────────────────────────────────────────────────────────────────────
+// 인정 루프 — 남이 내 지식을 인용한 순간을 개인 칭찬으로 (스펙: PR #81)
+// ─────────────────────────────────────────────────────────────────────────
+
+/// 축하 한 건. 표시용으로 이미 가공된 값만 담는다 — 렌더러가 판단할 게 없도록.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ReuseNote {
+    /// 인용된 내 페이지 id (추적용, 표시하지 않음)
+    pub page_id: String,
+    /// 인용한 팀(space). 개인명은 담지 않는다 — 프라이버시 기본값.
+    pub space: String,
+    /// 팀 경계를 넘은 재사용인지 — 서버 판정을 그대로 쓴다.
+    pub cross_team: bool,
+    pub at: String,
+}
+
+/// `/reuse-events` 행 → 표시용 노트. 필드가 없으면 None(방어적 무시).
+pub fn to_reuse_note(row: &Value) -> Option<ReuseNote> {
+    Some(ReuseNote {
+        page_id: row.get("page_id")?.as_str()?.to_string(),
+        space: row.get("space_id").and_then(|v| v.as_str()).unwrap_or("다른 팀").to_string(),
+        cross_team: row.get("cross_team").and_then(|v| v.as_bool()).unwrap_or(false),
+        at: row.get("created_at").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+    })
+}
+
+/// 축하 문구 — 마스코트 말풍선·소식 공용. 결정론(LLM 무개입).
+///
+/// **프라이버시**: 인용한 팀까지만 말하고 개인명·상대 이슈 제목은 절대 넣지 않는다
+/// (타 팀 업무 내용 누출 방지 — 스펙 §프라이버시).
+pub fn render_reuse_praise(notes: &[ReuseNote]) -> Option<String> {
+    let first = notes.first()?;
+    let where_ = if first.cross_team {
+        format!("{} 팀", first.space)
+    } else {
+        "같은 팀".to_string()
+    };
+    Some(if notes.len() == 1 {
+        format!("주인님이 올린 지식을 {where_}에서 가져다 썼어요!")
+    } else {
+        format!("주인님 지식이 {}곳에서 재사용됐어요 — {where_} 포함!", notes.len())
+    })
+}
+
 pub fn pull_source(
     cfg: &HubConfig,
     stored_token: Option<String>,
@@ -1486,6 +1546,52 @@ mod tests {
         store.set_setting("knowledge_hub_url", "https://hub.example.com").unwrap();
         store.set_setting("knowledge_hub_share", "off").unwrap();
         assert!(HubConfig::resolve(&store).is_none(), "설정에서 끄면 env로 되살아나지 않는다");
+    }
+
+    // ── 인정 루프 ──────────────────────────────────────────────────────
+
+    fn reuse_row() -> serde_json::Value {
+        serde_json::json!({
+            "reuse_id": "reuse_1", "issue_id": "iss_2", "page_id": "page_1",
+            "space_id": "ds", "cited_by": "bob", "cross_team": true,
+            "created_at": "2026-07-30T01:00:00+00:00"
+        })
+    }
+
+    #[test]
+    fn reuse_note_maps_server_row() {
+        let n = to_reuse_note(&reuse_row()).expect("정상 행은 노트가 된다");
+        assert_eq!(n.page_id, "page_1");
+        assert_eq!(n.space, "ds");
+        assert!(n.cross_team);
+    }
+
+    #[test]
+    fn reuse_note_ignores_row_without_page_id() {
+        assert!(to_reuse_note(&serde_json::json!({"reuse_id": "x"})).is_none());
+    }
+
+    #[test]
+    fn reuse_praise_names_team_not_person() {
+        let n = to_reuse_note(&reuse_row()).unwrap();
+        let msg = render_reuse_praise(&[n]).expect("한 건이면 문구가 나온다");
+        assert!(msg.contains("ds 팀"), "인용한 팀을 말한다: {msg}");
+        assert!(!msg.contains("bob"), "개인명은 넣지 않는다: {msg}");
+        assert!(!msg.contains("iss_2"), "상대 이슈는 넣지 않는다: {msg}");
+        assert!(!msg.contains("page_1"), "내부 id는 노출하지 않는다: {msg}");
+    }
+
+    #[test]
+    fn reuse_praise_same_team_does_not_claim_cross_team() {
+        let mut row = reuse_row();
+        row["cross_team"] = serde_json::json!(false);
+        let msg = render_reuse_praise(&[to_reuse_note(&row).unwrap()]).unwrap();
+        assert!(msg.contains("같은 팀"), "교차 팀이 아니면 그렇게 말한다: {msg}");
+    }
+
+    #[test]
+    fn reuse_praise_is_none_when_empty() {
+        assert!(render_reuse_praise(&[]).is_none(), "축하할 게 없으면 침묵한다");
     }
 
     #[test]

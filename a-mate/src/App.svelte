@@ -14,13 +14,13 @@
   import {
     getSummary, getDailyLine, getDailyCut, listFindings, onScanDone, onGotoTab, onChatShown, onDailyCutReady,
     onNewFindings, onDiaryReady, onOccasionToday, onDailyLine, onUpdateCheckRequested,
-    onLifeVisit, onGuestbookNew, noticesReady, lifeContentAccess, lifeGoto, lifeGuestbook,
+    onLifeVisit, onGuestbookNew, onReuseCelebrated, noticesReady, lifeContentAccess, lifeGoto, lifeGuestbook,
     lifeSetDailyLine, lifeSyncDailyCut, lifeView,
     type Summary,
   } from './lib/api';
   import {
     diaryNotice, findingNotice, guestbookNotice, loadNotices, occasionNotice, pushNotice, saveNotices,
-    visitNotice, type Notice, type NoticeDest,
+    visitNotice, reuseNotice, type Notice, type NoticeDest,
   } from './lib/notices';
   import {
     addDiaryDate, clearDiaryDates, clearGuestbookSeen, loadUnseen, maxCreatedAt, newGuestbookIds,
@@ -254,6 +254,8 @@
         record(guestbookNotice(rows, new Date().toISOString()));
         observeGuestbook(rows);
       }),
+      // 인정 루프 — 내 지식이 재사용된 순간을 개인 칭찬으로 (스펙 PR #81)
+      onReuseCelebrated((rows) => rows.length && record(reuseNotice(rows, new Date().toISOString()))),
       onDailyLine((text) => { dailyLine = text; }),
       onDailyCutReady(() => {
         getDailyCut().then((c) => (cutCaption = c?.caption || null));
