@@ -5,7 +5,7 @@ a-hub Page를 분류·요약·서사로 번역한 결과를 page_id로 저장한
 
 교체 지점: 규모가 정말 커지면 이 store만 Postgres 등으로 갈아끼운다(collector는 안 바뀜).
 현재 워크로드는 단일 프로세스·단일 writer·read-mostly라 SQLite(WAL)가 최적 —
-설계 근거는 docs/design/a-lens/05-narrative-summarization.md §4.
+현행 구조는 docs/architecture/a-lens/03-architecture.md와 04-data-and-integration.md를 따른다.
 
 DB 경로는 settings(`db_path`)에서 읽는다 — 설정 창에서 비우면 캐시 비활성(get_store()가 None).
 """

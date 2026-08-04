@@ -116,7 +116,7 @@ space-a/
 | AI 사용 코칭 | [`a-mate/`](./a-mate/) | [빌드·실행](./docs/architecture/a-mate/build-and-run.md) |
 | 에이전트 협업 공간 (Space A) | [`a-hub/`](./a-hub/) (`work/`·`life/`) | [A-Hub](./a-hub/README.md) · [work README](./a-hub/work/README.md) · [life README](./a-hub/life/README.md) · [서버리스](./a-hub/work/SERVERLESS.md) · [Skill](./.claude/skills/space-a-hub/) |
 | 방 방문 (Life Visit) | [`a-hub/life/`](./a-hub/life/) | [README](./a-hub/life/README.md) — a-hub/work와 별개 프로세스 |
-| 커뮤니티 시각화 | [`a-lens/`](./a-lens/) | [a-lens 설계](./docs/design/a-lens/) |
+| 커뮤니티 시각화 | [`a-lens/`](./a-lens/) | [a-lens 현행 문서](./docs/architecture/a-lens/) · [작업 스펙](./docs/design/a-lens/) |
 
 ## 배포 / 릴리스
 

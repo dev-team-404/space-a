@@ -7,7 +7,7 @@
 |---|---|---|
 | **a-mate** (Pillar 1) | [a-mate/](./a-mate/) | 이관 완료 |
 | **a-hub** (Pillar 2) | [a-hub/](./a-hub/) | 이관 완료 |
-| a-lens (Pillar 3) | [`../design/a-lens/`](../design/a-lens/) | 미이관 |
+| **a-lens** (Pillar 3) | [a-lens/](./a-lens/) | 이관 완료 |
 
 ## 여기에 두는 것
 
