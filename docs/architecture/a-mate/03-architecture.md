@@ -1,7 +1,7 @@
 # a-mate 아키텍처
 
 > **범위** — Pillar 1 데스크톱 앱 `a-mate`(제품명 Agent Mentor)의 현재 구조.
-> 코드베이스 실측 기준: `main` @ `3a6981a` (2026-08-03).
+> 코드베이스 실측 기준: `main` @ `b886034` (2026-08-04).
 > 설계 근거·이력은 [`docs/design/a-mate/`](../../design/a-mate/) 아래 `specs/`·`plans/`를 참고한다.
 > 이 문서는 **지금 코드가 어떻게 생겼는가**만 다루고, 왜 그렇게 정했는지는 각 spec과 [ADR](../../adr/)에 있다.
 
@@ -270,7 +270,7 @@ chat:goto-tab   chat:shown       update:check
 
 | 표면 | 구성 |
 |---|---|
-| tray | 좌클릭 → chat 토글. 메뉴에 마스코트 표시 / 실시간 조언 / 화면 캡처 보호 / 잡담 빈도 / 지금 스캔 / 시작 시 실행 / 종료. **설정의 source of truth는 store** — CheckMenuItem 자동 토글을 덮어쓴다 |
+| tray | 좌클릭 → chat 토글. 메뉴에 마스코트 표시 / 마스코트 위치 초기화 / 실시간 조언 / 화면 캡처 보호 / 잡담 빈도 / 지금 스캔 / 설정 / 업데이트 확인 / 시작 시 실행 / 종료. **설정의 source of truth는 store** — CheckMenuItem 자동 토글을 덮어쓴다 |
 | chat | 948×820, 숨김 시작. X는 destroy가 아니라 hide (상주 앱) |
 | mascot | 280×280 투명·무장식·alwaysOnTop·skipTaskbar. 말풍선 시 일시 확장. 위치는 `geometry::sanitize_pos`로 모니터 구성 변경을 방어한 뒤 복원 |
 
@@ -348,8 +348,10 @@ src/
    ├─ api.ts       # 모든 invoke 래퍼 + 타입 + 이벤트 리스너 (백엔드와의 유일한 접점)
    ├─ theme.css    # 색·radius·그림자의 단일 출처 — 모드(light/dark) × 스킨(sky/mint/peach/lavender)
    ├─ ui/          # HomeTab · CoachTab · DiaryTab · ChatTab · GuestbookTab · SettingsTab
-   │  ├─ home/     #   WeekTrend · ModelMix · SaveTop3 · NoticeLog
-   │  ├─ coach/    #   LearnCard · LogCard
+   │  ├─ coach-stream.ts   # 스트림 조립·정렬·공지 수명·배지 키 집합 (순수 함수)
+   │  ├─ coach-helpers.ts  # 카드 뷰모델 — 문법 A/B·근거 칩·고정 슬롯·처분 줄
+   │  ├─ home/     #   WeekTrend · ModelMix · SaveTop3(「지금 볼 코칭」) · NoticeLog
+   │  ├─ coach/    #   LearnCard(문법 B) · LogCard(문법 A)
    │  ├─ settings/ #   MeGroup · ConnectionGroup · LookGroup · PrivacyGroup · AppInfo
    │  └─ LifeView · MiniLife · RobotPortrait · SessionModal …
    ├─ robot/       # 절차 생성 로봇 (parts / render / anim / bubble)
@@ -362,7 +364,11 @@ src/
   이를 `no-hardcoded-colors.test.ts`가 강제한다.
 - 다이어리 본문은 `marked` + `DOMPurify.sanitize`로 렌더한다 — LLM 산출물 살균.
 - 채팅 이력은 창 수명 메모리(`$state`)에만 있고 영속화하지 않는다.
-- 알림 히스토리는 localStorage 최근 20건(백엔드 스키마를 건드리지 않으려고).
+- **코칭 탭의 판단은 전부 `coach-stream.ts`의 순수 함수에 있다** — 정렬(`first_seen` 내림차순),
+  공지 수명(일반 7일·긴급 2일), 배지가 셀 활성 키 집합. 컴포넌트는 렌더만 한다.
+  탭 배지와 화면이 **같은 목록**을 보게 하는 것이 이 분리의 목적이다.
+- 표시 층 상태(본 카드 키·고정 슬롯 확인·알림 히스토리)는 백엔드 스키마를 건드리지 않으려고
+  localStorage에 둔다. 알림 히스토리는 최근 20건.
 - 방은 허브 연결 시 격자 방(`LifeView`), 미연결 시 장식 방(`MiniLife`)으로 갈린다.
 
 ---
@@ -387,9 +393,9 @@ inventory+rules를 통째로 기다려 898ms가 나왔다. 상한(2,000회)을 �
 
 | 층 | 방식 | 현재 |
 |---|---|---|
-| core | 거의 전 모듈에 동봉된 단위 테스트. store는 `open_in_memory()`, 엔진은 `MockEngine`으로 결정적 | **665 passed** |
+| core | 거의 전 모듈에 동봉된 단위 테스트. store는 `open_in_memory()`, 엔진은 `MockEngine`으로 결정적 | **668 passed** |
 | src-tauri | 디바운스·diff·geometry를 Tauri 무관 순수 함수로 분리, 커맨드는 `*_inner`로 테스트 | **48 passed** |
-| 프론트 | vitest — 29파일 | **296 passed** |
+| 프론트 | vitest — 30파일 | **339 passed** |
 | E2E | 수동 체크리스트 (Tauri WebDriver 불안정) | — |
 
 핵심 패턴은 하나다: **부수효과(네트워크·파일·창)를 가장자리로 밀고, 판단 로직은 순수 함수로.**
