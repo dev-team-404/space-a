@@ -3,91 +3,68 @@
 SPACE-A 컴포넌트 간 **경계 계약**. 세 팀원이 서로를 기다리지 않고 병렬로 작업하기 위한 전제다.
 
 > ⚠️ **여기 있는 파일이 정답이다.** 설계 문서와 어긋나면 이 파일을 따른다.
-> 📌 **현재 v2** — v1은 Pillar 3의 데이터 계약과 대조하기 전에 만들어져 **틀렸다** (아래 참고).
+> 📌 **현재 v2.1 (2026-08-04, 구현 실측 정합)** — v1은 권한 모델 기반이 틀려 v2에서 전면 수정했고,
+> v2.1은 v2.0의 설계 표면 중 **구현되지 않은 부분을 제거**해 실제 서버 응답과 일치시켰다 (아래 참고).
 
 | 파일 | 계약 | 제공자 → 소비자 |
 |---|---|---|
-| [c1-mcp-tools.json](c1-mcp-tools.json) | **C1** — MCP Tool | Space A Hub → 임직원 에이전트 / Pillar 1 |
-| [c2-rest-api.json](c2-rest-api.json) | **C2** — 읽기 전용 REST | Space A Hub → 시각화 웹(Pillar 3) |
+| [c1-mcp-tools.json](c1-mcp-tools.json) | **C1** — MCP Tool | Space A Hub → 임직원 에이전트 / Pillar 1(A-Mate) |
+| [c2-rest-api.json](c2-rest-api.json) | **C2** — 읽기 전용 REST | Space A Hub → 시각화 웹 / Pillar 3(A-Lens) |
 | [c4-admin-api.json](c4-admin-api.json) | **C4** — 관리 REST (control plane) | Space A Hub → 관리 클라이언트 / 에이전트 온보딩 |
-| [fixtures/](fixtures/) | 응답 예시 | **서버 없이 먼저 작업 시작하라고 주는 것** |
+| [fixtures/](fixtures/) | 골든 데이터 | 서버 없이 먼저 작업 시작하라고 주는 것 (아래 주의 참고) |
 
 설계 배경은 [`docs/archive/design/a-hub/05-contracts.md`](../docs/archive/design/a-hub/05-contracts.md).
 
-## ⚠️ v1 → v2: 무엇이 바뀌었나
+## ⚠️ v2 → v2.1: 무엇이 바뀌었나 (구현 실측 정합)
 
-v1은 **`team` 문자열 하나**로 권한을 다뤘는데, **한 사람이 여러 Space에 속하므로** 표현 자체가 불가능했다.
-권한 모델의 기반이 틀렸던 것이라 v2에서 전면 수정했다.
+v2.0은 구현 전에 설계로 그린 표면이라, 실제 서버(a-hub/work)가 만들어지면서 어긋난 부분이 생겼다.
+v2.1은 **구현을 실측해 계약을 정합**시킨 판이다 — 미구현 표면을 계약에 남겨두면 소비자가 없는
+API를 믿게 되므로 제거를 택했다.
 
-| v1 | v2 |
+| v2.0 (설계) | v2.1 (실측) |
 |---|---|
-| `team` 문자열 | **`Space` 1급 개념**, 토큰 클레임은 `spaces[]` |
-| `private\|team\|public` | `org\|space` |
-| `report_issue` 1회 | `open_issue` → `cite_knowledge` → `resolve_issue` |
-| 재사용 = 그래프 엣지 | **`ReuseEvent` 1급 이벤트** |
+| 지식 id `doc_*`, 에이전트 id `agt_*` | **`page_*`** (Page가 지식의 실체), agent_id = **user_id** |
+| `search_knowledge` 응답에 confidence·solution·related | 실제 응답 필드(page_id·title·저자·시각)와 `scanned` |
+| 전송 헤더 `X-Space-A-Trace-Id`/`Depth`, `rate_limited` 코드 | 미구현 — 제거. 헤더는 `Authorization`뿐 |
+| C2 전용 뷰 API `/stats`·`/activity`·`/graph`, viewer_tier 4단계, 서버 측 서사 필드 | 미구현 — 제거. **파생 뷰는 A-Lens가 원천 조합으로 자체 계산** (C2 v3.0은 실제 읽기 표면을 기술) |
+| `POST /agents/register` 요청 `{name, space_id}` | **`{user_id, name, space_id}`** — 사람 계정과 연결 |
+
+fixtures 중 `stats.json`·`activity.json`·`space-detail-*.json`은 **v2.0 모양의 골든 데이터로 보존**한다
+— A-Lens의 `A_LENS_SOURCE=fixtures` 데모 모드가 이 파일들을 소비하는 어댑터를 유지하기 때문이다.
+현행 hub 응답 예시가 아니라는 점에 주의. `c1-lifecycle.json`은 v2.1 모양으로 갱신됐다.
 
 ## 🔒 권한 모델 — 하나의 모델, 두 개의 경로
 
 > **에이전트 경유가 권한 우회가 되면 안 된다.**
 > 사람이 UI에서 못 보는 것을 자기 에이전트에게 시켜서 볼 수 있으면 유리벽이 무의미하다.
 
-**C1(MCP)과 C2(UI)는 같은 규칙을 쓴다:**
+**C1(MCP)과 C2(REST 읽기)는 같은 규칙을 쓴다:**
 
 > 읽을 수 있는 것 = **`visibility: org` 지식** + **자기가 속한 Space의 데이터.** 그 외엔 없다.
 
-**집행은 서버가 한다.** 프론트는 아무것도 숨기지 않는다 — 서버가 **응답을 등급에 맞게 깎아서** 준다.
+**집행은 서버가 한다.** 소속은 Bearer 토큰에서만 유도하고 요청 파라미터를 신뢰하지 않는다.
+비멤버 Space의 issues·members·tree는 403이다. (v2.0의 lobby/guest/member/manager 4단계
+tier trimming은 구현 범위에서 제외됐다 — 현재 서버 측 가시성 규칙은 위 두 가지가 전부다.)
 
-```sh
-# 유리벽이 무엇을 가리는지 직접 보기
-diff fixtures/space-detail-member.json fixtures/space-detail-guest.json
-```
+## Pillar 3(A-Lens) 담당자에게
 
-## Pillar 3(시각화) 담당자에게
+**서버를 기다리지 마세요.** `fixtures/`로 화면을 먼저 만들 수 있습니다.
 
-**서버를 기다리지 마세요.** `fixtures/`가 실제 응답과 같은 모양입니다.
-
-| 픽스처 | 엔드포인트 |
+| 픽스처 | 용도 |
 |---|---|
-| `spaces.json` | `GET /spaces` — 로비(사옥) |
-| `space-detail-member.json` | `GET /spaces/sw-innov` — **멤버** |
-| `space-detail-guest.json` | `GET /spaces/sw-innov` — **게스트 (유리벽)** |
-| `reuse-events.json` | `GET /reuse-events` — 지식 재사용 피드 |
-| `stats.json` | `GET /stats` |
-| `activity.json` | `GET /activity` |
+| `spaces.json` | 로비(사옥) 골든 데이터 |
+| `space-detail-member.json` / `space-detail-guest.json` | 방 상세 — 멤버 vs 게스트(유리벽) 시나리오 |
+| `reuse-events.json` | 지식 재사용 피드 |
+| `stats.json` / `activity.json` | 통계·활동 피드 |
+| `c1-lifecycle.json` | C1 왕복 예시 (v2.1 모양) |
 
-과거 A-Lens 데이터 계약은 [`docs/archive/design/a-lens/04-data-mapping.md`](../docs/archive/design/a-lens/04-data-mapping.md)에 보존되어 있습니다.
+위 골든 데이터는 초기(v2.0) 설계 모양이고, A-Lens의 fixtures 데모 모드가 그대로 소비합니다.
+**실서버 연동은 C2 v3.0의 실측 표면**(`/spaces`·`/spaces/{id}/tree`·`/issues`·`/spaces/{id}/members`·
+`/reuse-events`·`/pages/{id}`)을 폴링해, 통계·활동 피드·협업 지도·하이라이트·서사를 **소비자가
+자체 계산**하는 구조입니다 — 서사를 LLM으로 만들지 규칙으로 만들지도 소비자의 선택이며, 실제로
+A-Lens는 LLM 실패 시 규칙 폴백으로 강등합니다.
 
-1. **ReuseEvent를 1급 이벤트로** (요청 #1) — `/reuse-events` 전용 엔드포인트
-2. **서사 캐시** (요청 #2) — `status_line`·`highlight`·`chain[].label`을 완성된 문장으로 **제공**합니다.
-   **다만 쓰실지 말지는 그쪽이 정하세요** (아래 참고)
-3. **타임라인 보존** (요청 #3) — `issues[].timeline[]`에 전이 이력 전체
-4. **절약 추정치는 서버 책임** (요청 #6) — `est_saved_tokens`를 **재사용 1건마다**.
-   추정치이므로 `~`를 붙여 표기해주세요
-5. **MCP도 같은 권한 모델** (요청 #7) — C1에 명시했습니다
-
-### 서사 생성은 그쪽 결정입니다 (Q4)
-
-**초안에서 제가 선을 넘었습니다.** "프론트가 조립하지 마라"고 적었는데, 그쪽 문서가
-**Q4(서사 번역 파이프라인 — 에이전트 기록 시 vs 백엔드 배치 vs 뷰 서버)를 "가장 중요한 열린 질문"**으로
-남겨둔 걸 제 계약이 몰래 닫아버린 셈이었습니다. 철회합니다.
-
-**어떤 화면을 에이전트가 만들고 어떤 화면을 결정론적으로 그릴지는 시각화 서비스가 정합니다.**
-C2는 **양쪽 재료를 다 주고 빠집니다.**
-
-| | 필드 | 쓰임 |
-|---|---|---|
-| **구조화** | `type`, `actor`, `space_id`, `doc_id`, `at`, 카운트, 상태 | 직접 조립하거나 **에이전트에게 먹이거나** |
-| **서사** | `summary`, `status_line`, `highlight`, `chain[].label` | 그대로 렌더 |
-
-**항상 둘 다 내려갑니다.** 화면마다 다르게 고르셔도 됩니다. 서버는 상관하지 않습니다.
-
-> 참고할 트레이드오프 (선택을 밀려는 게 아니라 재료로): 직접 조립하시면 **이벤트 타입이 늘 때마다
-> 프론트를 고쳐야** 하고, 서사 필드를 쓰시면 안 고쳐도 됩니다.
-
-**단, 이것만은 협상 대상이 아닙니다:** 게스트용 문장은 **누가 쓰든** 작업 내용을 담으면 안 됩니다.
-권한은 렌더링 선택이 아니라 서버가 집행합니다.
-
-## Pillar 1(코칭 Agent) 담당자에게
+## Pillar 1(A-Mate) 담당자에게
 
 이슈 하나의 생애주기가 **3개 호출**로 나뉩니다.
 
@@ -105,17 +82,13 @@ C2는 **양쪽 재료를 다 주고 빠집니다.**
 | 헤더 | 필수 | 내용 |
 |---|---|---|
 | `Authorization: Bearer <token>` | ✅ | **소속 Space(`spaces[]`)를 여기서 유도**합니다 |
-| `X-Space-A-Trace-Id` / `X-Space-A-Depth` | | 무한 루프 방지. 최초 호출은 `depth=0` |
 
 > ⚠️ **`space_id`를 권한 주장용으로 보내지 마세요.** 검색 범위를 *좁히는* 용도로만 받으며,
 > 서버는 토큰의 `spaces[]`와 교집합을 취합니다. 안 속한 Space는 지정해도 안 열립니다.
 
-**3단계 호출이 에이전트에 부담인지 알려주세요.** Pillar 3의 진행 중 이슈 타임라인 때문에
-`open_issue`를 분리했는데, 실제 에이전트 동선에서 과한지는 그쪽이 더 잘 압니다.
-
 ## 변경 규칙
 
-C1이 깨지면 Pillar 1이 죽고, C2가 깨지면 Pillar 3이 죽습니다. **v2부터 추가만 허용합니다.**
+C1이 깨지면 Pillar 1이 죽고, C2가 깨지면 Pillar 3이 죽습니다. **추가만 허용이 원칙입니다.**
 
 | 허용 | 금지 |
 |---|---|
@@ -124,3 +97,7 @@ C1이 깨지면 Pillar 1이 죽고, C2가 깨지면 Pillar 3이 죽습니다. **
 | ✅ 응답에 필드 추가 | ❌ 기존 필드의 **의미** 변경 |
 
 **소비자는 모르는 필드를 만나면 무시하세요.** 하드 실패 금지.
+
+> 예외 기록: v2.1(2026-08-04)은 "계약이 정본"이라는 원칙이 실구현과 어긋난 상태를 바로잡기 위해
+> **미구현 표면의 제거**를 1회 수행했다. 소비자 양쪽(A-Mate·A-Lens)이 이미 실측 모양으로 구현되어
+> 있어 실제 파손은 없다. 이후는 다시 추가만 허용한다.

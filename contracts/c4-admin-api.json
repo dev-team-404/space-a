@@ -1,19 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Space A Hub — C4: Admin Control Plane (REST)",
-  "version": "0.1.0",
-  "status": "draft — MVP. Additive-only once shared.",
-  "description": "Deterministic administrative REST API for Space A: create spaces, register agents (issue agent_id + token + membership). This is a CONTROL PLANE, not an agent — every operation is deterministic CRUD with no LLM judgment. Canonical knowledge writing is C1 (MCP); for the MVP the hub also exposes the C1 lifecycle over REST (see mvpKnowledgeRestBinding).",
+  "version": "0.2.0",
+  "supersedes": "0.1.0",
+  "description": "Space 생성·에이전트 온보딩·멤버십을 다루는 결정론적 관리 REST. LLM 판단이 없는 CONTROL PLANE이다. v0.2(2026-08-04)는 구현 실측 정합판 — register가 user_id(사람 계정)를 요구하고 agent_id=user_id로 통일됐으며(agt_* 체계 제거), resolve 응답의 doc_id는 page_id가 됐다. 지식 생애주기의 REST 바인딩(knowledgeRestBinding)은 MVP 임시가 아니라 실구현이다.",
 
   "permissionModel": {
-    "rule": "Membership (spaces[]) is derived from the bearer token, NEVER from a request parameter. An agent may only act within Spaces it belongs to.",
-    "enforcement": "Server-side. Identical rule to C1/C2."
+    "rule": "소속(spaces[])은 Bearer 토큰에서만 유도한다. 에이전트는 자기가 속한 Space 안에서만 행동한다.",
+    "enforcement": "서버 측. C1/C2와 동일 규칙.",
+    "knownLimits": "관리 엔드포인트(POST /spaces 등)는 Bearer 신원 없이 호출된다(PoC). SPACE_A_API_KEY 설정 시 공유 x-api-key 관문이 전 요청에 추가된다(/healthz·/readyz 제외). 토큰은 등록 순번 기반(tok_N)으로 발급되어 추측 가능하다 — PoC 단순화이며 서비스 전환 시 무작위 발급으로 교체 대상."
   },
 
   "errors": {
     "400": "invalid_request",
-    "401": "unauthorized — missing or invalid bearer token",
-    "403": "forbidden — authenticated but outside your Space membership",
+    "401": "unauthorized — Bearer 토큰 없음/무효",
+    "403": "forbidden — 인증됐지만 소속 Space 밖",
     "404": "not_found"
   },
 
@@ -21,27 +22,89 @@
     {
       "method": "POST",
       "path": "/spaces",
-      "auth": "none (MVP)",
-      "summary": "Create a team/task life (Space).",
-      "request": { "id": "string — slug, e.g. 'sw-innov'", "name": "string" },
-      "response": { "status": 201, "body": { "id": "string", "name": "string", "status": "active" } }
+      "auth": "없음 (PoC)",
+      "summary": "팀/과제 Space 생성. guidelines를 주면 가이드 Page가 함께 만들어진다.",
+      "request": { "id": "string — slug, 예: 'sw-innov'", "name": "string", "purpose": "string?", "guidelines": "string?" },
+      "response": { "status": 201, "body": { "id": "string", "name": "string", "status": "active", "purpose": "string|null", "guide_page_id": "page_*|null" } }
+    },
+    {
+      "method": "PATCH",
+      "path": "/spaces/{space_id}",
+      "auth": "없음 (PoC)",
+      "summary": "Space 이름 변경.",
+      "request": { "name": "string" },
+      "response": { "status": 200, "body": { "id": "string", "name": "string", "status": "string" } }
+    },
+    {
+      "method": "POST",
+      "path": "/spaces/{space_id}/archive",
+      "auth": "없음 (PoC)",
+      "summary": "Space 보관 처리.",
+      "response": { "status": 200, "body": { "id": "string", "status": "archived" } }
     },
     {
       "method": "POST",
       "path": "/agents/register",
-      "auth": "none (MVP)",
-      "summary": "Onboard an agent: issue an agent_id and token, and join a Space.",
-      "request": { "name": "string", "space_id": "string — must already exist" },
-      "response": {
-        "status": 201,
-        "body": { "agent_id": "agt_*", "spaces": ["string"], "token": "string — use as Bearer for issue calls" }
-      },
-      "errors": ["404 if space_id does not exist"]
+      "auth": "없음 (PoC)",
+      "summary": "에이전트 온보딩: user_id(사람 계정)에 묶인 agent_id와 토큰을 발급하고 Space에 가입시킨다.",
+      "request": { "user_id": "string — 사람 계정 slug. agent_id로 그대로 쓰인다", "name": "string", "space_id": "string — 이미 존재해야 함" },
+      "response": { "status": 201, "body": { "agent_id": "string (= user_id)", "spaces": ["string"], "token": "string — 이후 호출의 Bearer" } },
+      "errors": ["404 — space_id 없음"]
+    },
+    {
+      "method": "GET",
+      "path": "/spaces/{space_id}/members",
+      "auth": "Bearer",
+      "summary": "멤버 목록.",
+      "response": { "status": 200, "body": { "members": [{ "agent_id": "string", "name": "string", "spaces": ["string"] }] } }
+    },
+    {
+      "method": "POST",
+      "path": "/spaces/{space_id}/members",
+      "auth": "Bearer",
+      "summary": "멤버 추가.",
+      "request": { "agent_id": "string" },
+      "response": { "status": 201, "body": { "agent_id": "string", "spaces": ["string"] } }
+    },
+    {
+      "method": "DELETE",
+      "path": "/spaces/{space_id}/members/{agent_id}",
+      "auth": "Bearer",
+      "summary": "멤버 제거.",
+      "response": { "status": 200, "body": { "removed": "string" } }
+    },
+    {
+      "method": "GET",
+      "path": "/agents",
+      "auth": "Bearer",
+      "summary": "에이전트 목록.",
+      "response": { "status": 200, "body": { "agents": [{ "agent_id": "string", "name": "string", "spaces": ["string"] }] } }
+    },
+    {
+      "method": "GET",
+      "path": "/agents/{agent_id}",
+      "auth": "Bearer",
+      "summary": "에이전트 단건.",
+      "response": { "status": 200, "body": { "agent_id": "string", "name": "string", "spaces": ["string"] } }
+    },
+    {
+      "method": "DELETE",
+      "path": "/agents/{agent_id}",
+      "auth": "Bearer",
+      "summary": "에이전트 폐기(토큰 무효화).",
+      "response": { "status": 200, "body": { "revoked": "string" } }
+    },
+    {
+      "method": "POST",
+      "path": "/agents/{agent_id}/rotate-token",
+      "auth": "Bearer",
+      "summary": "토큰 재발급.",
+      "response": { "status": 200, "body": { "agent_id": "string", "token": "string" } }
     }
   ],
 
-  "mvpKnowledgeRestBinding": {
-    "note": "Canonical form is C1 (MCP tools). The hub exposes these over REST until the MCP adapter lands. Same permission model: space_id must be in the token's spaces[].",
+  "knowledgeRestBinding": {
+    "note": "C1(MCP)과 같은 지식 생애주기의 REST 바인딩. MCP를 못 쓰는 환경(스킬·스크립트)이 같은 기능에 접근한다. 권한 모델 동일: space_id는 토큰의 spaces[] 안이어야 한다.",
     "endpoints": [
       {
         "method": "POST",
@@ -52,21 +115,34 @@
       },
       {
         "method": "POST",
+        "path": "/issues/{issue_id}/cite",
+        "auth": "Bearer",
+        "request": { "page_id": "page_*", "note": "string?" },
+        "response": { "status": 200, "body": { "reuse_id": "reuse_*", "page_id": "page_*", "cross_team": "bool", "issue_status": "knowledge_linked" } }
+      },
+      {
+        "method": "POST",
         "path": "/issues/{issue_id}/resolve",
         "auth": "Bearer",
-        "request": {
-          "summary": "string",
-          "steps": ["string"],
-          "publish_knowledge": "bool — default true",
-          "visibility": "org | space — default org"
-        },
-        "response": {
-          "status": 200,
-          "body": { "issue_id": "iss_*", "status": "resolved", "doc_id": "doc_* — present when published" }
-        }
+        "request": { "summary": "string", "steps": ["string?"], "publish_knowledge": "bool = true", "visibility": "org | space = org" },
+        "response": { "status": 200, "body": { "issue_id": "iss_*", "status": "resolved", "page_id": "page_* — publish_knowledge=true일 때만" } }
+      },
+      {
+        "method": "POST",
+        "path": "/pages/search",
+        "auth": "Bearer",
+        "request": { "query": "string", "space_id": "string?", "limit": "int = 3" },
+        "response": { "status": 200, "body": { "results": ["C2 /pages/search와 동일"], "scanned": "int" } }
+      },
+      {
+        "method": "GET",
+        "path": "/skills/candidates",
+        "auth": "Bearer",
+        "summary": "반복 해결 패턴(Skill 승격 후보). query: space_id, min_occurrences=3.",
+        "response": { "status": 200, "body": { "candidates": [{ "pattern": "string", "occurrences": "int", "page_ids": ["page_*"] }] } }
       }
     ]
   },
 
-  "implementation": "a-hub/work/ (Pillar 2). Tests in a-hub/work/tests."
+  "implementation": "a-hub/work/ (Pillar 2 = A-Hub Work). 테스트: a-hub/work/tests — memory·sqlite 양쪽 파라미터라이즈."
 }
