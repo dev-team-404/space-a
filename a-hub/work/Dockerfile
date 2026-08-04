@@ -9,7 +9,9 @@ ARG PIP_TRUSTED=""
 
 # 서버(프로덕션) 런타임 의존성만. pyproject의 [project].dependencies와 일치시킨다.
 # 서버리스 전용(mangum/boto3, [serverless] extra)은 여기 들어오지 않는다 — 서버/서버리스 분리.
-RUN pip install --no-cache-dir ${PIP_TRUSTED} "fastapi>=0.115" "uvicorn>=0.30"
+# mcp는 필수다: CMD가 create_app을 기본값(mount_mcp=True)으로 띄우므로 없으면 부팅 자체가 실패한다.
+# 상한 <2: mcp 2.0에서 FastMCP가 MCPServer로 개명되며 mcp.server.fastmcp 모듈이 사라졌다.
+RUN pip install --no-cache-dir ${PIP_TRUSTED} "fastapi>=0.115" "uvicorn>=0.30" "mcp>=1.27,<2"
 
 # 애플리케이션 코드 (ports & adapters 전부)
 COPY ahub ./ahub

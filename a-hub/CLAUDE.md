@@ -22,7 +22,7 @@ Python 프로젝트, DB, 실행 생애주기를 공유하지 않는다.
 
 ```sh
 cd a-hub/work
-uv venv .venv && uv pip install --native-tls -e ".[dev]" mcp
+uv venv .venv && uv pip install --native-tls -e ".[dev]"
 .venv/bin/python -m pytest                # memory·sqlite 양쪽 검증
 .venv/bin/python -m uvicorn ahub.api.rest_server:create_app --factory --reload
 ```

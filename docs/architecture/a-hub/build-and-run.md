@@ -8,7 +8,6 @@ Work와 Life는 별도 Python 프로젝트다. 같은 가상환경을 공유한�
 
 - Python 3.12 이상
 - Docker Desktop 또는 Docker Engine + Compose
-- Work MCP를 사용할 경우 현재 코드와 호환되는 `mcp>=1.27,<2`
 - Work 서버리스 개발 배포를 사용할 경우 AWS CLI와 SAM CLI
 
 ## 2. Work 로컬 실행
@@ -16,7 +15,7 @@ Work와 Life는 별도 Python 프로젝트다. 같은 가상환경을 공유한�
 ```powershell
 cd a-hub/work
 python -m venv .venv
-.venv\Scripts\python -m pip install "mcp>=1.27,<2" -e ".[dev]"
+.venv\Scripts\python -m pip install -e ".[dev]"
 .venv\Scripts\python -m uvicorn ahub.api.rest_server:create_app --factory --reload --port 8000
 ```
 
@@ -44,9 +43,6 @@ $env:LIFE_SERVER_DB = "./life.db"
 ## 4. Docker Compose
 
 저장소의 `a-hub/`에서 두 서버를 함께 실행한다.
-
-> 현재 Work의 `pyproject.toml`에는 MCP 2.x 상한이 없어 새 빌드가 비호환 2.x를 선택할 수 있다.
-> 의존성 선언이 수정되기 전까지는 Work 이미지에 MCP 1.x가 설치되는지 확인해야 한다.
 
 ```powershell
 cd a-hub

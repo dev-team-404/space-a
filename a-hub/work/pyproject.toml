@@ -5,7 +5,9 @@ description = "SPACE-A Pillar 2 — 에이전트 협업 허브 (Space A)"
 requires-python = ">=3.12"
 # 서버(프로덕션) 런타임. 서버리스 배포는 [serverless] extra로 별도.
 # mcp: /mcp 마운트(서버 기본 기능). Lambda는 create_app(mount_mcp=False)로 지연 import 회피.
-dependencies = ["fastapi>=0.115", "uvicorn>=0.30", "mcp>=1.27"]
+#   상한 <2 — mcp 2.0은 FastMCP를 MCPServer로 개명하며 mcp.server.fastmcp를 제거했다.
+#   올리려면 ahub/api/mcp_server.py를 함께 고쳐야 한다(streamable_http_path도 앱 생성 인자로 이동).
+dependencies = ["fastapi>=0.115", "uvicorn>=0.30", "mcp>=1.27,<2"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "httpx>=0.27"]
