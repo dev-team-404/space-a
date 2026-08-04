@@ -10,6 +10,8 @@ AI 코딩 에이전트는 빠르게 결과를 만들지만 사용 기록과 해�
 | **A-Hub** | 업무 지식(Work)과 관계·공간(Life)을 제공하는 서버 | 개인의 경험을 팀이 재사용하는 공유 상태 |
 | **A-Lens** | Work와 Life를 2D 공간과 이야기로 번역하는 웹 서비스 | 에이전트 협업 흐름을 사람이 이해하는 관전 화면 |
 
+![A-Lens 관전 화면 — 팀 방을 구경하는 모습 (더미 데이터 데모)](./docs/architecture/a-lens/assets/2026-08-04-life-room.png)
+
 ```mermaid
 flowchart LR
     User["사용자와 코딩 에이전트"] --> Mate["A-Mate<br/>로컬 분석·코칭"]
@@ -27,7 +29,7 @@ flowchart LR
 - **A-Hub Life**: 개인 공간, 인테리어, 위치·프레즌스, 친구, 다이어리 공개 범위, 방명록과 마스코트 콘텐츠
 - **A-Lens**: Work·Life 수집, 팀 활동과 협업 관계 시각화, 요약·서사 번역, 장애 시 캐시·규칙 기반 폴백
 
-상세 요구사항과 비목표는 [PRD](./docs/PRD.md), 시스템 경계와 데이터 흐름은 [통합 아키텍처](./docs/architecture/README.md)에서 확인할 수 있습니다.
+상세 요구사항과 비목표는 [PRD](./docs/PRD.md), 시스템 경계와 데이터 흐름은 [통합 아키텍처](./docs/architecture/README.md), 컴포넌트별 비자명한 문제와 해결은 [기술 하이라이트](./docs/architecture/tech-highlights.md)에서 확인할 수 있습니다.
 
 ## 저장소 구조
 
@@ -46,6 +48,8 @@ space-a/
    └─ archive/
 ```
 
+> 코드와 문서에 나오는 **Pillar 1 / 2 / 3**은 각각 **A-Mate / A-Hub / A-Lens**를 가리키는 초기 축 이름입니다.
+
 ## 시작하기
 
 | 대상 | 실행·운영 문서 |
@@ -55,6 +59,12 @@ space-a/
 | A-Lens | [빌드 및 실행](./docs/architecture/a-lens/build-and-run.md) |
 
 전체 문서의 읽는 순서와 관리 기준은 [docs/README.md](./docs/README.md)에 있습니다.
+
+## 출처와 스코프
+
+- 이 저장소는 사내 AI 해커톤 출품을 위해 **2026년 7월부터 새로 개발**한 프로젝트이며, 기존 프로젝트나 오픈소스 저장소의 포크·확장이 아닙니다.
+- 오픈소스는 패키지 의존성으로 사용합니다 — Tauri v2, Svelte 5, Vite, Vitest, rusqlite 등 Rust 크레이트, FastAPI, uvicorn, httpx, pytest, MCP Python SDK, PixiJS, marked, DOMPurify 등. 전체 목록은 각 컴포넌트의 `Cargo.toml`·`package.json`·`pyproject.toml`에 있습니다.
+- 개발 과정 기록: 설계안·스펙·작업 계획 **192건**이 [docs/archive/](./docs/archive/)에, 채택된 결정 **28건**이 [docs/adr/](./docs/adr/)에 보존되어 있습니다.
 
 ## 설계 원칙
 

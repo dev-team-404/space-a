@@ -1,6 +1,6 @@
 # Agent Mentor — 기능 카탈로그
 
-> 구현된 기능과 그 동작 방식의 전체 목록. 코드 실측 기준: `main` @ `b886034` (2026-08-04).
+> 구현된 기능과 그 동작 방식의 전체 목록. 코드 실측 기준: 2026-08-04.
 > 코드 구조는 [`03-architecture.md`](03-architecture.md), 각 기능의 과거 설계 근거는 [`docs/archive/design/a-mate/`](../../archive/design/a-mate/) 참고.
 
 ## 0. 기능 지도

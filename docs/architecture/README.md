@@ -1,6 +1,6 @@
 # SPACE-A 통합 아키텍처
 
-> 기준: `main @ e0fc106` (2026-08-04)<br>
+> 기준: 2026-08-04<br>
 > 제품 요구사항: [PRD](../PRD.md)
 
 ## 1. 시스템 개요
@@ -97,6 +97,7 @@ Work와 Life는 같은 A-Hub 아래 있지만 별도 프로세스와 저장소�
 - 서버 접근 관문이 필요한 배포에서는 별도 API key를 사용할 수 있으며, 이는 사용자 권한을 대신하지 않습니다.
 - A-Lens는 원천 API의 권한을 우회하지 않으며 A-Hub DB에 직접 접속하지 않습니다.
 - 다만 **A-Lens 자체 API에는 인증이 없고** 뷰어 등급(`tier`)도 요청자가 지정합니다. 저장된 Work token으로 수집한 내용이 A-Lens에 접근할 수 있는 누구에게나 열리므로, 외부 노출 전에 인증과 서버 측 tier 결정이 필요합니다([a-lens/03-architecture.md](./a-lens/03-architecture.md) §7, [05-history-and-constraints.md](./a-lens/05-history-and-constraints.md) §2.1).
+- 정리하면, **보안 하드닝(세밀한 권한·토큰 무작위화·SSO·HTTPS 종단·CORS 정책)은 이번 구현 범위에서 의도적으로 제외한 PoC 트레이드오프**입니다. 각 컴포넌트 문서의 "알려진 제약"에 항목별로 기록해 두었으며, 사내 서비스로 전환할 때 개선을 전제로 합니다.
 
 ### 장애 격리
 
@@ -118,3 +119,5 @@ Work와 Life는 같은 A-Hub 아래 있지만 별도 프로세스와 저장소�
 | A-Mate | [상세 문서](./a-mate/) | [빌드 및 실행](./a-mate/build-and-run.md) |
 | A-Hub | [상세 문서](./a-hub/) | [빌드 및 실행](./a-hub/build-and-run.md) |
 | A-Lens | [상세 문서](./a-lens/) | [빌드 및 실행](./a-lens/build-and-run.md) |
+
+컴포넌트를 가로지르는 비자명한 문제와 해결은 [기술 하이라이트](./tech-highlights.md)에 코드 경로와 함께 정리되어 있다.

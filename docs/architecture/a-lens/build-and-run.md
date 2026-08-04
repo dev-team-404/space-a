@@ -1,6 +1,6 @@
 # A-Lens — 빌드와 실행
 
-> 실측 기준: `main @ fda2467` (2026-08-04)
+> 실측 기준: 2026-08-04
 
 ## 1. 요구 사항
 
@@ -57,7 +57,7 @@ Vite는 `/api`, `/assets`를 기본 8600 포트로 프록시한다. 다른 백�
 | `A_LENS_LIFE_ALIAS` | `닉네임=work_id|work_id` 별칭 목록 | 없음 |
 | `A_LENS_PRESENCE_WINDOW` | Work 최근 활동을 online으로 볼 초 | `3600` |
 | `A_LENS_CACHE_TTL` | Work 스냅숏 갱신 초 | `30` |
-| `A_LENS_LLM_URL` | OpenAI 호환 base URL. 비우면 번역 off | 로컬 LM Studio 주소 |
+| `A_LENS_LLM_URL` | OpenAI 호환 base URL. 비우면 LLM off(규칙 폴백) | 없음 (기본 비활성) |
 | `A_LENS_LLM_MODEL` | 모델명 | 저장소 기본 모델명 |
 | `A_LENS_LLM_KEY` | LLM Bearer key | 없음 |
 | `A_LENS_SUMMARY_STYLE` | `brief`, `normal`, `detailed` | `brief` |

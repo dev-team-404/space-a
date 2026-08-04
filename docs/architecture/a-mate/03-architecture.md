@@ -1,7 +1,7 @@
 # a-mate 아키텍처
 
 > **범위** — Pillar 1 데스크톱 앱 `a-mate`(제품명 Agent Mentor)의 현재 구조.
-> 코드베이스 실측 기준: `main` @ `b886034` (2026-08-04).
+> 코드베이스 실측 기준: 2026-08-04.
 > 설계 근거·이력은 [`docs/archive/design/a-mate/`](../../archive/design/a-mate/)을 참고한다.
 > 이 문서는 **지금 코드가 어떻게 생겼는가**만 다루고, 왜 그렇게 정했는지는 각 spec과 [ADR](../../adr/)에 있다.
 
@@ -272,7 +272,7 @@ chat:goto-tab   chat:shown       update:check
 |---|---|
 | tray | 좌클릭 → chat 토글. 메뉴에 마스코트 표시 / 마스코트 위치 초기화 / 실시간 조언 / 화면 캡처 보호 / 잡담 빈도 / 지금 스캔 / 설정 / 업데이트 확인 / 시작 시 실행 / 종료. **설정의 source of truth는 store** — CheckMenuItem 자동 토글을 덮어쓴다 |
 | chat | 948×820, 숨김 시작. X는 destroy가 아니라 hide (상주 앱) |
-| mascot | 280×280 투명·무장식·alwaysOnTop·skipTaskbar. 말풍선 시 일시 확장. 위치는 `geometry::sanitize_pos`로 모니터 구성 변경을 방어한 뒤 복원 |
+| mascot | 280×280 투명·무장식·alwaysOnTop·skipTaskbar. 창 크기는 상시 고정하고 접힘 상태의 투명 여백은 클릭 통과로 처리(우하단 로봇 영역만 상호작용). 위치는 `geometry::sanitize_pos`로 모니터 구성 변경을 방어한 뒤 복원 |
 
 `content_protected` 설정을 켜면 두 창 모두 화면 캡처에서 제외된다(사내 코드 노출 대비, 기본 off).
 

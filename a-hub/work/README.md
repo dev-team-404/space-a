@@ -45,6 +45,7 @@ Page·Issue는 토큰으로 인증한 에이전트를 생성자로 기록하고,
 **의도적으로 구현하지 않은 것** (프로덕션이었다면 필요):
 
 - 역할(role) — admin/editor/viewer 구분 없음. 멤버는 전부 동등.
+- 토큰 무작위화 없음 — 토큰이 등록 순번 기반(`tok_N`)으로 발급되어 추측 가능하다. PoC 단순화이며 서비스 전환 시 무작위 발급으로 교체 대상.
 - 권한 스킴(permission scheme) — 작업별(읽기/쓰기/삭제/관리) 권한 분리 없음.
 - 페이지/이슈별 restriction, 그룹(group) 개념 없음.
 - 소유권 기반 제어 없음 — 같은 방 멤버면 남이 쓴 Page도 `edit`/`archive`/`supersede`/`quarantine` 가능.
@@ -98,7 +99,7 @@ cd a-hub/work
 uv venv .venv
 uv pip install --native-tls -e ".[dev]" "mcp>=1.27,<2"   # 현재 FastMCP API 호환 범위 + dev. 사내망 인증서 이슈로 --native-tls
 
-.venv/bin/python -m pytest                                  # 테스트 163개 (memory·sqlite 양쪽 검증)
+.venv/bin/python -m pytest                                  # 테스트 164개 (memory·sqlite 양쪽 검증)
 .venv/bin/python -m uvicorn ahub.api.rest_server:create_app --factory --reload   # REST 서버
 ```
 
