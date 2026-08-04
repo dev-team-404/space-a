@@ -32,7 +32,7 @@
   "permissionModel": {
     "description": "THE AGENT PATH MUST NOT BE A PERMISSION BYPASS. If a person cannot see something in the Pillar 3 UI, they must not be able to obtain it by asking their agent instead — otherwise the 'glass wall' guest view is meaningless. The MCP visibility rule is therefore identical to the UI's.",
     "rule": "An agent may read: (a) any Knowledge doc with visibility='org', PLUS (b) all data belonging to Spaces the caller is a member of. Nothing else.",
-    "sourceOfTruth": "docs/design/frontend-viz/01-product.md §5 — 'MCP 검색의 가시성도 이 권한 모델과 동일해야 한다'",
+    "sourceOfTruth": "docs/archive/design/a-lens/01-space-model.md — archived visibility design",
     "enforcement": "Server-side, derived from the token's spaces[] claim. Never from a request parameter."
   },
 

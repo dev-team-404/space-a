@@ -184,7 +184,7 @@ def test_guestbook_reply_roundtrip_and_error_codes(client):
 
 
 # ── 공통 신원 (2026-07-29) — Life가 세 컴포넌트를 잇는 등록처 ──
-# 스펙: docs/design/common/specs/2026-07-29-shared-identity-life-hub-lens.md
+# 스펙: docs/archive/design/common/specs/2026-07-29-shared-identity-life-hub-lens.md
 
 
 def test_register_keeps_owner_and_hub_identity(client):

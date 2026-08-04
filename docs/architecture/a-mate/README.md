@@ -33,10 +33,9 @@ Windows·WSL의 Claude Code 사용 기록을 로컬에서 분석해, AI 코딩 �
 
 ## 더 깊이 보려면
 
-- [`docs/design/a-mate/specs/`](../../design/a-mate/specs/) — **진행 중** 설계 스펙만 남는다 (완료되면 archive로)
-- [`docs/archive/design/a-mate/`](../../archive/design/a-mate/) — 완료된 스펙·플랜·킥오프 미러 (ADR 0013)
+- [`docs/archive/design/a-mate/`](../../archive/design/a-mate/) — 완료·폐기된 스펙·플랜·킥오프 이력 (ADR 0013)
 - [`a-mate/CLAUDE.md`](../../../a-mate/CLAUDE.md) — 개발 제약 (Tauri v2 전용, Windows 전용, 어댑터 추상화 원칙)
-- [`docs/highlevel/level-2-a-mate-data-flows.md`](../../highlevel/level-2-a-mate-data-flows.md) — a-hub로 무엇이 나가는지
+- [`docs/archive/highlevel/level-2-a-mate-data-flows.md`](../../archive/highlevel/level-2-a-mate-data-flows.md) — 과거 하이레벨 데이터 흐름
 
 > `specs/`·`plans/`는 **시점 기록**이라 현행화 대상이 아니다. "지금 어떻게 되어 있나"는
 > 01/02/architecture 세 문서가 답한다.

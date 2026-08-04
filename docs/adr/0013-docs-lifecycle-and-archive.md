@@ -14,7 +14,7 @@
 - 문서·코드 주석이 실제와 다른 경로를 참조하는 드리프트가 이미 발생했다.
 
 설계 논의와 확정 결정은
-[docs/design/common/specs/2026-07-19-docs-lifecycle-design.md](../design/common/specs/2026-07-19-docs-lifecycle-design.md) 참조.
+[당시 문서 생명주기 설계](../archive/design/common/specs/2026-07-19-docs-lifecycle-design.md) 참조.
 
 ## 결정
 

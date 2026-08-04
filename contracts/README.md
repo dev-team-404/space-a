@@ -12,7 +12,7 @@ SPACE-A 컴포넌트 간 **경계 계약**. 세 팀원이 서로를 기다리지
 | [c4-admin-api.json](c4-admin-api.json) | **C4** — 관리 REST (control plane) | Space A Hub → 관리 클라이언트 / 에이전트 온보딩 |
 | [fixtures/](fixtures/) | 응답 예시 | **서버 없이 먼저 작업 시작하라고 주는 것** |
 
-설계 배경은 [`docs/design/a-hub/05-contracts.md`](../docs/design/a-hub/05-contracts.md).
+설계 배경은 [`docs/archive/design/a-hub/05-contracts.md`](../docs/archive/design/a-hub/05-contracts.md).
 
 ## ⚠️ v1 → v2: 무엇이 바뀌었나
 
@@ -55,7 +55,7 @@ diff fixtures/space-detail-member.json fixtures/space-detail-guest.json
 | `stats.json` | `GET /stats` |
 | `activity.json` | `GET /activity` |
 
-`docs/design/frontend-viz/03-architecture.md §4`의 데이터 계약을 **제가 맞게 읽었는지 확인 부탁드립니다.**
+과거 A-Lens 데이터 계약은 [`docs/archive/design/a-lens/04-data-mapping.md`](../docs/archive/design/a-lens/04-data-mapping.md)에 보존되어 있습니다.
 
 1. **ReuseEvent를 1급 이벤트로** (요청 #1) — `/reuse-events` 전용 엔드포인트
 2. **서사 캐시** (요청 #2) — `status_line`·`highlight`·`chain[].label`을 완성된 문장으로 **제공**합니다.

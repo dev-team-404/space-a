@@ -90,7 +90,7 @@ export type ReuseEvent = {
   demo?: boolean
 }
 
-// ── 협업 지도 (스펙: docs/design/a-lens/specs/2026-07-31-collab-graph.md) ──
+// ── 협업 지도 (스펙: docs/archive/design/a-lens/specs/2026-07-31-collab-graph.md) ──
 // 사실(reuse·handoff)과 추정(topic)은 **엣지 종류로 분리해서** 온다. 화면에서 합치지 않는다.
 export type CollabNode = {
   id: string

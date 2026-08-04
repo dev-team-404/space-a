@@ -1,6 +1,6 @@
 """협업 지도 — 엣지 3종 산출과 정직성 규칙.
 
-스펙: docs/design/a-lens/specs/2026-07-31-collab-graph.md
+스펙: docs/archive/design/a-lens/specs/2026-07-31-collab-graph.md
 
 특히 지키려는 것: **추정을 사실로 승격하지 않는다.** 사실 엣지(reuse·handoff)는 서버에
 기록이 있을 때만 생기고, 모호한 조인은 선을 긋지 않는다. 0건은 감추지 않고 stats로 보고한다.

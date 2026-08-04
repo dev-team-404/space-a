@@ -516,7 +516,7 @@ export function buildLifeScene(
     // 캐릭터 발끝이 격자 지점(원점)에 닿도록 앵커 하단 중앙. topY = 캐릭터 머리 위 y(음수).
     let topY = -34
     // 공통 신원 — Life에 마스코트 이미지가 있으면 그 사람의 아이콘으로 세운다(절차 생성보다 우선).
-    // 스펙: docs/design/common/specs/2026-07-29-shared-identity-life-hub-lens.md
+    // 스펙: docs/archive/design/common/specs/2026-07-29-shared-identity-life-hub-lens.md
     // 로드는 비동기라 먼저 기본 캐릭터를 세우고, 도착하면 갈아끼운다(실패하면 기본 그대로).
     const charKit = kitPiece(`char.${characterForSeed(agent.agent_id || agent.name || String(k))}`)
     if (charKit && charKit.mount === 'character') {

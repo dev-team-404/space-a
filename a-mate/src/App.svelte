@@ -50,7 +50,7 @@
   // 그룹은 지연하지 않는다 — 설정 탭이 안 보이는 동안 바뀌어도 관측되는 효과가 없다.
   let settingsGroup = $state<SettingsGroup>('conn');
 
-  // 방문 컨텍스트 (docs/design/life-visit.md §3) — 남의 방을 보는 동안에는
+  // 방문 컨텍스트 (docs/archive/design/life-visit.md §3) — 남의 방을 보는 동안에는
   // 사적 탭(일기·코칭·채팅)을 숨긴다. 데이터는 원래 로컬 전용이라 유출은 없지만,
   // 남의 방 화면에 내 사적 탭이 보이면 "남의 것"으로 오독된다.
   let visiting = $state(false);

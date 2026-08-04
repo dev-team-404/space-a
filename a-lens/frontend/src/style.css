@@ -756,7 +756,7 @@ button { font: inherit; cursor: pointer; }
 .issue-timeline { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 7px; }
 .issue-timeline li { font-size: 12.5px; line-height: 1.5; color: #dfe4ec; }
 
-/* ── 협업 지도 (스펙: docs/design/a-lens/specs/2026-07-31-collab-graph.md) ── */
+/* ── 협업 지도 (스펙: docs/archive/design/a-lens/specs/2026-07-31-collab-graph.md) ── */
 /* 사실은 실선, 추정은 점선. 굵기·색으로 가르지 않는 이유는 스펙 §2 참고. */
 .collab-legend {
   display: flex;

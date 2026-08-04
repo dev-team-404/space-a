@@ -146,7 +146,7 @@ function typeLines(lines: { label: string; value: string }[]) {
 }
 
 // ── 창문 말풍선 — 창밖 잡담 2~3턴 자동 재생 (패널과 같은 픽셀 폰트·타이핑) ──
-// 스펙: docs/design/a-lens/specs/2026-07-28-room-object-smalltalk-design.md
+// 스펙: docs/archive/design/a-lens/specs/2026-07-28-room-object-smalltalk-design.md
 const windowBubble = $('window-bubble')
 let bubbleTimer: number | null = null
 let bubbleSeq = 0 // 재생 세대 — 새 클릭·취소가 이전 재생의 콜백을 무효화한다
@@ -1209,7 +1209,7 @@ function hubActivityHTML(data: SpaceView): string {
 }
 
 // ── 협업 지도 탭 ──
-// 스펙: docs/design/a-lens/specs/2026-07-31-collab-graph.md
+// 스펙: docs/archive/design/a-lens/specs/2026-07-31-collab-graph.md
 // 사람을 원 위에 세우고 관계를 선으로 잇는다. **사실(실선)과 추정(점선)을 절대 섞지 않는다** —
 // 굵기·색으로 가르면 "진한 선 = 확실한 사실"로 오독된다.
 // force 시뮬레이션을 쓰지 않는 이유: 볼 때마다 좌표가 흔들려 같은 방이 다른 그림이 된다.

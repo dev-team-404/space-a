@@ -2,7 +2,7 @@
 
 > **범위** — Pillar 1 데스크톱 앱 `a-mate`(제품명 Agent Mentor)의 현재 구조.
 > 코드베이스 실측 기준: `main` @ `b886034` (2026-08-04).
-> 설계 근거·이력은 [`docs/design/a-mate/`](../../design/a-mate/) 아래 `specs/`·`plans/`를 참고한다.
+> 설계 근거·이력은 [`docs/archive/design/a-mate/`](../../archive/design/a-mate/)을 참고한다.
 > 이 문서는 **지금 코드가 어떻게 생겼는가**만 다루고, 왜 그렇게 정했는지는 각 spec과 [ADR](../../adr/)에 있다.
 
 ---
@@ -436,6 +436,6 @@ WSL 안에서 빌드하지 않는다(WSL은 분석 대상일 뿐).
 | [`02-features.md`](02-features.md) | 기능 카탈로그 |
 | [`04-history-and-roadmap.md`](04-history-and-roadmap.md) | 개발 연혁·교훈·로드맵 |
 | [`build-and-run.md`](build-and-run.md) | 빌드·실행·트러블슈팅 |
-| [`docs/design/a-mate/`](../../design/a-mate/) | 설계 스펙·구현 플랜 (시점 기록) |
+| [`docs/archive/design/a-mate/`](../../archive/design/a-mate/) | 과거 설계 스펙·구현 플랜 (시점 기록) |
 | [`a-mate/CLAUDE.md`](../../../a-mate/CLAUDE.md) | 개발 제약 |
 | [`contracts/`](../../../contracts/) | a-hub와의 경계 계약 (C1/C2/C4) |

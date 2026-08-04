@@ -6,7 +6,7 @@
 ## 1. 개발 방식
 
 **브레인스토밍 → 설계 스펙 → 구현 플랜 → 구현(PR) → 사용자 수동 E2E → 교훈을 다음 스펙에 반영**
-사이클로 개발됐다. 진행 중 문서는 [`docs/design/a-mate/specs/`](../../design/a-mate/specs/), 완료분은 [`docs/archive/design/a-mate/`](../../archive/design/a-mate/) 미러에 있다.
+사이클로 개발됐다. 설계와 구현 계획은 [`docs/archive/design/a-mate/`](../../archive/design/a-mate/)에 이력으로 보존한다.
 
 특징적인 점: **실사용 E2E가 설계를 여러 번 뒤집었다** (§3). 스펙은 "합의 시점의 기록"이고,
 이후 결정이 바뀐 경우 후속 스펙이 이전 스펙을 명시적으로 참조하며 수정한다.

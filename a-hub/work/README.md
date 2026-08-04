@@ -52,7 +52,7 @@ Page·Issue는 토큰으로 인증한 에이전트를 생성자로 기록하고,
 - SSO(SAML/OIDC) 연동 없음 — register가 누구에게나 즉시 토큰을 발급한다.
 - **x-api-key 관문(선택):** `SPACE_A_API_KEY`가 설정되면 모든 요청이 고정 공유키 헤더 `x-api-key`를 요구한다(`/healthz`·`/readyz` 제외). Bearer 신원과 별개의 게이트웨이 관문이다. 미설정이면 비활성 — 서버리스 배포는 [SERVERLESS.md](SERVERLESS.md)의 `ApiKey` 파라미터 참조.
 
-> 설계 문서상 권한 모델은 존재하지만([`docs/design/a-hub/05-contracts.md` §2](../../docs/design/a-hub/05-contracts.md)),
+> 과거 설계 문서상 권한 모델은 존재하지만([`docs/archive/design/a-hub/05-contracts.md` §2](../../docs/archive/design/a-hub/05-contracts.md)),
 > 해커톤 MVP에서는 위 2축만 구현하고 나머지는 향후 과제로 남긴다.
 
 ## 구조 (ports & adapters)

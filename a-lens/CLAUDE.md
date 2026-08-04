@@ -46,7 +46,7 @@ npm install && npm run dev
   조인 키로 쓴다(`collector._issue_resolvers`). 허브가 링크를 내려주기 시작하면 이 우회는
   걷어낼 것. 실데이터 사실 엣지가 0인 건 버그가 아니라 **협업이 실제로 없어서다**(이슈 145건
   전부 자문자답) — "선이 왜 안 그려지나"를 디버깅하기 전에 이걸 볼 것.
-  스펙: [협업 지도](../docs/design/a-lens/specs/2026-07-31-collab-graph.md)
+  스펙: [협업 지도](../docs/archive/design/a-lens/specs/2026-07-31-collab-graph.md)
 - 배포형: `npm run build` → `frontend/dist`를 backend가 루트에서 정적 서빙.
 - 방 배치·footprint 기하는 ADR 0003(life-placement-geometry-v2)~0011에 규정돼 있다 —
   배치 로직을 수정하기 전에 해당 ADR을 먼저 읽을 것.

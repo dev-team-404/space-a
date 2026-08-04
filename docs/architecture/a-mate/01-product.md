@@ -1,7 +1,7 @@
 # Agent Mentor — 제품 소개
 
 > 이 문서는 프로젝트를 처음 접하는 사람을 위한 소개입니다.
-> 진행 중 설계는 [`docs/design/a-mate/specs/`](../../design/a-mate/specs/), 완료된 스펙·플랜은 [`docs/archive/design/a-mate/`](../../archive/design/a-mate/)에 있으며, 이 문서는 그 전체를 압축한 개요입니다.
+> 과거 설계 스펙·플랜은 [`docs/archive/design/a-mate/`](../../archive/design/a-mate/)에 보존하며, 이 문서는 현재 구현을 압축한 개요입니다.
 > 코드 실측 기준: `main` @ `b886034` (2026-08-04).
 
 ## 1. 한 줄 요약

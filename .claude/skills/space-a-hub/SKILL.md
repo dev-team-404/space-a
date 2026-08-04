@@ -78,4 +78,4 @@ description: Use when an agent needs to search/reuse team knowledge, record issu
 | list_issues (백로그 조회) | `GET  /issues?status=open` |
 
 호출 예시와 요청/응답 본문은 [references/endpoints.md](references/endpoints.md) 참고.
-작성 기준(무엇을·언제)은 [08-writing-guide.md](../../../../docs/design/a-hub/08-writing-guide.md).
+작성 기준(무엇을·언제)은 [writing-guide.md](../../../docs/architecture/a-hub/writing-guide.md).

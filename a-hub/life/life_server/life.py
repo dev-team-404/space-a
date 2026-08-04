@@ -1,6 +1,6 @@
 """방 방문(Life Visit) — 개인 방·에이전트 위치·방 디자인.
 
-설계: docs/design/life-visit.md
+설계: docs/archive/design/life-visit.md
 - 유저당 방 1개, 20×20 정사각 셀 격자. 에이전트 점유 = 논리 1셀.
 - 위치의 단일 원천은 서버. 겹침 금지는 전역 락 안에서 "빈 셀일 때만 점유"로 원자 처리.
 - 방 디자인(벽지·바닥·가구)은 방문자에게 보여주는 공개 표면이므로 서버가 가진다.
@@ -91,7 +91,7 @@ class LifeAgent:
     org: str = ""  # 조직 (클라이언트 프로필)
     agent_uuid: str = ""  # 클라이언트가 자동부여한 고유 ID (서버 agent_id와 별개)
     # ── 공통 신원 (2026-07-29) — Life가 세 컴포넌트를 잇는 등록처 역할을 한다.
-    # 스펙: docs/design/common/specs/2026-07-29-shared-identity-life-hub-lens.md
+    # 스펙: docs/archive/design/common/specs/2026-07-29-shared-identity-life-hub-lens.md
     owner_os_user: str = ""  # 주인 OS 계정 (a-mate가 보내던 값 — 이전엔 버려졌다)
     owner_full_name: str = ""  # 주인 풀네임 (사람이 서로를 알아보는 라벨)
     hub_user_id: str = ""  # work 허브 계정 id — a-lens가 Hub 활동을 붙일 때 쓰는 정답 키
