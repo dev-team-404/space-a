@@ -32,9 +32,12 @@ Windows·WSL의 Claude Code 사용 기록을 **로컬에서** 분석해 코칭�
 ```powershell
 npm run tauri dev    # 개발 모드 실행 (핫리로드)
 npm run tauri build  # 릴리스 빌드
-npm test             # 프론트엔드 테스트 (Vitest)
+npm test             # 프론트엔드 타입 체크(svelte-check) + 테스트(Vitest)
 cargo test           # Rust 테스트 (워크스페이스 전체)
 ```
+
+> **테스트 전 `node_modules` 확인 — 없으면 반드시 `npm install`을 먼저 실행할 것.**
+> `node_modules`가 없어도 `npm test`가 exit 0으로 거짓 통과해 실패를 놓친다.
 
 ## 참고
 
