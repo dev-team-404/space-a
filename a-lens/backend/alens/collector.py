@@ -763,7 +763,7 @@ def _hub_snapshot() -> dict:
 
             agents = _merge_people([_agent(m) for m in members])
             # 합쳐진 사람은 흡수된 계정 id로 남긴 기록도 그 사람 이름으로 읽혀야 한다 — 방에는
-            # "돌쇠"인데 이슈 담당자는 "a-mate/coolfebreeze"로 뜨면 같은 혼동이 되돌아온다.
+            # "야옹이"인데 이슈 담당자는 "a-mate/agent-b"로 뜨면 같은 혼동이 되돌아온다.
             for row in agents:
                 if row.get("life_agent_id"):
                     for hub_id in (row["agent_id"], *row.get("merged_ids", [])):

@@ -38,13 +38,14 @@ def _defaults() -> dict:
         "life_token": e("A_LENS_LIFE_TOKEN", ""),
         "life_api_key": e("A_LENS_LIFE_API_KEY", ""),
         # Life 닉네임 → work 계정 id 별칭 매핑. Life가 hub_user_id를 주기 전(구버전 서버)
-        # 수동 보정용. "닉네임=hub_user_id" 를 쉼표로 이어 쓴다: "소금맛=salt.jeong,돌쇠=palen".
+        # 수동 보정용. "닉네임=hub_user_id" 를 쉼표로 이어 쓴다: "봇돌이=agent-a,야옹이=agent-b".
         # 한 사람의 허브 계정이 여러 개면 `|`로 잇는다(화면에서는 한 줄로 합쳐진다):
-        # "돌쇠=palen|coolfebreeze,kimmy=kimmy-claude|kimmy-mate"
+        # "야옹이=agent-b|agent-b-mate"
         "life_alias": e("A_LENS_LIFE_ALIAS", ""),
         "cache_ttl": float(e("A_LENS_CACHE_TTL", "30")),
-        # LLM API (OpenAI 호환). 기본값 = 로컬 LM Studio(WSL 호스트).
-        "llm_url": e("A_LENS_LLM_URL", "http://172.26.80.1:1234/v1"),
+        # LLM API (OpenAI 호환). 기본은 비활성(빈 URL) — 미설정이면 번역·잡담이 즉시 규칙
+        # 폴백으로 동작한다. 켜려면 설정 창이나 env로 엔드포인트를 넣는다.
+        "llm_url": e("A_LENS_LLM_URL", ""),
         "llm_model": e("A_LENS_LLM_MODEL", "qwen/qwen3/qwen3-30b-a3b-instruct-2507-q4_k_m.gguf"),
         "llm_key": e("A_LENS_LLM_KEY", ""),
         # 요약 길이: brief(한 문장·담백) | normal(2~3문장) | detailed(3~5문장). 바꾸면 재번역됨.

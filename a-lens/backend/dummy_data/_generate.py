@@ -6,6 +6,8 @@
   (지식 3~6 + 이슈 2~4 → 팀당 지식 ~45건, 이슈 ~30건).
 - 데이터의 성격: GitHub이 아니라 **각자 로컬 Claude(a-mate)로 하는 일상 업무**에서
   수집된 기록이다 — 로그 분석, 스크립트 작성, 문서 초안, 회의록 요약 등.
+- **전부 가상이다.** 인물·팀·문서·이슈·수치 모두 이 스크립트가 만든 허구 데모 데이터로,
+  실존 인물·조직·실제 업무 기록과 무관하다. 각 JSON 최상위 `_notice` 필드에도 명시된다.
 - 결정론(random seed 고정) — 재실행해도 같은 결과. diff 리뷰 가능.
 - 시각은 전부 "몇 분 전(min_ago)" 오프셋으로 저장 — collector가 로드 시점 기준으로
   환산하므로 프레즌스(온라인/오프라인)가 언제 띄워도 살아 있는 데모가 된다.
@@ -23,7 +25,7 @@ DOCS_PER_MEMBER = (3, 6)  # 멤버당 지식 문서 수
 ISSUES_PER_MEMBER = (2, 4)  # 멤버당 이슈 수 — 합계가 항상 5개 이상이 되는 범위
 MAX_REUSE_EVENTS = 20  # 팀당 재사용 이벤트 상한 (활동 피드 과밀 방지)
 
-# ── 이름 풀 (성·이름 조합으로 실명 느낌의 한국 이름 생성) ──────────────
+# ── 이름 풀 (성·이름 무작위 조합으로 **가상 인물** 이름 생성 — 실존 인물과 무관) ──
 SURNAMES = [
     ("김", "kim"), ("이", "lee"), ("박", "park"), ("최", "choi"), ("정", "jung"),
     ("강", "kang"), ("조", "cho"), ("윤", "yoon"), ("장", "jang"), ("임", "lim"),
@@ -884,11 +886,15 @@ def _project_of(team: dict, who: int, seq: int) -> str | None:
     return projects[(who + shift) % len(projects)]
 
 
-def _unique_title(tpl: str, team: dict, seen: set) -> str:
+def _unique_title(tpl: str, team: dict, seen: set, params: dict) -> tuple[str, dict]:
+    """제목이 유일해질 때까지 params를 다시 뽑고, **최종 제목을 만든 params를 함께 반환**한다
+    — 호출자가 같은 params로 본문을 채워야 제목과 본문의 모듈명이 어긋나지 않는다."""
+    title = fill(tpl, params)
     for _ in range(60):
-        title = fill(tpl, team["params"]())
         if title not in seen:
             break
+        params = team["params"]()
+        title = fill(tpl, params)
     else:
         base = f"{title} — {p(WEEKS)} 갱신"
         title, k = base, 2
@@ -896,7 +902,7 @@ def _unique_title(tpl: str, team: dict, seen: set) -> str:
             title = f"{base} ({k}차)"
             k += 1
     seen.add(title)
-    return title
+    return title, params
 
 
 def gen_docs(team: dict, members: list[dict]) -> list[dict]:
@@ -908,8 +914,7 @@ def gen_docs(team: dict, members: list[dict]) -> list[dict]:
     for who, author in enumerate(members):
         for seq in range(rng.randint(*DOCS_PER_MEMBER)):
             tpl = team["docs"][idx % len(team["docs"])]
-            params = team["params"]()
-            title = _unique_title(tpl[0], team, seen_titles)
+            title, params = _unique_title(tpl[0], team, seen_titles, team["params"]())
             # 재사용 수는 롱테일: 절반 이상 0, 일부만 다회 재사용
             r = rng.random()
             reuse = 0 if r < 0.55 else (rng.randint(1, 3) if r < 0.9 else rng.randint(4, 15))
@@ -948,7 +953,7 @@ def gen_issues(team: dict, members: list[dict]) -> list[dict]:
     for who, opener in enumerate(members):
         for seq in range(rng.randint(*ISSUES_PER_MEMBER)):
             tpl = team["issues"][idx % len(team["issues"])]
-            title = _unique_title(tpl, team, seen_titles)
+            title, _ = _unique_title(tpl, team, seen_titles, team["params"]())
             r = rng.random()
             status = "resolved" if r < 0.45 else ("open" if r < 0.75 else "knowledge_linked")
             # 해결된 이슈는 과거에, 열린 이슈는 최근에 몰리게
@@ -1008,6 +1013,7 @@ def main() -> None:
         # 랭킹으로 한 곳에서 한다. 스펙: docs/archive/design/a-lens/specs/2026-07-30-room-board-highlight.md §6
         lo1, hi1, lo2, hi2 = team["visits"]
         payload = {
+            "_notice": "가상 데모 데이터 — 이 파일의 인물·팀·문서·이슈·수치는 전부 _generate.py가 생성한 허구이며 실존 인물·조직·실제 업무 기록과 무관합니다.",
             "space": {"space_id": team["space_id"], "name": team["name"]},
             "visits": {"today": rng.randint(lo1, hi1), "total": rng.randint(lo2, hi2)},
             "members": members,

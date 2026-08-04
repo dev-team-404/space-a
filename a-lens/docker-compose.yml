@@ -1,7 +1,7 @@
 # a-lens 로컬 실행 + 같은 네트워크(LAN) 공유용.
 #   docker compose up -d --build   → http://<이 PC의 LAN IP>:8600 을 팀원과 공유
-# 주의: LLM은 호스트의 LM Studio(1234)를 host.docker.internal로 사용한다.
-#       a-hub 접속값은 backend/.env(커밋 안 됨)에서 읽는다.
+# 주의: a-hub 접속값과 LLM 엔드포인트는 backend/.env(커밋 안 됨)에서 읽는다.
+#       LLM 미설정이면 번역·잡담은 규칙 폴백으로 동작한다(.env.example 참고).
 services:
   a-lens:
     build:
@@ -15,11 +15,8 @@ services:
     env_file:
       - backend/.env # A_LENS_WORK_URL / A_LENS_WORK_TOKEN / A_LENS_WORK_API_KEY 등
     environment:
-      # 컨테이너 → 호스트의 LM Studio. WSL 게이트웨이 IP(172.26.80.1)가 실측상 유일하게 닿음
-      # (host.docker.internal은 이 환경에서 refused). WSL 재시작 등으로 IP가 바뀌면 이 값 또는
-      # 설정창의 LLM URL을 갱신하면 된다.
-      - A_LENS_LLM_URL=http://172.26.80.1:1234/v1
-      - A_LENS_LLM_MODEL=qwen/qwen3/qwen3-30b-a3b-instruct-2507-q4_k_m.gguf
+      # LLM 엔드포인트는 backend/.env로 지정한다. 컨테이너에서 호스트의 LM Studio를 쓸 때는
+      # host.docker.internal이 막히는 환경이 있어 WSL 게이트웨이 IP가 필요할 수 있다.
       - A_LENS_SUMMARY_STYLE=brief
     volumes:
       - alens-data:/app/a-lens/backend/.a-lens # 설정·번역 캐시·스냅숏 영속화
