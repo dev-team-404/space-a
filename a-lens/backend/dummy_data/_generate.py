@@ -1005,7 +1005,7 @@ def main() -> None:
 
         # 칠판 하이라이트는 여기서 만들지 않는다 — 소스별 규칙이 갈리면 같은 칠판이 데이터
         # 출처에 따라 다르게 뜬다. 아래 events/reuse_events 풀만 제공하고 선정은 alens.pipeline이
-        # 랭킹으로 한 곳에서 한다. 스펙: docs/design/a-lens/specs/2026-07-30-room-board-highlight.md §6
+        # 랭킹으로 한 곳에서 한다. 스펙: docs/archive/design/a-lens/specs/2026-07-30-room-board-highlight.md §6
         lo1, hi1, lo2, hi2 = team["visits"]
         payload = {
             "space": {"space_id": team["space_id"], "name": team["name"]},

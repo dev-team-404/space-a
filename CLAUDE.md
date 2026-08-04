@@ -5,77 +5,46 @@ SPACE-A는 **문서 우선** 프로젝트입니다. 구조·아키텍처 결정�
 ## 저장소 구조
 
 | 위치 | 내용 |
-|------|------|
-| [a-mate/](./a-mate/) | Pillar 1 — AI 사용 코칭 데스크톱 앱 (Agent Mentor). 제약: [a-mate/CLAUDE.md](./a-mate/CLAUDE.md) |
-| [a-hub/](./a-hub/) | Pillar 2 — 협업 공간 백엔드 (`work/`=업무, `life/`=방 방문·소셜). 제약: [a-hub/CLAUDE.md](./a-hub/CLAUDE.md) |
-| [a-lens/](./a-lens/) | Pillar 3 — 커뮤니티 시각화 웹 UI. 제약: [a-lens/CLAUDE.md](./a-lens/CLAUDE.md) |
-| [contracts/](./contracts/) | 컴포넌트 간 **경계 계약** (C1 MCP / C2 REST / C4 admin 스키마 + fixtures) |
+|---|---|
+| [a-mate/](./a-mate/) | A-Mate — 로컬 AI 사용 코칭 데스크톱 앱. 제약: [a-mate/CLAUDE.md](./a-mate/CLAUDE.md) |
+| [a-hub/](./a-hub/) | A-Hub — Work 업무 지식 서버와 Life 공간·소셜 서버. 제약: [a-hub/CLAUDE.md](./a-hub/CLAUDE.md) |
+| [a-lens/](./a-lens/) | A-Lens — 팀 활동 관전·시각화 웹 서비스. 제약: [a-lens/CLAUDE.md](./a-lens/CLAUDE.md) |
+| [contracts/](./contracts/) | 컴포넌트 간 기계 판독 API 계약과 픽스처 |
 
-## 문서 구조 (`docs/`)
+## 문서 구조
 
-**문서는 "시점"과 "현행"으로 나뉜다.** 이 구분이 디렉터리로 드러나게 배치한다.
-
-| 위치 | 성격 | 내용 |
-|------|------|------|
-| [docs/README.md](./docs/README.md) | — | 문서 인덱스 + 작성 규칙 |
-| [docs/highlevel/](./docs/highlevel/) | **현행** | 사람이 읽는 레벨 문서 (개요→기능→상세, 시작점 `level-0.md`) |
-| [docs/architecture/](./docs/architecture/) | **현행** | 컴포넌트별 **지금 이렇게 되어 있다** — 제품·기능·구조·연혁·빌드. 코드가 바뀌면 **같은 PR에서 갱신** |
-| [docs/design/](./docs/design/) | **시점** | 설계 안 + `<component>/{specs,plans,brainstorming}` 작업 문서. 합의 시점의 기록이라 **소급 수정하지 않는다** |
-| [docs/adr/](./docs/adr/) | **시점** | Architecture Decision Records (확정된 결정) |
-| [docs/archive/](./docs/archive/) | **시점** | 완료·폐기 작업 문서 미러 (**기본 탐색 제외**) |
-
-> 판단 기준 한 줄: **"코드가 바뀌면 이 문서도 고쳐야 하나?"**
-> 그렇다 → `architecture/`. 아니다(그때의 결정·계획 기록) → `design/`·`adr/`.
+| 위치 | 내용 |
+|---|---|
+| [README.md](./README.md) | 프로젝트 진입점과 현재 구현 범위 |
+| [docs/PRD.md](./docs/PRD.md) | 현재 제품 요구사항, 사용자 흐름, 범위와 완료 기준 |
+| [docs/architecture/](./docs/architecture/) | 현재 구현의 통합·컴포넌트 아키텍처와 실행 문서 |
+| [docs/adr/](./docs/adr/) | 채택된 Architecture Decision Records |
+| [docs/archive/](./docs/archive/) | 완료·폐기된 하이레벨·설계·작업 문서 이력 |
 
 ## 문서 작성 규칙
 
-- **문서 우선.** 구조·아키텍처 관련 결정은 코드보다 먼저 `docs/`에 기록한다.
-- **중요한 결정은 ADR로.** 되돌리기 어려운 결정(레포 구성, 스택, 스키마 등)은
-  `docs/adr/`에 `NNNN-title.md` 형식으로 남긴다. 채택된 ADR은 수정하지 않고 새 ADR로 대체한다.
-- **경계 계약은 `contracts/`가 정답.** 컴포넌트 간 계약(C1/C2/C4)이 바뀌면 `contracts/`의
-  스키마·픽스처를 먼저 갱신한다. 문서와 어긋나면 파일을 따른다.
-- **현행 문서는 `docs/architecture/<component>/`에.** 제품·기능·구조·연혁·빌드 가이드처럼
-  "지금 상태"를 기술하는 문서는 전부 여기 둔다. 같은 내용을 두 곳에 두지 않는다 —
-  반드시 한쪽이 먼저 낡는다. 규칙 상세: [ADR 0027](./docs/adr/0027-separate-current-state-docs-from-design.md)
-- **설계 안은 `docs/design/`에.** 컴포넌트별 설계 안을 자유롭게 작성한다.
-- **작업 문서 위치.** spec/plan/kickoff 문서는 해당 컴포넌트의
-  `docs/design/<component>/{specs,plans,brainstorming}`에 저장한다 (superpowers 등
-  스킬의 기본 저장 경로보다 이 규칙이 우선). 컴포넌트가 애매한 레포 공통 작업은
-  `docs/design/common/{specs,plans}`에. `docs/superpowers/`는 동결 — 신규 생성 금지.
-- **작업 문서는 소급 수정하지 않는다.** spec·plan·ADR은 그때의 기록이다. 현재와 달라졌으면
-  `architecture/`를 고치지, 옛 문서를 고쳐 쓰지 않는다.
-- **완료 시 아카이브 (DoD).** 구현 plan이 완료되면 같은 PR에서 `docs-archive` 스킬을
-  실행해 관련 작업 문서를 `docs/archive/` 미러로 옮긴다. 규칙 상세: [ADR 0013](./docs/adr/0013-docs-lifecycle-and-archive.md)
-- **`docs/archive/`는 기본 탐색에서 제외.** 과거 이력 조사가 목적일 때만 명시적으로 읽는다.
-- **문서 형식.** 한국어 기준, 표·다이어그램을 적극 활용해 읽기 쉽게 쓴다.
-- **문서만 바뀌는 변경엔 코드 테스트를 돌리지 않는다.** `.md`만 고친 작업에서 `npm test`·
-  `cargo test`·`svelte-check`는 검증 대상이 아니다 — 통과 여부가 그 변경과 무관하고,
-  안 돌렸다는 사실을 PR에 경고로 다는 것도 리뷰어의 주의를 낭비한다.
-  **예외는 문서에 적을 수치를 얻으려는 경우뿐**이다(예: `architecture/`의 테스트 통과 수 갱신).
-  그때도 필요한 명령만 골라 돌리고, 그 수치를 쓰는 문서에만 반영한다.
+- **문서 우선.** 구조·아키텍처 관련 결정은 코드보다 먼저 기록합니다.
+- **현재 상태는 PRD와 architecture에.** 제품 범위 변경은 `docs/PRD.md`, 구조·운영 변경은 `docs/architecture/`를 코드와 같은 변경에서 갱신합니다.
+- **중요한 결정은 ADR로.** 되돌리기 어려운 결정은 `docs/adr/NNNN-title.md`로 남깁니다. 채택된 ADR은 의미를 수정하지 않고 새 ADR로 대체합니다.
+- **경계 계약은 contracts가 정본.** C1/C2/C4 등 컴포넌트 간 스키마가 바뀌면 `contracts/`를 먼저 갱신합니다.
+- **과거 문서는 archive에.** `docs/archive/`는 이력 조사 목적일 때만 사용하며 현재 기능의 근거로 인용하지 않습니다.
+- **현재와 구상을 섞지 않습니다.** 코드에 없는 아이디어는 제출용 README·PRD·architecture에 구현 기능처럼 쓰지 않습니다.
+- **문서만 바뀌는 변경에는 코드 테스트를 돌리지 않습니다.** 문서의 수치를 확인할 때만 필요한 명령을 골라 실행합니다.
+- 문서는 한국어를 기본으로 하고 표와 다이어그램을 활용합니다.
 
 ## 커밋 메시지 규칙
 
-**Conventional Commits**를 따르며, 메시지는 **영어**로 작성한다.
+Conventional Commits를 따르며 메시지는 영어로 작성합니다.
 
-```
+```text
 <type>(<scope>): <subject>
 ```
 
-- **type** — `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `style`, `perf`, `build`, `ci`
-- **scope** — 변경 영역. 예: `agent`, `backend`, `frontend`, `schema`, `docs`, `infra` (선택)
-- **subject** — 명령형·현재형, 소문자 시작, 마침표 없음. 예: `add room creation API`
-- 본문/푸터는 필요할 때만. Breaking change는 `!` 표시 또는 `BREAKING CHANGE:` 푸터 사용.
-
-예시:
-```
-feat(backend): add room creation API
-fix(agent): handle empty claude log directory
-docs(design): draft frontend visualization spec
-chore: set up gitignore and base structure
-```
+- type: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `style`, `perf`, `build`, `ci`
+- scope: 변경 영역(선택). 예: `agent`, `backend`, `frontend`, `schema`, `docs`, `infra`
+- subject: 명령형·현재형, 소문자로 시작하고 마침표를 붙이지 않습니다.
 
 ## 참고
 
-- 프로젝트 개요: [`README.md`](./README.md)
-- 멘토 앱 빌드·실행: [`docs/architecture/a-mate/build-and-run.md`](./docs/architecture/a-mate/build-and-run.md)
+- 전체 문서 안내: [docs/README.md](./docs/README.md)
+- A-Mate 빌드·실행: [docs/architecture/a-mate/build-and-run.md](./docs/architecture/a-mate/build-and-run.md)

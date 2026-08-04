@@ -1,6 +1,6 @@
 """a-hub(life) 읽기 — 사람의 이름·마스코트 이미지와 공통 신원을 가져온다.
 
-스펙: docs/design/common/specs/2026-07-29-shared-identity-life-hub-lens.md
+스펙: docs/archive/design/common/specs/2026-07-29-shared-identity-life-hub-lens.md
 원칙: `life_url` 미설정이면 조용히 off(Hub-only 화면 그대로) · 실패는 경고 후 폴백(방은 계속
 뜬다) · 조인 키는 Life가 준 `identity.hub_user_id`가 1순위이고 없을 때만 추론한다(§3.1).
 """

@@ -1,4 +1,4 @@
-"""도메인 에러. code는 docs/design/life-visit.md §4의 에러 코드와 맞춘다."""
+"""도메인 에러. code는 docs/archive/design/life-visit.md §4의 에러 코드와 맞춘다."""
 
 
 class LifeServerError(Exception):

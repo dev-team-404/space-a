@@ -6,7 +6,7 @@ Page·Issue의 분류·요약·서사는 collector가 translator를 통해 만�
 
 하이라이트(로비 ★ · 방 칠판)는 여기서만 선정한다 — 소스(허브/더미/픽스처)에 무관하게
 같은 랭킹을 쓰므로 로비와 방이 어긋나지 않는다.
-스펙: docs/design/a-lens/specs/2026-07-30-room-board-highlight.md
+스펙: docs/archive/design/a-lens/specs/2026-07-30-room-board-highlight.md
 """
 
 import logging

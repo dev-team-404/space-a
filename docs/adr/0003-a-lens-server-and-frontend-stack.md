@@ -5,7 +5,7 @@
 
 ## 배경
 
-목표 아키텍처(2026-07-17 합의, [docs/highlevel/architecture.html](../highlevel/architecture.html))에서
+목표 아키텍처(2026-07-17 합의, [당시 하이레벨 문서](../archive/highlevel/architecture.html))에서
 a-lens는 관전 웹 UI를 서빙하는 **서버 컴포넌트**로 확정됐다 — 브라우저는 접근 수단이지
 컴포넌트가 아니다. 지금까지는 정적 vanilla JS 프로토타입(`a-lens/` 루트)으로 화면·표시
 결정을 검증했고, 이제 실제 구현을 시작한다.

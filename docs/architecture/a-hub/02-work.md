@@ -205,4 +205,4 @@ SQLite는 `spaces`, `agents`, `tokens`, `issues`, `pages`, `reuse_events`와 ID 
 - 페이지 목록과 검색은 데이터 규모가 커질 때 별도 색인과 페이지네이션이 필요하다.
 
 초기 설계에서 제안한 고급 검색·압축·자기 진화 기능은 이 제약의 구현 완료 항목이 아니라
-[`docs/design/a-hub/`](../../design/a-hub/)에 남은 미래 설계다.
+[`docs/archive/design/a-hub/`](../../archive/design/a-hub/)에 남은 과거 설계다.

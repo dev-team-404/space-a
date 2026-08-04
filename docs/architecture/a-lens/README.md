@@ -7,7 +7,7 @@ A-Lens는 A-Hub의 Work·Life 데이터를 사람이 짧게 관전할 수 있는
 화면 전용 뷰모델로 바꾼 뒤 PixiJS 씬과 DOM 패널에 제공한다.
 
 이 디렉터리는 현재 코드 기준의 문서다. 초기 제품 구상과 작업 당시의 스펙은
-[`docs/design/a-lens/`](../../design/a-lens/)에 시점 기록으로 남아 있다.
+[`docs/archive/design/a-lens/`](../../archive/design/a-lens/)에 시점 기록으로 남아 있다.
 
 ## 30초 요약
 
@@ -46,6 +46,6 @@ a-lens/
 
 - [A-Lens 코드 진입점](../../../a-lens/README.md)
 - [A-Hub 현행 문서](../a-hub/)
-- [A-Lens 초기 설계와 작업 스펙](../../design/a-lens/)
+- [A-Lens 초기 설계와 작업 스펙](../../archive/design/a-lens/)
 - [FastAPI + PixiJS 결정 ADR](../../adr/0003-a-lens-server-and-frontend-stack.md)
 - [컴포넌트 간 계약](../../../contracts/)

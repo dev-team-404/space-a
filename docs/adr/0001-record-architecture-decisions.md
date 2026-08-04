@@ -23,6 +23,6 @@ SPACE-A는 초기 구조 정비 단계이며, 레포 구성·스택·데이터 �
 
 ## 다음에 기록할 ADR (예정)
 
-- C1/C2 계약 확정 → [설계 문서](../design/a-hub/05-contracts.md)에서 승격 예정
+- C1/C2 계약 확정 → [당시 설계 문서](../archive/design/a-hub/05-contracts.md)에서 승격 예정
 - Backend / Frontend 스택 선택 (Vector DB, Graph DB, 서버 언어)
 - 사내 SSO 연동 방식

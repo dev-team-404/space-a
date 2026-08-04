@@ -128,7 +128,7 @@ class SqliteStore:
         if "agent_uuid" not in agent_columns:
             self._conn.execute("ALTER TABLE agents ADD COLUMN agent_uuid TEXT NOT NULL DEFAULT ''")
         # 공통 신원(2026-07-29) — a-mate가 보내던 주인 식별자를 버리지 않고 저장하고,
-        # work 허브 계정과의 연결 키(hub_user_id)를 여기에 둔다. 스펙: docs/design/common/specs/
+        # work 허브 계정과의 연결 키(hub_user_id)를 여기에 둔다. 스펙: docs/archive/design/common/specs/
         for col in ("owner_os_user", "owner_full_name", "hub_user_id"):
             if col not in agent_columns:
                 self._conn.execute(f"ALTER TABLE agents ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")

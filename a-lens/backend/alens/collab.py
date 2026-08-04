@@ -1,6 +1,6 @@
 """협업 지도 — 사람 노드 + 엣지 3종(인용·핸드오프·주제 겹침).
 
-스펙: docs/design/a-lens/specs/2026-07-31-collab-graph.md — 이 문서가 정답이다.
+스펙: docs/archive/design/a-lens/specs/2026-07-31-collab-graph.md — 이 문서가 정답이다.
 
 **사실과 추정을 엣지 종류로 가른다.** `reuse`·`handoff`는 서버에 기록된 사건이고 `topic`은
 문서 텍스트에서 유도한 추정이다. 섞으면 "없는 협업이 있어 보이는" 화면이 되므로, 합치는

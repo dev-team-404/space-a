@@ -1,6 +1,6 @@
 """방 안 오브젝트 잡담 — 창문·정수기를 클릭하면 캐릭터가 주고받는 짧은 대사 2~3줄.
 
-스펙: docs/design/a-lens/specs/2026-07-28-room-object-smalltalk-design.md
+스펙: docs/archive/design/a-lens/specs/2026-07-28-room-object-smalltalk-design.md
 원칙: **화면에 실제로 그려진 것**만 근거로 쓴다(창밖 풍경은 방 프리셋, 정수기는 정수기) ·
 모르는 정보(실제 기상·날짜)는 단정하지 않는다 · LLM 미설정·실패 시 결정론 폴백 ·
 (구역 × 풍경 × 시간대)당 최대 5세트만 생성해 재사용.

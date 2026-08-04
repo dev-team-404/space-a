@@ -33,7 +33,7 @@ def _defaults() -> dict:
         "presence_window": float(e("A_LENS_PRESENCE_WINDOW", "3600")),
         # a-hub(life) 연결 — 사람의 이름·마스코트 이미지를 여기서 읽는다.
         # 비우면 Life 연동 전체가 조용히 off(Hub-only 화면 그대로).
-        # 스펙: docs/design/common/specs/2026-07-29-shared-identity-life-hub-lens.md
+        # 스펙: docs/archive/design/common/specs/2026-07-29-shared-identity-life-hub-lens.md
         "life_url": e("A_LENS_LIFE_URL", ""),
         "life_token": e("A_LENS_LIFE_TOKEN", ""),
         "life_api_key": e("A_LENS_LIFE_API_KEY", ""),

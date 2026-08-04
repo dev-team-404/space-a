@@ -169,7 +169,7 @@ export const setContentStatus = (id: string, status: 'new' | 'resolved' | 'dismi
 // 마스코트가 pull한 occasion을 chat 창 알림 로그용으로 재방송 (pull 단일화 — 플랜 Task 2 Step 5)
 export const emitOccasionToday = (labels: string[]) => emit('occasion:today', labels);
 
-// --- 방 방문 (docs/design/life-visit.md) ---
+// --- 방 방문 (docs/archive/design/life-visit.md) ---
 
 export interface HubSettings {
   url: string;

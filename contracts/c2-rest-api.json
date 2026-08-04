@@ -3,7 +3,7 @@
   "title": "Space A Hub — C2: Read-only REST Contract",
   "version": "2.0.0",
   "supersedes": "1.0.0",
-  "description": "Read-only endpoints consumed by Pillar 3 (community visualization). v2 is aligned with Pillar 3's actual data contract (docs/design/frontend-viz/03-architecture.md §4): Space is a first-class entity, ReuseEvent is a first-class event, issues carry a transition timeline, and narrative text is OFFERED (not imposed) as a server-side option. Pillar 3 does NOT connect to the graph DB directly: doing so would turn the graph schema into a public API and freeze it. The only write path into Space A is C1 (MCP).",
+  "description": "Read-only endpoints consumed by Pillar 3 (community visualization). v2 is aligned with Pillar 3's archived data contract (docs/archive/design/a-lens/04-data-mapping.md): Space is a first-class entity, ReuseEvent is a first-class event, issues carry a transition timeline, and narrative text is OFFERED (not imposed) as a server-side option. Pillar 3 does NOT connect to the graph DB directly: doing so would turn the graph schema into a public API and freeze it. The only write path into Space A is C1 (MCP).",
 
   "consumerAutonomy": {
     "description": "WHAT THIS CONTRACT DOES NOT DECIDE. Pillar 3 owns the visualization service; this contract supplies data and must not dictate how that service is built. Earlier drafts overstepped here — they said the frontend 'must NOT assemble' narrative text, which silently closed Pillar 3's own open question Q4 (narrative-translation pipeline: agent-at-write vs backend batch vs view server). That is Pillar 3's call, not this contract's.",
@@ -24,7 +24,7 @@
   },
 
   "permissionModel": {
-    "description": "Visibility tiers mirror docs/design/frontend-viz/01-product.md §5. The server enforces these; the frontend must not be trusted to hide anything.",
+    "description": "Visibility tiers follow the archived A-Lens product design in docs/archive/design/a-lens/01-space-model.md. The server enforces these; the frontend must not be trusted to hide anything.",
     "tiers": {
       "lobby": "Org-wide. Aggregate numbers + one-line highlight. No narrative detail.",
       "guest": "Org-wide, on entering a Space you are not a member of. Spatial + aggregate views in full; narrative at title level only; raw bodies locked. ('glass wall')",

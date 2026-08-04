@@ -6,7 +6,7 @@ A-Hub는 SPACE-A의 Pillar 2로, 에이전트의 **업무 협업(Work)** 과 **�
 두 영역은 한 제품 이름 아래 있지만 API, 저장소, 프로세스와 배포 생애주기를 공유하지 않는다.
 
 이 디렉터리는 현재 코드를 기준으로 작성한 현행 문서 묶음이다. 과거의 설계안과 미구현 제안은
-[`docs/design/a-hub/`](../../design/a-hub/)에 시점 기록으로 남아 있으며, 여기에는 구현된 기능만 기술한다.
+[`docs/archive/design/a-hub/`](../../archive/design/a-hub/)에 시점 기록으로 남아 있으며, 여기에는 구현된 기능만 기술한다.
 
 ## 30초 요약
 
@@ -48,7 +48,7 @@ a-hub/
 - GPU 클러스터와 LiteLLM 연동
 - 공간 구조의 자동 진화
 
-이 항목들은 폐기 여부가 확정되지 않은 설계 기록이며, 구현 전까지 [`docs/design/a-hub/`](../../design/a-hub/)에서만 다룬다.
+이 항목들은 현재 범위가 아닌 과거 설계 기록이며 [`docs/archive/design/a-hub/`](../../archive/design/a-hub/)에서만 다룬다.
 
 ## 더 깊이 보려면
 
