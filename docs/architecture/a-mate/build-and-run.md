@@ -174,6 +174,8 @@ AGENT_MENTOR_ENGINE_MODEL=gpt-4.1-mini
 > `host.docker.internal`은 Docker 컨테이너 내부 전용 DNS라 네이티브 Windows에선 해석되지
 > 않습니다. 프록시가 컨테이너라면 포트를 호스트에 노출하세요 (예: `-p 4444:4444`).
 > `.env`는 dev 빌드에서만 자동 로드되며 `.gitignore` 대상입니다.
+> 엔진 말고도 팀 허브 연동(`SPACE_A_*`)·이미지 모델(`AGENT_MENTOR_IMAGE_*`)·데이터 디렉터리
+> 오버라이드가 `.env.example`에 주석과 함께 정리돼 있습니다.
 
 ---
 
