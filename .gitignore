@@ -7,6 +7,11 @@
 *.pem
 *.key
 secrets/
+# a-mate updater 서명 개인키·암호 — 팀 안전 채널로만 공유, 커밋 금지
+a-mate/dev-key/
+# CA 인증서는 커밋 금지가 기본 — a-lens/.proxy-certs/의 사내망 빌드용 프록시 CA만 의도적 예외
+*.crt
+!a-lens/.proxy-certs/*.crt
 # a-lens 런타임 설정(설정 창 저장값) — 토큰·API 키 포함 + 번역 캐시 DB
 .a-lens/
 

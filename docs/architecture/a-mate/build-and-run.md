@@ -201,7 +201,7 @@ bash a-mate/scripts/release-amate.sh 0.2.0             # 실제 발행
 | 항목 | 방법 |
 |------|------|
 | 공개 릴리스 저장소 | `gh repo create dev-team-404/a-mate-releases --public --add-readme` (updater가 익명 fetch하므로 **반드시 public**, 커밋이 최소 1개 있어야 함 — [아래 참고](#릴리스-저장소는-비어-있으면-안-된다)) |
-| 서명 키(팀 공용) | updater 개인키 + 암호를 안전 채널(1Password 등)로 받아 `~/.tauri/a-mate-updater.{key,pass}`에 배치(`chmod 600`). **커밋 금지.** 모두 **같은 키**여야 자동 업데이트가 깨지지 않는다. 개발·테스트라면 [레포 내 `dev-key/`](#개발용-서명-키--레포-내-a-matedev-key)를 그대로 쓸 수 있다 |
+| 서명 키(팀 공용) | updater 개인키 + 암호를 안전 채널(1Password 등)로 받아 `~/.tauri/a-mate-updater.{key,pass}`에 배치(`chmod 600`). **커밋 금지.** 모두 **같은 키**여야 자동 업데이트가 깨지지 않는다. 개발·테스트라면 팀 채널로 받아 [로컬 `dev-key/`](#개발용-서명-키--로컬-a-matedev-key)에 배치한 키를 그대로 쓸 수 있다 |
 | `gh` 인증 | `gh auth login` |
 
 > **서명 키 출처 (어디서 받나).** 이 키페어는 최초에 `tauri signer generate`로 **한 번 생성**됐다.
@@ -271,8 +271,8 @@ AMATE_RELEASE_REPO=my-id/a-mate-releases-test \
 AMATE_WIN_BUILD='D:\build\a-mate' bash a-mate/scripts/release-amate.sh 0.2.0
 ```
 
-**③ 레포 내 개발용 키로 서명** — `~/.tauri/`로 복사·이름 변경 없이 바로 가리킨다
-([개발용 서명 키](#개발용-서명-키--레포-내-a-matedev-key) 참고).
+**③ 로컬 개발용 키로 서명** — `~/.tauri/`로 복사·이름 변경 없이 바로 가리킨다
+([개발용 서명 키](#개발용-서명-키--로컬-a-matedev-key) 참고).
 
 ```bash
 AMATE_KEY_FILE=a-mate/dev-key/a-mate-updater.key.usefordev \
@@ -315,10 +315,11 @@ bash a-mate/scripts/release-amate.sh --dry-run 0.2.1
 - 테스트 전용 훅으로 `PROC_VERSION_FILE`(기본 `/proc/version`)도 있다 — `check_wsl`을 가짜 파일로
   검증하기 위한 것이니 릴리스 시엔 건드리지 않는다.
 
-### 개발용 서명 키 — 레포 내 `a-mate/dev-key/`
+### 개발용 서명 키 — 로컬 `a-mate/dev-key/`
 
-개발·테스트 목적의 릴리스는 1Password를 거치지 않고 **레포에 포함된 키를 그대로 쓴다.**
-`a-mate/dev-key/`에 세 파일이 있고, 이 키의 pubkey는 `tauri.conf.json`의 `pubkey`와 **동일**하므로
+개발·테스트 목적의 릴리스는 팀 안전 채널로 받은 키를 **로컬 `a-mate/dev-key/`에 배치해 쓴다**
+(이 디렉터리는 `.gitignore` 대상 — 개인키·암호는 저장소에 커밋하지 않는다).
+배치하는 세 파일은 아래와 같고, 이 키의 pubkey는 `tauri.conf.json`의 `pubkey`와 **동일**하므로
 이 키로 서명한 릴리스는 기존 설치본이 정상 검증한다(= 자동 업데이트가 그대로 동작).
 
 | `a-mate/dev-key/` 파일 | 역할 |
@@ -327,10 +328,10 @@ bash a-mate/scripts/release-amate.sh --dry-run 0.2.1
 | `a-mate-updater.pass` | 개인키 암호 |
 | `a-mate-updater.key.pub` | 공개키 (이미 `tauri.conf.json`에 반영돼 있어 빌드에 쓰지 않음) |
 
-**⚠️ `key.` 뒤의 접미사를 제거해야 한다.** 개인키 파일명이 `a-mate-updater.key.usefordev`인 것은
-루트 `.gitignore`의 `*.key` 규칙이 `a-mate-updater.key`를 무시해 레포에 담을 수 없기 때문이다.
-스크립트(`KEY_FILE` 기본값)는 **`a-mate-updater.key`** 를 찾으므로, 배치할 때
-**`key.` 뒤의 `usefordev`를 떼어** 확장자를 `.key`로 되돌려야 인식된다.
+**⚠️ `key.` 뒤의 접미사를 제거해야 한다.** 팀 공유본의 개인키 파일명은 관례상
+`a-mate-updater.key.usefordev`다. 스크립트(`KEY_FILE` 기본값)는 **`a-mate-updater.key`** 를
+찾으므로, `~/.tauri/`에 배치할 때 **`key.` 뒤의 `usefordev`를 떼어** 확장자를 `.key`로
+되돌려야 인식된다.
 
 ```bash
 # 저장소 루트에서 (WSL)
@@ -351,8 +352,8 @@ bash a-mate/scripts/release-amate.sh --dry-run 0.2.0
 ```
 
 > **이 키는 "개발 전용 별도 키"가 아니다.** pubkey가 배포본과 같은 **실제 서명 키**이므로,
-> 유출되면 누구나 모든 설치본이 신뢰하는 업데이트를 서명할 수 있다. `space-a` 레포를
-> **private로 유지**하고 외부에 공유하지 않는다. `~/.tauri/`로 복사한 사본도 `chmod 600`.
+> 유출되면 누구나 모든 설치본이 신뢰하는 업데이트를 서명할 수 있다. 키와 암호는 저장소에
+> 커밋하지 않고 팀 안전 채널로만 주고받는다. `a-mate/dev-key/`와 `~/.tauri/` 사본 모두 `chmod 600`.
 > 정식 릴리스 담당자는 [서명 키 출처](#최초-1회-셋업)대로 공유 볼트에서 받은 키를 쓴다.
 
 ### 서명 키 3파일과 빌드 (어떻게 다시 쓰이나)
