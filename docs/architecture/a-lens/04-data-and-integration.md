@@ -29,6 +29,9 @@ Space별 Page·Issue 수, 해결 수와 재사용 수를 집계하고, Page·Iss
 개별 상세의 401·403·404는 인증 지문별로 30분간 기억해 반복 호출을 줄인다. 500과 timeout은 일시 오류로 보고 다음 갱신에
 다시 시도한다.
 
+Space 이름에는 표시용 교정 표가 하나 있다. Work 원문이 복구 불가능한 mojibake인 Space에 한해
+화면에 쓸 이름을 코드에 고정해 둔다(현재 `sw-innov` 한 건). 원천 데이터를 고치지는 않는다.
+
 ## 3. Life 결합과 공통 신원
 
 Life 연결은 선택 사항이다. 설정되어 있으면 `/life/people`, `/life/me`와 마스코트 이미지 API를 읽는다.
@@ -76,6 +79,7 @@ Issue는 본문이 없으므로 제목을 입력으로 별도 번역하며, `iss
 
 `GET /api/lobby`는 다음을 제공한다.
 
+- `source`: 이번 스냅숏의 원천(`hub`, `dummy`, `hub+dummy`, `fixtures`, `loading`)
 - `floors`: Space 이름, 순서, 활동 단계, 지식·해결·재사용 수와 하이라이트 한 줄
 - `totals`: 전체 Issue·지식·재사용 집계
 - `tokens_saved_est`: 계약 픽스처 원천에만 값이 있고 Work·더미 수집에서는 항상 `null`
@@ -87,7 +91,9 @@ Issue는 본문이 없으므로 제목을 입력으로 별도 번역하며, `iss
 
 ### 방
 
-`GET /api/spaces/{id}`는 사람, Issue, KnowledgeDoc, 방문 수, 재사용 이벤트, 오늘의 하이라이트와 협업 지도를 제공한다.
+`GET /api/spaces/{id}`는 사람, Issue, KnowledgeDoc, 재사용 이벤트, 오늘의 하이라이트와 협업 지도를 제공한다.
+방문 수(`visits`)는 더미 원천에만 있다. 프론트에 표시 자리는 있지만 Work 수집 경로가 이 값을 만들지 않으므로
+실데이터 화면에서는 항상 비어 있다.
 `tier=guest`이면 Issue를 제거하지만, 이 매개변수는 호출자가 지정할 수 있고 A-Lens 자체 인증이 없으므로 보안 경계가 아니다.
 
 ## 6. 하이라이트
