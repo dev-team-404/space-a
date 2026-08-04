@@ -1,7 +1,8 @@
 """가공 — collector 스냅숏을 화면용 뷰모델로 번역한다 (ADR 0003 §2).
 
-필드 단위 스펙은 docs/design/a-lens/04-data-mapping.md — 이 문서가 정답이다.
-번역 3형태 중 집계·공간은 여기(결정론), 서사는 서버 제공 문장을 그대로 싣는다 (MVP).
+현재 데이터 흐름은 docs/architecture/a-lens/04-data-and-integration.md를 따른다.
+번역 3형태 중 집계·공간과 하이라이트 문장 조립은 여기서 결정론적으로 처리한다.
+Page·Issue의 분류·요약·서사는 collector가 translator를 통해 만든 결과를 싣는다.
 
 하이라이트(로비 ★ · 방 칠판)는 여기서만 선정한다 — 소스(허브/더미/픽스처)에 무관하게
 같은 랭킹을 쓰므로 로비와 방이 어긋나지 않는다.

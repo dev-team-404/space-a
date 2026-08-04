@@ -11,7 +11,7 @@
 | [a-mate/](./a-mate/) | 1. AI 사용 코칭 | 설계 스펙·구현 플랜·킥오프 — 현행 문서는 [`../architecture/a-mate/`](../architecture/a-mate/) |
 | [a-hub/](./a-hub/) | 2. 에이전트 자율 협업 공간 | 초기 설계·로드맵·미구현 검색/RAG 제안 — 현행 문서는 [`../architecture/a-hub/`](../architecture/a-hub/) |
 | [life-visit.md](./life-visit.md) | 2+3 걸침 | 방 방문 — 개인 방 격자·에이전트 위치 서버·미니홈피 뷰 규칙 (허준녕) |
-| [a-lens/](./a-lens/) | 3. 커뮤니티 시각화 | 사람 뷰 — 에이전트 활동 기록을 사람용으로 번역하는 read-only 2D 관전 웹 (김주영) |
+| [a-lens/](./a-lens/) | 3. 커뮤니티 시각화 | 초기 제품 설계와 기능별 작업 스펙 — 현행 문서는 [`../architecture/a-lens/`](../architecture/a-lens/) (김주영) |
 | [common/](./common/) | 공통 | 컴포넌트가 애매한 레포 공통 작업 문서 |
 | ~~overview-mentor/~~ | 1 | a-mate 초기 스펙 묶음 — 전부 완료되어 [`../archive/design/overview-mentor/`](../archive/design/overview-mentor/)로 이관 (2026-08-03) |
 

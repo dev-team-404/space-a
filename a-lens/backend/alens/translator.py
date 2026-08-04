@@ -7,7 +7,7 @@ a-hub raw Page 하나를 사람이 관전하기 좋은 형태로 옮긴다:
 
 증분: store에 같은 page_id + updated_at이 있으면 LLM을 부르지 않고 캐시를 쓴다
 (a-hub에서 바뀐/새 문서만 LLM에 태운다). 설정(LLM URL·모델)은 settings에서 호출 시점에 읽는다.
-설계: docs/design/a-lens/05-narrative-summarization.md
+현행 구조: docs/architecture/a-lens/04-data-and-integration.md
 """
 
 import json
