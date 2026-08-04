@@ -26,7 +26,7 @@ A-Lens는 현재 Work의 전용 C2 집계 API 하나를 받는 대신 다음 RES
 - Page 본문 상세 조회
 
 Space별 Page·Issue 수, 해결 수와 재사용 수를 집계하고, Page·Issue의 최근 write 시각으로 사람의 최근 활동을 만든다.
-개별 상세의 403·404는 인증 지문별로 30분간 기억해 반복 호출을 줄인다. 500과 timeout은 일시 오류로 보고 다음 갱신에
+개별 상세의 401·403·404는 인증 지문별로 30분간 기억해 반복 호출을 줄인다. 500과 timeout은 일시 오류로 보고 다음 갱신에
 다시 시도한다.
 
 ## 3. Life 결합과 공통 신원
@@ -53,15 +53,16 @@ flowchart LR
     Page["Work Page"] --> Cache{"page_id + updated_at\n캐시 적중?"}
     Cache -->|예| Saved["저장된 body·번역"]
     Cache -->|아니오| LLM{"LLM 사용 가능?"}
-    LLM -->|예| Generated["category + summary + narrative"]
-    LLM -->|실패·꺼짐| Rules["규칙 분류 + 본문 요약"]
+    LLM -->|예| Generated["title + category + summary + narrative"]
+    LLM -->|실패·꺼짐| Rules["규칙 분류 + 본문 요약 + 제목 자르기"]
     Generated --> DB["SQLite 저장"]
     Rules --> DB
     Saved --> View["KnowledgeDoc 뷰모델"]
     DB --> View
 ```
 
-LLM은 OpenAI 호환 `/chat/completions`를 사용한다. 카테고리·요약·서사를 JSON 한 번에 요청한다. Page는
+LLM은 OpenAI 호환 `/chat/completions`를 사용한다. 명사형 제목·카테고리·요약·서사를 JSON 한 번에 요청한다.
+생성 제목은 원문 제목을 대체하지 않고 표시용으로 따로 저장한다(Page는 `title`, Issue는 `gen_title`). Page는
 같은 `page_id`의 `updated_at`이 바뀌지 않으면 저장된 본문과 번역을 재사용한다. `source_hash`도 저장하지만
 현재 캐시 적중 조건으로 사용하지 않는다. 요약 길이를 바꾸면 번역 캐시를 비워 전체를 다시 번역한다.
 
@@ -75,12 +76,14 @@ Issue는 본문이 없으므로 제목을 입력으로 별도 번역하며, `iss
 
 `GET /api/lobby`는 다음을 제공한다.
 
-- `floors`: Space 이름, 순서, 활동 단계, 지식·해결·재사용 수와 하이라이트
+- `floors`: Space 이름, 순서, 활동 단계, 지식·해결·재사용 수와 하이라이트 한 줄
 - `totals`: 전체 Issue·지식·재사용 집계
-- `tokens_saved_est`: 원천에 근거가 있을 때만 제공하는 추정치
+- `tokens_saved_est`: 계약 픽스처 원천에만 값이 있고 Work·더미 수집에서는 항상 `null`
 - `highlight`: 조직 공개 이벤트 중 우선순위가 가장 높은 사건
 
-현재 프론트는 이 응답을 사옥 층으로 그리지 않고 방 목록과 통계 카드 재료로 사용한다.
+현재 프론트는 이 응답을 사옥 층으로 그리지 않는다. 홈 화면이 실제로 쓰는 값은 `floors`의 이름, `stats`와
+더미 표시(`demo`)뿐이다. `totals`, `tokens_saved_est`, 로비 `highlight`와 `floors[].highlight`는 응답 타입에만
+있고 어떤 화면에도 표시하지 않는다.
 
 ### 방
 
@@ -93,11 +96,17 @@ Issue는 본문이 없으므로 제목을 입력으로 별도 번역하며, `iss
 
 1. 다른 팀에서 가져간 재사용
 2. 같은 팀 재사용
-3. 새 지식
-4. 열린 Issue
+3. 스킬 제안
+4. 새 지식
+5. 지식 압축
+6. 열린 Issue
+
+Work 수집과 더미는 지식 등록과 재사용 이벤트만 만든다. 따라서 실제 화면에서는 1·2·4만 경쟁하고, 스킬 제안·
+지식 압축·열린 Issue는 계약 픽스처 원천에서만 후보가 된다.
 
 같은 사건도 원천 방에서는 “다른 팀이 가져갔다”, 소비 방에서는 “다른 팀 지식을 가져와 썼다”처럼 방 관점에 맞춰
-문장을 다르게 만든다. 로비 카드에는 짧은 한 줄 예산, 칠판에는 더 긴 여러 줄 예산을 적용한다.
+문장을 다르게 만든다. 로비 카드에는 짧은 한 줄 예산, 칠판에는 더 긴 여러 줄 예산을 적용한다. 두 예산 모두
+서버가 적용하지만, 로비 쪽 문장은 현재 화면에 표시되지 않는다(§5).
 
 ## 7. 협업 지도 계산
 

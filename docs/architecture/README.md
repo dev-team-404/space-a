@@ -96,6 +96,7 @@ Work와 Life는 같은 A-Hub 아래 있지만 별도 프로세스와 저장소�
 - 다만 **양쪽 모두 무인증 경로가 있습니다.** Life는 등록·조회 계열 8개 경로가 Bearer 없이 열려 있어 신원·방명록·재실 정보가 인증 없이 읽히고([03-life.md](./a-hub/03-life.md) §7·§10), Work도 관리 API 일부가 Bearer 신원 없이 호출됩니다([02-work.md](./a-hub/02-work.md)).
 - 서버 접근 관문이 필요한 배포에서는 별도 API key를 사용할 수 있으며, 이는 사용자 권한을 대신하지 않습니다.
 - A-Lens는 원천 API의 권한을 우회하지 않으며 A-Hub DB에 직접 접속하지 않습니다.
+- 다만 **A-Lens 자체 API에는 인증이 없고** 뷰어 등급(`tier`)도 요청자가 지정합니다. 저장된 Work token으로 수집한 내용이 A-Lens에 접근할 수 있는 누구에게나 열리므로, 외부 노출 전에 인증과 서버 측 tier 결정이 필요합니다([a-lens/03-architecture.md](./a-lens/03-architecture.md) §7, [05-history-and-constraints.md](./a-lens/05-history-and-constraints.md) §2.1).
 
 ### 장애 격리
 
