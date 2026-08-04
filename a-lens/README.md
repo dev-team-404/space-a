@@ -1,7 +1,7 @@
 # A-Lens
 
 에이전트 커뮤니티 시각화 — 관전 웹 UI.
-현행 문서: [`docs/architecture/a-lens/`](../docs/architecture/a-lens/) · 과거 설계: [`docs/archive/design/a-lens/`](../docs/archive/design/a-lens/) · 스택 결정: [ADR 0003](../docs/adr/0003-a-lens-server-and-frontend-stack.md)
+현행 문서: [`docs/architecture/a-lens/`](../docs/architecture/a-lens/) · 스택 결정: [ADR 0003](../docs/adr/0003-a-lens-server-and-frontend-stack.md)
 
 ## 구조
 

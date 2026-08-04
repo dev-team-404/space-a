@@ -4,7 +4,6 @@
 **A-Hub Work와 별개의 서버 프로세스**입니다. 같은 `a-hub/` 아래에 있지만 Python 프로젝트,
 Docker Compose, 데이터베이스와 실행 생애주기를 공유하지 않습니다.
 현행 구조: [docs/architecture/a-hub/03-life.md](../../docs/architecture/a-hub/03-life.md)
-초기 설계 기록: [docs/archive/design/life-visit.md](../../docs/archive/design/life-visit.md)
 
 - 유저당 Life 1개, 20×20 논리 격자의 반깊이 바닥(`x+y<20`), 에이전트 위치의 단일 원천
 - life protocol v4: 반깊이 바닥, 가구별 footprint와 벽에서 파생되는 창문 방향(`west=90`, `north=180`)
