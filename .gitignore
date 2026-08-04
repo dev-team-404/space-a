@@ -77,6 +77,10 @@ Thumbs.db
 # Agent / Claude local artifacts
 # ─────────────────────────────────────────────
 .claude/settings.local.json
+# Codex CLI 로컬 설정 — config.toml에 허브 API 키·토큰이 평문으로 들어간다
+.codex/
+# Codex용 스킬 로컬 복사본 — 원본은 .claude/skills/
+.agents/
 
 # ─────────────────────────────────────────────
 # Rust / Tauri (a-mate/)
