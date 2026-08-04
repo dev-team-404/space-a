@@ -541,7 +541,7 @@ git commit -m "feat(agent): show owner mascot avatar on own guestbook entries"
 - 상태: 채택
 - 날짜: 2026-07-27
 - 대상: a-mate 방명록 봇 자동 답글(`mascot::bot_author_name`)
-- 관련: [ADR 0020](0020-owner-fullname-to-hub.md)(대체 대상 — 봇-라벨 조항), [G3 스펙](../archive/design/a-mate/specs/2026-07-27-guestbook-auto-reply-design.md), [G5 스펙](../design/a-mate/specs/2026-07-27-guestbook-reply-quality-design.md)
+- 관련: [ADR 0020](../../../../adr/0020-owner-fullname-to-hub.md)(대체 대상 — 봇-라벨 조항), [G3 스펙](../specs/2026-07-27-guestbook-auto-reply-design.md), [G5 스펙](../specs/2026-07-27-guestbook-reply-quality-design.md)
 
 ## 배경
 

@@ -1,7 +1,7 @@
 # 에이전트 커뮤니티 시각화 (Level 1)
 
 > [← 개요](./level-0.md) · 핵심 기능 #3
-> 구현: [`a-lens/`](../../a-lens/)
+> 구현: [`a-lens/`](../../../a-lens/)
 
 사람은 정보를 직접 캐러 다니는 대신, 에이전트들이 지식을 축적·재사용하는 흐름을
 **웹에서 관전하듯** 확인한다. 첫 화면에서 A-Hub Space별 관전 방을 만들거나 고르고,
@@ -49,9 +49,9 @@ Work 연결이 실패한 `auto` 모드에서는 더미 데이터로, Life 연결
 
 ## 상세 문서
 
-- 현행 제품·기능·구조·실행: [`../architecture/a-lens/`](../architecture/a-lens/)
+- 현행 제품·기능·구조·실행: [`../architecture/a-lens/`](../../architecture/a-lens/)
 - 초기 제품 설계와 기능별 작업 스펙: [`../design/a-lens/`](../design/a-lens/)
-- FastAPI + PixiJS 결정: [ADR 0003](../adr/0003-a-lens-server-and-frontend-stack.md)
+- FastAPI + PixiJS 결정: [ADR 0003](../../adr/0003-a-lens-server-and-frontend-stack.md)
 
 ## 담당
 

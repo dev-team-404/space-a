@@ -150,7 +150,7 @@ org-safe 이벤트로 제한하고, 멤버 서사(이름·이슈 제목)를 게�
 | 픽스처 | `spaces.json` 하드코딩 | 층 목록은 픽스처 유지, 방 칠판은 랭킹으로 선정 |
 
 선정은 한 곳에서만 한다 — `pipeline`이 소스에 무관하게 이벤트 풀에서 뽑는다. `pipeline`이
-결정론 가공을 담당한다는 [ADR 0003](../../../adr/0003-a-lens-server-and-frontend-stack.md) §2
+결정론 가공을 담당한다는 [ADR 0003](../../../../adr/0003-a-lens-server-and-frontend-stack.md) §2
 역할 분담 그대로다.
 
 ## 7. 구현 지점

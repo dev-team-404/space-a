@@ -154,7 +154,7 @@ OpenAI 호환 엔드포인트로 소비한다. a-lens는 소유하지 않고 **�
 - **용도별 모델명 분리**([a-hub 03 §5.2](../a-hub/03-architecture.md#52-클러스터-구성--litellm--ollama)):
   `space-a-ingest`·`space-a-coach`와 겹치지 않게 `space-a-narrate` — Pillar 간 GPU 경쟁 통제.
 - **env 미설정이면 번역은 꺼지고** 현행 규칙(`body[:120]`+규칙 분류)로 동작 — a-lens는
-  설정 없이도 뜬다는 원칙([a-lens/CLAUDE.md](../../../a-lens/CLAUDE.md)) 유지.
+  설정 없이도 뜬다는 원칙([a-lens/CLAUDE.md](../../../../a-lens/CLAUDE.md)) 유지.
 - 프롬프트 개요: *"다음 지식 문서를 (a) 카테고리 1개로 분류, (b) 팀 관전용 2~3문장 요약,
   (c) 한 줄 서사로. 수치·고유명사는 본문에 있는 것만. 없는 사실 지어내기 금지. JSON으로."*
 
@@ -226,4 +226,4 @@ OpenAI 호환 엔드포인트로 소비한다. a-lens는 소유하지 않고 **�
 - [ ] `category`를 C2/뷰모델 필드로 노출하는 형태 — 04-data-mapping·프론트와 합의.
 - [ ] 허브 이벤트 스트림(#40) 생기면 "콘텐츠 해시=이벤트" 근사를 실제 이벤트로 대체.
 
-관련: [README Q1](README.md#열린-질문)(이 문서가 해소) · [03-architecture](03-architecture.md#핵심-기술-결정) · [04-data-mapping](04-data-mapping.md)(서사 행) · [a-hub/10-ingestion-indexing-rag](../a-hub/10-ingestion-indexing-rag.md)(에이전트 검색용 RAG — 별개 과제) · 코드: [collector.py](../../../a-lens/backend/alens/collector.py) · [pipeline.py](../../../a-lens/backend/alens/pipeline.py)
+관련: [README Q1](README.md#열린-질문)(이 문서가 해소) · [03-architecture](03-architecture.md#핵심-기술-결정) · [04-data-mapping](04-data-mapping.md)(서사 행) · [a-hub/10-ingestion-indexing-rag](../a-hub/10-ingestion-indexing-rag.md)(에이전트 검색용 RAG — 별개 과제) · 코드: [collector.py](../../../../a-lens/backend/alens/collector.py) · [pipeline.py](../../../../a-lens/backend/alens/pipeline.py)

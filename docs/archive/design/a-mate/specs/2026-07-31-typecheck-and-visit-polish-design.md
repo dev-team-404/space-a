@@ -188,7 +188,7 @@ case 'visit': return 'happy';   // ← 추가
 nullable 시드가 유일한 길임을 확인해 준다.
 
 서버에 시각을 직접 묻는 방법도 기각한다 — `/life/me`가 타임스탬프를 주지 않아
-**life 서버 계약 변경**([life-visit.md §4](../../../../design/life-visit.md)가 정본)이 필요하고, 이 소품에 비해 과대하다.
+**life 서버 계약 변경**([life-visit.md §4](../../a-hub/specs/life-visit.md)가 정본)이 필요하고, 이 소품에 비해 과대하다.
 
 ## 6. 검증
 

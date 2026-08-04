@@ -1,6 +1,6 @@
 # 아키텍처와 기술 방향
 
-> 상위: [사람 뷰](README.md) · 데이터 계약은 [contracts/](../../../contracts/)가 정답 (C2 read-only REST, v2)
+> 상위: [사람 뷰](README.md) · 데이터 계약은 [contracts/](../../../../contracts/)가 정답 (C2 read-only REST, v2)
 
 ## 목표 아키텍처에서의 위치 (2026-07-17 합의)
 

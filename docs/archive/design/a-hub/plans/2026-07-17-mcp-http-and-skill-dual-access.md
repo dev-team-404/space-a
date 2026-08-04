@@ -800,7 +800,7 @@ description: Use when an agent needs to search/reuse team knowledge or record is
 | resolve_issue | `POST /issues/{issue_id}/resolve` |
 | get_skill_candidates | `GET  /skills/candidates` |
 
-호출 예시와 요청/응답 본문은 [references/endpoints.md](references/endpoints.md) 참고.
+호출 예시와 요청/응답 본문은 [references/endpoints.md](../../../../../.claude/skills/space-a-hub/references/endpoints.md) 참고.
 ```
 
 - [ ] **Step 2: Create `skills/space-a-hub/references/endpoints.md`**

@@ -1,6 +1,6 @@
 # 방 방문(Life Visit) 설계
 
-> 담당: 허준녕 · 개념: [level-2-life-visit.md](../highlevel/level-2-life-visit.md)
+> 담당: 허준녕 · 개념: [level-2-life-visit.md](../../../highlevel/level-2-life-visit.md)
 > 서버(hub)의 방·위치 API와 클라이언트(미니홈피·마스코트)의 뷰 규칙.
 
 ## 1. 데이터 소유 경계
@@ -90,7 +90,7 @@ Python 프로젝트·배포·스토어·생애주기를 공유하지 않는다. 
 
 > 이 필드가 필요해진 경위: a-lens는 온라인 판정을 "마지막 허브 write(page·issue)가 1시간 안인가"로
 > 하고 있었다. a-mate의 write는 사람당 하루 1~3건이고 전부 자정 직후에 몰려서, 하루 23시간이
-> 오프라인이고 정작 켜지는 1시간은 새벽이었다. 자세한 배경: [a-hub/08-life-presence.md](a-hub/08-life-presence.md)
+> 오프라인이고 정작 켜지는 1시간은 새벽이었다. 자세한 배경: [a-hub/08-life-presence.md](../08-life-presence.md)
 
 ### 에러
 

@@ -9,7 +9,7 @@ archived: 2026-07-26
 - **상태**: 승인 대기 (브레인스토밍 완료)
 - **컴포넌트**: a-mate (`crates/core/src/sprite.rs`, `src-tauri/src/commands.rs`, `src-tauri/src/lib.rs`, `src/lib/api.ts`, `src/lib/ui/settings/ConnectionGroup.svelte`)
 - **결정 요지**: 설정 → 연결 → "캐릭터 이미지" 섹션에 **무과금 "연결 테스트" 버튼**을 추가한다. 저장·재생성 전에 URL·키·모델 오설정을 사람이 읽는 메시지로 잡아내는 피드백 루프. 위 "LLM 엔진"의 `연결 테스트`(`engine_test`)를 그대로 미러링한다.
-- **관련**: PR #103 [`fix/sprite-parse-image-from-content`](../../../../a-mate/crates/core/src/sprite.rs) (이미지 파서 — 이 브랜치 위에서 분기), 후속 PR2 = 나 탭 재생성 IA 개편(별도 브레인스토밍)
+- **관련**: PR #103 [`fix/sprite-parse-image-from-content`](../../../../../a-mate/crates/core/src/sprite.rs) (이미지 파서 — 이 브랜치 위에서 분기), 후속 PR2 = 나 탭 재생성 IA 개편(별도 브레인스토밍)
 
 ## 1. 배경 — 관측된 문제
 

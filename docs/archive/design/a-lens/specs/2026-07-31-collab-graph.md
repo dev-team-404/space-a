@@ -330,5 +330,5 @@ idf에 `+1` 평활을 넣은 것도 같은 이유 — 문서가 2건이면 `ln(N
 
 ---
 
-**참조** — [04-data-mapping](../04-data-mapping.md) · [ADR 0003](../../../adr/0003-a-lens-server-and-frontend-stack.md) ·
-[방 칠판 하이라이트 스펙](./2026-07-30-room-board-highlight.md) · [C2 계약](../../../../contracts/c2-rest-api.json)
+**참조** — [04-data-mapping](../04-data-mapping.md) · [ADR 0003](../../../../adr/0003-a-lens-server-and-frontend-stack.md) ·
+[방 칠판 하이라이트 스펙](./2026-07-30-room-board-highlight.md) · [C2 계약](../../../../../contracts/c2-rest-api.json)

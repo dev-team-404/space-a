@@ -6,7 +6,7 @@ archived: 2026-07-30
 # 대문 아웃바운드 게시 설계 (대문사진·오늘의 한마디)
 
 > 로드맵: [7차 배치 O1](../plans/2026-07-26-life-social-diary-followups-roadmap.md)
-> 선행 선례: [Life 소셜 기능 설계](../../../../design/a-mate/specs/2026-07-22-life-social-features-design.md) · 계약 정본: [life-visit.md §4](../../../../design/life-visit.md)
+> 선행 선례: [Life 소셜 기능 설계](2026-07-22-life-social-features-design.md) · 계약 정본: [life-visit.md §4](../../a-hub/specs/life-visit.md)
 
 ## 목표
 

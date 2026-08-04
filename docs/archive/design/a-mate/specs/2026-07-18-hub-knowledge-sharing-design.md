@@ -8,7 +8,7 @@ archived: 2026-08-03
 > **목적**: a-mate(Agent Mentor)가 규칙 엔진으로 찾은 코칭 발견(Finding)을 a-hub("Space A")에
 > 자동 발행해, **"개인의 시행착오가 조직의 자산이 된다"**(README 취지)를 Pillar 1↔2 사이에서 실증한다.
 > 관련: [컴포넌트 소통 지도](../../../highlevel/level-1-component-communication.md) ·
-> [Space A 작성 지침](../../collab-space/08-writing-guide.md) · [space-a-hub Skill](../../../../.claude/skills/space-a-hub/)
+> [Space A 작성 지침](../../../../architecture/a-hub/writing-guide.md) · [space-a-hub Skill](../../../../../.claude/skills/space-a-hub/)
 
 ## 0. 30초 요약
 
@@ -44,7 +44,7 @@ archived: 2026-08-03
 
 ## 3. 어떤 형식으로 — Issue→resolve, Page 저작이 아니라
 
-[작성 지침](../../collab-space/08-writing-guide.md)의 구분을 따른다:
+[작성 지침](../../../../architecture/a-hub/writing-guide.md)의 구분을 따른다:
 
 - **Issue → resolve** = "문제 해결의 기록"(해결책이 자동으로 Page 발행). 코칭 Finding은 정확히 이 형태다 — 문제(낭비 감지) + 검증된 처방(결정론 규칙).
 - 직접 Page 저작은 가이드·레퍼런스용이므로 쓰지 않는다.

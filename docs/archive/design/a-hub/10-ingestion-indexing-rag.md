@@ -69,7 +69,7 @@
 
 ### 2.2 비목표
 
-- **정밀 접근제어**(역할·필드 단위 권한) — 해커톤 범위 밖([a-hub/CLAUDE.md](../../../a-hub/CLAUDE.md)). `org`/`space` 2단계만.
+- **정밀 접근제어**(역할·필드 단위 권한) — 해커톤 범위 밖([a-hub/CLAUDE.md](../../../../a-hub/CLAUDE.md)). `org`/`space` 2단계만.
 - **분산 벡터 클러스터·샤딩** — 조직 규모(수천~수만 문서)에서는 단일 노드로 충분. §4.3에서 규모 근거 제시.
 - **실시간(sub-second) 재색인 보장** — 색인은 준실시간(수 초~수십 초 지연 허용, §7).
 - **a-lens 프론트 렌더링 변경** — 이 문서는 **backend가 무엇을 내보내는가**까지만. 프론트는 C2 소비만 갱신.
@@ -336,7 +336,7 @@ search_knowledge(query, space_id?, limit)
 | `_humanize_activity` 규칙 문장 (collector.py:128) | 레코드 기반 `narrative`(선택) |
 | 그룹핑 없음 | `topic_id` → 방/로비에서 주제 클러스터 시각화 |
 | 품질 표시 없음 | `quality.trust`/`reuse_count` → 신뢰 배지 |
-| 하이라이트 = id 최신순 | 클러스터·재사용 기반 하이라이트(파이프라인 [pipeline.py](../../../a-lens/backend/alens/pipeline.py) `_pick_highlight`가 이미 소비 가능한 형태) |
+| 하이라이트 = id 최신순 | 클러스터·재사용 기반 하이라이트(파이프라인 [pipeline.py](../../../../a-lens/backend/alens/pipeline.py) `_pick_highlight`가 이미 소비 가능한 형태) |
 
 > collector.py의 `_humanize_activity`에는 이미 *"추후 이 함수 안에서 LLM으로 요약"* 이라는
 > 교체 지점 주석이 있다. **그 LLM 처리를 a-lens가 아니라 a-hub로 옮기는 것**이 이 설계의 골자다
@@ -373,7 +373,7 @@ write(동기) ──▶ [DocStore 정본] ──enqueue(record_id)──▶ [Ing
 | **실패 격리** | LLM/임베딩 실패는 폴백 색인(§5.2a) 또는 재시도. 3회 초과 시 dead-letter + 로깅 |
 | **재색인** | 임베딩 모델/스키마 변경 시 정본 전량 재enqueue(백필). 파생만 재생성 |
 | **가시성** | 미색인 문서는 검색에서만 누락(정본은 조회 가능). a-lens에 "색인 대기" 상태 노출 가능 |
-| **배포 형태** | 서버(컨테이너)=인프로세스 워커 스레드. 서버리스(Lambda)=SQS+워커 Lambda([work/SERVERLESS.md](../../../a-hub/work/SERVERLESS.md) 경로) |
+| **배포 형태** | 서버(컨테이너)=인프로세스 워커 스레드. 서버리스(Lambda)=SQS+워커 Lambda([work/SERVERLESS.md](../../../../a-hub/work/SERVERLESS.md) 경로) |
 
 ---
 
@@ -438,4 +438,4 @@ write(동기) ──▶ [DocStore 정본] ──enqueue(record_id)──▶ [Ing
 - [06-governance.md](06-governance.md) — 지식 불파괴·사용 기반 신뢰도
 - [07-search-design.md](07-search-design.md) — `search_knowledge` 내부(이 문서의 ④와 접합)
 - [08-life-presence.md](08-life-presence.md) — 현재 방 검색 부스트
-- 코드: [a-hub/work/ahub/core/](../../../a-hub/work/ahub/core/) · a-lens 소비: [collector.py](../../../a-lens/backend/alens/collector.py) · [pipeline.py](../../../a-lens/backend/alens/pipeline.py)
+- 코드: [a-hub/work/ahub/core/](../../../../a-hub/work/ahub/core/) · a-lens 소비: [collector.py](../../../../a-lens/backend/alens/collector.py) · [pipeline.py](../../../../a-lens/backend/alens/pipeline.py)

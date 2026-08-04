@@ -6,7 +6,7 @@ archived: 2026-08-03
 # R8 MCP 대형 결과 — 유예 승격 (검토 + 설계)
 
 > **목표**: "이 MCP 서버는 매 호출마다 큰 결과를 가져와 컨텍스트를 크게 소모한다"는 실제 토큰 낭비를 코칭.
-> 관련: [기능 표 R8](../02-features.md) · [로드맵 §5](../04-history-and-roadmap.md)
+> 관련: [기능 표 R8](../../../../architecture/a-mate/02-features.md) · [로드맵 §5](../../../../architecture/a-mate/04-history-and-roadmap.md)
 
 ## 0. 30초 요약
 

@@ -1,7 +1,7 @@
 # C2 데이터 → 화면 매핑
 
-> 상위: [사람 뷰](README.md) · 계약 원본: [`contracts/c2-rest-api.json`](../../../contracts/c2-rest-api.json) (v2) + [`contracts/fixtures/`](../../../contracts/fixtures/)
-> 구현: [`a-lens/backend/alens/pipeline.py`](../../../a-lens/backend/alens/pipeline.py)
+> 상위: [사람 뷰](README.md) · 계약 원본: [`contracts/c2-rest-api.json`](../../../../contracts/c2-rest-api.json) (v2) + [`contracts/fixtures/`](../../../../contracts/fixtures/)
+> 구현: [`a-lens/backend/alens/pipeline.py`](../../../../a-lens/backend/alens/pipeline.py)
 
 a-hub가 C2로 내려주는 데이터가 **어느 화면 요소에, 어떤 번역(서사/집계/공간)을 거쳐**
 표시되는지를 필드 단위로 못 박는 문서. 백엔드 pipeline(wire → 뷰모델 번역)의 스펙이며,

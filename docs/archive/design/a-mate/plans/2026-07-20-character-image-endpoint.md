@@ -7,7 +7,7 @@ archived: 2026-08-03
 
 ## 배경 — 왜 캐릭터가 "기본 그림"으로만 보였나
 
-마스코트는 두 경로로 그려진다 ([`Mascot.svelte`](../../../../a-mate/src/Mascot.svelte)):
+마스코트는 두 경로로 그려진다 ([`Mascot.svelte`](../../../../../a-mate/src/Mascot.svelte)):
 
 | 경로 | 조건 | 결과 |
 |---|---|---|

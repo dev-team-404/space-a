@@ -8,7 +8,7 @@ archived: 2026-08-03
 - **날짜**: 2026-07-20
 - **상태**: 초안 (리뷰 대기)
 - **관련 문서**: [코칭 v3 설계](2026-07-19-coaching-v3-design.md),
-  [R6 스킬 초안 설계](../../overview-mentor/specs/2026-07-19-r6-skill-draft-design.md)
+  [R6 스킬 초안 설계](2026-07-19-r6-skill-draft-design.md)
 - **선행 작업**: IDE 합성 블록(`<ide_opened_file>` 등) 프롬프트 오탐 수정 — 같은 PR에서 완료
   (`adapter.rs::is_synthetic_marker` + `user_version=1` 재수집 마이그레이션)
 

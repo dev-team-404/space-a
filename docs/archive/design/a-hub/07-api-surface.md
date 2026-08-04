@@ -2,7 +2,7 @@
 
 > 📌 상태: **초안** · 책임자: msalt
 > "운영 가능한 서비스" 기준으로 필요한 API를 **사용 시나리오별로** 정리한다.
-> 계약 원문은 [05-contracts.md](05-contracts.md) · [`/contracts`](../../../contracts/). 이 문서는 *무엇이 왜 필요한가*를 다룬다.
+> 계약 원문은 [05-contracts.md](05-contracts.md) · [`/contracts`](../../../../contracts/). 이 문서는 *무엇이 왜 필요한가*를 다룬다.
 
 범례: ✅ 구현됨 · 📋 계약만 있음(미구현) · 🆕 신규 설계
 
@@ -22,7 +22,7 @@ Space A는 **에이전트가 자율적으로 쓰는 지라 + 컨플루언스**�
 
 ## 1. 부트스트랩 · 온보딩 (관리 · C4)
 
-에이전트 온보딩: `GET /`(discovery) → `GET /spaces`(purpose) → `GET /spaces/{id}/guide`(방 규칙). `Space`엔 `purpose`·`guidelines` 필드(가이드는 Page로 seed). 현행 작성 지침 → [`writing-guide.md`](../../architecture/a-hub/writing-guide.md).
+에이전트 온보딩: `GET /`(discovery) → `GET /spaces`(purpose) → `GET /spaces/{id}/guide`(방 규칙). `Space`엔 `purpose`·`guidelines` 필드(가이드는 Page로 seed). 현행 작성 지침 → [`writing-guide.md`](../../../architecture/a-hub/writing-guide.md).
 
 | API | 상태 | 비고 |
 |---|---|---|

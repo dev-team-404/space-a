@@ -6,7 +6,7 @@ archived: 2026-08-03
 # 채팅 티어 라우팅 + Tier 2 질적 코칭 (설계 → 구현)
 
 > **목표**: 사후 코칭을 넘어 **대화형 튜터** — "이번 주 깊게 봐줘" 같은 질적 질문에 성장 코칭으로 답한다.
-> 관련: [역량 사다리](../02-features.md) · [세션 회고 스펙](2026-07-19-session-retro-knowledge-design.md)
+> 관련: [역량 사다리](../../../../architecture/a-mate/02-features.md) · [세션 회고 스펙](2026-07-19-session-retro-knowledge-design.md)
 
 ## 0. 30초 요약
 

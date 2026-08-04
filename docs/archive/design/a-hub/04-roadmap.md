@@ -10,7 +10,7 @@
 | 아이데이션 | ✅ 완료 (문제 정의 → 시장 조사 → 아키텍처 검토) |
 | 컴포넌트 경계 검토 | ✅ 완료 ([03 §1](03-architecture.md#1-컴포넌트-경계--가장-큰-함정-두-가지)) |
 | MCP 채택 결정 | ✅ 확정 (Agent Skills 비교 검토 후) |
-| C1/C2 계약 스키마 | ✅ **확정 (v1)** — [05-contracts.md](05-contracts.md), [`/contracts/`](../../../contracts/) |
+| C1/C2 계약 스키마 | ✅ **확정 (v1)** — [05-contracts.md](05-contracts.md), [`/contracts/`](../../../../contracts/) |
 | Pillar 3용 픽스처 | ✅ 전달 완료 |
 | 코드 | 🔴 없음 |
 
@@ -65,7 +65,7 @@
 
 이게 안 정해지면 **다른 두 팀원이 일을 시작할 수 없다.**
 
-- [x] **C1 / C2 계약 확정 (v2)** → [05-contracts.md](05-contracts.md) · [`/contracts/`](../../../contracts/)
+- [x] **C1 / C2 계약 확정 (v2)** → [05-contracts.md](05-contracts.md) · [`/contracts/`](../../../../contracts/)
 - [x] **Pillar 3용 픽스처 전달** — **서버 없이 프론트 작업 시작 가능**
 - [x] **로컬 LLM 클러스터 소유권 합의 완료** — Pillar 2 밖의 공용 인프라
 - [ ] **Pillar 3 담당자 확인** — 내가 그쪽 데이터 계약을 맞게 읽었는지

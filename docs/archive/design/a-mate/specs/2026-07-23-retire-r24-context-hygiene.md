@@ -9,7 +9,7 @@ archived: 2026-08-03
 - **상태**: 승인 (구현 대기)
 - **컴포넌트**: a-mate (`crates/core`, `src/lib/ui`)
 - **결정 요지**: R24(F) 룰과 **그 전용 인프라(에피소드 세그먼터)를 완전 제거**한다. 이미 쌓인 카드는 purge.
-- **관련**: [코칭 가치 재설계](./2026-07-22-coaching-value-redesign-design.md) §4 F, [F 구현 계획(아카이브)](../../../archive/design/a-mate/plans/2026-07-22-coaching-f-context-hygiene.md)
+- **관련**: [코칭 가치 재설계](./2026-07-22-coaching-value-redesign-design.md) §4 F, [F 구현 계획(아카이브)](../plans/2026-07-22-coaching-f-context-hygiene.md)
 
 ## 1. 결정
 

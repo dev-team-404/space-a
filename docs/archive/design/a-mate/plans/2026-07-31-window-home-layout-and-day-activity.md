@@ -818,7 +818,7 @@ Run: `cd a-mate && npm run tauri dev`
 `docs/design/a-mate/plans/2026-07-26-life-social-diary-followups-roadmap.md`의 5차 배치 **D1** 제목 줄 끝에 `— ✅ 완료(2026-07-31, 묶음 ⑦)`를 붙이고, D1 항목 끝에 구현 결과를 적는다. **아래는 계획 시점의 예상이므로, 실제 착지 내용과 다르면 실제를 따른다.**
 
 ```markdown
-**묶음 ⑦ 구현 결과(2026-07-31)** — 설계: [아카이브 스펙](../../../archive/design/a-mate/specs/2026-07-31-window-home-layout-and-day-activity-design.md) · [아카이브 계획](../../../archive/design/a-mate/plans/2026-07-31-window-home-layout-and-day-activity.md)
+**묶음 ⑦ 구현 결과(2026-07-31)** — 설계: [아카이브 스펙](../specs/2026-07-31-window-home-layout-and-day-activity-design.md) · [아카이브 계획](2026-07-31-window-home-layout-and-day-activity.md)
 
 - **창을 960×820으로 고정**(`resizable: false`, `minWidth`/`minHeight` 제거). 처음엔 "창은 조절 가능 +
   콘텐츠 `max-width` 고정"(실제 싸이월드 방식)을 제안했으나 **"창을 늘려도 콘텐츠가 그대로면 늘리는 의미가

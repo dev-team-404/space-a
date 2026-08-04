@@ -96,7 +96,7 @@ api/           ← 진입점
 > **전송(C1):** MCP는 **Streamable HTTP**로만 서빙한다(stdio 제거). REST와 MCP는
 > **한 프로세스**에서 돌며(`create_app(mount_mcp=True)`가 `/mcp`에 MCP 앱을 마운트),
 > 같은 SpaceAService·스토어·Bearer 규칙을 공유한다. MCP를 못 붙이는 환경은 Skill
-> 패키지로 동일한 REST를 호출한다 → [ADR 0002](../../adr/0002-mcp-http-and-skill-dual-access.md).
+> 패키지로 동일한 REST를 호출한다 → [ADR 0002](../../../adr/0002-mcp-http-and-skill-dual-access.md).
 `core`가 `adapters`를 import 하는 순간 이 설계는 무너진다.
 
 > ⚙️ **원칙은 CI로 강제한다.** Python은 컴파일 타임에 import 방향을 막을 수단이 없어서,
@@ -238,7 +238,7 @@ Space A의 백오피스 작업(파싱·요약)은 **거대 모델 1개보다 빠
 | **단일 레포 + 디렉터리 분리** (`/hub`, `/agent`, `/web`, `/contracts`) | ✅ **권장.** 해커톤 규모에서 멀티레포는 오버헤드만 크다. 계약(스키마)을 `/contracts`에 두고 세 컴포넌트가 참조 |
 | 멀티 레포 | ❌ 3인 규모에 CI·버전 동기화 비용이 이득보다 크다 |
 
-> 레포 구성은 **되돌리기 어려운 결정**이므로, 확정되면 [`../../adr/`](../../adr/)에 ADR로 남긴다.
+> 레포 구성은 **되돌리기 어려운 결정**이므로, 확정되면 [`../../adr/`](../../../adr/)에 ADR로 남긴다.
 
 ## 8. 이 구성의 잔여 리스크
 

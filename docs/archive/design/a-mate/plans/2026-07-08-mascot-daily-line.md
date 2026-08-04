@@ -34,7 +34,7 @@ archived: 2026-07-19
 ## 착수 확인 결과 (구현 전 코드 검증 완료)
 
 - `commands::chat_context_inner(store)`는 **오늘 기준**이다: `summary_inner`가 `chrono::Local::now()`로 오늘 날짜를 만들어 `summary_for_date`로 오늘 세션/입출력을 집계한다. `session_count==0`이 '오늘 활동 0건'에 정확히 대응 → 정적 폴백 트리거로 적합. (단 `ctx.findings`는 전체 활성 findings 상위 10개라 '오늘 한정'은 아니지만, 스펙 §2/§5가 chat 컨텍스트 재사용을 명시했으므로 그대로 사용. fingerprint의 `findings.len()`은 최대 10으로 캡되지만 세션/토큰이 함께 fp를 움직이므로 캐시 무효화에 충분.)
-- `maybe_generate_diaries`는 [pipeline.rs](../../src-tauri/src/pipeline.rs)의 `#[cfg(not(test))] mod runtime` 안(`fn maybe_generate_diaries(app: &AppHandle, store_mutex: &std::sync::Mutex<SqliteStore>)`)이고, `run_pipeline_once`가 `scan:done` emit 직후 호출한다. daily-line 훅은 그 **바로 다음 줄**에 배치. 이 runtime 모듈은 테스트 불가(`cfg(not(test))`)이므로 생성 결정 로직은 core에 두고 여기선 얇게 배선만 한다.
+- `maybe_generate_diaries`는 [pipeline.rs](../../../../../a-mate/src-tauri/src/pipeline.rs)의 `#[cfg(not(test))] mod runtime` 안(`fn maybe_generate_diaries(app: &AppHandle, store_mutex: &std::sync::Mutex<SqliteStore>)`)이고, `run_pipeline_once`가 `scan:done` emit 직후 호출한다. daily-line 훅은 그 **바로 다음 줄**에 배치. 이 runtime 모듈은 테스트 불가(`cfg(not(test))`)이므로 생성 결정 로직은 core에 두고 여기선 얇게 배선만 한다.
 - 기존 `crates/core/src/mascot.rs`는 로봇 파츠 절차 생성(`RobotSpec`)이 들어있다. '오늘의 한마디' 함수들은 **이 파일에 추가**한다(스펙이 말한 "신규 파일"은 실질적으로 이 모듈에 마스코트 보이스를 묶는다는 뜻).
 
 ## File Structure
@@ -598,14 +598,14 @@ git commit -m "feat(mascot): get_daily_line 커맨드 + 등록 (오늘 캐시 �
 - Modify: `src/App.svelte` (`$state` + `refresh()` 재조회 + 마크업 + 스타일)
 
 **Interfaces:**
-- Consumes: `get_daily_line` command(Task 5), 기존 `invoke`, 기존 `onScanDone(() => refresh())`([App.svelte:33](../../src/App.svelte#L33)).
+- Consumes: `get_daily_line` command(Task 5), 기존 `invoke`, 기존 `onScanDone(() => refresh())`([App.svelte:33](../../../../../a-mate/src/App.svelte#L33)).
 - Produces: `getDailyLine(): Promise<string | null>`; App 사이드바 `.profile`의 `RobotPortrait` 밑 `<p class="daily-line">`(값 없으면 미렌더).
 
 **참고 — 신규 vitest 없음.** 이 레포엔 Svelte 컴포넌트 렌더 테스트 인프라(@testing-library/svelte)가 없고 모든 `.test.ts`는 순수 로직이다. daily-line 표시는 `{#if dailyLine}` 마크업 한 줄이라 순수 로직이 없다 → `npm run build`(타입/컴파일) + 기존 `npx vitest run` 그린 유지 + 수동 E2E로 검증(스펙 §6 "vitest 가능 범위").
 
 - [ ] **Step 1: api.ts 바인딩 추가**
 
-`src/lib/api.ts`에서 `getDiary` 바인딩 **다음**([api.ts:96](../../src/lib/api.ts#L96))에 추가:
+`src/lib/api.ts`에서 `getDiary` 바인딩 **다음**([api.ts:96](../../../../../a-mate/src/lib/api.ts#L96))에 추가:
 
 ```ts
 export const getDailyLine = () => invoke<string | null>('get_daily_line');
@@ -622,13 +622,13 @@ export const getDailyLine = () => invoke<string | null>('get_daily_line');
   } from './lib/api';
 ```
 
-`summary` state 선언 **다음**([App.svelte:23](../../src/App.svelte#L23))에 추가:
+`summary` state 선언 **다음**([App.svelte:23](../../../../../a-mate/src/App.svelte#L23))에 추가:
 
 ```ts
   let dailyLine = $state<string | null>(null);
 ```
 
-기존 `refresh()` 함수([App.svelte:28-31](../../src/App.svelte#L28-L31)) 안에 한 줄 추가(기존 `onScanDone(() => refresh())`가 scan:done마다 이걸 다시 부른다 — 별도 리스너 불필요):
+기존 `refresh()` 함수([App.svelte:28-31](../../../../../a-mate/src/App.svelte#L28-L31)) 안에 한 줄 추가(기존 `onScanDone(() => refresh())`가 scan:done마다 이걸 다시 부른다 — 별도 리스너 불필요):
 
 ```ts
   async function refresh() {
@@ -640,7 +640,7 @@ export const getDailyLine = () => invoke<string | null>('get_daily_line');
 
 - [ ] **Step 3: App.svelte — 초상 밑 마크업**
 
-`<aside class="profile">`([App.svelte:71-74](../../src/App.svelte#L71-L74))에서 `<RobotPortrait />` 밑, `<p class="mood">` 위에 추가:
+`<aside class="profile">`([App.svelte:71-74](../../../../../a-mate/src/App.svelte#L71-L74))에서 `<RobotPortrait />` 밑, `<p class="mood">` 위에 추가:
 
 ```svelte
       <aside class="profile">
@@ -652,7 +652,7 @@ export const getDailyLine = () => invoke<string | null>('get_daily_line');
 
 - [ ] **Step 4: App.svelte — 스타일**
 
-`<style>`의 `.mood { ... }` 규칙([App.svelte:127](../../src/App.svelte#L127)) **다음**에 추가(테마 토큰만 사용):
+`<style>`의 `.mood { ... }` 규칙([App.svelte:127](../../../../../a-mate/src/App.svelte#L127)) **다음**에 추가(테마 토큰만 사용):
 
 ```css
   .daily-line { margin: 0; font-size: 13px; color: var(--ink); text-align: center; line-height: 1.45; }

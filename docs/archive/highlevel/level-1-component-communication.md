@@ -37,10 +37,10 @@
 
 ## 엣지별 소통 방식
 
-- **에이전트 → a-hub (지식 기록·검색·재사용).** 접근이 두 갈래인 것이 핵심이다 — 같은 코어에 **c1 MCP**(`/mcp`, MCP 가능한 클라이언트)와 **c2 REST**(비-MCP 환경)가 동일한 작업을 제공한다. 비-MCP 환경용으로 [`space-a-hub` Skill](../../.claude/skills/space-a-hub/)이 REST 호출을 안내한다. 인증은 2단계: `x-api-key`(서버 게이트) + `Authorization: Bearer`(에이전트 신원, `POST /agents/register`로 발급).
+- **에이전트 → a-hub (지식 기록·검색·재사용).** 접근이 두 갈래인 것이 핵심이다 — 같은 코어에 **c1 MCP**(`/mcp`, MCP 가능한 클라이언트)와 **c2 REST**(비-MCP 환경)가 동일한 작업을 제공한다. 비-MCP 환경용으로 [`space-a-hub` Skill](../../../.claude/skills/space-a-hub/)이 REST 호출을 안내한다. 인증은 2단계: `x-api-key`(서버 게이트) + `Authorization: Bearer`(에이전트 신원, `POST /agents/register`로 발급).
 - **a-mate → life-server (마이라이프·프레즌스).** Rust `life_client.rs`가 `/life/register·enter·move`를 직접 호출한다. 앱 설정의 "Space A 서버" URL이 이 서버를 가리킨다.
-- **a-mate → a-hub (텔레메트리).** 목표 아키텍처(#46)의 신설 행 — 하루 1회 전날치 **파생 집계 JSON**(토큰·모델 믹스·코칭 채택/절감·MCP 카운트)을 전용 공간(`a-mate-telemetry`)에 발행한다. a-lens 대시보드의 원료. 원문·경로·프롬프트는 싣지 않는다. 계약 제안: [텔레메트리 스펙](../archive/design/overview-mentor/specs/2026-07-18-hub-telemetry-design.md).
-- **a-mate ↔ a-hub (코칭 지식 공유, 양방향).** push: a-mate가 규칙 엔진으로 찾은 **유의미한 코칭 발견**(예: 미사용 always-on MCP)을 스캔 후 자동으로 a-hub에 이슈→해결 흐름으로 발행한다 — "개인의 시행착오가 조직의 자산이 된다"의 구현. pull: 다른 팀원이 발행한 지식 페이지를 홈 탭 "오늘의 배움" 큐레이션 피드로 가져온다(내 발행분은 제외). 무엇을·언제·어떻게 주고받는지는 [설계 스펙](../archive/design/overview-mentor/specs/2026-07-18-hub-knowledge-sharing-design.md) 참고. 환경변수(`SPACE_A_HUB_URL` 등) 미설정이면 조용히 꺼진다(프라이버시 기본 = 로컬).
+- **a-mate → a-hub (텔레메트리).** 목표 아키텍처(#46)의 신설 행 — 하루 1회 전날치 **파생 집계 JSON**(토큰·모델 믹스·코칭 채택/절감·MCP 카운트)을 전용 공간(`a-mate-telemetry`)에 발행한다. a-lens 대시보드의 원료. 원문·경로·프롬프트는 싣지 않는다. 계약 제안: [텔레메트리 스펙](../design/a-mate/specs/2026-07-18-hub-telemetry-design.md).
+- **a-mate ↔ a-hub (코칭 지식 공유, 양방향).** push: a-mate가 규칙 엔진으로 찾은 **유의미한 코칭 발견**(예: 미사용 always-on MCP)을 스캔 후 자동으로 a-hub에 이슈→해결 흐름으로 발행한다 — "개인의 시행착오가 조직의 자산이 된다"의 구현. pull: 다른 팀원이 발행한 지식 페이지를 홈 탭 "오늘의 배움" 큐레이션 피드로 가져온다(내 발행분은 제외). 무엇을·언제·어떻게 주고받는지는 [설계 스펙](../design/a-mate/specs/2026-07-18-hub-knowledge-sharing-design.md) 참고. 환경변수(`SPACE_A_HUB_URL` 등) 미설정이면 조용히 꺼진다(프라이버시 기본 = 로컬).
 - **a-mate → 웹 (커뮤니티 큐레이션).** `content.rs`의 `ContentSource`들이 Claude 공식 문서·changelog·창시자(Boris) 팁을 fetch해 홈 탭 "오늘의 배움"에 노출한다.
 - **a-lens → a-hub / life-server (수집).** `collector.py`가 c2 REST 읽기(`/spaces`·`tree`·`issues`·`members`·`pages`)를 30초 캐시로 폴링한다. 허브 장애 시 `contracts/fixtures` 스냅숏으로 폴백. life-server 프레즌스 연동은 이슈 #39 대기.
 

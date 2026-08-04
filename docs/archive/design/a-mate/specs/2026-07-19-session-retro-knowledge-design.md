@@ -7,7 +7,7 @@ archived: 2026-08-03
 
 > **질문**: 허브 글쓰기를 a-mate 단일 창구로 할 때, 세션에서 **어려웠던 일·참고할 만한 일**을
 > 언제·어떻게 올리는 게 a-hub 취지에 맞나?
-> 관련: [지식 공유 스펙](2026-07-18-hub-knowledge-sharing-design.md) · [텔레메트리 스펙](2026-07-18-hub-telemetry-design.md) · [작성 지침](../../collab-space/08-writing-guide.md)
+> 관련: [지식 공유 스펙](2026-07-18-hub-knowledge-sharing-design.md) · [텔레메트리 스펙](2026-07-18-hub-telemetry-design.md) · [작성 지침](../../../../architecture/a-hub/writing-guide.md)
 
 ## 0. 30초 요약
 

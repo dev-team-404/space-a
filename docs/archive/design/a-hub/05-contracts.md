@@ -4,7 +4,7 @@
 > [03-architecture.md §3](03-architecture.md#3-외부와의-계약-contract) 참고.
 >
 > 📌 **상태: v2 (확정)** — 책임자: msalt
-> 기계가 읽는 스키마는 [`/contracts`](../../../contracts/)에 있다. **이 문서와 그 파일이 어긋나면 파일이 정답이다.**
+> 기계가 읽는 스키마는 [`/contracts`](../../../../contracts/)에 있다. **이 문서와 그 파일이 어긋나면 파일이 정답이다.**
 
 ## 0. v1 → v2 — 왜 다시 썼나
 
@@ -42,7 +42,7 @@ C1이 깨지면 Pillar 1이 죽고, C2가 깨지면 Pillar 3이 죽는다. **v2�
 > 🏗️ **해커톤 구현 현황 — 세밀한 접근 제어는 미구현.**
 > 아래 권한 모델은 **설계 목표**다. 해커톤 MVP(`a-hub/work/`)에서는 **방 단위 멤버십 + 문서 `org`/`space` visibility**
 > 두 축만 구현했다. 등급별 응답 깎기(로비/게스트/멤버/매니저), 역할, 페이지별 restriction, SSO 연동은 **의도적으로 미구현**이며
-> 향후 과제로 남긴다. 구현 현황: [`a-hub/work/README.md`](../../../a-hub/work/README.md#범위-밖--세밀한-접근-제어-해커톤이라-미구현).
+> 향후 과제로 남긴다. 구현 현황: [`a-hub/work/README.md`](../../../../a-hub/work/README.md#범위-밖--세밀한-접근-제어-해커톤이라-미구현).
 
 Pillar 3 설계의 요구사항을 그대로 받는다:
 
@@ -77,8 +77,8 @@ Pillar 3 설계의 요구사항을 그대로 받는다:
   클라이언트가 자기 소속을 자기 입으로 주장하게 두면 권한 모델 전체가 무의미해진다.
 - **프론트엔드는 아무것도 숨기지 않는다.** 서버가 **응답 자체를 등급에 맞게 깎아서** 준다.
   게스트에게 `issues`는 빈 배열로 내려간다 — "받아놓고 안 그리는" 게 아니다.
-  → [`space-detail-member.json`](../../../contracts/fixtures/space-detail-member.json) 과
-    [`space-detail-guest.json`](../../../contracts/fixtures/space-detail-guest.json) 을 **diff 해보면 바로 보인다.**
+  → [`space-detail-member.json`](../../../../contracts/fixtures/space-detail-member.json) 과
+    [`space-detail-guest.json`](../../../../contracts/fixtures/space-detail-guest.json) 을 **diff 해보면 바로 보인다.**
 
 ## 3. 공통 규약
 
@@ -96,7 +96,7 @@ Pillar 3 설계의 요구사항을 그대로 받는다:
 
 > **구현 상태:** stdio 전송은 **더 이상 구현되지 않는다** — Streamable HTTP + per-request
 > Bearer가 유일한 전송이다. 계약(헤더 위치·클레임 구조)은 그대로이고, 구현이 계약의
-> "기본"(HTTP)을 따라잡았을 뿐이다. → [ADR 0002](../../adr/0002-mcp-http-and-skill-dual-access.md).
+> "기본"(HTTP)을 따라잡았을 뿐이다. → [ADR 0002](../../../adr/0002-mcp-http-and-skill-dual-access.md).
 
 토큰 → `{ user_id, agent_id, spaces[] }`. **`spaces[]`가 권한의 전부다.**
 
@@ -145,7 +145,7 @@ Pillar 3 설계의 요구사항을 그대로 받는다:
 해결 ────────▶ resolve_issue     (status: resolved)
 ```
 
-전체 왕복 예시: [`c1-lifecycle.json`](../../../contracts/fixtures/c1-lifecycle.json)
+전체 왕복 예시: [`c1-lifecycle.json`](../../../../contracts/fixtures/c1-lifecycle.json)
 
 | Tool | 언제 | 핵심 |
 |---|---|---|
@@ -166,12 +166,12 @@ v2는 기록을 **거부하는 대신** 서버측 **staleness sweeping**(오래�
 
 | Endpoint | 용도 | 픽스처 |
 |---|---|---|
-| `GET /spaces` | 로비 — 사옥의 층들 | [spaces.json](../../../contracts/fixtures/spaces.json) |
-| `GET /spaces/{id}` | 스페이스 상세 — **등급에 따라 응답이 깎여 나감** | [member](../../../contracts/fixtures/space-detail-member.json) / [guest](../../../contracts/fixtures/space-detail-guest.json) |
-| `GET /reuse-events` | **북극성 피드** — 지식이 팀 경계를 넘은 기록 | [reuse-events.json](../../../contracts/fixtures/reuse-events.json) |
+| `GET /spaces` | 로비 — 사옥의 층들 | [spaces.json](../../../../contracts/fixtures/spaces.json) |
+| `GET /spaces/{id}` | 스페이스 상세 — **등급에 따라 응답이 깎여 나감** | [member](../../../../contracts/fixtures/space-detail-member.json) / [guest](../../../../contracts/fixtures/space-detail-guest.json) |
+| `GET /reuse-events` | **북극성 피드** — 지식이 팀 경계를 넘은 기록 | [reuse-events.json](../../../../contracts/fixtures/reuse-events.json) |
 | `GET /graph` | 관계망 네트워크 맵 | — |
-| `GET /stats` | 집계 대시보드 | [stats.json](../../../contracts/fixtures/stats.json) |
-| `GET /activity` | 관전 피드 | [activity.json](../../../contracts/fixtures/activity.json) |
+| `GET /stats` | 집계 대시보드 | [stats.json](../../../../contracts/fixtures/stats.json) |
+| `GET /activity` | 관전 피드 | [activity.json](../../../../contracts/fixtures/activity.json) |
 
 ### 5.1 서사(narrative)는 **제공**하지, 강요하지 않는다
 

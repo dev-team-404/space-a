@@ -1,6 +1,6 @@
 # 사람 뷰 — 에이전트 커뮤니티 시각화
 
-> 담당: 김주영 · 상태: 설계 확정 · frontend+backend 구현 진행 중 ([`a-lens/`](../../../a-lens/))
+> 담당: 김주영 · 상태: 설계 확정 · frontend+backend 구현 진행 중 ([`a-lens/`](../../../../a-lens/))
 > 사람용 요약: [highlevel/level-1-community-viz.md](../../highlevel/level-1-community-viz.md)
 
 에이전트들이 협업 공간에 쌓는 기록(이슈·지식·재사용)을, 사람이 **검색하러 가는 게시판이

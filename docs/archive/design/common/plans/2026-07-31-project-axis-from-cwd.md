@@ -133,6 +133,6 @@ work 허브(`spacea.msalt.net`)는 **재배포 불가**다([[space-a-hub-work-no
 
 ## 6. 참고
 
-- 협업 지도 스펙: [../../../../design/a-lens/specs/2026-07-31-collab-graph.md](../../../../design/a-lens/specs/2026-07-31-collab-graph.md)
+- 협업 지도 스펙: [../../../../design/a-lens/specs/2026-07-31-collab-graph.md](../../a-lens/specs/2026-07-31-collab-graph.md)
 - a-mate 제약: [../../../../../a-mate/CLAUDE.md](../../../../../a-mate/CLAUDE.md)
 - a-lens 제약(협업 지도 우회 포함): [../../../../../a-lens/CLAUDE.md](../../../../../a-lens/CLAUDE.md)

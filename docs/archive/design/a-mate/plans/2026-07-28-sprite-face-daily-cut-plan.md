@@ -1287,8 +1287,8 @@ git commit -m "feat(agent): show daily mascot cut with caption on home portrait"
 - 상태: 채택
 - 날짜: 2026-07-28
 - 대상: a-mate(Agent Mentor) 이미지 생성 경로의 전송 소재 수위
-- 관련: [ADR 0019](0019-owner-memory-transmission-boundary.md)(전송 경계),
-  [설계 스펙](../design/a-mate/specs/2026-07-28-sprite-face-daily-cut-design.md)
+- 관련: [ADR 0019](../../../../adr/0019-owner-memory-transmission-boundary.md)(전송 경계),
+  [설계 스펙](../specs/2026-07-28-sprite-face-daily-cut-design.md)
 
 ## 배경
 

@@ -17,7 +17,7 @@
 > ⚠️ **해커톤 범위 — 세밀한 접근 제어는 구현하지 않는다.**
 > 이 프로젝트는 해커톤 산출물이라, 통제는 **방 단위 멤버십 + 문서 `org`/`space` visibility** 두 축까지만 구현한다.
 > 역할(admin/editor/viewer), 권한 스킴, 페이지별 restriction, 소유권 기반 제어, SSO 연동은 **의도적으로 미구현**이다.
-> (설계상 권한 모델: [`../design/a-hub/05-contracts.md` §2](../design/a-hub/05-contracts.md) · 구현 현황: [`a-hub/work/README.md`](../../a-hub/work/README.md#범위-밖--세밀한-접근-제어-해커톤이라-미구현))
+> (설계상 권한 모델: [`../design/a-hub/05-contracts.md` §2](../design/a-hub/05-contracts.md) · 구현 현황: [`a-hub/work/README.md`](../../../a-hub/work/README.md#범위-밖--세밀한-접근-제어-해커톤이라-미구현))
 
 ## 지금 구현된 것 (MVP)
 
@@ -27,7 +27,7 @@
 - `POST /agents/register` — 온보딩 (`agent_id`·`token`·소속)
 - `POST /issues`, `POST /issues/{id}/resolve` — 지식 열기·해결 (C1의 MVP REST 바인딩)
 
-계약: [`../../contracts/c4-admin-api.json`](../../contracts/c4-admin-api.json) · 코드: [`../../a-hub/work/`](../../a-hub/work/)
+계약: [`../../contracts/c4-admin-api.json`](../../../contracts/c4-admin-api.json) · 코드: [`../../a-hub/work/`](../../../a-hub/work/)
 
 ## 다음 슬라이스
 

@@ -83,7 +83,7 @@
 
 이 문서는 **work 공간의 check_in/check_out**(MCP) 프레즌스 설계다. 그와 별개로 **life 서버**
 (방 방문)에는 접속 신선도가 먼저 필요해져 구현됐다 — `agents.last_seen`. 규격은
-[life-visit.md §4 프레즌스](../life-visit.md)에 있다.
+[life-visit.md §4 프레즌스](specs/life-visit.md)에 있다.
 
 계기: a-lens가 온라인/오프라인을 **"마지막 허브 write(page·issue)가 1시간 안인가"** 로 판정하고
 있었다. a-mate의 write는 사람당 하루 1~3건이고 전부 자정 직후에 몰려서, 하루 23시간이 오프라인이고
