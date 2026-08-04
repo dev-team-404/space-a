@@ -13,6 +13,9 @@ services:
     environment:
       # 설정하면 SQLite로 영속(볼륨). 지우면 인메모리로 동작.
       SPACE_A_DB: /data/space_a.db
+      # 설정하면 x-api-key 관문 활성 (healthz/readyz 제외). 비우면 관문 비활성.
+      # life와 **별개 키**다 — 같은 값을 쓰더라도 변수는 따로 준다.
+      SPACE_A_API_KEY: ${SPACE_A_API_KEY:-}
     volumes:
       - space-a-data:/data
     restart: unless-stopped

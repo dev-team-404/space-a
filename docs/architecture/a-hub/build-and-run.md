@@ -25,6 +25,9 @@ python -m venv .venv
 
 영속 SQLite를 쓰려면 실행 전에 `SPACE_A_DB`를 파일 경로로 설정한다. 설정하지 않으면 인메모리다.
 
+변수 목록과 기본값은 [`a-hub/.env.example`](../../../a-hub/.env.example)에 주석과 함께 있다. 다만 로컬
+uvicorn 실행은 `.env`를 자동으로 읽지 않으므로 위처럼 셸 환경 변수로 직접 넣어야 한다.
+
 ## 3. Life 로컬 실행
 
 ```powershell
@@ -56,7 +59,13 @@ docker compose ps
 | Work `hub` | `8000` | `/data/space_a.db` |
 | Life `life-server` | `8001` | `/data/life.db` |
 
+Compose는 `a-hub/.env`를 자동으로 읽어 `${...}` 보간에 쓴다. 보간 대상은 사내망 빌드용 `PIP_TRUSTED`와
+두 서버의 관문 키 `SPACE_A_API_KEY`·`LIFE_SERVER_API_KEY`다. DB 경로는 compose가 컨테이너 안에서
+고정하므로 `.env`에 넣지 않아도 된다.
+
 API key를 활성화하려면 Work는 `SPACE_A_API_KEY`, Life는 `LIFE_SERVER_API_KEY`를 각각 설정한다.
+둘 다 compose에 배선되어 있어 `a-hub/.env`에 값을 넣으면 켜진다. 변수가 없거나 값이 비어 있으면
+관문은 비활성이다. **두 서버는 서로 다른 변수를 읽으므로 한쪽만 설정하면 다른 쪽은 열려 있다.**
 
 ## 5. 테스트
 
