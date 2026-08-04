@@ -50,8 +50,8 @@ impl AppState {
 /// 마스코트 창 논리 크기(px). 창은 이 크기로 **상시 고정** — 확장/접힘을 리사이즈로
 /// 구현하면 창 원점 이동 + WebView 비동기 리페인트 때문에 로봇이 튀어 보이는
 /// 깜빡임이 생긴다. 접힘 상태의 여백은 클릭 통과로 처리한다.
-pub(crate) const MASCOT_W: f64 = 320.0;
-pub(crate) const MASCOT_H: f64 = 230.0;
+pub(crate) const MASCOT_W: f64 = 280.0;
+pub(crate) const MASCOT_H: f64 = 280.0;
 /// 로봇 상호작용 영역(우하단, 논리 px) — 이 밖의 투명 여백은 접힘 상태에서 클릭 통과
 pub(crate) const ROBOT_SIDE: f64 = 160.0;
 
@@ -258,7 +258,7 @@ pub fn run() {
             })
             .setup(|app| {
                 // 테스트용 오버라이드: 한 PC에서 두 인스턴스를 돌릴 때 데이터 디렉터리 분리
-                // (docs/archive/design/life-visit.md §5) — 미설정이면 기존 경로 그대로.
+                // (docs/archive/design/a-hub/specs/life-visit.md §5) — 미설정이면 기존 경로 그대로.
                 let dir = match std::env::var("AGENT_MENTOR_DATA_DIR") {
                     Ok(d) if !d.trim().is_empty() => std::path::PathBuf::from(d),
                     _ => app.path().app_data_dir()?,

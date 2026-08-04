@@ -38,9 +38,9 @@ pub fn display_layout_signature(monitors: &[(i32, i32, i32, i32, u32)]) -> Strin
 mod tests {
     use super::{display_layout_signature, sanitize_pos};
 
-    // 실제 상수와 동일: 창 320×230, 로봇 160.
-    const W: i32 = 320;
-    const H: i32 = 230;
+    // 실제 상수와 동일: 창 280×280, 로봇 160.
+    const W: i32 = 280;
+    const H: i32 = 280;
     const R: i32 = 160;
 
     #[test]

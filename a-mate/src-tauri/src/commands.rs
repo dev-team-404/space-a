@@ -765,7 +765,7 @@ pub fn engine_test(url: String, key: String, model: String) -> Result<String, St
 // 못박았고, §4.2 문법 B의 슬롯에도 그 줄이 없다. 외국어 소식은 파이프라인의 번역 스텝이
 // 아이템당 1회 생성해 `content_items.summary_ko`에 캐시한다(D7 해소).
 
-// --- 방 방문 (docs/archive/design/life-visit.md) ---
+// --- 방 방문 (docs/archive/design/a-hub/specs/life-visit.md) ---
 // 설정 키: hub_url·hub_token·hub_agent_id·hub_life_id. 이름의 단일 원본은 user_name이다.
 // 규율: 락은 설정 읽기/쓰기 동안만, 네트워크(hub HTTP)는 락 밖.
 

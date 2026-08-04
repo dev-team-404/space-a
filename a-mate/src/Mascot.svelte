@@ -128,7 +128,7 @@ import { getCurrentWindow, PhysicalPosition } from '@tauri-apps/api/window';
     return () => { clearTimeout(t); p.then((u) => u()); };
   });
 
-  // 방 이동 팝오버 (docs/archive/design/life-visit.md §3): 우클릭 = 메뉴, 클릭 = 홈피(기존)
+  // 방 이동 팝오버 (docs/archive/design/a-hub/specs/life-visit.md §3): 우클릭 = 메뉴, 클릭 = 홈피(기존)
   let lifeMenu = $state<LifeListEntry[] | null>(null); // null = 닫힘
   let myLifeId = $state('');
   let curLifeId = $state(''); // 현재 있는 방 — 내 방이면 "돌아가기" 버튼을 숨긴다
