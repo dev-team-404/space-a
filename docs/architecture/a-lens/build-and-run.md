@@ -39,7 +39,8 @@ Vite는 `/api`, `/assets`를 기본 8600 포트로 프록시한다. 다른 백�
 
 ## 3. 설정
 
-`backend/.env.example`을 참고해 환경 변수를 셸에 넣거나, 앱 홈의 설정 창에서 저장한다. `.env` 파일은
+`backend/.env.example`을 참고해 환경 변수를 셸에 넣거나, 앱 홈의 설정 창에서 저장한다. 예시 파일에는
+Work·LLM 변수만 있으므로 Life 연동과 요약 길이는 아래 표를 보고 직접 지정한다. `.env` 파일은
 Python 코드가 자동으로 읽지 않는다. 저장 설정은 기본적으로 `backend/.a-lens/settings.json`에 기록되며 환경 변수보다 우선한다.
 
 주요 설정:
