@@ -8,7 +8,7 @@ archived: 2026-07-19
 > **목적**: 별도 브랜치(`feat/content-curation`)에서 개발한 "콘텐츠 큐레이션(AX 튜터)"을
 > 통합 저장소의 `client/` 구조(앱을 `client/`로 이동한 #24 이후) 위로 이관한 기록.
 > 무엇을 얹었는지 + 어떻게 병합했는지 + 검증 결과를 담는다.
-> 설계 배경은 [`feat/content-curation`의 킥오프·스펙](https://github.com/dev-team-404/space-a/tree/feat/content-curation) 참고.
+> 설계 배경은 [콘텐츠 큐레이션 킥오프](../brainstorming/2026-07-14-content-curation-kickoff.md) 참고.
 
 ## 미리보기 — 홈탭 "오늘의 배움" (미니홈피)
 

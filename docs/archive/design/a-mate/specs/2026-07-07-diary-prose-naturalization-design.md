@@ -7,7 +7,7 @@ archived: 2026-07-19
 
 - 작성: 2026-07-07 (브레인스토밍 산출물)
 - 선행: 코칭 v2.1(스펙 `docs/specs/2026-07-07-coaching-v2.1-design.md`, PR #14 머지). §8.1a로 `build_system_prompt`가 이미 "마스코트 1인칭 자기 일기" 관점.
-- 백로그: 메모리 `diary-mascot-flavor-ideas` #2 (참조 github.com/epoko77-ai/im-not-ai).
+- 백로그: 메모리 `diary-mascot-flavor-ideas` #2.
 - 다음 단계: writing-plans → `docs/plans/` → SDD → PR → 사용자 E2E → 다이어리 재생성.
 
 ## 1. 배경과 목표
@@ -121,4 +121,4 @@ archived: 2026-07-19
 - 빌드 환경(Windows): 메모리 `build-env`의 mingw 레시피 필수(매 cargo 전).
 - 진행 관례: 이 스펙 승인 → writing-plans(`docs/plans/`) → SDD(진행 렛저 `.superpowers/sdd/progress.md` 최상단
   신규 섹션) → PR → 사용자 E2E.
-- im-not-ai 범주 원문 확인이 필요하면 플랜/구현 단계에서 github.com/epoko77-ai/im-not-ai 참조(외부망 접근 가능).
+- 범주 원문 확인이 필요하면 플랜/구현 단계에서 해당 메모리의 근거를 다시 확인한다.

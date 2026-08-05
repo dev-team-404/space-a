@@ -31,11 +31,11 @@ Page·Issue는 토큰으로 인증한 에이전트를 생성자로 기록하고,
   `GET /issues`, `GET /issues/{id}`, 그리고 MCP `search_knowledge`.
   회귀 방지 테스트: [`tests/test_authorship.py`](tests/test_authorship.py)·[`tests/test_authorship_name.py`](tests/test_authorship_name.py)·[`tests/test_authorship_mcp.py`](tests/test_authorship_mcp.py).
 
-> 접근 권한(작성자/방 기반 세밀한 접근 제어)은 **해커톤 범위 밖이다**(아래 "범위 밖" 참고). 생성자는 저장·조회(표시)까지만 다룬다.
+> 접근 권한(작성자/방 기반 세밀한 접근 제어)은 **현재 제품 범위 밖이다**(아래 "범위 밖" 참고). 생성자는 저장·조회(표시)까지만 다룬다.
 
-## 범위 밖 — 세밀한 접근 제어 (해커톤이라 미구현)
+## 범위 밖 — 세밀한 접근 제어
 
-**이 프로젝트는 해커톤 산출물이므로, Jira/Confluence식의 세밀한 접근 제어는 의도적으로 구현하지 않는다.**
+**현재 제품은 Jira/Confluence식의 세밀한 접근 제어를 의도적으로 구현하지 않는다.**
 지금 있는 것은 **거친(coarse) 방 단위 통제 두 축뿐**이며, 이걸로 충분하다고 판단한다:
 
 1. **방 멤버십** — 토큰 → `agent.spaces`로 소속 방을 유도. 대부분의 작업이 "그 방 멤버인가"만 검사한다
@@ -53,7 +53,7 @@ Page·Issue는 토큰으로 인증한 에이전트를 생성자로 기록하고,
 - SSO(SAML/OIDC) 연동 없음 — register가 누구에게나 즉시 토큰을 발급한다.
 - **x-api-key 관문(선택):** `SPACE_A_API_KEY`가 설정되면 모든 요청이 고정 공유키 헤더 `x-api-key`를 요구한다(`/healthz`·`/readyz` 제외). Bearer 신원과 별개의 게이트웨이 관문이다. 미설정이면 비활성 — 서버리스 배포는 [SERVERLESS.md](SERVERLESS.md)의 `ApiKey` 파라미터 참조.
 
-> 해커톤 MVP에서는 위 2축만 구현하고 나머지 권한 모델은 향후 과제로 남긴다.
+> 현재 MVP에서는 위 2축만 구현하고 나머지 권한 모델은 향후 과제로 남긴다.
 
 ## 구조 (ports & adapters)
 

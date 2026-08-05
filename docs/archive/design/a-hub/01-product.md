@@ -77,7 +77,7 @@ Space A의 지식은 남아서 **다음 사람의 에이전트**를 돕는다.
 > Confluence는 **사람이 관리해야 사는** 시스템이고,
 > **Space A는 안 관리해도 스스로 자라는** 시스템이다.
 
-> 조사 예정: [hang-in/seCall](https://github.com/hang-in/seCall) — 컨셉 확인 후 비교 추가.
+> 추가 비교 후보는 컨셉 확인 후 반영한다.
 
 ## 5. MCP vs Agent Skills — 왜 MCP인가
 

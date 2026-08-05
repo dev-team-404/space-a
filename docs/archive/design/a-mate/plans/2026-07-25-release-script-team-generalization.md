@@ -204,7 +204,7 @@ main() {
   "platforms": {
     "windows-x86_64": {
       "signature": "$SIG",
-      "url": "https://github.com/$RELEASE_REPO/releases/download/v$VERSION/$URLNAME"
+      "url": "<release-base-url>/download/v$VERSION/$URLNAME"
     }
   }
 }

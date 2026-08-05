@@ -499,7 +499,7 @@ impl CoachingJudge for R7Judge {
             c.evidence.get("tool_calls").and_then(|v| v.as_u64()).unwrap_or(0),
             c.evidence.get("tok_output").and_then(|v| v.as_u64()).unwrap_or(0),
         );
-        let system = "당신은 Claude Code 사용 습관을 코칭하는 심사관입니다. \
+        let system = "당신은 Claude Code 사용 습관을 코칭하는 판정자입니다. \
 사용자가 이 세션에서 시킨 작업이 Opus가 꼭 필요했는지, Sonnet으로 충분했는지 판정하세요.\n\
 작업의 '무게'만 보세요 — 에이전트가 잘했는지·서브에이전트 모델 선택은 판단 대상이 아닙니다.\n\
 over_modeled=true: 사소·정형 작업(단순 조회·이름변경·짧은 수정 등)이라 Sonnet으로 충분.\n\

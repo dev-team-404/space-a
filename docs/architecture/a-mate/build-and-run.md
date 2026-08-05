@@ -222,7 +222,7 @@ bash a-mate/scripts/release-amate.sh 0.2.0             # 실제 발행
 `untagged-<해시>` 형태가 된다:
 
 ```
-https://github.com/OWNER/REPO/releases/download/untagged-6398235ab8755b39b5e5/latest.json
+<release-base-url>/untagged-6398235ab8755b39b5e5/latest.json
 ```
 
 그런데 `latest.json`이 스스로 담고 있는 설치 파일 주소와 `tauri.conf.json`의 `endpoints`는

@@ -48,7 +48,7 @@
 | 07-30 | **현관 공개**([ADR 0026](../../adr/0026-front-door-outbound-publication.md)) — 내 한마디·컷을 방 앞에 건다 |
 | 07-31 | 다이어리 활동 패널 · **svelte-check 도입** · 창 크기 고정 |
 | 08-02 | 미니룸 테마 5종 · **코칭 탭 단일 스트림**(로그 카드 + 배움 카드, [spec](../../archive/design/a-mate/specs/2026-08-02-coaching-tab-single-stream-design.md)) · 피드 TTL · R6 dismiss 억제 |
-| 08-03 | 로컬 공지 소스 · content `first_seen` 수명주기 · disposition 수명주기 · **[인정 루프 (#157)](https://github.com/dev-team-404/space-a/pull/157)** |
+| 08-03 | 로컬 공지 소스 · content `first_seen` 수명주기 · disposition 수명주기 · **인정 루프** |
 | 08-03 | **코칭 탭 마감** — 시간순 한 줄 스트림 · 분류 배지/출처 칩/분류별 레일 색 · 탭 배지를 미확인 수로 · 공지 수명(7일/긴급 2일) · **카드 상한 폐지**(#168·#169) |
 
 큰 흐름: **백엔드 크레이트 → Tauri 셸·프론트 → E2E 기반 코칭 신뢰 회복(v2/v2.1) → 페르소나 보이스 →

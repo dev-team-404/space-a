@@ -480,7 +480,7 @@ tauri-plugin-process = "2"
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/dev-team-404/a-mate-releases/releases/latest/download/latest.json"
+        "<release-base-url>/latest/download/latest.json"
       ],
       "pubkey": "<PUBKEY>"
     }
@@ -624,7 +624,7 @@ cat > "$NSIS_DIR/latest.json" <<JSON
   "platforms": {
     "windows-x86_64": {
       "signature": "$SIG",
-      "url": "https://github.com/$RELEASE_REPO/releases/download/v$VERSION/$URLNAME"
+      "url": "<release-base-url>/download/v$VERSION/$URLNAME"
     }
   }
 }

@@ -54,7 +54,7 @@ space-a/
 
 | 대상 | 실행·운영 문서 |
 |---|---|
-| 전체 평가·검증 | [비밀값 없는 실행 경로와 통합 설정](./docs/evaluation-guide.md) |
+| 전체 실행·검증 | [비밀값 없는 실행 경로와 통합 설정](./docs/setup-and-verification.md) |
 | A-Mate | [빌드 및 실행](./docs/architecture/a-mate/build-and-run.md) |
 | A-Hub | [통합 실행](./docs/architecture/a-hub/build-and-run.md), [Work](./a-hub/work/README.md), [Life](./a-hub/life/README.md) |
 | A-Lens | [빌드 및 실행](./docs/architecture/a-lens/build-and-run.md) |
@@ -63,7 +63,7 @@ space-a/
 
 ## 출처와 스코프
 
-- 이 저장소는 사내 AI 해커톤 출품을 위해 **2026년 7월부터 새로 개발**한 프로젝트이며, 기존 프로젝트나 오픈소스 저장소의 포크·확장이 아닙니다.
+- 이 저장소는 **2026년 7월부터 새로 개발**한 프로젝트이며, 기존 프로젝트나 오픈소스 저장소의 포크·확장이 아닙니다.
 - A-Lens의 방 배경·책상·캐릭터 스프라이트는 팀이 생성형 AI 이미지 도구를 사용해 직접 제작한 오리지널 에셋이며, 외부 서비스의 기존 이미지를 전재하지 않았습니다.
 - 오픈소스는 패키지 의존성으로 사용합니다 — Tauri v2, Svelte 5, Vite, Vitest, rusqlite 등 Rust 크레이트, FastAPI, uvicorn, httpx, pytest, MCP Python SDK, PixiJS, marked, DOMPurify 등. 전체 목록은 각 컴포넌트의 `Cargo.toml`·`package.json`·`pyproject.toml`에 있습니다.
 - 개발 과정 기록: 설계안·스펙·작업 계획 **192건**이 [docs/archive/](./docs/archive/)에, 채택된 결정 **28건**이 [docs/adr/](./docs/adr/)에 보존되어 있습니다.
@@ -74,4 +74,4 @@ space-a/
 - 외부로 보내는 데이터는 사용자가 공유하기로 한 증류된 정보로 제한합니다.
 - Work, Life, A-Lens는 서로의 DB를 직접 소유하거나 수정하지 않고 공개 계약을 통해 연결합니다.
 - 수치와 판정은 결정론적으로 계산하고, 생성 모델은 제한된 요약과 서사에 사용합니다.
-- 현재 구현과 과거 설계안을 분리하여 제출 문서가 미구현 기능을 약속하지 않게 합니다.
+- 현재 구현과 과거 설계안을 분리하여 현재 상태 문서가 미구현 기능을 약속하지 않게 합니다.

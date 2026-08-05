@@ -181,7 +181,7 @@ CREATE TABLE IF NOT EXISTS hub_reuse_seen (
 
 | # | 항목 | 판정 |
 |---|------|------|
-| Q1 | a-mate의 `GET /reuse-events` **읽기 접근** | 재사용 이벤트는 org-safe(a-lens 로비에 공개)라 원칙상 OK. 이벤트가 많아지면 `?source_space=`(또는 `?doc_id=`) 필터를 계약 소유자(msalt)에게 **요청** — a-lens G-리스트와 같은 방식. 없으면 전량 폴링 후 클라이언트 필터(해커톤 범위 OK). |
+| Q1 | a-mate의 `GET /reuse-events` **읽기 접근** | 재사용 이벤트는 org-safe(a-lens 로비에 공개)라 원칙상 OK. 이벤트가 많아지면 `?source_space=`(또는 `?doc_id=`) 필터를 계약 소유자(msalt)에게 **요청** — a-lens G-리스트와 같은 방식. 없으면 전량 폴링 후 클라이언트 필터(현재 범위에서 허용). |
 | Q2 | `resolve_issue.doc_id`(발행 시 반환) == `/reuse-events[].doc_id` 동일 식별자? | 설계상 동일해야 함. §10 E2E-3에서 **실측 확인**. 다르면 a-hub가 매핑을 노출해야 하므로 계약 소유자에게 통보. |
 | Q3 | `consumer_agent` 개인명 노출 정책 | **기본 팀 단위**(off) 권고. 개인명은 옵트인 옵션으로만(§12). |
 

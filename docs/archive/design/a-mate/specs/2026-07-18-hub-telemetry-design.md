@@ -5,7 +5,7 @@ archived: 2026-08-03
 
 # a-mate → a-hub 텔레메트리 — 설계 스펙 (계약 제안 포함)
 
-> **목적**: [목표 아키텍처(이슈 #46)](https://github.com/dev-team-404/space-a/issues/46)의
+> **목적**: [목표 아키텍처](../../../highlevel/level-1-component-communication.md)의
 > **"A-Mate → A-Hub Work: 텔레메트리 (신설 · 계약 협의 필요)"** 행을 구현한다 —
 > 토큰 사용량 · 모델 믹스 · 코칭 채택/절감 · MCP 사용 카운트.
 > 대원칙 그대로: **"원문은 로컬을 떠나지 않는다 — 서버로 나가는 것은 카운트·상태·파생 신호뿐."**

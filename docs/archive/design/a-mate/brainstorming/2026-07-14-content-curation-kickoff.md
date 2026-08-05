@@ -136,7 +136,7 @@ src/lib/api.ts                  [수정] invoke 래퍼 + content:tip 이벤트
 src/lib/ui/home/TipCard.svelte  [신규] 홈탭 "오늘의 팁" 위젯
 ```
 
-### MVP 단계 (해커톤)
+### MVP 단계
 
 1. **Day 1**: T3 내장 카탈로그(팁 20개+) + `detect_level` + `score()` — **네트워크 0에서 데모 성립**
 2. **Day 2**: T1 changelog fetch + 파이프라인 편승 + T2 사내 API 연동
@@ -147,7 +147,7 @@ src/lib/ui/home/TipCard.svelte  [신규] 홈탭 "오늘의 팁" 위젯
 - **레벨 감지 임계값** — "Lv1 졸업"의 정확한 판정선 (캐시율 몇 %? CLAUDE.md 존재만으로 충분?).
   다차원(각 dimension 독립 레벨) vs 단일 레벨 스칼라.
 - **노출 예산 확정** — 말풍선 일 1건이 기존 실시간 조언(FIFO 5)과 경합할 때 우선순위.
-- **T2 사내 API 연동 범위** — 스킬허브 검색/행사 캘린더 중 해커톤 범위, 인증 방식.
+- **T2 사내 API 연동 범위** — 스킬허브 검색/행사 캘린더 중 현재 제품 범위, 인증 방식.
 - **content_items vs findings 테이블 재사용** — 팁도 Finding으로 취급해 상태머신을 공짜로 얻을지,
   별도 테이블로 갈지 (est_tokens_saved 정렬과 충돌 여부).
 - **승급 칭찬의 발화 채널** — occasion 재사용 vs 신규 이벤트.

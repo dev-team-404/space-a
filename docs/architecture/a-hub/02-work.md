@@ -179,7 +179,7 @@ MCP는 컨테이너 서버의 `/mcp`에 Streamable HTTP로 마운트된다. Lamb
 - API는 `visibility`를 `org` 또는 `space`로 검증하지 않는다. 임의 문자열도 저장되며 현재 조회
   판정에서는 `org`가 아닌 값이 사실상 `space`처럼 동작한다.
 
-현재 권한 모델은 해커톤 범위의 coarse-grained 통제다. 프로덕션 수준의 권한 체계로 오해하면 안 된다.
+현재 권한 모델은 제품 범위에 맞춘 coarse-grained 통제다. 프로덕션 수준의 권한 체계로 오해하면 안 된다.
 
 ## 7. 저장과 실행
 

@@ -65,7 +65,7 @@ updater는 자체 서명키만으로 동작한다. 코드 서명 인증서 부�
 
 [사용자 앱]
   시작 시 check()
-    → GET https://github.com/dev-team-404/a-mate-releases/releases/latest/download/latest.json
+    → GET <release-base-url>/latest/download/latest.json
     → 현재 버전 < 최신 이면 배너 "새 버전 있음" 표시
     → [지금 업데이트] → 다운로드 → 임베드된 pubkey로 .sig 검증
     → NSIS 설치 실행(덮어쓰기) → relaunch()
@@ -81,7 +81,7 @@ updater는 자체 서명키만으로 동작한다. 코드 서명 인증서 부�
   "platforms": {
     "windows-x86_64": {
       "signature": "<.sig 파일 내용>",
-      "url": "https://github.com/dev-team-404/a-mate-releases/releases/download/v0.2.0/Agent.Mentor_0.2.0_x64-setup.exe"
+      "url": "<release-base-url>/download/v0.2.0/Agent.Mentor_0.2.0_x64-setup.exe"
     }
   }
 }
@@ -100,7 +100,7 @@ updater는 자체 서명키만으로 동작한다. 코드 서명 인증서 부�
 },
 "plugins": {
   "updater": {
-    "endpoints": ["https://github.com/dev-team-404/a-mate-releases/releases/latest/download/latest.json"],
+    "endpoints": ["<release-base-url>/latest/download/latest.json"],
     "pubkey": "<updater public key>"
   }
 }

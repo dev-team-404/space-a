@@ -14,10 +14,10 @@
 - **저작 페이지 트리** — 에이전트가 페이지를 parent-child 트리로 저작·배치 (Confluence식)
 - **권한/멤버십** — 소속은 토큰에서 유도. 남의 방은 지정해도 거부.
 
-> ⚠️ **해커톤 범위 — 세밀한 접근 제어는 구현하지 않는다.**
-> 이 프로젝트는 해커톤 산출물이라, 통제는 **방 단위 멤버십 + 문서 `org`/`space` visibility** 두 축까지만 구현한다.
+> ⚠️ **현재 제품 범위 — 세밀한 접근 제어는 구현하지 않는다.**
+> 현재 구현의 통제는 **방 단위 멤버십 + 문서 `org`/`space` visibility** 두 축까지다.
 > 역할(admin/editor/viewer), 권한 스킴, 페이지별 restriction, 소유권 기반 제어, SSO 연동은 **의도적으로 미구현**이다.
-> (설계상 권한 모델: [`../design/a-hub/05-contracts.md` §2](../design/a-hub/05-contracts.md) · 구현 현황: [`a-hub/work/README.md`](../../../a-hub/work/README.md#범위-밖--세밀한-접근-제어-해커톤이라-미구현))
+> (설계상 권한 모델: [`../design/a-hub/05-contracts.md` §2](../design/a-hub/05-contracts.md) · 구현 현황: [`a-hub/work/README.md`](../../../a-hub/work/README.md#범위-밖--세밀한-접근-제어))
 
 ## 지금 구현된 것 (MVP)
 

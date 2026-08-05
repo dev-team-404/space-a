@@ -22,7 +22,7 @@ archived: 2026-07-23
 - **저빈도·나깅 방지:** `MIN_MATCHED_SESSIONS = 2`(⚠ CALIBRATE), work-kind당 카드 1장, 이미 사용 중이면 침묵, 카드 dismiss는 id 기반 영구(콘텐츠 인프라 재사용).
 - **프라이버시·네트워크:** 카탈로그 = 공개 read-only GET(사용자 데이터 미전송, 15s 타임아웃). LLM 매칭 = 설정된 Engine(온프레)에만.
 - **락 규율:** resolve/gather/persist 짧은 락, LLM·네트워크 I/O는 락 밖 (`run_coaching_judgments` 미러).
-- **카탈로그 소스(§8 핀, 2026-07-23 실측):** `https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/.claude-plugin/marketplace.json` — 200 OK, ~158KB, 425 plugins. 스키마 `{plugins:[{name, description, author?, category?, source, homepage?}]}`.
+- **카탈로그 소스(§8 핀, 2026-07-23 실측):** 로컬 마켓플레이스 설정이 가리키는 공식 카탈로그 URL — 200 OK, ~158KB, 425 plugins. 스키마 `{plugins:[{name, description, author?, category?, source, homepage?}]}`.
 - 커밋은 Conventional Commits·영어, scope=`agent`. Windows 네이티브에서 `cargo test`.
 - **세션 단위 판정의 예외 근거:** E는 B처럼 세션이 판정의 본질 단위(LLM이 "세션 작업 성격" 판정). never-clear 사용자는 kinds 다중 라벨로 부분 보상되며, 근본 교정은 F(컨텍스트 위생)가 담당(스펙 §2-3, §4 B와 동일 논리).
 
@@ -151,7 +151,7 @@ impl Default for MarketplaceCatalogSource {
     fn default() -> Self {
         MarketplaceCatalogSource {
             // 스펙 §8 핀(2026-07-23 실측): 200 OK, ~158KB, 425 plugins.
-            url: "https://raw.githubusercontent.com/anthropics/claude-plugins-official/main/.claude-plugin/marketplace.json".into(),
+            url: official_marketplace_catalog_url.into(),
         }
     }
 }
@@ -778,7 +778,7 @@ pub fn work_kind_prompt(prompts: &[String]) -> (String, String) {
         .collect::<Vec<_>>()
         .join("\n");
     let system = format!(
-        "당신은 Claude Code 세션의 작업 성격을 분류하는 심사관입니다.\n\
+        "당신은 Claude Code 세션의 작업 성격을 분류하는 판정자입니다.\n\
          사용자가 이 세션에서 시킨 작업이 아래 종류 중 어디에 해당하는지 고르세요(복수 가능).\n\
          {vocab}\n\
          사용자 요청 자체의 성격만 보세요 — 에이전트가 무엇을 어떻게 했는지는 판단 대상이 아닙니다.\n\

@@ -7,7 +7,7 @@ archived: 2026-08-03
 
 - **날짜**: 2026-07-30
 - **컴포넌트**: a-mate (`crates/core`, `src-tauri`, `src/`)
-- **스펙**: [PR #81 hub recognition loop](https://github.com/dev-team-404/space-a/pull/81) 설계안을 실행 계획으로 구체화
+- **스펙**: [hub recognition loop 설계안](../specs/2026-07-21-hub-recognition-loop-design.md)을 실행 계획으로 구체화
 - **선행**: [지식 재사용 루프 닫기](../../common/specs/2026-07-25-close-knowledge-reuse-loop-design.md) (PR #110, 머지됨)
 
 ## 1. 무엇을 / 왜

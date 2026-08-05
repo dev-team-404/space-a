@@ -643,7 +643,7 @@ Expected: FAIL — `cannot find function 'judgment_prompt'`
 ```rust
 /// 판정 프롬프트 (정밀도 우선, 한국어). system=기준, user=재료. (스펙 §4.3)
 pub fn judgment_prompt(ctx: &DraftContext) -> (String, String) {
-    let system = "당신은 Claude Code 사용 습관을 코칭하는 심사관입니다. \
+    let system = "당신은 Claude Code 사용 습관을 코칭하는 판정자입니다. \
 사용자가 여러 세션에서 반복한 지시가 '재사용 가능한 스킬/커맨드로 묶을 가치'가 있는지 판정하세요.\n\
 worthy=true: 재사용 가능한 절차·규칙·체크리스트를 담은 지시 — 매번 같은 다단계 작업, 정해진 형식이나 규칙을 요구하는 지시.\n\
 worthy=false: 대화 접착제('진행해줘','계속','ㅇㅋ' 등), 일회성·문맥 의존 지시, 단순 질문·피드백, 인사.\n\
