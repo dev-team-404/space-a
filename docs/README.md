@@ -6,10 +6,11 @@
 
 0. [소개 슬라이드](./space-a-intro.html) — 실제 화면으로 보는 12장 요약 (**처음이면 여기서 시작**)
 1. [프로젝트 README](../README.md) — 문제, 제품 구성, 구현 범위
-2. [PRD](./PRD.md) — 사용자, 요구사항, 범위와 완료 기준
+2. [PRD](./PRD.md) — 사용자, 요구사항, 차별성, 범위와 완료 기준
 3. [통합 아키텍처](./architecture/README.md) — 컴포넌트 경계, 데이터 흐름, 배포 구조
-4. 컴포넌트 상세 — [A-Mate](./architecture/a-mate/), [A-Hub](./architecture/a-hub/), [A-Lens](./architecture/a-lens/)
-5. [ADR](./adr/) — 되돌리기 어려운 기술·제품 결정
+4. [기술 하이라이트](./architecture/tech-highlights.md) — 컴포넌트별 비자명한 문제와 해결(코드 경로 포함)
+5. 컴포넌트 상세 — [A-Mate](./architecture/a-mate/), [A-Hub](./architecture/a-hub/), [A-Lens](./architecture/a-lens/)
+6. [ADR](./adr/) — 되돌리기 어려운 기술·제품 결정
 
 > **소개 슬라이드 보는 법** — GitHub은 HTML을 렌더하지 않고 소스로 표시한다.
 > 파일 페이지에서 **Download raw file**(⤓)로 내려받아 브라우저로 열면 된다.

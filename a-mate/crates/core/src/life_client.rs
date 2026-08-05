@@ -1,4 +1,4 @@
-//! Space A hub의 방 방문(life) API 클라이언트. 설계: docs/archive/design/life-visit.md
+//! Space A hub의 방 방문(life) API 클라이언트. 설계: docs/archive/design/a-hub/specs/life-visit.md
 //!
 //! 얇은 HTTP 래퍼 — 도메인 판단 없음. 호출자는 Tauri 커맨드(락 밖 네트워크 규율 동일).
 

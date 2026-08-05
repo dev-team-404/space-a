@@ -3,14 +3,17 @@
 life_server를 **사외에서 접근 가능한 테스트 서버**로 띄운 기록·운영 절차입니다.
 life_server는 인메모리 + SQLite 단일 프로세스라 **상주 서버**로 운영합니다.
 
+> 아래에서 `<서버 IP>`는 VM 공인 IP, `<ssh-alias>`는 각자 SSH config에 등록한 접속 별칭입니다.
+> 실제 접속 좌표(IP·`x-api-key`)는 저장소에 두지 않고 팀 안전 채널로 공유합니다.
+
 ## 현재 배포 상태
 
 | 항목 | 값 |
 |---|---|
-| Base URL | `http://158.179.194.42:8001` |
-| OpenAPI 문서 | `http://158.179.194.42:8001/docs` |
+| Base URL | `http://<서버 IP>:8001` |
+| OpenAPI 문서 | `http://<서버 IP>:8001/docs` |
 | VM | Oracle Cloud (OCI), Ubuntu 24.04 LTS, AMD x86_64, RAM ~1 GB |
-| SSH | `ssh msalt-spacea` (User `ubuntu`, HostName `158.179.194.42`) |
+| SSH | `ssh <ssh-alias>` (User `ubuntu`) |
 | 배포 경로 | `~/space-a-life/life` |
 | 런타임 | Docker + Compose (`space-a-life-server` 컨테이너, `restart: unless-stopped`) |
 | 인증 | `x-api-key` 관문 활성 (`LIFE_SERVER_API_KEY`) |
@@ -25,7 +28,7 @@ life_server는 인메모리 + SQLite 단일 프로세스라 **상주 서버**로
 로컬 PC에서:
 
 ```bash
-API=http://158.179.194.42:8001
+API=http://<서버 IP>:8001
 KEY=<x-api-key>
 
 curl $API/healthz                        # 관문 면제 → {"status":"ok"} (키 없이 200)
@@ -44,14 +47,14 @@ curl -X POST $API/life/register -H "x-api-key: $KEY" \
 cd a-hub
 # life 폴더를 VM으로 전송 (.git·캐시 제외)
 tar czf - --exclude='__pycache__' --exclude='.pytest_cache' --exclude='*.egg-info' --exclude='.git' life \
-  | ssh msalt-spacea 'tar xzf - -C ~/space-a-life'
+  | ssh <ssh-alias> 'tar xzf - -C ~/space-a-life'
 # 재빌드·재기동
-ssh msalt-spacea 'cd ~/space-a-life/life && sudo LIFE_SERVER_API_KEY="<x-api-key>" docker compose up -d --build'
+ssh <ssh-alias> 'cd ~/space-a-life/life && sudo LIFE_SERVER_API_KEY="<x-api-key>" docker compose up -d --build'
 ```
 
 ## 운영 메모
 
-`ssh msalt-spacea` 접속 후 `cd ~/space-a-life/life` 에서:
+`ssh <ssh-alias>` 접속 후 `cd ~/space-a-life/life` 에서:
 
 | 작업 | 명령 |
 |---|---|
@@ -72,7 +75,7 @@ ssh msalt-spacea 'cd ~/space-a-life/life && sudo LIFE_SERVER_API_KEY="<x-api-key
 ### 1. 스왑 2 GB (RAM ~1 GB라 빌드 OOM 방지)
 
 ```bash
-ssh msalt-spacea '
+ssh <ssh-alias> '
   sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
   sudo mkswap /swapfile && sudo swapon /swapfile
   echo "/swapfile none swap sw 0 0" | sudo tee -a /etc/fstab'
@@ -81,7 +84,7 @@ ssh msalt-spacea '
 ### 2. Docker 설치
 
 ```bash
-ssh msalt-spacea 'curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker $USER'
+ssh <ssh-alias> 'curl -fsSL https://get.docker.com | sudo sh && sudo usermod -aG docker $USER'
 ```
 
 ### 3. 코드 전송 & 기동
@@ -95,7 +98,7 @@ OCI는 **클라우드 방화벽(Security List/NSG)** 과 **VM 안 iptables** 를
 **4-1. VM iptables** (Ubuntu OCI 이미지는 REJECT 규칙이 기본):
 
 ```bash
-ssh msalt-spacea '
+ssh <ssh-alias> '
   sudo iptables -I INPUT -p tcp --dport 8001 -j ACCEPT   # 체인 맨 앞에 삽입 → REJECT보다 먼저 적용
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
   sudo netfilter-persistent save'

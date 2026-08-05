@@ -356,7 +356,7 @@ async function openSettings() {
       <label class="set-field"><span>별칭 매핑
           <em class="muted">(닉네임=hub 계정, 쉼표 구분 · 한 사람이 계정 여러 개면 <code>|</code>로 잇기)</em></span>
         <input id="set-life_alias" type="text" value="${esc(s.life_alias ?? '')}"
-          placeholder="소금맛=salt.jeong,돌쇠=palen|coolfebreeze" /></label>
+          placeholder="봇돌이=agent-a,야옹이=agent-b|agent-b-mate" /></label>
 
       <h3 class="set-group">LLM API — 분류·요약·서사</h3>
       <label class="set-field"><span>LLM URL (OpenAI 호환)</span>

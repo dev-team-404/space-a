@@ -37,7 +37,7 @@ cargo test           # Rust 테스트 (워크스페이스 전체)
 ```
 
 > **테스트 전 `node_modules` 확인 — 없으면 반드시 `npm install`을 먼저 실행할 것.**
-> `node_modules`가 없어도 `npm test`가 exit 0으로 거짓 통과해 실패를 놓친다.
+> 의존성이 없으면 `npm test`가 pretest 가드에서 안내 메시지와 함께 즉시 실패한다(exit 1).
 
 ## 참고
 

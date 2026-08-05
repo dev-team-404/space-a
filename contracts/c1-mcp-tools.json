@@ -1,39 +1,24 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Space A Hub — C1: MCP Tool Contract",
-  "version": "2.0.0",
-  "supersedes": "1.0.0",
-  "description": "Tools exposed by the Space A MCP server to employee agents (Pillar 1 and any MCP client). v2 aligns with Pillar 3's Space/membership model: v1's single `team` claim could not express a person belonging to several Spaces, which broke the permission model at its foundation. Change policy: additive only from here. Adding optional fields or enum values is allowed; removing/renaming fields or changing their meaning is not. Consumers MUST ignore unknown fields.",
+  "version": "2.1.0",
+  "supersedes": "2.0.0",
+  "description": "Space A MCP 서버가 에이전트(A-Mate와 모든 MCP 클라이언트)에 노출하는 도구 계약. v2.1(2026-08-04)은 구현 실측 정합판이다 — v2.0의 설계 시점 표면 중 구현되지 않은 부분(confidence·solution·tried_and_failed·related 필드, searched 퍼널, X-Space-A-Trace-Id/Depth 헤더, rate_limited 코드, agt_*/doc_*/skl_* id 체계)을 제거하고, 실제 서버(a-hub/work/ahub/api/mcp_server.py)가 주고받는 모양을 그대로 기록했다. 지식의 식별자는 doc_id가 아니라 page_id다(Page가 지식의 실체). 변경 정책: v2.1부터 다시 추가만 허용(additive only) — 소비자는 모르는 필드를 무시한다.",
 
   "transport": {
-    "description": "Every C1 call carries identity and trace metadata OUT OF BAND — in transport headers, not in tool arguments. MCP's own auth spec is not mature, so this is defined at the application layer. Identity is the precondition for the visibility model: without it, scoping cannot be computed at all.",
+    "description": "신원은 도구 인자가 아니라 전송 계층에서 온다. MCP 앱은 Streamable HTTP로 REST 서버의 /mcp에 마운트되며, 서버가 요청별 Authorization 헤더를 읽어 Bearer 토큰으로 에이전트와 소속 space를 판별한다.",
     "http": {
       "Authorization": {
         "required": true,
         "format": "Bearer <token>",
-        "description": "Issued by corporate SSO. The server resolves it to { user_id, agent_id, spaces[] }. NOTE: agent_id and spaces are derived from this token and are NOT accepted as request parameters — letting a client assert its own membership would void the whole permission model."
-      },
-      "X-Space-A-Trace-Id": {
-        "required": false,
-        "description": "Correlates one problem-solving flow across agents. The originating caller generates it. If absent, the server issues one and returns it."
-      },
-      "X-Space-A-Depth": {
-        "required": false,
-        "type": "integer",
-        "default": 0,
-        "description": "How many agent hops deep this call is. Increment when acting on a Space A response by calling another agent. Server rejects depth > MAX_DEPTH (default 5) with rate_limited. This is a cooperative guard against runaway loops, not a defence against a malicious client; the hard backstop is the server-side token/call circuit breaker."
+        "description": "POST /agents/register(C4)가 발급한 토큰. 서버가 { agent_id, spaces[] }로 해석한다. spaces는 토큰에서만 유도되며 요청 인자로 받지 않는다 — 클라이언트가 소속을 주장하게 하면 권한 모델이 무너진다."
       }
-    },
-    "stdio": {
-      "SPACE_A_TOKEN": "Same token, passed as an environment variable at process launch (local development)."
     }
   },
 
   "permissionModel": {
-    "description": "THE AGENT PATH MUST NOT BE A PERMISSION BYPASS. If a person cannot see something in the Pillar 3 UI, they must not be able to obtain it by asking their agent instead — otherwise the 'glass wall' guest view is meaningless. The MCP visibility rule is therefore identical to the UI's.",
-    "rule": "An agent may read: (a) any Knowledge doc with visibility='org', PLUS (b) all data belonging to Spaces the caller is a member of. Nothing else.",
-    "sourceOfTruth": "docs/archive/design/a-lens/01-space-model.md — archived visibility design",
-    "enforcement": "Server-side, derived from the token's spaces[] claim. Never from a request parameter."
+    "rule": "에이전트가 읽을 수 있는 것 = visibility='org'인 지식 전부 + 자기가 속한 Space의 데이터. 그 외엔 없다.",
+    "enforcement": "서버 측. 토큰의 spaces[]에서 유도하며 요청 파라미터를 신뢰하지 않는다. search_knowledge의 space_id 인자는 범위를 좁힐 뿐, 소속하지 않은 Space를 열지 못한다."
   },
 
   "$defs": {
@@ -41,37 +26,12 @@
       "type": "string",
       "enum": ["org", "space"],
       "default": "org",
-      "description": "Knowledge sharing scope, aligned with Pillar 3. 'org' = readable org-wide (the default: knowledge is meant to circulate). 'space' = readable only within the owning Space. NOTE: v1 used private|team|public; those values are gone.",
-      "x-migration": "v1 public -> org; v1 team|private -> space"
+      "description": "지식 공개 범위. org = 전사 열람(기본 — 지식은 순환하라고 있는 것), space = 소속 Space 멤버만."
     },
-    "spaceId": { "type": "string", "description": "e.g. 'sw-innov'. A Space is a team life (a floor in the Pillar 3 building metaphor)." },
-    "issueId": { "type": "string", "pattern": "^iss_[a-zA-Z0-9_-]+$" },
-    "docId": { "type": "string", "pattern": "^doc_[a-zA-Z0-9_-]+$" },
-    "skillId": { "type": "string", "pattern": "^skl_[a-zA-Z0-9_-]+$" },
-    "agentId": { "type": "string", "pattern": "^agt_[a-zA-Z0-9_-]+$" },
-
-    "context": {
-      "type": "object",
-      "description": "Anchors for graph expansion. The richer this is, the fewer tokens the answer needs.",
-      "properties": {
-        "language": { "type": "string", "examples": ["typescript", "python"] },
-        "framework": { "type": "string", "examples": ["next.js", "fastapi"] },
-        "os": { "type": "string", "examples": ["windows", "wsl2", "macos"] },
-        "tools": { "type": "array", "items": { "type": "string" } }
-      },
-      "additionalProperties": true
-    },
-
-    "solution": {
-      "type": "object",
-      "required": ["summary", "steps"],
-      "properties": {
-        "summary": { "type": "string", "description": "One line: what actually worked." },
-        "steps": { "type": "array", "items": { "type": "string" } },
-        "required_tools": { "type": "array", "items": { "type": "string" } }
-      }
-    },
-
+    "spaceId": { "type": "string", "examples": ["sw-innov"] },
+    "issueId": { "type": "string", "pattern": "^iss_", "examples": ["iss_1"] },
+    "pageId": { "type": "string", "pattern": "^page_", "examples": ["page_7"] },
+    "reuseId": { "type": "string", "pattern": "^reuse_", "examples": ["reuse_1"] },
     "error": {
       "type": "object",
       "required": ["error"],
@@ -82,8 +42,8 @@
           "properties": {
             "code": {
               "type": "string",
-              "enum": ["invalid_request", "unauthorized", "not_found", "forbidden", "rate_limited"],
-              "description": "unauthorized = missing/expired token. forbidden = authenticated but outside the caller's Space membership. rate_limited = depth exceeded or circuit breaker tripped."
+              "enum": ["invalid_request", "unauthorized", "forbidden", "not_found"],
+              "description": "unauthorized = 토큰 없음/무효. forbidden = 인증됐지만 소속 Space 밖."
             },
             "message": { "type": "string" }
           }
@@ -94,81 +54,78 @@
 
   "tools": [
     {
+      "name": "get_guide",
+      "description": "이 Space의 작성 가이드를 읽는다. 처음 쓰는 Space라면 쓰기 전에 먼저 호출한다. 공개 space 정보라 인증을 요구하지 않는다.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["space_id"],
+        "properties": { "space_id": { "$ref": "#/$defs/spaceId" } },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "oneOf": [
+          { "type": "object", "properties": { "guide": { "const": null } }, "description": "가이드가 없는 Space" },
+          {
+            "type": "object",
+            "required": ["page_id", "title", "body"],
+            "properties": {
+              "page_id": { "$ref": "#/$defs/pageId" },
+              "title": { "type": "string" },
+              "body": { "type": "string" }
+            }
+          }
+        ]
+      }
+    },
+
+    {
       "name": "search_knowledge",
-      "description": "Search the org's agent knowledge for a similar past issue and its solution. Call this BEFORE trying to reason a fix from scratch. Returns a condensed solution payload, not raw logs. Results are scoped by the permission model: org-visible knowledge plus your own Spaces.",
+      "description": "유사한 과거 해결책을 찾는다. 스스로 추론하기 전에 먼저 호출한다. 권한 범위(org 공개 + 내가 속한 space) 안에서만 검색된다. 현재 검색은 공백 분리 부분 문자열 매칭이다(의미 검색 아님 — 알려진 제약).",
       "inputSchema": {
         "type": "object",
         "required": ["query"],
         "properties": {
-          "query": { "type": "string", "minLength": 1, "description": "The error message or problem statement. Raw text is fine." },
-          "context": { "$ref": "#/$defs/context" },
-          "space_id": {
-            "$ref": "#/$defs/spaceId",
-            "description": "Optional: restrict the search to one Space you belong to. Cannot be used to reach a Space you are not a member of — the server intersects this with your token's spaces[]."
-          },
-          "limit": { "type": "integer", "minimum": 1, "maximum": 10, "default": 3, "description": "Keep small. Every extra result is tokens spent." }
+          "query": { "type": "string", "minLength": 1 },
+          "space_id": { "$ref": "#/$defs/spaceId", "description": "선택: 검색 범위를 소속 Space 하나로 좁힌다." },
+          "limit": { "type": "integer", "default": 3 }
         },
         "additionalProperties": false
       },
       "outputSchema": {
         "type": "object",
-        "required": ["results", "searched"],
+        "required": ["results", "scanned"],
         "properties": {
           "results": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["doc_id", "title", "confidence", "solution"],
+              "required": ["page_id", "space_id", "title"],
               "properties": {
-                "doc_id": { "$ref": "#/$defs/docId" },
-                "space_id": { "$ref": "#/$defs/spaceId", "description": "The Space that authored this knowledge. May differ from yours — that is the point: knowledge crosses team boundaries." },
+                "page_id": { "$ref": "#/$defs/pageId" },
+                "space_id": { "$ref": "#/$defs/spaceId", "description": "이 지식을 만든 Space. 내 소속과 다를 수 있다 — 그것이 지식이 팀 경계를 넘는 순간이다." },
                 "title": { "type": "string" },
-                "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-                "solution": { "$ref": "#/$defs/solution" },
-                "tried_and_failed": {
-                  "type": "array",
-                  "items": { "type": "string" },
-                  "description": "Dead ends a previous agent already walked. Do not repeat them."
-                },
-                "related": {
-                  "type": "object",
-                  "description": "Graph-expanded neighbours. This is what a vector-only search cannot give you.",
-                  "properties": {
-                    "tools": { "type": "array", "items": { "type": "string" } },
-                    "skills": { "type": "array", "items": { "$ref": "#/$defs/skillId" } }
-                  }
-                },
-                "reuse_count": { "type": "integer", "description": "How many times this has been cited successfully. Higher = more trustworthy." },
-                "recorded_at": { "type": "string", "format": "date-time" }
+                "source": { "type": "string", "enum": ["authored", "issue"], "description": "직접 저작 vs 이슈 해결에서 파생" },
+                "created_by": { "type": "string" },
+                "created_by_name": { "type": ["string", "null"] },
+                "created_at": { "type": "string" },
+                "updated_at": { "type": "string" }
               }
             }
           },
-          "searched": {
-            "type": "object",
-            "description": "Retrieval funnel. Proves the token saving: many candidates considered, few returned.",
-            "required": ["vector_hits", "graph_expanded", "returned"],
-            "properties": {
-              "vector_hits": { "type": "integer" },
-              "graph_expanded": { "type": "integer" },
-              "returned": { "type": "integer" }
-            }
-          }
+          "scanned": { "type": "integer", "description": "검색이 살펴본 후보 수." }
         }
       }
     },
 
     {
       "name": "open_issue",
-      "description": "Declare that you have hit a problem. Call this WHEN THE PROBLEM APPEARS, not after solving it. v1 deliberately had no such call; v2 adds it because Pillar 3's UI renders a live issue timeline (opened -> knowledge_linked -> resolved) and an in-progress issue simply cannot be drawn if nothing is recorded until the end. The orphan-record risk this creates is handled by server-side staleness sweeping, not by refusing to record.",
+      "description": "문제가 생긴 시점에 이슈를 연다 (해결 후가 아니라). 진행 중 이슈가 기록돼야 관전 화면이 살아있는 타임라인을 그릴 수 있다.",
       "inputSchema": {
         "type": "object",
         "required": ["title", "space_id"],
         "properties": {
           "title": { "type": "string" },
-          "space_id": { "$ref": "#/$defs/spaceId", "description": "Which Space this issue belongs to. Must be one you are a member of." },
-          "context": { "$ref": "#/$defs/context" },
-          "error_message": { "type": "string" },
-          "note": { "type": "string", "description": "Human-readable one-liner for the timeline entry. Pillar 3 renders this verbatim." }
+          "space_id": { "$ref": "#/$defs/spaceId", "description": "소속한 Space여야 한다." }
         },
         "additionalProperties": false
       },
@@ -184,22 +141,24 @@
 
     {
       "name": "cite_knowledge",
-      "description": "Record that you found an existing knowledge doc relevant to an open issue. This is what produces a ReuseEvent — the single most important event in this system, because it is the moment one team's knowledge crosses into another's. Call it as soon as you decide to use a search result, not after the fix lands.",
+      "description": "기존 문서를 이 이슈에 재사용으로 기록한다. 이 순간 ReuseEvent가 생긴다 — 한 팀의 지식이 다른 팀의 문제를 푸는, 이 시스템에서 가장 중요한 이벤트다. 검색 결과를 쓰기로 결정한 즉시 호출한다.",
       "inputSchema": {
         "type": "object",
-        "required": ["issue_id", "doc_id"],
+        "required": ["issue_id", "page_id"],
         "properties": {
           "issue_id": { "$ref": "#/$defs/issueId" },
-          "doc_id": { "$ref": "#/$defs/docId", "description": "The knowledge doc you are reusing, from search_knowledge results." },
-          "note": { "type": "string", "description": "Why it applies. Rendered verbatim in the Pillar 3 timeline." }
+          "page_id": { "$ref": "#/$defs/pageId", "description": "search_knowledge 결과에서 재사용하기로 한 문서." },
+          "note": { "type": "string", "description": "왜 적용되는지 한 줄." }
         },
         "additionalProperties": false
       },
       "outputSchema": {
         "type": "object",
-        "required": ["reuse_id", "issue_status"],
+        "required": ["reuse_id", "page_id", "cross_team", "issue_status"],
         "properties": {
-          "reuse_id": { "type": "string" },
+          "reuse_id": { "$ref": "#/$defs/reuseId" },
+          "page_id": { "$ref": "#/$defs/pageId" },
+          "cross_team": { "type": "boolean", "description": "지식의 원 Space와 이슈의 Space가 다르면 true — 팀 경계를 넘은 재사용." },
           "issue_status": { "type": "string", "enum": ["knowledge_linked"] }
         }
       }
@@ -207,62 +166,38 @@
 
     {
       "name": "resolve_issue",
-      "description": "Record the solution and close the issue. If the issue produced knowledge worth sharing, this is where it becomes a Knowledge doc.",
+      "description": "해결을 기록하고 이슈를 닫는다. publish_knowledge면 해결이 Page로 발행된다. 남에게 도움될 공유 가치가 있으면 visibility='org'로, 개인적 해결 기록이면 'space'로 낮춘다. MCP는 이슈가 열린 그 space에 발행한다 — 자유 Page 저작은 REST가 담당한다.",
       "inputSchema": {
         "type": "object",
-        "required": ["issue_id", "solution"],
+        "required": ["issue_id", "summary"],
         "properties": {
           "issue_id": { "$ref": "#/$defs/issueId" },
-          "solution": { "$ref": "#/$defs/solution" },
-          "tried_steps": {
-            "type": "array",
-            "description": "What you tried that did NOT work. As valuable as the solution — it saves the next agent the same dead ends.",
-            "items": {
-              "type": "object",
-              "required": ["step", "outcome"],
-              "properties": {
-                "step": { "type": "string" },
-                "outcome": { "type": "string", "enum": ["failed", "partial"] },
-                "note": { "type": "string" }
-              }
-            }
-          },
-          "publish_knowledge": {
-            "type": "boolean",
-            "default": true,
-            "description": "Whether to turn this solution into a reusable Knowledge doc. Default true — knowledge is meant to circulate."
-          },
-          "visibility": { "$ref": "#/$defs/visibility" },
-          "note": { "type": "string", "description": "Timeline entry text. Rendered verbatim by Pillar 3." }
+          "summary": { "type": "string", "description": "실제로 통한 해결 한 줄." },
+          "steps": { "type": "array", "items": { "type": "string" } },
+          "publish_knowledge": { "type": "boolean", "default": true },
+          "visibility": { "$ref": "#/$defs/visibility" }
         },
         "additionalProperties": false
       },
       "outputSchema": {
         "type": "object",
-        "required": ["issue_id", "issue_status"],
+        "required": ["issue_id", "status"],
         "properties": {
           "issue_id": { "$ref": "#/$defs/issueId" },
-          "issue_status": { "type": "string", "enum": ["resolved"] },
-          "doc_id": { "$ref": "#/$defs/docId", "description": "Present when publish_knowledge was true." },
-          "knowledge_status": {
-            "type": "string",
-            "enum": ["created", "merged"],
-            "description": "'merged' means the gatekeeper judged this a duplicate of existing knowledge and folded it in — the first line of defence against knowledge-base bloat."
-          },
-          "merged_into": { "$ref": "#/$defs/docId" }
+          "status": { "type": "string", "enum": ["resolved"] },
+          "page_id": { "$ref": "#/$defs/pageId", "description": "publish_knowledge=true였을 때만 존재." }
         }
       }
     },
 
     {
       "name": "get_skill_candidates",
-      "description": "List repeated solution patterns that should be promoted into an automated Skill. A fix recorded 3+ times is a signal that a human should stop doing it by hand.",
+      "description": "반복된 해결 패턴(= Skill 승격 후보)을 조회한다. 같은 해결이 3번 기록됐다는 것은 사람이 손으로 그만 해도 된다는 신호다. 현재 패턴 판정은 issue-derived Page의 동일 제목 집계다(알려진 제약).",
       "inputSchema": {
         "type": "object",
         "properties": {
-          "scope": { "type": "string", "enum": ["me", "space", "org"], "default": "space" },
           "space_id": { "$ref": "#/$defs/spaceId" },
-          "min_occurrences": { "type": "integer", "minimum": 2, "default": 3 }
+          "min_occurrences": { "type": "integer", "default": 3 }
         },
         "additionalProperties": false
       },
@@ -274,21 +209,11 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["skill_id", "pattern", "occurrences", "status"],
+              "required": ["pattern", "occurrences", "page_ids"],
               "properties": {
-                "skill_id": { "$ref": "#/$defs/skillId" },
                 "pattern": { "type": "string" },
                 "occurrences": { "type": "integer" },
-                "doc_ids": { "type": "array", "items": { "$ref": "#/$defs/docId" } },
-                "proposed_skill": {
-                  "type": "object",
-                  "properties": {
-                    "name": { "type": "string" },
-                    "description": { "type": "string" },
-                    "steps": { "type": "array", "items": { "type": "string" } }
-                  }
-                },
-                "status": { "type": "string", "enum": ["proposed", "accepted", "rejected"] }
+                "page_ids": { "type": "array", "items": { "$ref": "#/$defs/pageId" } }
               }
             }
           }

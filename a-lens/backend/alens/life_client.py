@@ -77,7 +77,7 @@ def alias_map() -> dict[str, list[str]]:
         nick, hubs = pair.split("=", 1)
         ids = [h.strip() for h in hubs.split("|") if h.strip()]
         if nick.strip() and ids:
-            # 같은 닉네임이 두 번 나와도 덮지 않고 더한다("돌쇠=palen,돌쇠=coolfebreeze"도 통한다)
+            # 같은 닉네임이 두 번 나와도 덮지 않고 더한다("야옹이=agent-a,야옹이=agent-b"도 통한다)
             out.setdefault(normalize(nick), []).extend(ids)
     return out
 

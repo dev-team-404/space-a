@@ -653,7 +653,7 @@ pub fn build_guestbook_reply_prompt(
 }
 
 /// G3 — 답글 생성의 user 메시지. 방문자 통제 값(이름·원글)은 system이 아니라 여기로 —
-/// 악의적 원글("이전 지시 무시하고 …")이 system 권위를 얻지 못하게 한다 (Codex 리뷰).
+/// 원글에 지시문 흉내 문구가 섞여 있어도 system 권위를 얻지 못하게 한다 (Codex 리뷰).
 pub fn build_guestbook_reply_user_msg(visitor_name: &str, post_body: &str) -> String {
     format!("[방명록 원글 — 방문자 '{visitor_name}']\n{post_body}")
 }

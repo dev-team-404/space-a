@@ -1,6 +1,6 @@
 # A-Lens — 빌드와 실행
 
-> 실측 기준: `main @ fda2467` (2026-08-04)
+> 실측 기준: 2026-08-04
 
 ## 1. 요구 사항
 
@@ -47,8 +47,8 @@ Vite는 `/api`, `/assets`를 기본 8600 포트로 프록시한다. 다른 백�
 
 | 변수 | 의미 | 기본 |
 |---|---|---|
-| `A_LENS_SOURCE` | `auto`, `hub`, `dummy`, `fixtures` | `auto` |
-| `A_LENS_WORK_URL` | A-Hub Work 주소 | `https://spacea.msalt.net` |
+| `A_LENS_SOURCE` | `auto`, `hub`, `dummy`, `fixtures` | `dummy` |
+| `A_LENS_WORK_URL` | A-Hub Work 주소 | 없음 |
 | `A_LENS_WORK_TOKEN` | Work Bearer token | 없음 |
 | `A_LENS_WORK_API_KEY` | Work `x-api-key` | 없음 |
 | `A_LENS_LIFE_URL` | A-Hub Life 주소. 비우면 연동 off | 없음 |
@@ -57,12 +57,15 @@ Vite는 `/api`, `/assets`를 기본 8600 포트로 프록시한다. 다른 백�
 | `A_LENS_LIFE_ALIAS` | `닉네임=work_id|work_id` 별칭 목록 | 없음 |
 | `A_LENS_PRESENCE_WINDOW` | Work 최근 활동을 online으로 볼 초 | `3600` |
 | `A_LENS_CACHE_TTL` | Work 스냅숏 갱신 초 | `30` |
-| `A_LENS_LLM_URL` | OpenAI 호환 base URL. 비우면 번역 off | 로컬 LM Studio 주소 |
+| `A_LENS_LLM_URL` | OpenAI 호환 base URL. 비우면 LLM off(규칙 폴백) | 없음 (기본 비활성) |
 | `A_LENS_LLM_MODEL` | 모델명 | 저장소 기본 모델명 |
 | `A_LENS_LLM_KEY` | LLM Bearer key | 없음 |
 | `A_LENS_SUMMARY_STYLE` | `brief`, `normal`, `detailed` | `brief` |
 | `A_LENS_DB` | 번역 캐시 SQLite 경로 | `.a-lens/translation.db` |
 | `A_LENS_SETTINGS` | 저장 설정 파일 경로. 개발용 | `.a-lens/settings.json` |
+
+기본 `dummy` 모드는 외부 요청 없이 번들 데모 데이터를 보여준다. 실데이터를 보려면 Work URL과
+인증값을 넣고 `auto`(실데이터+더미, 실패 시 더미) 또는 `hub`(실데이터만)로 명시적으로 바꾼다.
 
 설정 API는 비밀값 원문을 돌려주지 않고 `*_set`만 반환한다. 다만 `settings.json` 자체는 평문 파일이므로
 커밋하거나 공유하지 않는다.

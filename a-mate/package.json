@@ -7,6 +7,7 @@
     "build": "vite build",
     "tauri": "tauri",
     "check": "svelte-check --threshold error",
+    "pretest": "node -e \"try{require.resolve('svelte-check/package.json');require.resolve('vitest/package.json')}catch{console.error('[a-mate] node_modules 불완전 — 먼저 npm install 을 실행하세요.');process.exit(1)}\"",
     "test": "svelte-check --threshold error && vitest run"
   },
   "dependencies": {

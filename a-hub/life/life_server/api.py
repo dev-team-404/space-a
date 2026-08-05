@@ -1,6 +1,6 @@
 """REST API 어댑터 (FastAPI) — 방 방문 서버.
 
-hub(Space/Page)와 별개의 프로세스. 엔드포인트 계약: docs/archive/design/life-visit.md §4.
+hub(Space/Page)와 별개의 프로세스. 엔드포인트 계약: docs/archive/design/a-hub/specs/life-visit.md §4.
 도메인 에러를 HTTP 상태로 매핑한다.
 """
 
@@ -129,12 +129,12 @@ def create_app(life: LifeService | None = None) -> FastAPI:
     def discover():
         return {
             "service": "space-a-life-server",
-            "description": "방 방문 서버 — 개인 방·에이전트 위치·방 디자인 (docs/archive/design/life-visit.md)",
+            "description": "방 방문 서버 — 개인 방·에이전트 위치·방 디자인 (docs/archive/design/a-hub/specs/life-visit.md)",
             "auth": "Authorization: Bearer <token> (등록: POST /life/register)",
             # LIFE_SERVER_API_KEY 설정 시 모든 요청에 x-api-key 헤더 필요 (healthz/readyz 제외)
             "api_key_required": bool(os.environ.get("LIFE_SERVER_API_KEY")),
             "openapi": "/docs",
-            "life_protocol": 3,
+            "life_protocol": 4,
         }
 
     @app.get("/capabilities")

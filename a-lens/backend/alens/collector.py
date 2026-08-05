@@ -2,12 +2,12 @@
 
 허브 주소·토큰은 배포에 따라 바뀔 수 있으므로 전부 환경변수로 받는다:
 
-  A_LENS_SOURCE      auto(기본) | hub | dummy | fixtures
+  A_LENS_SOURCE      auto | hub | dummy(기본) | fixtures
                      auto    허브 성공 시 허브+더미 병합, 실패 시 더미만
                      hub     허브만 (실데이터 검증용, 실패 시 에러)
                      dummy   backend/dummy_data만
                      fixtures contracts/fixtures 골든 데이터만 (계약 검증용)
-  A_LENS_WORK_URL    a-hub-work base URL (기본 https://spacea.msalt.net)
+  A_LENS_WORK_URL    a-hub-work base URL (기본 빈 값 — 외부 연동 off)
   A_LENS_WORK_TOKEN  허브 Bearer 토큰 (없으면 인증 필요한 상세는 비어서 내려감)
   A_LENS_WORK_API_KEY  허브 x-api-key 헤더 값 (2026-07-19 허브 인증 전환 — 비면 생략)
   A_LENS_PRESENCE_WINDOW  online 판정 창(초, 기본 3600) — 이 시간 안에 write 한 사람만 online
@@ -763,7 +763,7 @@ def _hub_snapshot() -> dict:
 
             agents = _merge_people([_agent(m) for m in members])
             # 합쳐진 사람은 흡수된 계정 id로 남긴 기록도 그 사람 이름으로 읽혀야 한다 — 방에는
-            # "돌쇠"인데 이슈 담당자는 "a-mate/coolfebreeze"로 뜨면 같은 혼동이 되돌아온다.
+            # "야옹이"인데 이슈 담당자는 "a-mate/agent-b"로 뜨면 같은 혼동이 되돌아온다.
             for row in agents:
                 if row.get("life_agent_id"):
                     for hub_id in (row["agent_id"], *row.get("merged_ids", [])):

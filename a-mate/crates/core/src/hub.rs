@@ -30,11 +30,6 @@ pub const MIN_OCCURRENCES_WHEN_NO_EST: u64 = 3;
 /// 스캔당 발행 상한 (도입 시 백로그 폭주 방지).
 pub const MAX_PER_SCAN: usize = 3;
 
-/// 팀 공용 허브 주소 — 설정·env가 없어도 여기에 붙는다(설치 직후 바로 동작).
-/// 비밀이 아닌 값만 기본값으로 둔다. **API 키는 기본값을 두지 않는다** —
-/// 공유 비밀을 소스에 넣으면 저장소 이력에 영구히 남기 때문. 키는 설정 탭에서 1회 입력한다.
-/// 키가 없으면 허브 호출이 401로 실패하지만 공유는 "실패 무해" 규율이라 앱 동작에 지장이 없다.
-pub const DEFAULT_HUB_URL: &str = "https://spacea.msalt.net";
 /// 팀 기본 공간.
 pub const DEFAULT_SPACE_ID: &str = "sw-innov";
 
@@ -70,18 +65,17 @@ impl HubConfig {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
         };
-        // 명시적으로 껐으면 어떤 경로로도(설정·env·기본값) 되살아나지 않는다 — 유일한 opt-out.
+        // 명시적으로 껐으면 어떤 경로로도(설정·env) 되살아나지 않는다.
         if store.get_setting("knowledge_hub_share").ok().flatten().as_deref() == Some("off") {
             return None;
         }
-        // 저장값이 없으면 env, 그것도 없으면 **팀 기본값**으로 붙는다.
-        // 설치 직후에도 팀 지식을 주고받게 하려는 의도적 기본값(2026-07-28).
+        // 외부 전송은 opt-in이다. 저장 URL이나 env URL이 없으면 전체 파이프라인을 no-op으로 둔다.
         let env = HubConfig::from_env();
         let env_ref = env.as_ref();
+        let base_url = get("knowledge_hub_url")
+            .or_else(|| env_ref.map(|c| c.base_url.clone()))?;
         Some(HubConfig {
-            base_url: get("knowledge_hub_url")
-                .or_else(|| env_ref.map(|c| c.base_url.clone()))
-                .unwrap_or_else(|| DEFAULT_HUB_URL.into())
+            base_url: base_url
                 .trim_end_matches('/')
                 .to_string(),
             api_key: get("knowledge_hub_api_key")
@@ -1603,30 +1597,12 @@ mod tests {
         assert!(HubConfig::from_env().is_none());
     }
 
-    /// 설치 직후(설정·env 전무)에도 팀 허브에 붙어야 한다 — 2026-07-28 결정.
-    /// 단, 키는 기본값을 두지 않으므로 비어 있다(소스에 공유 비밀을 넣지 않는다).
     #[test]
-    fn config_falls_back_to_team_defaults_when_unset() {
+    fn config_is_none_when_store_and_env_are_unset() {
         std::env::remove_var("SPACE_A_HUB_URL");
         let store = crate::store::SqliteStore::open_in_memory().unwrap();
 
-        let cfg = HubConfig::resolve(&store).expect("설정이 없어도 팀 기본값으로 잡혀야 한다");
-        assert_eq!(cfg.base_url, DEFAULT_HUB_URL);
-        assert_eq!(cfg.space_id, DEFAULT_SPACE_ID);
-        assert!(cfg.api_key.is_empty(), "API 키 기본값은 두지 않는다(비밀 커밋 방지)");
-        assert_eq!(cfg.min_tokens, DEFAULT_MIN_TOKENS);
-    }
-
-    /// 기본값이 생겨도 opt-out은 계속 유효해야 한다.
-    #[test]
-    fn config_off_switch_beats_team_defaults() {
-        std::env::remove_var("SPACE_A_HUB_URL");
-        let store = crate::store::SqliteStore::open_in_memory().unwrap();
-        store.set_setting("knowledge_hub_share", "off").unwrap();
-        assert!(
-            HubConfig::resolve(&store).is_none(),
-            "공유를 끄면 기본값으로도 되살아나지 않는다",
-        );
+        assert!(HubConfig::resolve(&store).is_none());
     }
 
     // ── 세션 회고 — 선별 조건·스크럽·파싱 ──

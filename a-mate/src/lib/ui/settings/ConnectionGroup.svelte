@@ -7,7 +7,7 @@
     knowledgeHubSettingsGet, knowledgeHubSettingsSet, knowledgeHubShareSet,
     type EngineSettings, type HubSettings, type ImageSettings, type KnowledgeHubSettings,
   } from '../../api';
-  import { LENS_DEFAULT_URL, LENS_OFF } from '../../lens';
+  import { LENS_OFF, LENS_URL_PLACEHOLDER } from '../../lens';
   import { IDLE, busy, err, ok, type Status } from './status';
   import StatusLine from './StatusLine.svelte';
 
@@ -77,23 +77,23 @@
 
   // --- A-Lens (관전 웹) 주소 — 홈 화면의 'A-Lens에서 보기' 링크가 쓴다 ---
   // 링크는 <주소>/#life/<기록할 공간>으로 조립되므로, 공간은 아래 지식 허브 설정을 따른다.
-  // 기본 주소·조립 규칙은 lib/lens.ts와 공유한다 — 홈 화면 링크와 어긋나지 않게.
+  // 주소가 없으면 링크를 숨기는 조립 규칙은 lib/lens.ts와 공유한다.
   let lensUrl = $state('');
   let lensStatus = $state<Status>(IDLE);
   async function loadLens(){
     try {
       const all = await getSettings();
-      lensUrl = (all.a_lens_url ?? '').trim() || LENS_DEFAULT_URL;
+      lensUrl = (all.a_lens_url ?? '').trim();
     } catch(e){ lensStatus = err(`A-Lens 주소를 불러오지 못했어요: ${e}`); }
   }
   loadLens();
   async function saveLens(){
     lensStatus = busy('저장 중…');
-    // 비워두면 팀 기본 주소로 동작한다. 링크를 아예 숨기려면 'off'를 넣는다(lens.ts 규칙).
+    // 빈 값과 과거 설정의 'off' 모두 링크를 숨긴다(lens.ts 규칙).
     try {
       await setSetting('a_lens_url', lensUrl.trim());
       lensStatus = ok(
-        lensUrl.trim().toLowerCase() === LENS_OFF
+        !lensUrl.trim() || lensUrl.trim().toLowerCase() === LENS_OFF
           ? '홈 화면 링크를 숨깁니다.'
           : '저장했어요. 홈 화면 링크에 반영됩니다.',
       );
@@ -101,8 +101,8 @@
   }
 
   // --- 팀 지식 허브 (a-hub work) — Life Server와 다른 서버다 ---
-  // 팀 기본값. 입력을 비우고 저장하면 이 값들이 다시 채워진다(사내 배포 공용 주소).
-  const KHUB_DEFAULTS = {
+  // 입력 칸에만 보여줄 팀 배포 예시. 저장하기 전에는 연결값으로 쓰지 않는다.
+  const KHUB_EXAMPLES = {
     url: 'https://spacea.msalt.net',
     space_id: 'sw-innov',
   } as const;
@@ -111,24 +111,29 @@
   async function loadKhub(){
     try {
       khub = await knowledgeHubSettingsGet();
-      // 빈 칸으로 두면 "뭘 넣어야 하지?"가 되므로 팀 기본값을 실제 값으로 채워 보여준다.
-      // (백엔드도 같은 값으로 폴백하므로 저장하지 않아도 이 값으로 동작한다)
-      if (!khub.url.trim()) khub.url = KHUB_DEFAULTS.url;
-      if (!khub.space_id.trim()) khub.space_id = KHUB_DEFAULTS.space_id;
+      if (!khub.space_id.trim()) khub.space_id = KHUB_EXAMPLES.space_id;
     }
     catch(e){ khubStatus = err(`지식 허브 설정을 불러오지 못했어요: ${e}`); }
   }
   loadKhub();
   async function saveKhub(){
     khubStatus = busy('저장 중…');
-    // 빈 칸은 팀 기본값으로 채운다 — 주소를 외우지 않아도 되게.
-    const url = khub.url.trim() || KHUB_DEFAULTS.url;
-    const spaceId = khub.space_id.trim() || KHUB_DEFAULTS.space_id;
+    const url = khub.url.trim();
+    const spaceId = khub.space_id.trim() || KHUB_EXAMPLES.space_id;
     try {
       await knowledgeHubSettingsSet(url, khub.api_key, spaceId, khub.user);
-      await knowledgeHubShareSet(true); // 저장 = 켬 (껐다가 다시 설정하는 경우 복구)
+      // URL을 저장할 때만 켠다. 빈 값으로 저장값을 지울 때는 기존 공유 off 상태를 보존한다.
+      if (url) await knowledgeHubShareSet(true);
       await loadKhub();
-      khubStatus = ok('저장했어요. 다음 스캔부터 팀 지식을 주고받습니다.');
+      khubStatus = ok(
+        url
+          ? '설정을 저장했어요. 관문 서버는 유효한 API 키가 있어야 연결됩니다.'
+          : khub.share_off
+            ? '저장된 URL을 지웠어요. 공유 꺼짐 상태는 유지됩니다.'
+            : khub.source === 'env'
+              ? '저장된 URL을 지웠어요. 이제 .env 설정을 사용합니다.'
+              : '저장된 URL을 지웠어요. 외부에 연결하지 않습니다.',
+      );
     } catch(e){ khubStatus = err(e); }
   }
   async function toggleKhubShare(){
@@ -144,10 +149,9 @@
   }
   const khubSourceLabel = $derived(
     khub.share_off ? '공유 꺼짐 — 팀에 아무것도 보내지 않습니다'
-    : khub.source === 'store' ? `연결됨 — ${khub.space_id || '공간 미지정'} 공간에 기록합니다`
-    : khub.source === 'env' ? '.env 값 사용 중 (설치본에서는 로드되지 않으니 아래에 저장해 두세요)'
-    // 기본값으로도 붙지만, 관문이 켜진 팀 서버는 API 키가 있어야 실제로 오간다.
-    : '팀 기본값으로 연결됨 — API 키를 넣어야 실제로 주고받습니다',
+    : khub.source === 'store' ? `설정됨 — ${khub.space_id || '공간 미지정'} 공간을 사용합니다`
+    : khub.source === 'env' ? '.env 설정 사용 중 (설치본에서는 로드되지 않으니 아래에 저장해 두세요)'
+    : '미연결 — URL을 저장하기 전에는 외부에 요청하지 않습니다',
   );
 </script>
 
@@ -179,8 +183,8 @@
     <em>{`<주소>/#life/<기록할 공간>`}</em> 로 열립니다 — 공간은 아래 지식 허브 설정을 따릅니다.
   </p>
   <div class="fields">
-    <label class="field"><span>A-Lens 주소 <em>(숨기려면 off)</em></span>
-      <input type="text" bind:value={lensUrl} placeholder={LENS_DEFAULT_URL} spellcheck="false"/></label>
+    <label class="field"><span>A-Lens 주소 <em>(비우면 숨김)</em></span>
+      <input type="text" bind:value={lensUrl} placeholder={LENS_URL_PLACEHOLDER} spellcheck="false"/></label>
   </div>
   <div class="actions">
     <button class="primary" onclick={saveLens} disabled={lensStatus.kind==='busy'}>저장</button>
@@ -194,27 +198,29 @@
     내 에이전트가 찾아낸 해결책을 팀에 발행하고, 남이 이미 올린 지식이 있으면 대신 인용합니다 (Space A).
     위 Life Server와는 <em>다른 서버</em>입니다. 프롬프트 원문·파일 경로·세션 ID는 보내지 않습니다.
   </p>
-  <p class="source" data-kind={khub.share_off ? 'none' : khub.source === 'none' ? 'store' : khub.source}>{khubSourceLabel}</p>
+  <p class="source" data-kind={khub.share_off || khub.source === 'none' ? 'none' : khub.source}>{khubSourceLabel}</p>
   <div class="fields">
     <label class="field"><span>허브 URL</span>
-      <input type="text" bind:value={khub.url} placeholder={KHUB_DEFAULTS.url} spellcheck="false"/></label>
+      <input type="text" bind:value={khub.url} placeholder={KHUB_EXAMPLES.url} spellcheck="false"/></label>
     <label class="field"><span>API 키 <em>(관문 켜진 서버만)</em></span>
       <input type="password" bind:value={khub.api_key} placeholder="비워두면 인증 없이" spellcheck="false"/></label>
     <label class="field"><span>기록할 공간</span>
-      <input type="text" bind:value={khub.space_id} placeholder={KHUB_DEFAULTS.space_id} spellcheck="false"/></label>
+      <input type="text" bind:value={khub.space_id} placeholder={KHUB_EXAMPLES.space_id} spellcheck="false"/></label>
     <label class="field"><span>내 이름 <em>(허브 계정)</em></span>
       <input type="text" bind:value={khub.user} placeholder="예: palendy" spellcheck="false"/></label>
   </div>
   <div class="actions">
     <button class="primary" onclick={saveKhub} disabled={khubStatus.kind==='busy'}>저장</button>
-    <button onclick={toggleKhubShare} disabled={khubStatus.kind==='busy'}>
-      {khub.share_off ? '공유 켜기' : '공유 끄기'}
-    </button>
+    {#if khub.source !== 'none' || khub.share_off}
+      <button onclick={toggleKhubShare} disabled={khubStatus.kind==='busy'}>
+        {khub.share_off ? '공유 켜기' : '공유 끄기'}
+      </button>
+    {/if}
   </div>
   <StatusLine status={khubStatus}/>
   <p class="hint2">
-    설정하지 않아도 팀 기본값({KHUB_DEFAULTS.url} · {KHUB_DEFAULTS.space_id})으로 붙습니다.
-    공유를 원치 않으면 '공유 끄기'를 누르세요.
+    팀 배포 예시: {KHUB_EXAMPLES.url} · {KHUB_EXAMPLES.space_id}. 관문이 켜진 서버는
+    별도로 전달받은 API 키가 필요하며, 키는 앱 설치본에 포함되지 않습니다.
   </p>
 </section>
 
@@ -240,7 +246,7 @@
 
 <section>
   <h2>캐릭터 이미지</h2>
-  <p class="hint">마스코트 캐릭터를 그릴 이미지 생성 모델입니다. 사내 LLM은 그림을 못 그리므로 위 텍스트 엔진과 따로 지정합니다. 사람마다 한 번 생성해 캐시하므로 이후에는 호출하지 않습니다. 캐릭터 생성·재생성과 '오늘의 대문사진'은 봇 탭에서 합니다.</p>
+  <p class="hint">마스코트 캐릭터를 그릴 이미지 생성 모델입니다. 사내 LLM은 그림을 못 그리므로 위 텍스트 엔진과 따로 지정합니다. 사람마다 한 번 생성해 캐시하므로 이후에는 호출하지 않습니다. 캐릭터 생성·재생성과 '오늘의 대문사진'은 설정 &gt; 봇에서 합니다.</p>
   <p class="source" data-kind={img.source}>{imgSourceLabel}</p>
   <div class="fields">
     <label class="field"><span>엔드포인트 URL</span>

@@ -1,4 +1,4 @@
-"""방 방문(life) — 등록·입장·이동·겹침 금지·디자인. 설계: docs/archive/design/life-visit.md"""
+"""방 방문(life) — 등록·입장·이동·겹침 금지·디자인. 설계: docs/archive/design/a-hub/specs/life-visit.md"""
 
 import pytest
 

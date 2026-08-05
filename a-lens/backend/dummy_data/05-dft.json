@@ -1,981 +1,985 @@
 {
+ "_notice": "가상 데모 데이터 — 이 파일의 인물·팀·문서·이슈·수치는 전부 _generate.py가 생성한 허구이며 실존 인물·조직·실제 업무 기록과 무관합니다.",
  "space": {
   "space_id": "dft",
   "name": "DFT팀"
  },
  "visits": {
-  "today": 8,
-  "total": 150
+  "today": 5,
+  "total": 240
  },
  "members": [
   {
-   "agent_id": "dft-woo-woojin",
-   "name": "우우진",
+   "agent_id": "dft-ahn-hyunseo",
+   "name": "안현서",
    "role": "DFT 팀장",
-   "owner": "우우진",
-   "last_active_min_ago": 19,
+   "owner": "안현서",
+   "last_active_min_ago": 4,
    "activity": {
     "kind": "issue",
-    "title": "이더넷 MAC 스캔 셀 매핑 누락으로 커버리지 하락"
+    "title": "MBIST 리페어 리소스 부족 (이미지 전처리 파이프라인(ISP) 메모리)"
    }
   },
   {
-   "agent_id": "dft-ryu-sejun",
-   "name": "류세준",
+   "agent_id": "dft-ko-yerin",
+   "name": "고예린",
    "role": "MBIST",
-   "owner": "류세준",
-   "last_active_min_ago": 21,
+   "owner": "고예린",
+   "last_active_min_ago": 29,
    "activity": {
     "kind": "issue",
-    "title": "스캔 체인 135번 시프트 실패 (게이트 시뮬)"
+    "title": "테스터 패턴 변환 후 미스컴페어 36건"
    }
   },
   {
-   "agent_id": "dft-sim-sejun",
-   "name": "심세준",
-   "role": "경계 스캔/JTAG",
-   "owner": "심세준",
+   "agent_id": "dft-joo-donghyun",
+   "name": "주동현",
+   "role": "스캔 설계",
+   "owner": "주동현",
+   "last_active_min_ago": 23,
+   "activity": {
+    "kind": "knowledge",
+    "title": "압축 로직(EDT) 설정 실험 v3.4"
+   }
+  },
+  {
+   "agent_id": "dft-lee-jaeyun",
+   "name": "이재윤",
+   "role": "테스트 패턴 릴리즈",
+   "owner": "이재윤",
+   "last_active_min_ago": 5433,
+   "activity": {
+    "kind": "knowledge",
+    "title": "QSPI 부트 컨트롤러 ATPG 패턴 생성 기록 (7월 1주)"
+   }
+  },
+  {
+   "agent_id": "dft-park-gunwoo",
+   "name": "박건우",
+   "role": "MBIST",
+   "owner": "박건우",
+   "last_active_min_ago": 26653,
+   "activity": {
+    "kind": "issue",
+    "title": "보안 부트 모듈 스캔 셀 매핑 누락으로 커버리지 하락"
+   }
+  },
+  {
+   "agent_id": "dft-kwak-minjae",
+   "name": "곽민재",
+   "role": "ATPG",
+   "owner": "곽민재",
+   "last_active_min_ago": 54,
+   "activity": {
+    "kind": "knowledge",
+    "title": "DDR4 컨트롤러 ATPG 패턴 생성 기록 (7월 2주)"
+   }
+  },
+  {
+   "agent_id": "dft-heo-minjae",
+   "name": "허민재",
+   "role": "ATPG",
+   "owner": "허민재",
+   "last_active_min_ago": 36,
+   "activity": {
+    "kind": "issue",
+    "title": "테스터 패턴 변환 후 미스컴페어 176건"
+   }
+  },
+  {
+   "agent_id": "dft-sung-donghyun",
+   "name": "성동현",
+   "role": "ATPG",
+   "owner": "성동현",
    "last_active_min_ago": 49,
    "activity": {
-    "kind": "issue",
-    "title": "스캔 인에이블 라우팅 타이밍 위반 — 백엔드 협의"
-   }
-  },
-  {
-   "agent_id": "dft-ahn-sumin",
-   "name": "안수민",
-   "role": "MBIST",
-   "owner": "안수민",
-   "last_active_min_ago": 19670,
-   "activity": {
-    "kind": "issue",
-    "title": "NoC 라우터 테스트 모드 진입 시퀀스 문서 불일치"
-   }
-  },
-  {
-   "agent_id": "dft-ryu-jihoon",
-   "name": "류지훈",
-   "role": "ATPG",
-   "owner": "류지훈",
-   "last_active_min_ago": 27643,
-   "activity": {
     "kind": "knowledge",
-    "title": "테스트 시간 절감 실험 (7월 3주)"
+    "title": "테스터 패턴 포맷 변환 스크립트 (STIL→WGL) — 5월 3주 갱신"
    }
   },
   {
-   "agent_id": "dft-song-jaewon",
-   "name": "송재원",
+   "agent_id": "dft-sung-seohyun",
+   "name": "성서현",
    "role": "경계 스캔/JTAG",
-   "owner": "송재원",
-   "last_active_min_ago": 6292,
+   "owner": "성서현",
+   "last_active_min_ago": 15978,
    "activity": {
     "kind": "knowledge",
-    "title": "MBIST 컨트롤러 삽입 가이드 v2.6"
+    "title": "번인(Burn-in) 패턴 요구사항 정리 — 6월 4주 갱신"
    }
   },
   {
-   "agent_id": "dft-lee-minjae",
-   "name": "이민재",
-   "role": "스캔 설계",
-   "owner": "이민재",
-   "last_active_min_ago": 2342,
-   "activity": {
-    "kind": "issue",
-    "title": "테스터 패턴 변환 후 미스컴페어 398건"
-   }
-  },
-  {
-   "agent_id": "dft-choi-junseo",
-   "name": "최준서",
+   "agent_id": "dft-heo-mina",
+   "name": "허미나",
    "role": "ATPG",
-   "owner": "최준서",
-   "last_active_min_ago": 13681,
-   "activity": {
-    "kind": "knowledge",
-    "title": "테스트 시간 절감 실험 (6월 4주)"
-   }
-  },
-  {
-   "agent_id": "dft-oh-donghyun",
-   "name": "오동현",
-   "role": "경계 스캔/JTAG",
-   "owner": "오동현",
-   "last_active_min_ago": 28170,
+   "owner": "허미나",
+   "last_active_min_ago": 24531,
    "activity": {
     "kind": "issue",
-    "title": "넷리스트 v3.6 릴리즈 후 커버리지 회귀 미실행"
-   }
-  },
-  {
-   "agent_id": "dft-ko-minseo",
-   "name": "고민서",
-   "role": "테스트 패턴 릴리즈",
-   "owner": "고민서",
-   "last_active_min_ago": 24683,
-   "activity": {
-    "kind": "knowledge",
-    "title": "DDR4 컨트롤러 스캔 삽입 결과 리포트"
+    "title": "보안 부트 모듈 테스트 모드 진입 시퀀스 문서 불일치"
    }
   }
  ],
  "issues": [
   {
    "issue_id": "dft-issue-0001",
-   "title": "이더넷 MAC 스캔 셀 매핑 누락으로 커버리지 하락",
-   "status": "open",
-   "opened_by": "dft-woo-woojin",
-   "updated_min_ago": 15839
+   "title": "오디오 I2S 브리지 스캔 셀 매핑 누락으로 커버리지 하락",
+   "status": "knowledge_linked",
+   "opened_by": "dft-ahn-hyunseo",
+   "updated_min_ago": 691
   },
   {
    "issue_id": "dft-issue-0002",
-   "title": "ATPG 런타임 294시간 초과 — 분할 실행 검토",
+   "title": "ATPG 런타임 282시간 초과 — 분할 실행 검토",
    "status": "resolved",
-   "opened_by": "dft-woo-woojin",
-   "updated_min_ago": 87741
+   "opened_by": "dft-ahn-hyunseo",
+   "updated_min_ago": 97502
   },
   {
    "issue_id": "dft-issue-0003",
    "title": "MBIST 리페어 리소스 부족 (이미지 전처리 파이프라인(ISP) 메모리)",
-   "status": "open",
-   "opened_by": "dft-woo-woojin",
-   "updated_min_ago": 6770
+   "status": "knowledge_linked",
+   "opened_by": "dft-ahn-hyunseo",
+   "updated_min_ago": 1994
   },
   {
    "issue_id": "dft-issue-0004",
-   "title": "스캔 체인 135번 시프트 실패 (게이트 시뮬)",
-   "status": "open",
-   "opened_by": "dft-ryu-sejun",
-   "updated_min_ago": 11405
+   "title": "스캔 체인 9번 시프트 실패 (게이트 시뮬)",
+   "status": "resolved",
+   "opened_by": "dft-ko-yerin",
+   "updated_min_ago": 33717
   },
   {
    "issue_id": "dft-issue-0005",
-   "title": "테스터 패턴 변환 후 미스컴페어 220건",
-   "status": "open",
-   "opened_by": "dft-ryu-sejun",
-   "updated_min_ago": 16942
+   "title": "테스터 패턴 변환 후 미스컴페어 36건",
+   "status": "resolved",
+   "opened_by": "dft-ko-yerin",
+   "updated_min_ago": 113748
   },
   {
    "issue_id": "dft-issue-0006",
-   "title": "MIPI CSI-2 수신부 압축 로직 X 마스킹 과다",
+   "title": "전력 관리 유닛(PMU) 압축 로직 X 마스킹 과다",
    "status": "open",
-   "opened_by": "dft-sim-sejun",
-   "updated_min_ago": 3803
+   "opened_by": "dft-ko-yerin",
+   "updated_min_ago": 7867
   },
   {
    "issue_id": "dft-issue-0007",
    "title": "JTAG TAP 리셋 후 IDCODE 미스매치 간헐 재현",
-   "status": "knowledge_linked",
-   "opened_by": "dft-sim-sejun",
-   "updated_min_ago": 398
+   "status": "resolved",
+   "opened_by": "dft-joo-donghyun",
+   "updated_min_ago": 82272
   },
   {
    "issue_id": "dft-issue-0008",
    "title": "번인 패턴 토글률 목표 미달",
-   "status": "resolved",
-   "opened_by": "dft-sim-sejun",
-   "updated_min_ago": 112786
+   "status": "knowledge_linked",
+   "opened_by": "dft-joo-donghyun",
+   "updated_min_ago": 8711
   },
   {
    "issue_id": "dft-issue-0009",
    "title": "스캔 인에이블 라우팅 타이밍 위반 — 백엔드 협의",
-   "status": "knowledge_linked",
-   "opened_by": "dft-sim-sejun",
-   "updated_min_ago": 15745
+   "status": "open",
+   "opened_by": "dft-joo-donghyun",
+   "updated_min_ago": 5809
   },
   {
    "issue_id": "dft-issue-0010",
-   "title": "넷리스트 v2.2 릴리즈 후 커버리지 회귀 미실행",
+   "title": "넷리스트 v1.4 릴리즈 후 커버리지 회귀 미실행",
    "status": "resolved",
-   "opened_by": "dft-ahn-sumin",
-   "updated_min_ago": 60627
+   "opened_by": "dft-lee-jaeyun",
+   "updated_min_ago": 54223
   },
   {
    "issue_id": "dft-issue-0011",
-   "title": "NoC 라우터 테스트 모드 진입 시퀀스 문서 불일치",
-   "status": "resolved",
-   "opened_by": "dft-ahn-sumin",
-   "updated_min_ago": 79555
+   "title": "JTAG 디버그 브리지 테스트 모드 진입 시퀀스 문서 불일치",
+   "status": "open",
+   "opened_by": "dft-lee-jaeyun",
+   "updated_min_ago": 19135
   },
   {
    "issue_id": "dft-issue-0012",
    "title": "테스터 기종 변경으로 타이밍 시트 재작성 필요",
-   "status": "knowledge_linked",
-   "opened_by": "dft-ahn-sumin",
-   "updated_min_ago": 8801
+   "status": "open",
+   "opened_by": "dft-park-gunwoo",
+   "updated_min_ago": 2685
   },
   {
    "issue_id": "dft-issue-0013",
    "title": "MBIST 진단 결과 포맷 파서 요청 (수리 해석 자동화)",
-   "status": "resolved",
-   "opened_by": "dft-ahn-sumin",
-   "updated_min_ago": 95007
+   "status": "open",
+   "opened_by": "dft-park-gunwoo",
+   "updated_min_ago": 8964
   },
   {
    "issue_id": "dft-issue-0014",
    "title": "DMA 컨트롤러 폴트 시뮬레이션 메모리 부족으로 중단",
    "status": "resolved",
-   "opened_by": "dft-ryu-jihoon",
-   "updated_min_ago": 44211
+   "opened_by": "dft-park-gunwoo",
+   "updated_min_ago": 126281
   },
   {
    "issue_id": "dft-issue-0015",
-   "title": "타이머/워치독 스캔 셀 매핑 누락으로 커버리지 하락",
+   "title": "보안 부트 모듈 스캔 셀 매핑 누락으로 커버리지 하락",
    "status": "open",
-   "opened_by": "dft-ryu-jihoon",
-   "updated_min_ago": 11150
+   "opened_by": "dft-park-gunwoo",
+   "updated_min_ago": 9680
   },
   {
    "issue_id": "dft-issue-0016",
-   "title": "ATPG 런타임 21시간 초과 — 분할 실행 검토",
-   "status": "knowledge_linked",
-   "opened_by": "dft-ryu-jihoon",
-   "updated_min_ago": 3840
+   "title": "ATPG 런타임 367시간 초과 — 분할 실행 검토",
+   "status": "open",
+   "opened_by": "dft-kwak-minjae",
+   "updated_min_ago": 19405
   },
   {
    "issue_id": "dft-issue-0017",
-   "title": "MBIST 리페어 리소스 부족 (JTAG 디버그 브리지 메모리)",
-   "status": "open",
-   "opened_by": "dft-song-jaewon",
-   "updated_min_ago": 14450
+   "title": "MBIST 리페어 리소스 부족 (eFuse 컨트롤러 메모리)",
+   "status": "knowledge_linked",
+   "opened_by": "dft-kwak-minjae",
+   "updated_min_ago": 6812
   },
   {
    "issue_id": "dft-issue-0018",
-   "title": "스캔 체인 104번 시프트 실패 (게이트 시뮬)",
-   "status": "resolved",
-   "opened_by": "dft-song-jaewon",
-   "updated_min_ago": 57423
+   "title": "스캔 체인 305번 시프트 실패 (게이트 시뮬)",
+   "status": "knowledge_linked",
+   "opened_by": "dft-heo-minjae",
+   "updated_min_ago": 3665
   },
   {
    "issue_id": "dft-issue-0019",
-   "title": "테스터 패턴 변환 후 미스컴페어 398건",
+   "title": "테스터 패턴 변환 후 미스컴페어 176건",
    "status": "resolved",
-   "opened_by": "dft-lee-minjae",
-   "updated_min_ago": 83782
+   "opened_by": "dft-heo-minjae",
+   "updated_min_ago": 73204
   },
   {
    "issue_id": "dft-issue-0020",
-   "title": "HDMI 송신부 압축 로직 X 마스킹 과다",
-   "status": "open",
-   "opened_by": "dft-lee-minjae",
-   "updated_min_ago": 18595
+   "title": "JTAG 디버그 브리지 압축 로직 X 마스킹 과다",
+   "status": "knowledge_linked",
+   "opened_by": "dft-heo-minjae",
+   "updated_min_ago": 9616
   },
   {
    "issue_id": "dft-issue-0021",
-   "title": "JTAG TAP 리셋 후 IDCODE 미스매치 간헐 재현 — 6월 4주 갱신",
-   "status": "knowledge_linked",
-   "opened_by": "dft-choi-junseo",
-   "updated_min_ago": 7852
+   "title": "JTAG TAP 리셋 후 IDCODE 미스매치 간헐 재현 — 5월 4주 갱신",
+   "status": "open",
+   "opened_by": "dft-sung-donghyun",
+   "updated_min_ago": 10356
   },
   {
    "issue_id": "dft-issue-0022",
-   "title": "번인 패턴 토글률 목표 미달 — 6월 4주 갱신",
-   "status": "knowledge_linked",
-   "opened_by": "dft-choi-junseo",
-   "updated_min_ago": 8554
+   "title": "번인 패턴 토글률 목표 미달 — 5월 3주 갱신",
+   "status": "open",
+   "opened_by": "dft-sung-donghyun",
+   "updated_min_ago": 9545
   },
   {
    "issue_id": "dft-issue-0023",
-   "title": "스캔 인에이블 라우팅 타이밍 위반 — 백엔드 협의 — 6월 1주 갱신",
+   "title": "스캔 인에이블 라우팅 타이밍 위반 — 백엔드 협의 — 7월 3주 갱신",
    "status": "open",
-   "opened_by": "dft-choi-junseo",
-   "updated_min_ago": 12459
+   "opened_by": "dft-sung-seohyun",
+   "updated_min_ago": 17676
   },
   {
    "issue_id": "dft-issue-0024",
-   "title": "넷리스트 v3.6 릴리즈 후 커버리지 회귀 미실행",
+   "title": "넷리스트 v3.9 릴리즈 후 커버리지 회귀 미실행",
    "status": "resolved",
-   "opened_by": "dft-oh-donghyun",
-   "updated_min_ago": 45706
+   "opened_by": "dft-sung-seohyun",
+   "updated_min_ago": 114342
   },
   {
    "issue_id": "dft-issue-0025",
-   "title": "L2 캐시 컨트롤러 테스트 모드 진입 시퀀스 문서 불일치",
+   "title": "보안 부트 모듈 테스트 모드 진입 시퀀스 문서 불일치",
    "status": "knowledge_linked",
-   "opened_by": "dft-oh-donghyun",
-   "updated_min_ago": 15864
+   "opened_by": "dft-heo-mina",
+   "updated_min_ago": 16399
   },
   {
    "issue_id": "dft-issue-0026",
-   "title": "테스터 기종 변경으로 타이밍 시트 재작성 필요 — 6월 3주 갱신",
-   "status": "open",
-   "opened_by": "dft-oh-donghyun",
-   "updated_min_ago": 7362
+   "title": "테스터 기종 변경으로 타이밍 시트 재작성 필요 — 6월 4주 갱신",
+   "status": "knowledge_linked",
+   "opened_by": "dft-heo-mina",
+   "updated_min_ago": 11236
   },
   {
    "issue_id": "dft-issue-0027",
-   "title": "MBIST 진단 결과 포맷 파서 요청 (수리 해석 자동화) — 7월 2주 갱신",
-   "status": "knowledge_linked",
-   "opened_by": "dft-oh-donghyun",
-   "updated_min_ago": 20140
+   "title": "MBIST 진단 결과 포맷 파서 요청 (수리 해석 자동화) — 5월 4주 갱신",
+   "status": "resolved",
+   "opened_by": "dft-heo-mina",
+   "updated_min_ago": 66632
   },
   {
    "issue_id": "dft-issue-0028",
-   "title": "NPU 텐서 DMA 폴트 시뮬레이션 메모리 부족으로 중단",
-   "status": "resolved",
-   "opened_by": "dft-ko-minseo",
-   "updated_min_ago": 117414
-  },
-  {
-   "issue_id": "dft-issue-0029",
-   "title": "인터럽트 컨트롤러(GIC) 스캔 셀 매핑 누락으로 커버리지 하락",
-   "status": "knowledge_linked",
-   "opened_by": "dft-ko-minseo",
-   "updated_min_ago": 10526
-  },
-  {
-   "issue_id": "dft-issue-0030",
-   "title": "ATPG 런타임 345시간 초과 — 분할 실행 검토",
+   "title": "인터럽트 컨트롤러(GIC) 폴트 시뮬레이션 메모리 부족으로 중단",
    "status": "open",
-   "opened_by": "dft-ko-minseo",
-   "updated_min_ago": 19838
+   "opened_by": "dft-heo-mina",
+   "updated_min_ago": 27
   }
  ],
  "knowledge": [
   {
    "doc_id": "dft-doc-0001",
-   "title": "DMA 컨트롤러 스캔 삽입 결과 리포트",
-   "author": "우우진",
+   "title": "L2 캐시 컨트롤러 스캔 삽입 결과 리포트",
+   "author": "안현서",
    "visibility": "org",
-   "reuse_count": 3,
-   "cited_by": [
-    "verification",
-    "analog",
-    "product"
-   ],
-   "created_min_ago": 49759,
-   "summary": "HDMI 송신부 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.",
-   "body": "## 배경\nHDMI 송신부 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.\n\n## 내용\n- 체인 32개 균형 배분, stuck-at 커버리지 96%\n- 스캔 인에이블 타이밍 예외는 백엔드팀과 합의된 제약 사용\n- 삽입 로그 요약은 로컬 Claude 파서로 자동화\n\n_이 문서는 우우진의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 61658,
+   "summary": "L2 캐시 컨트롤러 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.",
+   "body": "## 배경\nL2 캐시 컨트롤러 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.\n\n## 내용\n- 체인 338개 균형 배분, stuck-at 커버리지 98%\n- 스캔 인에이블 타이밍 예외는 백엔드팀과 합의된 제약 사용\n- 삽입 로그 요약은 로컬 Claude 파서로 자동화\n\n_이 문서는 안현서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0002",
-   "title": "MBIST 컨트롤러 삽입 가이드 v3.1",
-   "author": "우우진",
-   "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 3649,
-   "summary": "메모리 BIST 삽입 절차와 QSPI 부트 컨트롤러 적용 시 주의점.",
-   "body": "## 배경\n메모리 BIST 삽입 절차와 QSPI 부트 컨트롤러 적용 시 주의점.\n\n## 내용\n- 공유 컨트롤러 그룹핑 기준: 클록 도메인·전력 도메인 일치\n- 삽입 후 스캔 체인 재정렬 필요 — 백엔드팀 통보 절차 포함\n- 리페어 리소스 계산 표 첨부\n\n_이 문서는 우우진의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "dft-doc-0003",
-   "title": "SD/eMMC 호스트 ATPG 패턴 생성 기록 (5월 4주)",
-   "author": "우우진",
+   "title": "MBIST 컨트롤러 삽입 가이드 v1.5",
+   "author": "안현서",
    "visibility": "space",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 11077,
-   "summary": "NPU 텐서 DMA의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.",
-   "body": "## 배경\nNPU 텐서 DMA의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.\n\n## 내용\n- stuck-at 93% / transition 5패턴 — 압축 옵션 비교표 포함\n- 미검출 폴트 상위 원인: 스캔 불가 셀 — 설계 변경 요청 목록\n- 런 로그 정리는 로컬 Claude로 자동 요약\n\n_이 문서는 우우진의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 2881,
+   "summary": "메모리 BIST 삽입 절차와 NPU 텐서 DMA 적용 시 주의점.",
+   "body": "## 배경\n메모리 BIST 삽입 절차와 NPU 텐서 DMA 적용 시 주의점.\n\n## 내용\n- 공유 컨트롤러 그룹핑 기준: 클록 도메인·전력 도메인 일치\n- 삽입 후 스캔 체인 재정렬 필요 — 백엔드팀 통보 절차 포함\n- 리페어 리소스 계산 표 첨부\n\n_이 문서는 안현서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "dft-doc-0003",
+   "title": "타이머/워치독 ATPG 패턴 생성 기록 (7월 2주)",
+   "author": "안현서",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 2223,
+   "summary": "타이머/워치독의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.",
+   "body": "## 배경\n타이머/워치독의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.\n\n## 내용\n- stuck-at 85% / transition 336패턴 — 압축 옵션 비교표 포함\n- 미검출 폴트 상위 원인: 스캔 불가 셀 — 설계 변경 요청 목록\n- 런 로그 정리는 로컬 Claude로 자동 요약\n\n_이 문서는 안현서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0004",
    "title": "테스터 패턴 포맷 변환 스크립트 (STIL→WGL)",
-   "author": "류세준",
+   "author": "고예린",
    "visibility": "org",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 93192,
+   "created_min_ago": 81964,
    "summary": "테스터 반입용 패턴 포맷 변환기 — 로컬 Claude로 작성, 타이밍 시트 자동 매핑.",
-   "body": "## 배경\n테스터 반입용 패턴 포맷 변환기 — 로컬 Claude로 작성, 타이밍 시트 자동 매핑.\n\n## 내용\n- STIL 타이밍 블록을 테스터 시트로 매핑 — 수작업 오류 제거\n- 변환 후 첫 195패턴 미니 검증 루틴 포함\n- 신규 테스터 기종 프로파일은 설정 파일로 분리\n\n_이 문서는 류세준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n테스터 반입용 패턴 포맷 변환기 — 로컬 Claude로 작성, 타이밍 시트 자동 매핑.\n\n## 내용\n- STIL 타이밍 블록을 테스터 시트로 매핑 — 수작업 오류 제거\n- 변환 후 첫 180패턴 미니 검증 루틴 포함\n- 신규 테스터 기종 프로파일은 설정 파일로 분리\n\n_이 문서는 고예린의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0005",
-   "title": "전력 관리 유닛(PMU) 스캔 커버리지 하락 분석",
-   "author": "류세준",
-   "visibility": "space",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 100883,
-   "summary": "전력 관리 유닛(PMU) 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.",
-   "body": "## 배경\n전력 관리 유닛(PMU) 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.\n\n## 내용\n- 하락 243건 분석: 스캔 셀 매핑 누락이 대부분 — 체크 스크립트 추가\n- 재발 방지: 넷리스트 릴리즈 시 커버리지 회귀 비교 자동화\n- 분석 과정은 STA 파서(백엔드팀 지식) 참고해 스크립트화\n\n_이 문서는 류세준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "title": "MIPI CSI-2 수신부 스캔 커버리지 하락 분석",
+   "author": "고예린",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "firmware",
+    "verification"
+   ],
+   "created_min_ago": 156037,
+   "summary": "MIPI CSI-2 수신부 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.",
+   "body": "## 배경\nMIPI CSI-2 수신부 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.\n\n## 내용\n- 하락 137건 분석: 스캔 셀 매핑 누락이 대부분 — 체크 스크립트 추가\n- 재발 방지: 넷리스트 릴리즈 시 커버리지 회귀 비교 자동화\n- 분석 과정은 STA 파서(백엔드팀 지식) 참고해 스크립트화\n\n_이 문서는 고예린의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0006",
    "title": "경계 스캔(JTAG) 체인 검증 노트",
-   "author": "류세준",
-   "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 80695,
+   "author": "고예린",
+   "visibility": "space",
+   "reuse_count": 2,
+   "cited_by": [
+    "soc-design",
+    "hr-people"
+   ],
+   "created_min_ago": 115128,
    "summary": "보드 레벨 경계 스캔 체인 구성과 BSDL 검증 기록.",
-   "body": "## 배경\n보드 레벨 경계 스캔 체인 구성과 BSDL 검증 기록.\n\n## 내용\n- BSDL 문법 검증 + 체인 무결성 패턴 — 보드팀 전달 절차\n- IO 셀 타입별 캡처/업데이트 동작 표 정리\n- BSDL 초안은 로컬 Claude로 생성 후 툴 검증\n\n_이 문서는 류세준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n보드 레벨 경계 스캔 체인 구성과 BSDL 검증 기록.\n\n## 내용\n- BSDL 문법 검증 + 체인 무결성 패턴 — 보드팀 전달 절차\n- IO 셀 타입별 캡처/업데이트 동작 표 정리\n- BSDL 초안은 로컬 Claude로 생성 후 툴 검증\n\n_이 문서는 고예린의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0007",
-   "title": "압축 로직(EDT) 설정 실험 v1.9",
-   "author": "류세준",
+   "title": "압축 로직(EDT) 설정 실험 v3.4",
+   "author": "주동현",
    "visibility": "org",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 817,
+   "created_min_ago": 78968,
    "summary": "테스트 압축비 스윕 실험 — 패턴 수·커버리지·면적 트레이드오프.",
-   "body": "## 배경\n테스트 압축비 스윕 실험 — 패턴 수·커버리지·면적 트레이드오프.\n\n## 내용\n- 압축비 361x에서 패턴 수 최소 — 그 이상은 X 마스킹 손해\n- 면적 오버헤드 90% 이내 유지 조건 정리\n- 실험 매트릭스 자동 실행 스크립트 포함\n\n_이 문서는 류세준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n테스트 압축비 스윕 실험 — 패턴 수·커버리지·면적 트레이드오프.\n\n## 내용\n- 압축비 250x에서 패턴 수 최소 — 그 이상은 X 마스킹 손해\n- 면적 오버헤드 86% 이내 유지 조건 정리\n- 실험 매트릭스 자동 실행 스크립트 포함\n\n_이 문서는 주동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0008",
    "title": "번인(Burn-in) 패턴 요구사항 정리",
-   "author": "류세준",
+   "author": "주동현",
    "visibility": "org",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 91808,
+   "created_min_ago": 106862,
    "summary": "신뢰성팀 번인 보드용 패턴 요구사항과 생성 방법 정리.",
-   "body": "## 배경\n신뢰성팀 번인 보드용 패턴 요구사항과 생성 방법 정리.\n\n## 내용\n- 토글률 목표 88% — ATPG 패턴 재활용 + 클록 스킴 조정\n- 전력 제한 내 토글 극대화 조합 실험 기록\n- 신뢰성팀 요구 문서를 로컬 Claude로 요약해 체크리스트화\n\n_이 문서는 류세준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n신뢰성팀 번인 보드용 패턴 요구사항과 생성 방법 정리.\n\n## 내용\n- 토글률 목표 87% — ATPG 패턴 재활용 + 클록 스킴 조정\n- 전력 제한 내 토글 극대화 조합 실험 기록\n- 신뢰성팀 요구 문서를 로컬 Claude로 요약해 체크리스트화\n\n_이 문서는 주동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0009",
-   "title": "SD/eMMC 호스트 테스트 액세스 설계 노트",
-   "author": "류세준",
+   "title": "eFuse 컨트롤러 테스트 액세스 설계 노트",
+   "author": "주동현",
    "visibility": "org",
-   "reuse_count": 1,
-   "cited_by": [
-    "verification"
-   ],
-   "created_min_ago": 97810,
-   "summary": "MIPI CSI-2 수신부 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.",
-   "body": "## 배경\nMIPI CSI-2 수신부 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.\n\n## 내용\n- 관측점 290개 — 미검출 폴트 밀집 영역 우선\n- 기능 경로 타이밍 영향 없음 확인 (백엔드팀 STA 교차 확인)\n- 액세스 맵은 브링업 디버깅용으로 펌웨어팀에도 공유\n\n_이 문서는 류세준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 79081,
+   "summary": "eFuse 컨트롤러 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.",
+   "body": "## 배경\neFuse 컨트롤러 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.\n\n## 내용\n- 관측점 290개 — 미검출 폴트 밀집 영역 우선\n- 기능 경로 타이밍 영향 없음 확인 (백엔드팀 STA 교차 확인)\n- 액세스 맵은 브링업 디버깅용으로 펌웨어팀에도 공유\n\n_이 문서는 주동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0010",
-   "title": "테스트 시간 절감 실험 (5월 3주)",
-   "author": "심세준",
-   "visibility": "org",
-   "reuse_count": 1,
-   "cited_by": [
-    "hr-people"
-   ],
-   "created_min_ago": 3534,
+   "title": "테스트 시간 절감 실험 (7월 3주)",
+   "author": "주동현",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 57288,
    "summary": "패턴 재배열·동시 측정으로 테스트 시간을 줄인 실험 기록.",
-   "body": "## 배경\n패턴 재배열·동시 측정으로 테스트 시간을 줄인 실험 기록.\n\n## 내용\n- 패턴 그룹 재배열로 인덱스 시간 99% 절감\n- 동시 측정 가능 블록 조합 표 — 전력 제약 내 선별\n- 테스터 로그 분석은 로컬 Claude 스크립트 사용\n\n_이 문서는 심세준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n패턴 재배열·동시 측정으로 테스트 시간을 줄인 실험 기록.\n\n## 내용\n- 패턴 그룹 재배열로 인덱스 시간 93% 절감\n- 동시 측정 가능 블록 조합 표 — 전력 제약 내 선별\n- 테스터 로그 분석은 로컬 Claude 스크립트 사용\n\n_이 문서는 주동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0011",
-   "title": "이미지 전처리 파이프라인(ISP) 스캔 삽입 결과 리포트",
-   "author": "심세준",
-   "visibility": "org",
-   "reuse_count": 10,
+   "title": "SD/eMMC 호스트 스캔 삽입 결과 리포트",
+   "author": "주동현",
+   "visibility": "space",
+   "reuse_count": 3,
    "cited_by": [
-    "soc-design",
-    "firmware",
+    "product",
+    "analog",
     "verification"
    ],
-   "created_min_ago": 49264,
-   "summary": "QSPI 부트 컨트롤러 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.",
-   "body": "## 배경\nQSPI 부트 컨트롤러 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.\n\n## 내용\n- 체인 175개 균형 배분, stuck-at 커버리지 93%\n- 스캔 인에이블 타이밍 예외는 백엔드팀과 합의된 제약 사용\n- 삽입 로그 요약은 로컬 Claude 파서로 자동화\n\n_이 문서는 심세준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 127756,
+   "summary": "SD/eMMC 호스트 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.",
+   "body": "## 배경\nSD/eMMC 호스트 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.\n\n## 내용\n- 체인 350개 균형 배분, stuck-at 커버리지 94%\n- 스캔 인에이블 타이밍 예외는 백엔드팀과 합의된 제약 사용\n- 삽입 로그 요약은 로컬 Claude 파서로 자동화\n\n_이 문서는 주동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0012",
-   "title": "MBIST 컨트롤러 삽입 가이드 v3.5",
-   "author": "심세준",
-   "visibility": "org",
-   "reuse_count": 5,
+   "title": "MBIST 컨트롤러 삽입 가이드 v1.7",
+   "author": "이재윤",
+   "visibility": "space",
+   "reuse_count": 3,
    "cited_by": [
+    "verification",
     "product",
-    "physical-design",
-    "verification"
+    "soc-design"
    ],
-   "created_min_ago": 38721,
-   "summary": "메모리 BIST 삽입 절차와 USB 3.1 컨트롤러 적용 시 주의점.",
-   "body": "## 배경\n메모리 BIST 삽입 절차와 USB 3.1 컨트롤러 적용 시 주의점.\n\n## 내용\n- 공유 컨트롤러 그룹핑 기준: 클록 도메인·전력 도메인 일치\n- 삽입 후 스캔 체인 재정렬 필요 — 백엔드팀 통보 절차 포함\n- 리페어 리소스 계산 표 첨부\n\n_이 문서는 심세준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 61122,
+   "summary": "메모리 BIST 삽입 절차와 eFuse 컨트롤러 적용 시 주의점.",
+   "body": "## 배경\n메모리 BIST 삽입 절차와 eFuse 컨트롤러 적용 시 주의점.\n\n## 내용\n- 공유 컨트롤러 그룹핑 기준: 클록 도메인·전력 도메인 일치\n- 삽입 후 스캔 체인 재정렬 필요 — 백엔드팀 통보 절차 포함\n- 리페어 리소스 계산 표 첨부\n\n_이 문서는 이재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0013",
-   "title": "USB 3.1 컨트롤러 ATPG 패턴 생성 기록 (6월 2주)",
-   "author": "심세준",
-   "visibility": "space",
+   "title": "QSPI 부트 컨트롤러 ATPG 패턴 생성 기록 (7월 1주)",
+   "author": "이재윤",
+   "visibility": "org",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 63895,
-   "summary": "HDMI 송신부의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.",
-   "body": "## 배경\nHDMI 송신부의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.\n\n## 내용\n- stuck-at 87% / transition 212패턴 — 압축 옵션 비교표 포함\n- 미검출 폴트 상위 원인: 스캔 불가 셀 — 설계 변경 요청 목록\n- 런 로그 정리는 로컬 Claude로 자동 요약\n\n_이 문서는 심세준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 923,
+   "summary": "QSPI 부트 컨트롤러의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.",
+   "body": "## 배경\nQSPI 부트 컨트롤러의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.\n\n## 내용\n- stuck-at 97% / transition 360패턴 — 압축 옵션 비교표 포함\n- 미검출 폴트 상위 원인: 스캔 불가 셀 — 설계 변경 요청 목록\n- 런 로그 정리는 로컬 Claude로 자동 요약\n\n_이 문서는 이재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0014",
-   "title": "테스터 패턴 포맷 변환 스크립트 (STIL→WGL) — 7월 1주 갱신",
-   "author": "심세준",
-   "visibility": "space",
-   "reuse_count": 6,
-   "cited_by": [
-    "analog",
-    "firmware",
-    "verification"
-   ],
-   "created_min_ago": 38061,
+   "title": "테스터 패턴 포맷 변환 스크립트 (STIL→WGL) — 7월 3주 갱신",
+   "author": "이재윤",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 14868,
    "summary": "테스터 반입용 패턴 포맷 변환기 — 로컬 Claude로 작성, 타이밍 시트 자동 매핑.",
-   "body": "## 배경\n테스터 반입용 패턴 포맷 변환기 — 로컬 Claude로 작성, 타이밍 시트 자동 매핑.\n\n## 내용\n- STIL 타이밍 블록을 테스터 시트로 매핑 — 수작업 오류 제거\n- 변환 후 첫 321패턴 미니 검증 루틴 포함\n- 신규 테스터 기종 프로파일은 설정 파일로 분리\n\n_이 문서는 심세준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n테스터 반입용 패턴 포맷 변환기 — 로컬 Claude로 작성, 타이밍 시트 자동 매핑.\n\n## 내용\n- STIL 타이밍 블록을 테스터 시트로 매핑 — 수작업 오류 제거\n- 변환 후 첫 369패턴 미니 검증 루틴 포함\n- 신규 테스터 기종 프로파일은 설정 파일로 분리\n\n_이 문서는 이재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0015",
-   "title": "DDR4 컨트롤러 스캔 커버리지 하락 분석",
-   "author": "심세준",
-   "visibility": "space",
-   "reuse_count": 2,
-   "cited_by": [
-    "physical-design",
-    "firmware"
-   ],
-   "created_min_ago": 1025,
-   "summary": "L2 캐시 컨트롤러 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.",
-   "body": "## 배경\nL2 캐시 컨트롤러 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.\n\n## 내용\n- 하락 28건 분석: 스캔 셀 매핑 누락이 대부분 — 체크 스크립트 추가\n- 재발 방지: 넷리스트 릴리즈 시 커버리지 회귀 비교 자동화\n- 분석 과정은 STA 파서(백엔드팀 지식) 참고해 스크립트화\n\n_이 문서는 심세준의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "title": "오디오 I2S 브리지 스캔 커버리지 하락 분석",
+   "author": "이재윤",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 57734,
+   "summary": "오디오 I2S 브리지 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.",
+   "body": "## 배경\n오디오 I2S 브리지 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.\n\n## 내용\n- 하락 102건 분석: 스캔 셀 매핑 누락이 대부분 — 체크 스크립트 추가\n- 재발 방지: 넷리스트 릴리즈 시 커버리지 회귀 비교 자동화\n- 분석 과정은 STA 파서(백엔드팀 지식) 참고해 스크립트화\n\n_이 문서는 이재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0016",
-   "title": "경계 스캔(JTAG) 체인 검증 노트 — 5월 3주 갱신",
-   "author": "안수민",
-   "visibility": "org",
+   "title": "경계 스캔(JTAG) 체인 검증 노트 — 6월 3주 갱신",
+   "author": "이재윤",
+   "visibility": "space",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 47754,
+   "created_min_ago": 2442,
    "summary": "보드 레벨 경계 스캔 체인 구성과 BSDL 검증 기록.",
-   "body": "## 배경\n보드 레벨 경계 스캔 체인 구성과 BSDL 검증 기록.\n\n## 내용\n- BSDL 문법 검증 + 체인 무결성 패턴 — 보드팀 전달 절차\n- IO 셀 타입별 캡처/업데이트 동작 표 정리\n- BSDL 초안은 로컬 Claude로 생성 후 툴 검증\n\n_이 문서는 안수민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n보드 레벨 경계 스캔 체인 구성과 BSDL 검증 기록.\n\n## 내용\n- BSDL 문법 검증 + 체인 무결성 패턴 — 보드팀 전달 절차\n- IO 셀 타입별 캡처/업데이트 동작 표 정리\n- BSDL 초안은 로컬 Claude로 생성 후 툴 검증\n\n_이 문서는 이재윤의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0017",
-   "title": "압축 로직(EDT) 설정 실험 v2.4",
-   "author": "안수민",
+   "title": "압축 로직(EDT) 설정 실험 v3.0",
+   "author": "박건우",
    "visibility": "org",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 3897,
+   "created_min_ago": 2270,
    "summary": "테스트 압축비 스윕 실험 — 패턴 수·커버리지·면적 트레이드오프.",
-   "body": "## 배경\n테스트 압축비 스윕 실험 — 패턴 수·커버리지·면적 트레이드오프.\n\n## 내용\n- 압축비 231x에서 패턴 수 최소 — 그 이상은 X 마스킹 손해\n- 면적 오버헤드 86% 이내 유지 조건 정리\n- 실험 매트릭스 자동 실행 스크립트 포함\n\n_이 문서는 안수민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n테스트 압축비 스윕 실험 — 패턴 수·커버리지·면적 트레이드오프.\n\n## 내용\n- 압축비 112x에서 패턴 수 최소 — 그 이상은 X 마스킹 손해\n- 면적 오버헤드 94% 이내 유지 조건 정리\n- 실험 매트릭스 자동 실행 스크립트 포함\n\n_이 문서는 박건우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0018",
-   "title": "번인(Burn-in) 패턴 요구사항 정리 — 5월 3주 갱신",
-   "author": "안수민",
-   "visibility": "org",
+   "title": "번인(Burn-in) 패턴 요구사항 정리 — 6월 1주 갱신",
+   "author": "박건우",
+   "visibility": "space",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 66682,
+   "created_min_ago": 39779,
    "summary": "신뢰성팀 번인 보드용 패턴 요구사항과 생성 방법 정리.",
-   "body": "## 배경\n신뢰성팀 번인 보드용 패턴 요구사항과 생성 방법 정리.\n\n## 내용\n- 토글률 목표 96% — ATPG 패턴 재활용 + 클록 스킴 조정\n- 전력 제한 내 토글 극대화 조합 실험 기록\n- 신뢰성팀 요구 문서를 로컬 Claude로 요약해 체크리스트화\n\n_이 문서는 안수민의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n신뢰성팀 번인 보드용 패턴 요구사항과 생성 방법 정리.\n\n## 내용\n- 토글률 목표 95% — ATPG 패턴 재활용 + 클록 스킴 조정\n- 전력 제한 내 토글 극대화 조합 실험 기록\n- 신뢰성팀 요구 문서를 로컬 Claude로 요약해 체크리스트화\n\n_이 문서는 박건우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0019",
-   "title": "L2 캐시 컨트롤러 테스트 액세스 설계 노트",
-   "author": "류지훈",
-   "visibility": "org",
-   "reuse_count": 1,
-   "cited_by": [
-    "verification"
-   ],
-   "created_min_ago": 1508,
-   "summary": "DDR4 컨트롤러 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.",
-   "body": "## 배경\nDDR4 컨트롤러 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.\n\n## 내용\n- 관측점 193개 — 미검출 폴트 밀집 영역 우선\n- 기능 경로 타이밍 영향 없음 확인 (백엔드팀 STA 교차 확인)\n- 액세스 맵은 브링업 디버깅용으로 펌웨어팀에도 공유\n\n_이 문서는 류지훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "title": "전력 관리 유닛(PMU) 테스트 액세스 설계 노트",
+   "author": "박건우",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 26659,
+   "summary": "전력 관리 유닛(PMU) 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.",
+   "body": "## 배경\n전력 관리 유닛(PMU) 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.\n\n## 내용\n- 관측점 228개 — 미검출 폴트 밀집 영역 우선\n- 기능 경로 타이밍 영향 없음 확인 (백엔드팀 STA 교차 확인)\n- 액세스 맵은 브링업 디버깅용으로 펌웨어팀에도 공유\n\n_이 문서는 박건우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0020",
-   "title": "테스트 시간 절감 실험 (7월 3주)",
-   "author": "류지훈",
-   "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 61833,
+   "title": "테스트 시간 절감 실험 (5월 4주)",
+   "author": "박건우",
+   "visibility": "space",
+   "reuse_count": 15,
+   "cited_by": [
+    "verification",
+    "analog",
+    "physical-design"
+   ],
+   "created_min_ago": 900,
    "summary": "패턴 재배열·동시 측정으로 테스트 시간을 줄인 실험 기록.",
-   "body": "## 배경\n패턴 재배열·동시 측정으로 테스트 시간을 줄인 실험 기록.\n\n## 내용\n- 패턴 그룹 재배열로 인덱스 시간 94% 절감\n- 동시 측정 가능 블록 조합 표 — 전력 제약 내 선별\n- 테스터 로그 분석은 로컬 Claude 스크립트 사용\n\n_이 문서는 류지훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n패턴 재배열·동시 측정으로 테스트 시간을 줄인 실험 기록.\n\n## 내용\n- 패턴 그룹 재배열로 인덱스 시간 97% 절감\n- 동시 측정 가능 블록 조합 표 — 전력 제약 내 선별\n- 테스터 로그 분석은 로컬 Claude 스크립트 사용\n\n_이 문서는 박건우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0021",
-   "title": "인터럽트 컨트롤러(GIC) 스캔 삽입 결과 리포트",
-   "author": "류지훈",
+   "title": "USB 3.1 컨트롤러 스캔 삽입 결과 리포트",
+   "author": "박건우",
    "visibility": "space",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 464,
+   "created_min_ago": 626,
    "summary": "USB 3.1 컨트롤러 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.",
-   "body": "## 배경\nUSB 3.1 컨트롤러 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.\n\n## 내용\n- 체인 34개 균형 배분, stuck-at 커버리지 86%\n- 스캔 인에이블 타이밍 예외는 백엔드팀과 합의된 제약 사용\n- 삽입 로그 요약은 로컬 Claude 파서로 자동화\n\n_이 문서는 류지훈의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\nUSB 3.1 컨트롤러 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.\n\n## 내용\n- 체인 193개 균형 배분, stuck-at 커버리지 92%\n- 스캔 인에이블 타이밍 예외는 백엔드팀과 합의된 제약 사용\n- 삽입 로그 요약은 로컬 Claude 파서로 자동화\n\n_이 문서는 박건우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0022",
-   "title": "MBIST 컨트롤러 삽입 가이드 v2.6",
-   "author": "송재원",
-   "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 1991,
-   "summary": "메모리 BIST 삽입 절차와 JTAG 디버그 브리지 적용 시 주의점.",
-   "body": "## 배경\n메모리 BIST 삽입 절차와 JTAG 디버그 브리지 적용 시 주의점.\n\n## 내용\n- 공유 컨트롤러 그룹핑 기준: 클록 도메인·전력 도메인 일치\n- 삽입 후 스캔 체인 재정렬 필요 — 백엔드팀 통보 절차 포함\n- 리페어 리소스 계산 표 첨부\n\n_이 문서는 송재원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "title": "MBIST 컨트롤러 삽입 가이드 v1.1",
+   "author": "박건우",
+   "visibility": "space",
+   "reuse_count": 4,
+   "cited_by": [
+    "hr-people",
+    "product",
+    "physical-design"
+   ],
+   "created_min_ago": 100796,
+   "summary": "메모리 BIST 삽입 절차와 HDMI 송신부 적용 시 주의점.",
+   "body": "## 배경\n메모리 BIST 삽입 절차와 HDMI 송신부 적용 시 주의점.\n\n## 내용\n- 공유 컨트롤러 그룹핑 기준: 클록 도메인·전력 도메인 일치\n- 삽입 후 스캔 체인 재정렬 필요 — 백엔드팀 통보 절차 포함\n- 리페어 리소스 계산 표 첨부\n\n_이 문서는 박건우의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0023",
-   "title": "오디오 I2S 브리지 ATPG 패턴 생성 기록 (6월 4주)",
-   "author": "송재원",
+   "title": "DDR4 컨트롤러 ATPG 패턴 생성 기록 (7월 2주)",
+   "author": "곽민재",
    "visibility": "space",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 145326,
-   "summary": "HDMI 송신부의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.",
-   "body": "## 배경\nHDMI 송신부의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.\n\n## 내용\n- stuck-at 95% / transition 366패턴 — 압축 옵션 비교표 포함\n- 미검출 폴트 상위 원인: 스캔 불가 셀 — 설계 변경 요청 목록\n- 런 로그 정리는 로컬 Claude로 자동 요약\n\n_이 문서는 송재원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 28339,
+   "summary": "DDR4 컨트롤러의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.",
+   "body": "## 배경\nDDR4 컨트롤러의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.\n\n## 내용\n- stuck-at 88% / transition 145패턴 — 압축 옵션 비교표 포함\n- 미검출 폴트 상위 원인: 스캔 불가 셀 — 설계 변경 요청 목록\n- 런 로그 정리는 로컬 Claude로 자동 요약\n\n_이 문서는 곽민재의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0024",
-   "title": "테스터 패턴 포맷 변환 스크립트 (STIL→WGL) — 6월 4주 갱신",
-   "author": "송재원",
-   "visibility": "org",
-   "reuse_count": 12,
-   "cited_by": [
-    "product",
-    "firmware",
-    "analog"
-   ],
-   "created_min_ago": 395,
-   "summary": "테스터 반입용 패턴 포맷 변환기 — 로컬 Claude로 작성, 타이밍 시트 자동 매핑.",
-   "body": "## 배경\n테스터 반입용 패턴 포맷 변환기 — 로컬 Claude로 작성, 타이밍 시트 자동 매핑.\n\n## 내용\n- STIL 타이밍 블록을 테스터 시트로 매핑 — 수작업 오류 제거\n- 변환 후 첫 94패턴 미니 검증 루틴 포함\n- 신규 테스터 기종 프로파일은 설정 파일로 분리\n\n_이 문서는 송재원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "dft-doc-0025",
-   "title": "이더넷 MAC 스캔 커버리지 하락 분석",
-   "author": "송재원",
-   "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 90374,
-   "summary": "DMA 컨트롤러 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.",
-   "body": "## 배경\nDMA 컨트롤러 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.\n\n## 내용\n- 하락 397건 분석: 스캔 셀 매핑 누락이 대부분 — 체크 스크립트 추가\n- 재발 방지: 넷리스트 릴리즈 시 커버리지 회귀 비교 자동화\n- 분석 과정은 STA 파서(백엔드팀 지식) 참고해 스크립트화\n\n_이 문서는 송재원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "dft-doc-0026",
-   "title": "경계 스캔(JTAG) 체인 검증 노트 — 7월 2주 갱신",
-   "author": "송재원",
+   "title": "테스터 패턴 포맷 변환 스크립트 (STIL→WGL) — 7월 1주 갱신",
+   "author": "곽민재",
    "visibility": "space",
    "reuse_count": 2,
    "cited_by": [
     "physical-design",
     "product"
    ],
-   "created_min_ago": 60996,
+   "created_min_ago": 94444,
+   "summary": "테스터 반입용 패턴 포맷 변환기 — 로컬 Claude로 작성, 타이밍 시트 자동 매핑.",
+   "body": "## 배경\n테스터 반입용 패턴 포맷 변환기 — 로컬 Claude로 작성, 타이밍 시트 자동 매핑.\n\n## 내용\n- STIL 타이밍 블록을 테스터 시트로 매핑 — 수작업 오류 제거\n- 변환 후 첫 314패턴 미니 검증 루틴 포함\n- 신규 테스터 기종 프로파일은 설정 파일로 분리\n\n_이 문서는 곽민재의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "dft-doc-0025",
+   "title": "타이머/워치독 스캔 커버리지 하락 분석",
+   "author": "곽민재",
+   "visibility": "org",
+   "reuse_count": 1,
+   "cited_by": [
+    "product"
+   ],
+   "created_min_ago": 743,
+   "summary": "타이머/워치독 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.",
+   "body": "## 배경\n타이머/워치독 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.\n\n## 내용\n- 하락 278건 분석: 스캔 셀 매핑 누락이 대부분 — 체크 스크립트 추가\n- 재발 방지: 넷리스트 릴리즈 시 커버리지 회귀 비교 자동화\n- 분석 과정은 STA 파서(백엔드팀 지식) 참고해 스크립트화\n\n_이 문서는 곽민재의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "dft-doc-0026",
+   "title": "경계 스캔(JTAG) 체인 검증 노트 — 6월 2주 갱신",
+   "author": "곽민재",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 100063,
    "summary": "보드 레벨 경계 스캔 체인 구성과 BSDL 검증 기록.",
-   "body": "## 배경\n보드 레벨 경계 스캔 체인 구성과 BSDL 검증 기록.\n\n## 내용\n- BSDL 문법 검증 + 체인 무결성 패턴 — 보드팀 전달 절차\n- IO 셀 타입별 캡처/업데이트 동작 표 정리\n- BSDL 초안은 로컬 Claude로 생성 후 툴 검증\n\n_이 문서는 송재원의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n보드 레벨 경계 스캔 체인 구성과 BSDL 검증 기록.\n\n## 내용\n- BSDL 문법 검증 + 체인 무결성 패턴 — 보드팀 전달 절차\n- IO 셀 타입별 캡처/업데이트 동작 표 정리\n- BSDL 초안은 로컬 Claude로 생성 후 툴 검증\n\n_이 문서는 곽민재의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0027",
-   "title": "압축 로직(EDT) 설정 실험 v3.7",
-   "author": "이민재",
+   "title": "압축 로직(EDT) 설정 실험 v1.8",
+   "author": "허민재",
    "visibility": "space",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 67640,
+   "reuse_count": 1,
+   "cited_by": [
+    "soc-design"
+   ],
+   "created_min_ago": 166763,
    "summary": "테스트 압축비 스윕 실험 — 패턴 수·커버리지·면적 트레이드오프.",
-   "body": "## 배경\n테스트 압축비 스윕 실험 — 패턴 수·커버리지·면적 트레이드오프.\n\n## 내용\n- 압축비 367x에서 패턴 수 최소 — 그 이상은 X 마스킹 손해\n- 면적 오버헤드 93% 이내 유지 조건 정리\n- 실험 매트릭스 자동 실행 스크립트 포함\n\n_이 문서는 이민재의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n테스트 압축비 스윕 실험 — 패턴 수·커버리지·면적 트레이드오프.\n\n## 내용\n- 압축비 41x에서 패턴 수 최소 — 그 이상은 X 마스킹 손해\n- 면적 오버헤드 94% 이내 유지 조건 정리\n- 실험 매트릭스 자동 실행 스크립트 포함\n\n_이 문서는 허민재의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0028",
-   "title": "번인(Burn-in) 패턴 요구사항 정리 — 7월 3주 갱신",
-   "author": "이민재",
+   "title": "번인(Burn-in) 패턴 요구사항 정리 — 7월 2주 갱신",
+   "author": "허민재",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 37734,
+   "summary": "신뢰성팀 번인 보드용 패턴 요구사항과 생성 방법 정리.",
+   "body": "## 배경\n신뢰성팀 번인 보드용 패턴 요구사항과 생성 방법 정리.\n\n## 내용\n- 토글률 목표 88% — ATPG 패턴 재활용 + 클록 스킴 조정\n- 전력 제한 내 토글 극대화 조합 실험 기록\n- 신뢰성팀 요구 문서를 로컬 Claude로 요약해 체크리스트화\n\n_이 문서는 허민재의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "dft-doc-0029",
+   "title": "L2 캐시 컨트롤러 테스트 액세스 설계 노트",
+   "author": "허민재",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 2779,
+   "summary": "L2 캐시 컨트롤러 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.",
+   "body": "## 배경\nL2 캐시 컨트롤러 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.\n\n## 내용\n- 관측점 396개 — 미검출 폴트 밀집 영역 우선\n- 기능 경로 타이밍 영향 없음 확인 (백엔드팀 STA 교차 확인)\n- 액세스 맵은 브링업 디버깅용으로 펌웨어팀에도 공유\n\n_이 문서는 허민재의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "dft-doc-0030",
+   "title": "테스트 시간 절감 실험 (6월 1주)",
+   "author": "허민재",
+   "visibility": "org",
+   "reuse_count": 2,
+   "cited_by": [
+    "hr-people",
+    "soc-design"
+   ],
+   "created_min_ago": 720,
+   "summary": "패턴 재배열·동시 측정으로 테스트 시간을 줄인 실험 기록.",
+   "body": "## 배경\n패턴 재배열·동시 측정으로 테스트 시간을 줄인 실험 기록.\n\n## 내용\n- 패턴 그룹 재배열로 인덱스 시간 89% 절감\n- 동시 측정 가능 블록 조합 표 — 전력 제약 내 선별\n- 테스터 로그 분석은 로컬 Claude 스크립트 사용\n\n_이 문서는 허민재의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "dft-doc-0031",
+   "title": "PCIe Gen4 컨트롤러 스캔 삽입 결과 리포트",
+   "author": "허민재",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 4178,
+   "summary": "PCIe Gen4 컨트롤러 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.",
+   "body": "## 배경\nPCIe Gen4 컨트롤러 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.\n\n## 내용\n- 체인 50개 균형 배분, stuck-at 커버리지 93%\n- 스캔 인에이블 타이밍 예외는 백엔드팀과 합의된 제약 사용\n- 삽입 로그 요약은 로컬 Claude 파서로 자동화\n\n_이 문서는 허민재의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "dft-doc-0032",
+   "title": "MBIST 컨트롤러 삽입 가이드 v1.6",
+   "author": "성동현",
    "visibility": "space",
    "reuse_count": 1,
    "cited_by": [
     "verification"
    ],
-   "created_min_ago": 3921,
-   "summary": "신뢰성팀 번인 보드용 패턴 요구사항과 생성 방법 정리.",
-   "body": "## 배경\n신뢰성팀 번인 보드용 패턴 요구사항과 생성 방법 정리.\n\n## 내용\n- 토글률 목표 86% — ATPG 패턴 재활용 + 클록 스킴 조정\n- 전력 제한 내 토글 극대화 조합 실험 기록\n- 신뢰성팀 요구 문서를 로컬 Claude로 요약해 체크리스트화\n\n_이 문서는 이민재의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "dft-doc-0029",
-   "title": "DMA 컨트롤러 테스트 액세스 설계 노트",
-   "author": "이민재",
-   "visibility": "org",
-   "reuse_count": 8,
-   "cited_by": [
-    "verification",
-    "analog",
-    "physical-design"
-   ],
-   "created_min_ago": 1944,
-   "summary": "MIPI CSI-2 수신부 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.",
-   "body": "## 배경\nMIPI CSI-2 수신부 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.\n\n## 내용\n- 관측점 356개 — 미검출 폴트 밀집 영역 우선\n- 기능 경로 타이밍 영향 없음 확인 (백엔드팀 STA 교차 확인)\n- 액세스 맵은 브링업 디버깅용으로 펌웨어팀에도 공유\n\n_이 문서는 이민재의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "dft-doc-0030",
-   "title": "테스트 시간 절감 실험 (6월 4주)",
-   "author": "최준서",
-   "visibility": "org",
-   "reuse_count": 2,
-   "cited_by": [
-    "verification",
-    "physical-design"
-   ],
-   "created_min_ago": 29632,
-   "summary": "패턴 재배열·동시 측정으로 테스트 시간을 줄인 실험 기록.",
-   "body": "## 배경\n패턴 재배열·동시 측정으로 테스트 시간을 줄인 실험 기록.\n\n## 내용\n- 패턴 그룹 재배열로 인덱스 시간 98% 절감\n- 동시 측정 가능 블록 조합 표 — 전력 제약 내 선별\n- 테스터 로그 분석은 로컬 Claude 스크립트 사용\n\n_이 문서는 최준서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "dft-doc-0031",
-   "title": "QSPI 부트 컨트롤러 스캔 삽입 결과 리포트",
-   "author": "최준서",
-   "visibility": "space",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 26979,
-   "summary": "오디오 I2S 브리지 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.",
-   "body": "## 배경\n오디오 I2S 브리지 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.\n\n## 내용\n- 체인 350개 균형 배분, stuck-at 커버리지 95%\n- 스캔 인에이블 타이밍 예외는 백엔드팀과 합의된 제약 사용\n- 삽입 로그 요약은 로컬 Claude 파서로 자동화\n\n_이 문서는 최준서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
-  },
-  {
-   "doc_id": "dft-doc-0032",
-   "title": "MBIST 컨트롤러 삽입 가이드 v1.5",
-   "author": "최준서",
-   "visibility": "org",
-   "reuse_count": 3,
-   "cited_by": [
-    "verification",
-    "hr-people",
-    "analog"
-   ],
-   "created_min_ago": 449,
-   "summary": "메모리 BIST 삽입 절차와 전력 관리 유닛(PMU) 적용 시 주의점.",
-   "body": "## 배경\n메모리 BIST 삽입 절차와 전력 관리 유닛(PMU) 적용 시 주의점.\n\n## 내용\n- 공유 컨트롤러 그룹핑 기준: 클록 도메인·전력 도메인 일치\n- 삽입 후 스캔 체인 재정렬 필요 — 백엔드팀 통보 절차 포함\n- 리페어 리소스 계산 표 첨부\n\n_이 문서는 최준서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 3877,
+   "summary": "메모리 BIST 삽입 절차와 DDR4 컨트롤러 적용 시 주의점.",
+   "body": "## 배경\n메모리 BIST 삽입 절차와 DDR4 컨트롤러 적용 시 주의점.\n\n## 내용\n- 공유 컨트롤러 그룹핑 기준: 클록 도메인·전력 도메인 일치\n- 삽입 후 스캔 체인 재정렬 필요 — 백엔드팀 통보 절차 포함\n- 리페어 리소스 계산 표 첨부\n\n_이 문서는 성동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0033",
-   "title": "HDMI 송신부 ATPG 패턴 생성 기록 (7월 1주)",
-   "author": "오동현",
-   "visibility": "space",
+   "title": "eFuse 컨트롤러 ATPG 패턴 생성 기록 (6월 3주)",
+   "author": "성동현",
+   "visibility": "org",
    "reuse_count": 2,
    "cited_by": [
-    "soc-design",
+    "analog",
     "firmware"
    ],
-   "created_min_ago": 1345,
-   "summary": "이더넷 MAC의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.",
-   "body": "## 배경\n이더넷 MAC의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.\n\n## 내용\n- stuck-at 93% / transition 367패턴 — 압축 옵션 비교표 포함\n- 미검출 폴트 상위 원인: 스캔 불가 셀 — 설계 변경 요청 목록\n- 런 로그 정리는 로컬 Claude로 자동 요약\n\n_이 문서는 오동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 2401,
+   "summary": "eFuse 컨트롤러의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.",
+   "body": "## 배경\neFuse 컨트롤러의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.\n\n## 내용\n- stuck-at 99% / transition 349패턴 — 압축 옵션 비교표 포함\n- 미검출 폴트 상위 원인: 스캔 불가 셀 — 설계 변경 요청 목록\n- 런 로그 정리는 로컬 Claude로 자동 요약\n\n_이 문서는 성동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0034",
-   "title": "테스터 패턴 포맷 변환 스크립트 (STIL→WGL) — 7월 2주 갱신",
-   "author": "오동현",
+   "title": "테스터 패턴 포맷 변환 스크립트 (STIL→WGL) — 5월 3주 갱신",
+   "author": "성동현",
    "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 103532,
+   "reuse_count": 5,
+   "cited_by": [
+    "verification",
+    "physical-design",
+    "hr-people"
+   ],
+   "created_min_ago": 141570,
    "summary": "테스터 반입용 패턴 포맷 변환기 — 로컬 Claude로 작성, 타이밍 시트 자동 매핑.",
-   "body": "## 배경\n테스터 반입용 패턴 포맷 변환기 — 로컬 Claude로 작성, 타이밍 시트 자동 매핑.\n\n## 내용\n- STIL 타이밍 블록을 테스터 시트로 매핑 — 수작업 오류 제거\n- 변환 후 첫 19패턴 미니 검증 루틴 포함\n- 신규 테스터 기종 프로파일은 설정 파일로 분리\n\n_이 문서는 오동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n테스터 반입용 패턴 포맷 변환기 — 로컬 Claude로 작성, 타이밍 시트 자동 매핑.\n\n## 내용\n- STIL 타이밍 블록을 테스터 시트로 매핑 — 수작업 오류 제거\n- 변환 후 첫 148패턴 미니 검증 루틴 포함\n- 신규 테스터 기종 프로파일은 설정 파일로 분리\n\n_이 문서는 성동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0035",
-   "title": "eFuse 컨트롤러 스캔 커버리지 하락 분석",
-   "author": "오동현",
-   "visibility": "org",
+   "title": "HDMI 송신부 스캔 커버리지 하락 분석",
+   "author": "성동현",
+   "visibility": "space",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 7583,
-   "summary": "USB 3.1 컨트롤러 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.",
-   "body": "## 배경\nUSB 3.1 컨트롤러 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.\n\n## 내용\n- 하락 139건 분석: 스캔 셀 매핑 누락이 대부분 — 체크 스크립트 추가\n- 재발 방지: 넷리스트 릴리즈 시 커버리지 회귀 비교 자동화\n- 분석 과정은 STA 파서(백엔드팀 지식) 참고해 스크립트화\n\n_이 문서는 오동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 1683,
+   "summary": "HDMI 송신부 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.",
+   "body": "## 배경\nHDMI 송신부 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.\n\n## 내용\n- 하락 169건 분석: 스캔 셀 매핑 누락이 대부분 — 체크 스크립트 추가\n- 재발 방지: 넷리스트 릴리즈 시 커버리지 회귀 비교 자동화\n- 분석 과정은 STA 파서(백엔드팀 지식) 참고해 스크립트화\n\n_이 문서는 성동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0036",
    "title": "경계 스캔(JTAG) 체인 검증 노트 — 7월 1주 갱신",
-   "author": "오동현",
+   "author": "성동현",
    "visibility": "space",
-   "reuse_count": 2,
+   "reuse_count": 6,
    "cited_by": [
-    "verification",
-    "soc-design"
+    "firmware",
+    "physical-design",
+    "product"
    ],
-   "created_min_ago": 92164,
+   "created_min_ago": 1093,
    "summary": "보드 레벨 경계 스캔 체인 구성과 BSDL 검증 기록.",
-   "body": "## 배경\n보드 레벨 경계 스캔 체인 구성과 BSDL 검증 기록.\n\n## 내용\n- BSDL 문법 검증 + 체인 무결성 패턴 — 보드팀 전달 절차\n- IO 셀 타입별 캡처/업데이트 동작 표 정리\n- BSDL 초안은 로컬 Claude로 생성 후 툴 검증\n\n_이 문서는 오동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n보드 레벨 경계 스캔 체인 구성과 BSDL 검증 기록.\n\n## 내용\n- BSDL 문법 검증 + 체인 무결성 패턴 — 보드팀 전달 절차\n- IO 셀 타입별 캡처/업데이트 동작 표 정리\n- BSDL 초안은 로컬 Claude로 생성 후 툴 검증\n\n_이 문서는 성동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0037",
-   "title": "압축 로직(EDT) 설정 실험 v3.2",
-   "author": "오동현",
-   "visibility": "space",
-   "reuse_count": 1,
-   "cited_by": [
-    "verification"
-   ],
-   "created_min_ago": 2388,
+   "title": "압축 로직(EDT) 설정 실험 v2.4",
+   "author": "성서현",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 98362,
    "summary": "테스트 압축비 스윕 실험 — 패턴 수·커버리지·면적 트레이드오프.",
-   "body": "## 배경\n테스트 압축비 스윕 실험 — 패턴 수·커버리지·면적 트레이드오프.\n\n## 내용\n- 압축비 128x에서 패턴 수 최소 — 그 이상은 X 마스킹 손해\n- 면적 오버헤드 93% 이내 유지 조건 정리\n- 실험 매트릭스 자동 실행 스크립트 포함\n\n_이 문서는 오동현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n테스트 압축비 스윕 실험 — 패턴 수·커버리지·면적 트레이드오프.\n\n## 내용\n- 압축비 217x에서 패턴 수 최소 — 그 이상은 X 마스킹 손해\n- 면적 오버헤드 86% 이내 유지 조건 정리\n- 실험 매트릭스 자동 실행 스크립트 포함\n\n_이 문서는 성서현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0038",
    "title": "번인(Burn-in) 패턴 요구사항 정리 — 6월 4주 갱신",
-   "author": "고민서",
+   "author": "성서현",
    "visibility": "org",
-   "reuse_count": 0,
-   "cited_by": [],
-   "created_min_ago": 699,
+   "reuse_count": 3,
+   "cited_by": [
+    "firmware",
+    "physical-design",
+    "verification"
+   ],
+   "created_min_ago": 3011,
    "summary": "신뢰성팀 번인 보드용 패턴 요구사항과 생성 방법 정리.",
-   "body": "## 배경\n신뢰성팀 번인 보드용 패턴 요구사항과 생성 방법 정리.\n\n## 내용\n- 토글률 목표 92% — ATPG 패턴 재활용 + 클록 스킴 조정\n- 전력 제한 내 토글 극대화 조합 실험 기록\n- 신뢰성팀 요구 문서를 로컬 Claude로 요약해 체크리스트화\n\n_이 문서는 고민서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n신뢰성팀 번인 보드용 패턴 요구사항과 생성 방법 정리.\n\n## 내용\n- 토글률 목표 87% — ATPG 패턴 재활용 + 클록 스킴 조정\n- 전력 제한 내 토글 극대화 조합 실험 기록\n- 신뢰성팀 요구 문서를 로컬 Claude로 요약해 체크리스트화\n\n_이 문서는 성서현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0039",
-   "title": "PCIe Gen4 컨트롤러 테스트 액세스 설계 노트",
-   "author": "고민서",
+   "title": "이미지 전처리 파이프라인(ISP) 테스트 액세스 설계 노트",
+   "author": "성서현",
    "visibility": "space",
-   "reuse_count": 1,
-   "cited_by": [
-    "product"
-   ],
-   "created_min_ago": 786,
-   "summary": "NoC 라우터 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.",
-   "body": "## 배경\nNoC 라우터 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.\n\n## 내용\n- 관측점 44개 — 미검출 폴트 밀집 영역 우선\n- 기능 경로 타이밍 영향 없음 확인 (백엔드팀 STA 교차 확인)\n- 액세스 맵은 브링업 디버깅용으로 펌웨어팀에도 공유\n\n_이 문서는 고민서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 2352,
+   "summary": "이미지 전처리 파이프라인(ISP) 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.",
+   "body": "## 배경\n이미지 전처리 파이프라인(ISP) 내부 신호의 테스트 액세스(관측/제어점) 삽입 결정 기록.\n\n## 내용\n- 관측점 136개 — 미검출 폴트 밀집 영역 우선\n- 기능 경로 타이밍 영향 없음 확인 (백엔드팀 STA 교차 확인)\n- 액세스 맵은 브링업 디버깅용으로 펌웨어팀에도 공유\n\n_이 문서는 성서현의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0040",
-   "title": "테스트 시간 절감 실험 (7월 2주)",
-   "author": "고민서",
+   "title": "테스트 시간 절감 실험 (6월 4주)",
+   "author": "허미나",
    "visibility": "org",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 3374,
+   "created_min_ago": 876,
    "summary": "패턴 재배열·동시 측정으로 테스트 시간을 줄인 실험 기록.",
-   "body": "## 배경\n패턴 재배열·동시 측정으로 테스트 시간을 줄인 실험 기록.\n\n## 내용\n- 패턴 그룹 재배열로 인덱스 시간 88% 절감\n- 동시 측정 가능 블록 조합 표 — 전력 제약 내 선별\n- 테스터 로그 분석은 로컬 Claude 스크립트 사용\n\n_이 문서는 고민서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\n패턴 재배열·동시 측정으로 테스트 시간을 줄인 실험 기록.\n\n## 내용\n- 패턴 그룹 재배열로 인덱스 시간 85% 절감\n- 동시 측정 가능 블록 조합 표 — 전력 제약 내 선별\n- 테스터 로그 분석은 로컬 Claude 스크립트 사용\n\n_이 문서는 허미나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0041",
-   "title": "DDR4 컨트롤러 스캔 삽입 결과 리포트",
-   "author": "고민서",
-   "visibility": "org",
+   "title": "eFuse 컨트롤러 스캔 삽입 결과 리포트",
+   "author": "허미나",
+   "visibility": "space",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 154151,
+   "created_min_ago": 50336,
    "summary": "eFuse 컨트롤러 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.",
-   "body": "## 배경\neFuse 컨트롤러 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.\n\n## 내용\n- 체인 5개 균형 배분, stuck-at 커버리지 92%\n- 스캔 인에이블 타이밍 예외는 백엔드팀과 합의된 제약 사용\n- 삽입 로그 요약은 로컬 Claude 파서로 자동화\n\n_이 문서는 고민서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "body": "## 배경\neFuse 컨트롤러 스캔 체인 삽입 결과 — 체인 구성·커버리지·타이밍 영향.\n\n## 내용\n- 체인 221개 균형 배분, stuck-at 커버리지 88%\n- 스캔 인에이블 타이밍 예외는 백엔드팀과 합의된 제약 사용\n- 삽입 로그 요약은 로컬 Claude 파서로 자동화\n\n_이 문서는 허미나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   },
   {
    "doc_id": "dft-doc-0042",
-   "title": "MBIST 컨트롤러 삽입 가이드 v1.4",
-   "author": "고민서",
+   "title": "MBIST 컨트롤러 삽입 가이드 v2.4",
+   "author": "허미나",
+   "visibility": "org",
+   "reuse_count": 13,
+   "cited_by": [
+    "verification",
+    "analog",
+    "physical-design"
+   ],
+   "created_min_ago": 160198,
+   "summary": "메모리 BIST 삽입 절차와 QSPI 부트 컨트롤러 적용 시 주의점.",
+   "body": "## 배경\n메모리 BIST 삽입 절차와 QSPI 부트 컨트롤러 적용 시 주의점.\n\n## 내용\n- 공유 컨트롤러 그룹핑 기준: 클록 도메인·전력 도메인 일치\n- 삽입 후 스캔 체인 재정렬 필요 — 백엔드팀 통보 절차 포함\n- 리페어 리소스 계산 표 첨부\n\n_이 문서는 허미나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "dft-doc-0043",
+   "title": "USB 3.1 컨트롤러 ATPG 패턴 생성 기록 (6월 3주)",
+   "author": "허미나",
+   "visibility": "space",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 90742,
+   "summary": "USB 3.1 컨트롤러의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.",
+   "body": "## 배경\nUSB 3.1 컨트롤러의 ATPG 런 설정·커버리지·패턴 수 기록과 압축률 실험.\n\n## 내용\n- stuck-at 90% / transition 264패턴 — 압축 옵션 비교표 포함\n- 미검출 폴트 상위 원인: 스캔 불가 셀 — 설계 변경 요청 목록\n- 런 로그 정리는 로컬 Claude로 자동 요약\n\n_이 문서는 허미나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "dft-doc-0044",
+   "title": "테스터 패턴 포맷 변환 스크립트 (STIL→WGL) — 7월 1주 갱신 (2차)",
+   "author": "허미나",
    "visibility": "org",
    "reuse_count": 0,
    "cited_by": [],
-   "created_min_ago": 131536,
-   "summary": "메모리 BIST 삽입 절차와 SD/eMMC 호스트 적용 시 주의점.",
-   "body": "## 배경\n메모리 BIST 삽입 절차와 SD/eMMC 호스트 적용 시 주의점.\n\n## 내용\n- 공유 컨트롤러 그룹핑 기준: 클록 도메인·전력 도메인 일치\n- 삽입 후 스캔 체인 재정렬 필요 — 백엔드팀 통보 절차 포함\n- 리페어 리소스 계산 표 첨부\n\n_이 문서는 고민서의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+   "created_min_ago": 126344,
+   "summary": "테스터 반입용 패턴 포맷 변환기 — 로컬 Claude로 작성, 타이밍 시트 자동 매핑.",
+   "body": "## 배경\n테스터 반입용 패턴 포맷 변환기 — 로컬 Claude로 작성, 타이밍 시트 자동 매핑.\n\n## 내용\n- STIL 타이밍 블록을 테스터 시트로 매핑 — 수작업 오류 제거\n- 변환 후 첫 171패턴 미니 검증 루틴 포함\n- 신규 테스터 기종 프로파일은 설정 파일로 분리\n\n_이 문서는 허미나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
+  },
+  {
+   "doc_id": "dft-doc-0045",
+   "title": "전력 관리 유닛(PMU) 스캔 커버리지 하락 분석",
+   "author": "허미나",
+   "visibility": "org",
+   "reuse_count": 0,
+   "cited_by": [],
+   "created_min_ago": 99677,
+   "summary": "전력 관리 유닛(PMU) 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.",
+   "body": "## 배경\n전력 관리 유닛(PMU) 커버리지 하락 원인 분석 — 매핑 누락·신규 로직·제약 변화 구분.\n\n## 내용\n- 하락 75건 분석: 스캔 셀 매핑 누락이 대부분 — 체크 스크립트 추가\n- 재발 방지: 넷리스트 릴리즈 시 커버리지 회귀 비교 자동화\n- 분석 과정은 STA 파서(백엔드팀 지식) 참고해 스크립트화\n\n_이 문서는 허미나의 로컬 Claude 세션(a-mate)에서 수집·정리되었습니다._"
   }
  ],
  "reuse_events": [
   {
-   "doc_id": "dft-doc-0024",
+   "doc_id": "dft-doc-0020",
    "source_space": "dft",
-   "consumer_space": "product",
-   "min_ago": 42673,
-   "summary": "DFT팀의 『테스터 패턴 포맷 변환 스크립트 (STIL→WGL) — 6월 4주 갱신』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+   "consumer_space": "verification",
+   "min_ago": 25049,
+   "summary": "DFT팀의 『테스트 시간 절감 실험 (5월 4주)』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "dft-doc-0042",
+   "source_space": "dft",
+   "consumer_space": "verification",
+   "min_ago": 10718,
+   "summary": "DFT팀의 『MBIST 컨트롤러 삽입 가이드 v2.4』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "dft-doc-0036",
+   "source_space": "dft",
+   "consumer_space": "firmware",
+   "min_ago": 15977,
+   "summary": "DFT팀의 『경계 스캔(JTAG) 체인 검증 노트 — 7월 1주 갱신』 지식이 펌웨어개발팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "dft-doc-0034",
+   "source_space": "dft",
+   "consumer_space": "verification",
+   "min_ago": 11992,
+   "summary": "DFT팀의 『테스터 패턴 포맷 변환 스크립트 (STIL→WGL) — 5월 3주 갱신』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "dft-doc-0022",
+   "source_space": "dft",
+   "consumer_space": "hr-people",
+   "min_ago": 28754,
+   "summary": "DFT팀의 『MBIST 컨트롤러 삽입 가이드 v1.1』 지식이 인사팀 (People)에서 재사용되었습니다"
   },
   {
    "doc_id": "dft-doc-0011",
    "source_space": "dft",
-   "consumer_space": "soc-design",
-   "min_ago": 30717,
-   "summary": "DFT팀의 『이미지 전처리 파이프라인(ISP) 스캔 삽입 결과 리포트』 지식이 SoC 설계팀에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "dft-doc-0029",
-   "source_space": "dft",
-   "consumer_space": "verification",
-   "min_ago": 39635,
-   "summary": "DFT팀의 『DMA 컨트롤러 테스트 액세스 설계 노트』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "dft-doc-0014",
-   "source_space": "dft",
-   "consumer_space": "analog",
-   "min_ago": 1881,
-   "summary": "DFT팀의 『테스터 패턴 포맷 변환 스크립트 (STIL→WGL) — 7월 1주 갱신』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
+   "consumer_space": "product",
+   "min_ago": 12707,
+   "summary": "DFT팀의 『SD/eMMC 호스트 스캔 삽입 결과 리포트』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
   },
   {
    "doc_id": "dft-doc-0012",
    "source_space": "dft",
-   "consumer_space": "product",
-   "min_ago": 5987,
-   "summary": "DFT팀의 『MBIST 컨트롤러 삽입 가이드 v3.5』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+   "consumer_space": "verification",
+   "min_ago": 36711,
+   "summary": "DFT팀의 『MBIST 컨트롤러 삽입 가이드 v1.7』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
   },
   {
-   "doc_id": "dft-doc-0001",
+   "doc_id": "dft-doc-0038",
    "source_space": "dft",
-   "consumer_space": "verification",
-   "min_ago": 7396,
-   "summary": "DFT팀의 『DMA 컨트롤러 스캔 삽입 결과 리포트』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
+   "consumer_space": "firmware",
+   "min_ago": 40418,
+   "summary": "DFT팀의 『번인(Burn-in) 패턴 요구사항 정리 — 6월 4주 갱신』 지식이 펌웨어개발팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "dft-doc-0005",
+   "source_space": "dft",
+   "consumer_space": "firmware",
+   "min_ago": 4072,
+   "summary": "DFT팀의 『MIPI CSI-2 수신부 스캔 커버리지 하락 분석』 지식이 펌웨어개발팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "dft-doc-0006",
+   "source_space": "dft",
+   "consumer_space": "soc-design",
+   "min_ago": 19347,
+   "summary": "DFT팀의 『경계 스캔(JTAG) 체인 검증 노트』 지식이 SoC 설계팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "dft-doc-0024",
+   "source_space": "dft",
+   "consumer_space": "physical-design",
+   "min_ago": 29187,
+   "summary": "DFT팀의 『테스터 패턴 포맷 변환 스크립트 (STIL→WGL) — 7월 1주 갱신』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "dft-doc-0030",
+   "source_space": "dft",
+   "consumer_space": "hr-people",
+   "min_ago": 32175,
+   "summary": "DFT팀의 『테스트 시간 절감 실험 (6월 1주)』 지식이 인사팀 (People)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "dft-doc-0033",
+   "source_space": "dft",
+   "consumer_space": "analog",
+   "min_ago": 8178,
+   "summary": "DFT팀의 『eFuse 컨트롤러 ATPG 패턴 생성 기록 (6월 3주)』 지식이 아날로그 설계팀 (AMS)에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "dft-doc-0025",
+   "source_space": "dft",
+   "consumer_space": "product",
+   "min_ago": 3360,
+   "summary": "DFT팀의 『타이머/워치독 스캔 커버리지 하락 분석』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+  },
+  {
+   "doc_id": "dft-doc-0027",
+   "source_space": "dft",
+   "consumer_space": "soc-design",
+   "min_ago": 18771,
+   "summary": "DFT팀의 『압축 로직(EDT) 설정 실험 v1.8』 지식이 SoC 설계팀에서 재사용되었습니다"
   },
   {
    "doc_id": "dft-doc-0032",
    "source_space": "dft",
    "consumer_space": "verification",
-   "min_ago": 3187,
-   "summary": "DFT팀의 『MBIST 컨트롤러 삽입 가이드 v1.5』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "dft-doc-0015",
-   "source_space": "dft",
-   "consumer_space": "physical-design",
-   "min_ago": 24881,
-   "summary": "DFT팀의 『DDR4 컨트롤러 스캔 커버리지 하락 분석』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "dft-doc-0026",
-   "source_space": "dft",
-   "consumer_space": "physical-design",
-   "min_ago": 18614,
-   "summary": "DFT팀의 『경계 스캔(JTAG) 체인 검증 노트 — 7월 2주 갱신』 지식이 백엔드 설계팀 (PD)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "dft-doc-0030",
-   "source_space": "dft",
-   "consumer_space": "verification",
-   "min_ago": 21388,
-   "summary": "DFT팀의 『테스트 시간 절감 실험 (6월 4주)』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "dft-doc-0033",
-   "source_space": "dft",
-   "consumer_space": "soc-design",
-   "min_ago": 9074,
-   "summary": "DFT팀의 『HDMI 송신부 ATPG 패턴 생성 기록 (7월 1주)』 지식이 SoC 설계팀에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "dft-doc-0036",
-   "source_space": "dft",
-   "consumer_space": "verification",
-   "min_ago": 42335,
-   "summary": "DFT팀의 『경계 스캔(JTAG) 체인 검증 노트 — 7월 1주 갱신』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "dft-doc-0009",
-   "source_space": "dft",
-   "consumer_space": "verification",
-   "min_ago": 40143,
-   "summary": "DFT팀의 『SD/eMMC 호스트 테스트 액세스 설계 노트』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "dft-doc-0010",
-   "source_space": "dft",
-   "consumer_space": "hr-people",
-   "min_ago": 16250,
-   "summary": "DFT팀의 『테스트 시간 절감 실험 (5월 3주)』 지식이 인사팀 (People)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "dft-doc-0019",
-   "source_space": "dft",
-   "consumer_space": "verification",
-   "min_ago": 22445,
-   "summary": "DFT팀의 『L2 캐시 컨트롤러 테스트 액세스 설계 노트』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "dft-doc-0028",
-   "source_space": "dft",
-   "consumer_space": "verification",
-   "min_ago": 35184,
-   "summary": "DFT팀의 『번인(Burn-in) 패턴 요구사항 정리 — 7월 3주 갱신』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "dft-doc-0037",
-   "source_space": "dft",
-   "consumer_space": "verification",
-   "min_ago": 27334,
-   "summary": "DFT팀의 『압축 로직(EDT) 설정 실험 v3.2』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
-  },
-  {
-   "doc_id": "dft-doc-0039",
-   "source_space": "dft",
-   "consumer_space": "product",
-   "min_ago": 4360,
-   "summary": "DFT팀의 『PCIe Gen4 컨트롤러 테스트 액세스 설계 노트』 지식이 제품기획·마케팅팀에서 재사용되었습니다"
+   "min_ago": 13143,
+   "summary": "DFT팀의 『MBIST 컨트롤러 삽입 가이드 v1.6』 지식이 설계검증팀 (DV)에서 재사용되었습니다"
   }
  ]
 }

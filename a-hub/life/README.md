@@ -29,8 +29,8 @@ life_server는 인메모리 + SQLite 단일 프로세스라 **상주 서버**로
 
 | 항목 | 값 |
 |---|---|
-| Base URL | `http://158.179.194.42:8001` |
-| OpenAPI 문서 | `http://158.179.194.42:8001/docs` |
+| Base URL | `http://<서버 IP>:8001` — 실제 좌표·키는 팀 안전 채널로 공유 |
+| OpenAPI 문서 | `http://<서버 IP>:8001/docs` |
 | 인증 | `x-api-key` 헤더 (관문 활성) + 엔드포인트별 `Authorization: Bearer <token>` |
 | VM | OCI Ubuntu 24.04 (AMD, x86_64), Docker Compose, `restart: unless-stopped` |
 | 영속 | SQLite 볼륨(`life-server-data`) — 재시작·재부팅에도 방·위치·디자인 유지 |
@@ -39,7 +39,7 @@ life_server는 인메모리 + SQLite 단일 프로세스라 **상주 서버**로
 > 운영이 필요해지면 HTTPS(Caddy/Cloudflare Tunnel)를 앞에 두세요.
 
 ```bash
-API=http://158.179.194.42:8001
+API=http://<서버 IP>:8001
 KEY=<x-api-key>                                   # 배포 시 정한 LIFE_SERVER_API_KEY
 
 curl $API/healthz                                 # 관문 면제 → 200 (키 없이도)
