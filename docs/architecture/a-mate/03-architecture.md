@@ -296,9 +296,12 @@ SHARE_RULES              = ["R8"]                      // 공유 대상 규칙
 DEFAULT_MIN_TOKENS       = 1000                        // 절감 추정 하한
 MIN_OCCURRENCES_WHEN_NO_EST = 3                        // 추정 없을 때 반복 하한
 MAX_PER_SCAN             = 3                           // 스캔당 발행 상한
-DEFAULT_HUB_URL          = "https://spacea.msalt.net"
 DEFAULT_SPACE_ID         = "sw-innov"
 ```
+
+허브 설정은 저장된 `knowledge_hub_url` → `SPACE_A_HUB_URL` 순으로 해석하며 둘 다 없으면
+공유 파이프라인 전체가 no-op이다. `https://spacea.msalt.net`은 설정 화면의 팀 배포 예시일 뿐
+인증 없이 호출하는 런타임 기본값이 아니다.
 
 선별 조건은 `화이트리스트 ∩ status=new ∩ 문턱 통과 ∩ 미공유`, 상한 `MAX_PER_SCAN`.
 

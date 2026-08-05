@@ -487,6 +487,10 @@ pub fn set_setting(app: tauri::AppHandle, state: State<AppState>, key: String, v
     if key == "content_protected" {
         crate::apply_content_protection(&app, value == "true");
     }
+    if key == "a_lens_url" {
+        use tauri::Emitter as _;
+        let _ = app.emit("settings:changed", ());
+    }
     Ok(())
 }
 
@@ -611,9 +615,9 @@ pub struct KnowledgeHubSettings {
     pub api_key: String,
     pub space_id: String,
     pub user: String,
-    /// "store"(설정 탭) | "env"(.env — dev 빌드 전용) | "none"(저장·env 없음 → 팀 기본값으로 동작)
+    /// "store"(설정 탭) | "env"(.env — dev 빌드 전용) | "none"(저장·env 없음 → 미연결)
     pub source: String,
-    /// 사용자가 공유를 명시적으로 껐는지. 켜져 있으면 기본값만으로도 공유가 돈다.
+    /// 사용자가 공유를 명시적으로 껐는지.
     pub share_off: bool,
 }
 
@@ -642,7 +646,7 @@ pub fn knowledge_hub_settings_get(state: State<AppState>) -> Result<KnowledgeHub
             source: "env".into(),
             share_off,
         },
-        // 저장·env가 없어도 팀 기본값으로 동작한다(hub::HubConfig::resolve) — 그 값을 그대로 보여준다.
+        // 저장·env가 없으면 연결하지 않는다(hub::HubConfig::resolve).
         None => KnowledgeHubSettings {
             url: String::new(),
             api_key: String::new(),
@@ -654,7 +658,7 @@ pub fn knowledge_hub_settings_get(state: State<AppState>) -> Result<KnowledgeHub
     })
 }
 
-/// 팀 지식 공유를 끄거나(off) 다시 켠다. 끄면 설정·env·기본값 어느 경로로도 공유하지 않는다.
+/// 팀 지식 공유를 끄거나(off) 다시 켠다. 끄면 설정·env 어느 경로로도 공유하지 않는다.
 #[tauri::command(async)]
 pub fn knowledge_hub_share_set(state: State<AppState>, enabled: bool) -> Result<(), String> {
     let guard = lock(&state)?;

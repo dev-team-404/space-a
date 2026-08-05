@@ -1,8 +1,8 @@
 <script lang="ts">
   // A-Lens 링크 — 우리 팀 방을 관전 웹에서 연다. 주소 조립 규칙은 lib/lens.ts 한 곳에 둔다
-  // (설정 창도 같은 모듈을 쓴다). 설정이 없어도 팀 기본 주소로 동작하고, 'off'면 숨는다.
+  // (설정 창도 같은 모듈을 쓴다). 주소가 없거나 'off'면 숨는다.
   import { openUrl } from '@tauri-apps/plugin-opener';
-  import { getSettings } from '../api';
+  import { getSettings, onSettingsChanged } from '../api';
   import { lensRoomUrl, lensSpaceLabel } from '../lens';
 
   let url = $state('');
@@ -18,6 +18,11 @@
     }
   }
   load();
+
+  $effect(() => {
+    const sub = onSettingsChanged(load);
+    return () => { sub.then((unlisten) => unlisten()); };
+  });
 
   async function open() {
     if (!url) return;

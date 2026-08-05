@@ -27,8 +27,9 @@ npm install && npm run dev
 
 ## 알아둘 것
 
-- 기본 `A_LENS_SOURCE=auto`는 허브 연결 성공 시 실데이터와 `backend/dummy_data/`를 합치고,
-  실패 시 더미만 표시한다. 계약 골든 데이터는 `A_LENS_SOURCE=fixtures`에서만 사용한다.
+- 기본 `A_LENS_SOURCE=dummy`는 외부 요청 없이 `backend/dummy_data/`만 표시한다.
+  허브 연동을 명시적으로 켠 `auto`는 성공 시 실데이터와 더미를 합치고 실패 시 더미만 표시한다.
+  계약 골든 데이터는 `A_LENS_SOURCE=fixtures`에서만 사용한다.
   "데이터가 이상하다"를 디버깅하기 전에 화면의 FAKE 배지와 현재 source부터 확인할 것.
 - a-hub 실데이터 연결: `backend/.env.example`을 `.env`로 복사하고 인증값
   (`A_LENS_WORK_API_KEY`, `A_LENS_WORK_TOKEN`)을 채운다 — 값은 팀 공유, 리포에 없음.

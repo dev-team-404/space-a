@@ -25,9 +25,9 @@ def _defaults() -> dict:
     e = os.environ.get
     return {
         # 원천: auto | hub | dummy | fixtures
-        "source": e("A_LENS_SOURCE", "auto"),
+        "source": e("A_LENS_SOURCE", "dummy"),
         # a-hub(work) 연결
-        "work_url": e("A_LENS_WORK_URL", "https://spacea.msalt.net"),
+        "work_url": e("A_LENS_WORK_URL", ""),
         "work_token": e("A_LENS_WORK_TOKEN", ""),
         "work_api_key": e("A_LENS_WORK_API_KEY", ""),
         "presence_window": float(e("A_LENS_PRESENCE_WINDOW", "3600")),

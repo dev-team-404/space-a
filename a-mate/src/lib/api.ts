@@ -387,12 +387,12 @@ export interface KnowledgeHubSettings {
   api_key: string;
   space_id: string;
   user: string;
-  /** 'none'이어도 팀 기본값으로 동작한다 — 꺼짐 여부는 share_off로 판단할 것. */
+  /** 'none'이면 저장 URL과 환경변수가 없어 미연결이다. */
   source: 'store' | 'env' | 'none';
   share_off: boolean;
 }
 
-/** 팀 지식 공유 on/off. 끄면 설정·env·기본값 어느 경로로도 공유하지 않는다. */
+/** 팀 지식 공유 on/off. 끄면 설정·env 어느 경로로도 공유하지 않는다. */
 export async function knowledgeHubShareSet(enabled: boolean): Promise<void> {
   await invoke('knowledge_hub_share_set', { enabled });
 }

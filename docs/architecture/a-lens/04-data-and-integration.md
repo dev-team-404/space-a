@@ -11,6 +11,9 @@
 | `dummy` | `backend/dummy_data/`의 데모 회사만 사용 |
 | `fixtures` | `contracts/fixtures/`의 계약 검증 데이터 사용 |
 
+설치 직후 기본은 `dummy`다. Work URL과 인증값을 설정한 운영자가 `auto` 또는 `hub`를
+명시적으로 선택할 때만 A-Hub에 요청한다.
+
 `auto`에서 실데이터와 더미의 `space_id`가 겹치면 실데이터가 우선한다. 더미 항목에는 `demo=true`를 넣어 프론트가
 `FAKE`로 구분한다.
 
