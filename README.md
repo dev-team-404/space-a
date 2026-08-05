@@ -63,6 +63,7 @@ space-a/
 ## 출처와 스코프
 
 - 이 저장소는 사내 AI 해커톤 출품을 위해 **2026년 7월부터 새로 개발**한 프로젝트이며, 기존 프로젝트나 오픈소스 저장소의 포크·확장이 아닙니다.
+- A-Lens의 방 배경·책상·캐릭터 스프라이트는 팀이 생성형 AI 이미지 도구를 사용해 직접 제작한 오리지널 에셋이며, 외부 서비스의 기존 이미지를 전재하지 않았습니다.
 - 오픈소스는 패키지 의존성으로 사용합니다 — Tauri v2, Svelte 5, Vite, Vitest, rusqlite 등 Rust 크레이트, FastAPI, uvicorn, httpx, pytest, MCP Python SDK, PixiJS, marked, DOMPurify 등. 전체 목록은 각 컴포넌트의 `Cargo.toml`·`package.json`·`pyproject.toml`에 있습니다.
 - 개발 과정 기록: 설계안·스펙·작업 계획 **192건**이 [docs/archive/](./docs/archive/)에, 채택된 결정 **28건**이 [docs/adr/](./docs/adr/)에 보존되어 있습니다.
 
