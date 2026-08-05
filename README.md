@@ -54,6 +54,7 @@ space-a/
 
 | 대상 | 실행·운영 문서 |
 |---|---|
+| 전체 평가·검증 | [비밀값 없는 실행 경로와 통합 설정](./docs/evaluation-guide.md) |
 | A-Mate | [빌드 및 실행](./docs/architecture/a-mate/build-and-run.md) |
 | A-Hub | [통합 실행](./docs/architecture/a-hub/build-and-run.md), [Work](./a-hub/work/README.md), [Life](./a-hub/life/README.md) |
 | A-Lens | [빌드 및 실행](./docs/architecture/a-lens/build-and-run.md) |
