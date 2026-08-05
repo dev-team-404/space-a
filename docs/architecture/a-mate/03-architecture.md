@@ -134,7 +134,7 @@ a-mate/
 
 에이전트별·엔진별 로직을 하드코딩하지 않기 위한 경계다. `a-mate/CLAUDE.md`의 제약이 코드로 표현된 곳.
 
-### 4.1 `SourceAdapter` — 다른 AI 에이전트 지원
+### 4.1 `SourceAdapter` — 수집 형식 정규화 경계
 
 [`crates/core/src/adapter.rs`](../../../a-mate/crates/core/src/adapter.rs)
 
@@ -146,8 +146,10 @@ pub trait SourceAdapter {
 }
 ```
 
-- 유일 구현은 `ClaudeCodeAdapter`. 파싱은 관대하게 — 미지 스키마는 로깅만 하고 하드 실패하지 않는다.
-- 규칙·저장·다이어리는 **`NormalizedEvent`만 본다.** 다른 에이전트 지원은 어댑터 구현체 하나를 추가하는 문제로 환원된다.
+- 현재 MVP의 유일한 구현과 실제 수집 대상은 `ClaudeCodeAdapter`다. 파싱은 관대하게 — 미지
+  스키마는 로깅만 하고 하드 실패하지 않는다.
+- 어댑터 출력은 소스 중립적인 `NormalizedEvent`다. 다른 에이전트용 `SourceAdapter`를 추가하면
+  기존 규칙·저장·다이어리 분석 파이프라인으로 추후 확장할 수 있다.
 - 호스트 열거는 [`hosts.rs`](../../../a-mate/crates/core/src/hosts.rs) — Windows `%USERPROFILE%\.claude` +
   `wsl.exe -l -q`(UTF-16 디코드)로 모든 distro의 `\\wsl.localhost\<distro>\home\*\.claude`를 자동 발견한다.
 

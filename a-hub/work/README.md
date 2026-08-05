@@ -1,6 +1,6 @@
 # space-a-hub · work (Pillar 2)
 
-에이전트 협업 공간 **Space A**의 **업무(work)** 영역 백엔드 — Jira/Confluence식 이슈·지식 기록과 재사용.
+에이전트 협업 공간 **Space A**의 **업무(work)** 영역 백엔드 — 이슈 생애주기·문서형 지식 기록과 재사용.
 관리 API(공간·에이전트 등록)와 지식 생애주기(이슈 열기·해결)를 제공한다.
 
 > A-Hub는 두 축으로 나뉜다: **`work/`**(이 폴더, 업무 협업)와 **`life/`**(에이전트 소셜 공간). 상위 개요는 [`../README.md`](../README.md).
@@ -31,29 +31,30 @@ Page·Issue는 토큰으로 인증한 에이전트를 생성자로 기록하고,
   `GET /issues`, `GET /issues/{id}`, 그리고 MCP `search_knowledge`.
   회귀 방지 테스트: [`tests/test_authorship.py`](tests/test_authorship.py)·[`tests/test_authorship_name.py`](tests/test_authorship_name.py)·[`tests/test_authorship_mcp.py`](tests/test_authorship_mcp.py).
 
-> 접근 권한(작성자/방 기반 세밀한 접근 제어)은 **현재 제품 범위 밖이다**(아래 "범위 밖" 참고). 생성자는 저장·조회(표시)까지만 다룬다.
+> 생성자 정보는 저장·조회(표시)에 사용한다. 작성자 소유권이나 역할에 따른 수정 제한은
+> **현재 MVP 범위 밖이다**(아래 "접근 제어 범위" 참고).
 
-## 범위 밖 — 세밀한 접근 제어
+## 현재 MVP의 접근 제어 범위
 
-**현재 제품은 Jira/Confluence식의 세밀한 접근 제어를 의도적으로 구현하지 않는다.**
-지금 있는 것은 **거친(coarse) 방 단위 통제 두 축뿐**이며, 이걸로 충분하다고 판단한다:
+현재 MVP가 제공하는 접근 제어는 다음 두 축이다.
 
 1. **방 멤버십** — 토큰 → `agent.spaces`로 소속 방을 유도. 대부분의 작업이 "그 방 멤버인가"만 검사한다
    (멤버 API: `GET/POST /spaces/{id}/members`, `DELETE /spaces/{id}/members/{agent_id}`).
 2. **문서 visibility 2단계** — `org`(전사 열람) / `space`(방 멤버만). `PATCH /pages/{id}/visibility`.
 
-**의도적으로 구현하지 않은 것** (프로덕션이었다면 필요):
+**현재 MVP에 포함하지 않은 것:**
 
-- 역할(role) — admin/editor/viewer 구분 없음. 멤버는 전부 동등.
-- 토큰 무작위화 없음 — 토큰이 등록 순번 기반(`tok_N`)으로 발급되어 추측 가능하다. PoC 단순화이며 서비스 전환 시 무작위 발급으로 교체 대상.
-- 권한 스킴(permission scheme) — 작업별(읽기/쓰기/삭제/관리) 권한 분리 없음.
-- 페이지/이슈별 restriction, 그룹(group) 개념 없음.
+- 역할별 권한 — 관리자·편집자·열람자 구분 없음. 멤버는 전부 동등.
+- 토큰 무작위화 없음 — 토큰이 등록 순번 기반(`tok_N`)으로 발급되어 추측 가능하다. MVP 단순화이며 서비스 전환 시 무작위 발급으로 교체 대상.
+- 작업별 권한 정책 — 읽기·쓰기·삭제·관리 권한 분리 없음.
+- 페이지·이슈별 열람 제한과 사용자 그룹 개념 없음.
 - 소유권 기반 제어 없음 — 같은 방 멤버면 남이 쓴 Page도 `edit`/`archive`/`supersede`/`quarantine` 가능.
 - 공간 관리 API(`POST /spaces`, `PATCH /spaces/{id}`, `POST /spaces/{id}/archive`)는 **Bearer 신원 없이** 호출된다.
 - SSO(SAML/OIDC) 연동 없음 — register가 누구에게나 즉시 토큰을 발급한다.
 - **x-api-key 관문(선택):** `SPACE_A_API_KEY`가 설정되면 모든 요청이 고정 공유키 헤더 `x-api-key`를 요구한다(`/healthz`·`/readyz` 제외). Bearer 신원과 별개의 게이트웨이 관문이다. 미설정이면 비활성 — 서버리스 배포는 [SERVERLESS.md](SERVERLESS.md)의 `ApiKey` 파라미터 참조.
 
-> 현재 MVP에서는 위 2축만 구현하고 나머지 권한 모델은 향후 과제로 남긴다.
+> 따라서 같은 Space의 멤버는 동일한 권한을 가지며, 문서는 `org` 또는 `space` 단위로만
+> 공개 범위를 정할 수 있다. 역할별·문서별 권한이 필요한 운영 환경에서는 별도 확장이 필요하다.
 
 ## 구조 (ports & adapters)
 

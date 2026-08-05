@@ -15,7 +15,7 @@ Python 프로젝트, DB, 실행 생애주기를 공유하지 않는다.
 - **UTF-8 gotcha.** 모든 JSON 응답은 `charset=utf-8`을 명시한다(`UTF8JSONResponse`) —
   생략하면 한국 Windows(CP949) 클라이언트에서 한글이 mojibake로 깨진다.
   회귀 테스트: `work/tests/test_encoding.py`.
-- 세밀한 접근 제어(역할·권한 스킴·restriction)는 **현재 제품 범위 밖 — 의도적 미구현**.
+- 세밀한 접근 제어(역할별 권한·작업별 권한 정책·문서별 열람 제한)는 **현재 MVP 범위 밖 — 의도적 미구현**.
   방 멤버십 + visibility 2단계(`org`/`space`)만 있다. 임의로 추가하지 말 것.
 - 서버(컨테이너)가 프로덕션, 서버리스(Lambda)는 개발용. 의존성이 `[serverless]` extra로
   분리돼 있으니 서버 빌드에 `mangum`·`boto3`가 들어가면 안 된다.

@@ -80,7 +80,7 @@ npm run tauri dev
 ```
 
 개발 실행에는 updater 서명 개인키나 암호가 필요하지 않다. 첫 Rust 빌드는 수 분 걸릴 수 있으며,
-Windows·WSL의 지원 에이전트 기록이 있으면 로컬에서 수집하고 없으면 빈 상태 UI로 정상 실행된다.
+Windows·WSL의 Claude Code 기록이 있으면 로컬에서 수집하고 없으면 빈 상태 UI로 정상 실행된다.
 Node.js, Rust MSVC, C++ Build Tools와 WebView2 준비 방법은
 [A-Mate 빌드·실행 문서](./architecture/a-mate/build-and-run.md)를 따른다.
 

@@ -24,10 +24,13 @@ flowchart LR
 
 ## 구현 범위
 
-- **A-Mate**: Windows·WSL의 에이전트 기록 수집, 결정론적 코칭, 다이어리와 마스코트, 선택적 A-Hub 연동
+- **A-Mate**: Windows·WSL의 Claude Code 기록 수집, 결정론적 코칭, 다이어리와 마스코트, 선택적 A-Hub 연동
 - **A-Hub Work**: Space, Agent, Issue, Page, 검색·인용·해결·재사용 이력, REST와 MCP 접근
 - **A-Hub Life**: 개인 공간, 인테리어, 위치·프레즌스, 친구, 다이어리 공개 범위, 방명록과 마스코트 콘텐츠
 - **A-Lens**: Work·Life 수집, 팀 활동과 협업 관계 시각화, 요약·서사 번역, 장애 시 캐시·규칙 기반 폴백
+
+A-Mate의 현재 MVP 수집 대상은 Claude Code입니다. 코어의 `SourceAdapter`와 `NormalizedEvent`
+경계를 통해 다른 코딩 에이전트도 추후 같은 분석 파이프라인으로 확장할 수 있습니다.
 
 상세 요구사항과 비목표는 [PRD](./docs/PRD.md), 시스템 경계와 데이터 흐름은 [통합 아키텍처](./docs/architecture/README.md), 컴포넌트별 비자명한 문제와 해결은 [기술 하이라이트](./docs/architecture/tech-highlights.md)에서 확인할 수 있습니다.
 
