@@ -4,16 +4,23 @@
 
 ## 권장 읽기 순서
 
+0. [소개 슬라이드](./space-a-intro.html) — 실제 화면으로 보는 12장 요약 (**처음이면 여기서 시작**)
 1. [프로젝트 README](../README.md) — 문제, 제품 구성, 구현 범위
 2. [PRD](./PRD.md) — 사용자, 요구사항, 범위와 완료 기준
 3. [통합 아키텍처](./architecture/README.md) — 컴포넌트 경계, 데이터 흐름, 배포 구조
 4. 컴포넌트 상세 — [A-Mate](./architecture/a-mate/), [A-Hub](./architecture/a-hub/), [A-Lens](./architecture/a-lens/)
 5. [ADR](./adr/) — 되돌리기 어려운 기술·제품 결정
 
+> **소개 슬라이드 보는 법** — GitHub은 HTML을 렌더하지 않고 소스로 표시한다.
+> 파일 페이지에서 **Download raw file**(⤓)로 내려받아 브라우저로 열면 된다.
+> 저장소를 받아둔 상태면 `docs/space-a-intro.html`을 더블클릭. 좌우 방향키로 넘긴다.
+> 이미지가 파일 안에 들어 있어 인터넷 없이도 그대로 보인다.
+
 ## 문서 구분
 
 | 위치 | 목적 | 관리 기준 |
 |---|---|---|
+| [`space-a-intro.html`](./space-a-intro.html) | 제출·발표용 소개 슬라이드 (실제 화면 캡처 12장, 단일 파일) | 화면이나 실측 수치가 달라지면 재캡처 후 교체 |
 | [`PRD.md`](./PRD.md) | 현재 제품 요구사항과 제출 범위 | 범위나 사용자 흐름이 바뀌면 갱신 |
 | [`architecture/`](./architecture/) | 현재 구현의 구조와 운영 방식 | 코드와 같은 변경에서 갱신 |
 | [`adr/`](./adr/) | 채택된 주요 결정 | 기존 기록은 보존하고 새 ADR로 대체 |
