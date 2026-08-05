@@ -185,6 +185,9 @@ updater·서명이 연결돼 있어(`tauri.conf.json`의 `plugins.updater` + `cr
 새 버전은 **공개 릴리스 저장소** `dev-team-404/a-mate-releases`에 발행하면 설치본이
 앱 내에서 자동 업데이트된다. 발행은 **WSL에서 로컬 스크립트**로 한다(현재 CI 미도입).
 
+> updater 개인키와 암호는 `npm run tauri dev`에 쓰이지 않고 앱에도 포함되지 않는다.
+> 아래 릴리스 절차에서 설치 파일의 `.sig`를 만드는 동안 빌드 머신의 환경변수로만 주입된다.
+
 ```bash
 # 저장소 루트에서 (WSL)
 bash a-mate/scripts/release-amate.sh --dry-run 0.2.0   # 프리플라이트만 점검
@@ -317,6 +320,9 @@ bash a-mate/scripts/release-amate.sh --dry-run 0.2.1
 
 ### 개발용 서명 키 — 로컬 `a-mate/dev-key/`
 
+여기서 "개발용"은 **개발·테스트 릴리스에 쓰는 로컬 보관 위치**라는 뜻이다.
+`npm run tauri dev`로 앱을 실행하는 일반 개발 과정에는 이 디렉터리나 서명 키가 필요하지 않다.
+
 개발·테스트 목적의 릴리스는 팀 안전 채널로 받은 키를 **로컬 `a-mate/dev-key/`에 배치해 쓴다**
 (이 디렉터리는 `.gitignore` 대상 — 개인키·암호는 저장소에 커밋하지 않는다).
 배치하는 세 파일은 아래와 같고, 이 키의 pubkey는 `tauri.conf.json`의 `pubkey`와 **동일**하므로
@@ -360,7 +366,7 @@ bash a-mate/scripts/release-amate.sh --dry-run 0.2.0
 
 `tauri signer generate`는 세 요소를 만든다 — 역할과 사용 시점이 다르다.
 
-| 파일 | 종류 | 빌드에서 쓰이나 · 어떻게 |
+| 파일 | 종류 | updater 릴리스 빌드에서 쓰이나 · 어떻게 |
 |------|------|--------------------------|
 | `~/.tauri/a-mate-updater.key` | **개인키** | ✅ **릴리스 빌드 시.** 파일 **내용**을 env `TAURI_SIGNING_PRIVATE_KEY`로 주입 → `tauri build`가 설치 파일을 서명해 `.sig`를 생성 |
 | `~/.tauri/a-mate-updater.pass` | **개인키 암호** | ✅ **릴리스 빌드 시.** env `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`로 주입 → 개인키 잠금 해제 |
@@ -377,7 +383,10 @@ powershell.exe -NoProfile -Command " ... \
   ... npm run tauri build"                                 # 이 두 env가 있어야 .sig 생성
 ```
 
-정리: **빌드에 필요한 건 `.key` + `.pass` 둘뿐**이고, `.pub`은 이미 `tauri.conf.json`에 박혀 있어 빌드에 다시 넣지 않는다. 두 env가 없으면 `createUpdaterArtifacts`가 켜져 있어도 `.sig`가 안 나와 자동 업데이트가 성립하지 않는다.
+정리: **updater 릴리스 서명에 필요한 건 `.key` + `.pass` 둘뿐**이고, `.pub`은 이미
+`tauri.conf.json`에 박혀 있어 빌드에 다시 넣지 않는다. 개인키·암호는 설치 파일에 포함되지 않는다.
+두 env가 없으면 `createUpdaterArtifacts`가 켜져 있어도 `.sig`가 안 나와 자동 업데이트가 성립하지
+않지만, `npm run tauri dev`에는 영향이 없다.
 
 > 스크립트 없이 Windows PowerShell에서 직접 서명 빌드하려면 같은 두 env를 손으로 세팅한다
 > (개행 제거 위해 `.Trim()`):
