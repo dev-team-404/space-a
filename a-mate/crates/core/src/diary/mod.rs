@@ -627,7 +627,6 @@ fn parse_numstat_log(out: &str) -> Vec<(String, u64)> {
 /// host가 `wsl:<distro>`면 `wsl -d <distro> -- git`으로 WSL 안에서 실행(리눅스 경로), 아니면 네이티브 git.
 /// WSL 미설치·distro 부재 등은 spawn 에러 → 빈 벡터 → 상위에서 topics로 폴백.
 fn git_commits_for(host: &str, cwd: &str, date: &str) -> Vec<(String, u64)> {
-    use std::process::Command;
     let Some(next) = NaiveDate::parse_from_str(date, "%Y-%m-%d")
         .ok()
         .and_then(|d| d.succ_opt())
@@ -640,11 +639,11 @@ fn git_commits_for(host: &str, cwd: &str, date: &str) -> Vec<(String, u64)> {
     let run = |git_args: &[String]| -> Option<String> {
         let mut cmd = match wsl_distro {
             Some(distro) => {
-                let mut c = Command::new("wsl");
+                let mut c = crate::hosts::background_command("wsl");
                 c.args(["-d", distro, "--", "git"]);
                 c
             }
-            None => Command::new("git"),
+            None => crate::hosts::background_command("git"),
         };
         cmd.args(git_args)
             .output()

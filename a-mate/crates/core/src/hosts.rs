@@ -1,5 +1,19 @@
 use crate::adapter::ClaudeCodeAdapter;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+
+/// Build a background child process without flashing a console window in the
+/// packaged Windows GUI application.
+pub(crate) fn background_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
 
 /// 하나의 Claude 소스 위치(호스트 라벨 + .claude 루트).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,7 +87,7 @@ pub fn parse_wsl_distros(raw: &[u8]) -> Vec<String> {
 pub fn wsl_list_distros() -> Vec<String> {
     // status.success() 확인: 실패/미설치 시 wsl.exe가 에러 메시지를 stdout으로 낼 수 있어,
     // 성공한 경우에만 파싱해 에러문이 distro명으로 오파싱되는 것을 막는다.
-    match std::process::Command::new("wsl.exe").args(["-l", "-q"]).output() {
+    match background_command("wsl.exe").args(["-l", "-q"]).output() {
         Ok(o) if o.status.success() => parse_wsl_distros(&o.stdout),
         _ => Vec::new(),
     }
@@ -178,11 +192,11 @@ pub fn git_repo_root(host: &str, cwd: &str) -> Option<String> {
     let run = |args: &[&str]| -> Option<String> {
         let mut cmd = match host.strip_prefix("wsl:") {
             Some(distro) => {
-                let mut c = std::process::Command::new("wsl");
+                let mut c = background_command("wsl");
                 c.args(["-d", distro, "--", "git"]);
                 c
             }
-            None => std::process::Command::new("git"),
+            None => background_command("git"),
         };
         cmd.args(["-C", cwd])
             .args(args)
