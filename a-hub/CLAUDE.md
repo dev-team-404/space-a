@@ -37,7 +37,7 @@ uv venv .venv && uv pip install --native-tls -e ".[dev]"
 
 ```sh
 cd a-hub/life
-docker compose up -d --build              # 포트 8001
+docker compose up -d --build              # 포트 개발망:8001 사내망: 5050
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]" && .venv/bin/pytest   # 테스트
 ```
 

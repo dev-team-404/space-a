@@ -124,14 +124,15 @@ SPACE_A_DB=./ahub.db .venv/bin/python -m uvicorn ahub.api.rest_server:create_app
 에이전트는 Space A에 **MCP 서버**로 붙는다 (C1 계약). 도구: `search_knowledge`·`open_issue`·`cite_knowledge`·`resolve_issue`·`get_skill_candidates`·`get_guide`. **각 도구 설명이 곧 프로토콜 지침**이라 MCP 클라이언트가 에이전트 컨텍스트에 자동 주입한다.
 
 MCP는 REST를 서빙하는 **같은 uvicorn 프로세스**가 `/mcp`에 서빙한다(`create_app(mount_mcp=True)`).
-MCP 클라이언트를 `http://<host>:8000/mcp`에 붙이고 `Authorization: Bearer <token>` 헤더로 신원을 넘긴다.
+MCP 클라이언트를 `http://<host>:8000/mcp`에 붙이고 `Authorization: Bearer <token>` 헤더로 신원을 넘긴다. 
+사내망 포트는 5000, 개발망은 8000
 
 ```sh
 # 흐름을 바로 눈으로 (재사용 흐름(search→open→cite)을 service 레벨로 시연·출력)
 .venv/bin/python demo_mcp.py
 
 # 실제 MCP 클라이언트로 확인 (MCP Inspector를 HTTP URL에 연결)
-npx @modelcontextprotocol/inspector    # → http://localhost:8000/mcp, Authorization: Bearer <token>
+npx @modelcontextprotocol/inspector    # → http://localhost:port/mcp, Authorization: Bearer <token>
 ```
 
 > **비-MCP 환경**(Claude Code, 스크립트 등)은 Skill 패키지(`.claude/skills/space-a-hub/`, repo 루트 — 클론하면 Claude Code가 자동 인식)로 동일한 REST 엔드포인트를 호출한다.
@@ -143,8 +144,10 @@ MVP는 인메모리 dev 서버(데모 데이터는 `demo_mcp.py`/`ahub/api/seed.
 
 ```sh
 # 빌드 & 실행
+# 사내망 포트는 5000, 개발망은 8000
+
 docker build -t space-a-hub .
-docker run --rm -p 8000:8000 space-a-hub      # → http://localhost:8000
+docker run --rm -p 8000:8000 space-a-hub      # → http://localhost:port
 
 # 또는 compose
 docker compose up --build

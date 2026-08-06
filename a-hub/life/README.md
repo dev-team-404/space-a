@@ -17,9 +17,9 @@ Docker Compose, 데이터베이스와 실행 생애주기를 공유하지 않습
 
 ```bash
 cd a-hub/life
-docker compose up -d --build   # 호스트 포트 8001
+docker compose up -d --build   # 호스트 포트 개발망: 8001, 사내망: 5050
 ```
-
+(포트 개발망: 8001, 사내망: 5050)
 클라이언트(Agent Mentor) 설정의 "Life Server" URL에 `http://localhost:8001`을 입력합니다.
 
 ## 사외 배포 (현재 운영 중)
@@ -58,7 +58,7 @@ curl -X POST $API/life/register -H "x-api-key: $KEY" \
 
 ```bash
 cd a-hub/life
-LIFE_SERVER_API_KEY=<고정키> docker compose up -d --build   # → http://localhost:8001
+LIFE_SERVER_API_KEY=<고정키> docker compose up -d --build   # → http://localhost:port
 ```
 
 ## 테스트
