@@ -5,7 +5,8 @@
     imageSettingsGet, imageSettingsSet, imageTest,
     getSettings, setSetting,
     knowledgeHubSettingsGet, knowledgeHubSettingsSet, knowledgeHubShareSet,
-    type EngineSettings, type HubSettings, type ImageSettings, type KnowledgeHubSettings,
+    type EngineSettings, type HubSettings, type ImageApi, type ImageSettings,
+    type KnowledgeHubSettings,
   } from '../../api';
   import { LENS_OFF, LENS_URL_PLACEHOLDER } from '../../lens';
   import { IDLE, busy, err, ok, type Status } from './status';
@@ -28,8 +29,22 @@
     catch(e){ hubStatus = err(e); }
   }
 
+  // 사내 게이트웨이가 요구하는 신원 헤더 예시 — 입력 칸 안내용(저장값 아님).
+  const HEADER_PLACEHOLDER = 'x-user-id: abc\nx-dept-name: s/w개발팀\nx-service-id: service-a';
+
+  // 값에 비ASCII가 있어 퍼센트 인코딩되어 나갈 헤더 이름들. 백엔드(http_headers.rs)의
+  // 판정과 같은 규칙이며, 저장 전에도 알려주려고 프런트에서 한 번 더 본다.
+  function nonAsciiNames(raw: string): string[] {
+    return raw.split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/:(.*)/s))
+      .filter(([n, v]) => n?.trim() && v?.trim() && /[^\x20-\x7e\t]/.test(v))
+      .map(([n]) => n.trim().replace(/^["']|["']$/g, ''));
+  }
+
   // --- 텍스트 LLM 엔진 ---
-  let eng = $state<EngineSettings>({ url:'', key:'', model:'', source:'none' });
+  let eng = $state<EngineSettings>({ url:'', key:'', model:'', headers:'', source:'none' });
   let engStatus = $state<Status>(IDLE);
   async function loadEngine(){
     try { eng = await engineSettingsGet(); } catch(e){ engStatus = err(`설정을 불러오지 못했어요: ${e}`); }
@@ -37,12 +52,12 @@
   loadEngine();
   async function saveEngine(){
     engStatus = busy('저장 중…');
-    try { await engineSettingsSet(eng.url, eng.key, eng.model); await loadEngine(); engStatus = ok('저장했어요. 다음 호출부터 적용됩니다.'); }
+    try { await engineSettingsSet(eng.url, eng.key, eng.model, eng.headers); await loadEngine(); engStatus = ok('저장했어요. 다음 호출부터 적용됩니다.'); }
     catch(e){ engStatus = err(e); }
   }
   async function testEngine(){
     engStatus = busy('연결 확인 중…');
-    try { engStatus = ok(await engineTest(eng.url, eng.key, eng.model)); }
+    try { engStatus = ok(await engineTest(eng.url, eng.key, eng.model, eng.headers)); }
     catch(e){ engStatus = err(`연결 실패: ${e}`); }
   }
   const engSourceLabel = $derived(
@@ -52,21 +67,25 @@
   );
 
   // --- 캐릭터 이미지 모델 (사내 LLM은 그림을 못 그려 텍스트 엔진과 분리) ---
-  let img = $state<ImageSettings>({ url:'', key:'', model:'', source:'none' });
+  let img = $state<ImageSettings>({ url:'', key:'', model:'', headers:'', api:'chat', source:'none' });
   let imgStatus = $state<Status>(IDLE);
+  const IMAGE_APIS: { value: ImageApi; label: string }[] = [
+    { value: 'chat',   label: 'chat/completions (참조 이미지 첨부)' },
+    { value: 'images', label: 'images/generations (OpenAI 규격)' },
+  ];
   async function loadImage(){
     try { img = await imageSettingsGet(); } catch(e){ imgStatus = err(`이미지 설정을 불러오지 못했어요: ${e}`); }
   }
   loadImage();
   async function saveImage(){
     imgStatus = busy('저장 중…');
-    try { await imageSettingsSet(img.url, img.key, img.model); await loadImage(); imgStatus = ok('저장했어요.'); }
+    try { await imageSettingsSet(img.url, img.key, img.model, img.headers, img.api); await loadImage(); imgStatus = ok('저장했어요.'); }
     catch(e){ imgStatus = err(e); }
   }
   async function testImage(){
     imgStatus = busy('연결 확인 중…');
     // image_test는 실패 시 이미 완성된 한국어 메시지를 reject하므로 접두어 없이 그대로 쓴다.
-    try { imgStatus = ok(await imageTest(img.url, img.key, img.model)); }
+    try { imgStatus = ok(await imageTest(img.url, img.key, img.model, img.headers, img.api)); }
     catch(e){ imgStatus = err(e); }
   }
   const imgSourceLabel = $derived(
@@ -235,13 +254,21 @@
       <input type="password" bind:value={eng.key} placeholder="비워두면 인증 없이 호출" spellcheck="false"/></label>
     <label class="field"><span>모델명</span>
       <input type="text" bind:value={eng.model} placeholder="gpt-4o-mini" spellcheck="false"/></label>
+    <label class="field wide"><span>추가 헤더 <em>(선택 — 한 줄에 하나씩 <code>이름: 값</code>)</em></span>
+      <textarea bind:value={eng.headers} rows="3" placeholder={HEADER_PLACEHOLDER} spellcheck="false"></textarea>
+      {#if nonAsciiNames(eng.headers).length}
+        <span class="warn">{nonAsciiNames(eng.headers).join(', ')} — 값에 한글 등 비ASCII가 있어 <b>UTF-8 퍼센트 인코딩</b>해서 보냅니다 (HTTP 헤더는 ASCII만 실을 수 있습니다). 서버가 디코드하지 않는다면 값을 영문으로 바꾸세요.</span>
+      {/if}</label>
   </div>
   <div class="actions">
     <button class="primary" onclick={saveEngine} disabled={engStatus.kind==='busy'}>저장</button>
     <button onclick={testEngine} disabled={engStatus.kind==='busy'}>연결 테스트</button>
   </div>
   <StatusLine status={engStatus}/>
-  <p class="hint2">URL을 비우고 저장하면 .env(AGENT_MENTOR_ENGINE_*) 값으로 되돌아갑니다.</p>
+  <p class="hint2">
+    사내 게이트웨이가 신원 헤더를 요구하면 위에 적으세요 — 모든 호출(일기·한마디·잡담·채팅)에 함께 나갑니다.
+    URL을 비우고 저장하면 .env(AGENT_MENTOR_ENGINE_*) 값으로 되돌아갑니다.
+  </p>
 </section>
 
 <section>
@@ -255,12 +282,27 @@
       <input type="password" bind:value={img.key} placeholder="sk-or-..." spellcheck="false"/></label>
     <label class="field"><span>이미지 모델</span>
       <input type="text" bind:value={img.model} placeholder="google/gemini-2.5-flash-image" spellcheck="false"/></label>
+    <label class="field"><span>API 방식</span>
+      <select bind:value={img.api}>
+        {#each IMAGE_APIS as a (a.value)}<option value={a.value}>{a.label}</option>{/each}
+      </select></label>
+    <label class="field wide"><span>추가 헤더 <em>(선택 — 한 줄에 하나씩 <code>이름: 값</code>)</em></span>
+      <textarea bind:value={img.headers} rows="3" placeholder={HEADER_PLACEHOLDER} spellcheck="false"></textarea>
+      {#if nonAsciiNames(img.headers).length}
+        <span class="warn">{nonAsciiNames(img.headers).join(', ')} — 값에 한글 등 비ASCII가 있어 <b>UTF-8 퍼센트 인코딩</b>해서 보냅니다.</span>
+      {/if}</label>
   </div>
   <div class="actions">
     <button class="primary" onclick={saveImage} disabled={imgStatus.kind==='busy'}>저장</button>
     <button onclick={testImage} disabled={imgStatus.kind==='busy'}>연결 테스트</button>
   </div>
   <StatusLine status={imgStatus}/>
+  <p class="hint2">
+    <b>API 방식</b> — OpenRouter·LiteLLM처럼 <code>chat/completions</code>로 그림을 주는 게이트웨이는 첫 번째를
+    고르세요. 화풍 견본 이미지를 함께 보내 캐릭터가 일관됩니다. 사내 게이트웨이처럼
+    <code>images/generations</code>만 여는 곳은 두 번째를 고르세요 — 이 규격은 참조 이미지를 받지 못해
+    화풍을 글로만 지시합니다.
+  </p>
 </section>
 
 <style>
@@ -271,7 +313,12 @@
   .field{display:flex;flex-direction:column;gap:4px}
   .field>span{font-size:12px;color:var(--text-soft)}
   .field em{font-style:normal;opacity:.7}
-  .field input{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface-inset);color:var(--text);font:inherit}
+  .field input,.field select,.field textarea{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface-inset);color:var(--text);font:inherit}
+  /* 헤더는 여러 줄이라 2열 그리드 전체를 쓴다 */
+  .field.wide{grid-column:1 / -1}
+  .field textarea{resize:vertical;min-height:64px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;white-space:pre}
+  .field code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .warn{font-size:11px;color:var(--cream-ink);background:var(--cream);border-radius:6px;padding:5px 8px}
   .actions{display:flex;gap:8px;margin-top:12px}
   .actions button{border:0;border-radius:99px;padding:7px 14px;background:var(--lav-surface);color:var(--lav-ink);cursor:pointer;font:inherit}
   .actions button.primary{background:var(--accent);color:var(--accent-ink);font-weight:700}

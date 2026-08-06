@@ -1659,7 +1659,7 @@ pub(crate) fn generate_daily_cut_core(
         let spec = agent_mentor::mascot::respec_pose_for_seed(spec, mbti.as_deref(), &var_seed);
         sprite::character_description(&spec, mbti.as_deref(), &var_seed)
     });
-    let prompt = sprite::build_cut_image_prompt(shot, desc.as_deref(), &scene_en);
+    let prompt = sprite::build_cut_image_prompt(shot, desc.as_deref(), &scene_en, cfg.api);
     let png = sprite::generate_cut(&cfg, &prompt).map_err(|e| {
         format!("이미지 생성 실패 ({}/{}회): {e}", cut.attempts, sprite::MAX_CUT_ATTEMPTS_PER_DAY)
     })?;

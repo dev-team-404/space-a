@@ -563,6 +563,8 @@ pub struct EngineSettings {
     pub url: String,
     pub key: String,
     pub model: String,
+    /// 사내 게이트웨이용 추가 헤더 — 설정 창 원문("이름: 값" 줄 목록) 그대로.
+    pub headers: String,
     pub source: String,
 }
 
@@ -576,13 +578,31 @@ pub fn engine_settings_get(state: State<AppState>) -> Result<EngineSettings, Str
             url: stored_url,
             key: get("engine_key"),
             model: get("engine_model"),
+            headers: get("engine_headers"),
             source: "store".into(),
         });
     }
     Ok(match OpenAiCompatEngine::from_env() {
-        Some(e) => EngineSettings { url: e.base_url, key: e.api_key, model: e.model, source: "env".into() },
-        None => EngineSettings { url: String::new(), key: String::new(), model: String::new(), source: "none".into() },
+        Some(e) => EngineSettings {
+            url: e.base_url,
+            key: e.api_key,
+            model: e.model,
+            headers: headers_to_text(&e.headers),
+            source: "env".into(),
+        },
+        None => EngineSettings {
+            url: String::new(),
+            key: String::new(),
+            model: String::new(),
+            headers: String::new(),
+            source: "none".into(),
+        },
     })
+}
+
+/// 파싱된 헤더 → 설정 창에 되돌려 보여줄 원문. env 폴백 값을 그대로 보여주기 위한 역변환.
+fn headers_to_text(headers: &[(String, String)]) -> String {
+    headers.iter().map(|(k, v)| format!("{k}: {v}")).collect::<Vec<_>>().join("\n")
 }
 
 #[tauri::command(async)]
@@ -591,6 +611,7 @@ pub fn engine_settings_set(
     url: String,
     key: String,
     model: String,
+    headers: String,
 ) -> Result<(), String> {
     let url = url.trim();
     if !url.is_empty() && !(url.starts_with("http://") || url.starts_with("https://")) {
@@ -601,6 +622,8 @@ pub fn engine_settings_set(
     guard.set_setting("engine_url", url).map_err(|e| e.to_string())?;
     guard.set_setting("engine_key", key.trim()).map_err(|e| e.to_string())?;
     guard.set_setting("engine_model", model.trim()).map_err(|e| e.to_string())?;
+    // 원문 그대로 저장한다 — 사용자가 다시 열었을 때 적은 대로 보여야 고치기 쉽다.
+    guard.set_setting("engine_headers", headers.trim()).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -746,7 +769,12 @@ pub fn theme_set(
 
 /// 저장 전 값으로도 시험할 수 있게 폼 값을 그대로 받는다. 성공 시 모델의 응답 일부를 돌려준다.
 #[tauri::command(async)]
-pub fn engine_test(url: String, key: String, model: String) -> Result<String, String> {
+pub fn engine_test(
+    url: String,
+    key: String,
+    model: String,
+    headers: String,
+) -> Result<String, String> {
     let url = url.trim().to_string();
     if url.is_empty() {
         return Err("엔드포인트 URL을 입력하세요".into());
@@ -756,6 +784,7 @@ pub fn engine_test(url: String, key: String, model: String) -> Result<String, St
         base_url: url,
         api_key: key.trim().to_string(),
         model: if model.is_empty() { "gpt-4o-mini".to_string() } else { model.to_string() },
+        headers: agent_mentor::http_headers::parse_headers(&headers),
     };
     let out = engine
         .generate("연결 테스트입니다. 'ok' 한 단어로만 답하세요.", "ping")
@@ -1884,6 +1913,10 @@ pub struct ImageSettings {
     pub url: String,
     pub key: String,
     pub model: String,
+    /// 사내 게이트웨이용 추가 헤더 — 설정 창 원문("이름: 값" 줄 목록) 그대로.
+    pub headers: String,
+    /// 이미지 API 방식: "chat"(기본, 참조 이미지 첨부) | "images"(OpenAI images/generations).
+    pub api: String,
     pub source: String,
 }
 
@@ -1897,16 +1930,27 @@ pub fn image_settings_get(state: State<AppState>) -> Result<ImageSettings, Strin
             url: stored_url,
             key: get("image_key"),
             model: get("image_model"),
+            headers: get("image_headers"),
+            api: agent_mentor::sprite::ImageApi::parse(&get("image_api")).as_str().into(),
             source: "store".into(),
         });
     }
     // 저장값이 없으면 env 폴백이 뭘로 잡히는지 그대로 보여준다(설정 안내용).
     Ok(match crate::resolve_sprite_cfg(&guard) {
-        Some(c) => ImageSettings { url: c.base_url, key: c.api_key, model: c.model, source: "env".into() },
+        Some(c) => ImageSettings {
+            url: c.base_url,
+            key: c.api_key,
+            model: c.model,
+            headers: headers_to_text(&c.headers),
+            api: c.api.as_str().into(),
+            source: "env".into(),
+        },
         None => ImageSettings {
             url: String::new(),
             key: String::new(),
             model: agent_mentor::sprite::DEFAULT_IMAGE_MODEL.into(),
+            headers: String::new(),
+            api: agent_mentor::sprite::ImageApi::default().as_str().into(),
             source: "none".into(),
         },
     })
@@ -1918,12 +1962,17 @@ pub fn image_settings_set(
     url: String,
     key: String,
     model: String,
+    headers: String,
+    api: String,
 ) -> Result<(), String> {
     let guard = lock(&state)?;
     for (k, v) in [
         ("image_url", url.trim()),
         ("image_key", key.trim()),
         ("image_model", model.trim()),
+        ("image_headers", headers.trim()),
+        // 모르는 값이 저장돼 조용히 기본값으로 도는 일이 없도록 정규화해서 넣는다.
+        ("image_api", agent_mentor::sprite::ImageApi::parse(&api).as_str()),
     ] {
         guard.set_setting(k, v).map_err(|e| e.to_string())?;
     }
@@ -1961,7 +2010,13 @@ fn probe_result_message(
 /// 저장 전 값으로 이미지 엔드포인트를 검증한다 (무과금 — `GET /models`).
 /// 폼 값을 그대로 받아 실제 생성 없이 URL·키·모델을 확인한다. `engine_test` 미러링.
 #[tauri::command(async)]
-pub fn image_test(url: String, key: String, model: String) -> Result<String, String> {
+pub fn image_test(
+    url: String,
+    key: String,
+    model: String,
+    headers: String,
+    api: String,
+) -> Result<String, String> {
     let url = url.trim();
     if url.is_empty() {
         return Err("엔드포인트 URL을 입력하세요".into());
@@ -1976,6 +2031,8 @@ pub fn image_test(url: String, key: String, model: String) -> Result<String, Str
         } else {
             model_in.to_string()
         },
+        headers: agent_mentor::http_headers::parse_headers(&headers),
+        api: agent_mentor::sprite::ImageApi::parse(&api),
     };
     let verdict = agent_mentor::sprite::probe_endpoint(&cfg);
     probe_result_message(verdict, &cfg.model)
@@ -2290,6 +2347,7 @@ fn resolve_engine(store: &SqliteStore) -> Option<OpenAiCompatEngine> {
             base_url: url,
             api_key: get("engine_key").trim().to_string(),
             model: if model.trim().is_empty() { "gpt-4o-mini".into() } else { model.trim().into() },
+            headers: agent_mentor::http_headers::parse_headers(&get("engine_headers")),
         });
     }
     OpenAiCompatEngine::from_env()

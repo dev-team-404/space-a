@@ -7,6 +7,7 @@ pub mod curation;
 pub mod diary;
 pub mod finding;
 pub mod hosts;
+pub mod http_headers;
 pub mod hub;
 pub mod inbound;
 pub mod inventory;
