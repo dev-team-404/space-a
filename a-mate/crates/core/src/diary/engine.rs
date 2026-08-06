@@ -140,6 +140,8 @@ pub struct OpenAiCompatEngine {
     pub base_url: String,
     pub api_key: String,
     pub model: String,
+    /// 사내 게이트웨이가 요구하는 추가 헤더(`x-user-id` 등). 없으면 빈 벡터.
+    pub headers: Vec<(String, String)>,
 }
 
 impl OpenAiCompatEngine {
@@ -148,7 +150,21 @@ impl OpenAiCompatEngine {
         let api_key = std::env::var("AGENT_MENTOR_ENGINE_KEY").unwrap_or_default();
         let model = std::env::var("AGENT_MENTOR_ENGINE_MODEL")
             .unwrap_or_else(|_| "gpt-4o-mini".to_string());
-        Some(OpenAiCompatEngine { base_url, api_key, model })
+        let headers = crate::http_headers::parse_headers_env(
+            &std::env::var("AGENT_MENTOR_ENGINE_HEADERS").unwrap_or_default(),
+        );
+        Some(OpenAiCompatEngine { base_url, api_key, model, headers })
+    }
+
+    /// 공통 요청 골격 — Authorization + 사용자 지정 헤더를 한 곳에서 얹는다.
+    /// 사내 헤더가 `Authorization`을 직접 지정하는 경우도 있어, 사용자 헤더를 **나중에** 얹어
+    /// 마지막 지정이 이기도록 한다.
+    fn post(&self, url: &str) -> ureq::Request {
+        let req = ureq::post(url)
+            .timeout(std::time::Duration::from_secs(60))
+            .set("Authorization", &format!("Bearer {}", self.api_key))
+            .set("Content-Type", "application/json");
+        crate::http_headers::apply_headers(req, &self.headers)
     }
 
     fn request(&self, messages: serde_json::Value) -> Result<EngineOutput> {
@@ -158,10 +174,8 @@ impl OpenAiCompatEngine {
             "messages": messages,
             "temperature": 0.7
         });
-        let resp = ureq::post(&url)
-            .timeout(std::time::Duration::from_secs(60))
-            .set("Authorization", &format!("Bearer {}", self.api_key))
-            .set("Content-Type", "application/json")
+        let resp = self
+            .post(&url)
             .send_json(body)
             .map_err(|e| anyhow!("engine request failed: {e}"))?;
 
@@ -232,10 +246,8 @@ impl Engine for OpenAiCompatEngine {
             "tools": tools_json,
             "tool_choice": "auto",
         });
-        let resp = ureq::post(&url)
-            .timeout(std::time::Duration::from_secs(60))
-            .set("Authorization", &format!("Bearer {}", self.api_key))
-            .set("Content-Type", "application/json")
+        let resp = self
+            .post(&url)
             .send_json(body)
             .map_err(|e| anyhow!("engine tool request failed: {e}"))?;
         let v: serde_json::Value = resp.into_json()?;

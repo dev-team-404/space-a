@@ -13,6 +13,48 @@ pub struct SpriteConfig {
     pub base_url: String,
     pub api_key: String,
     pub model: String,
+    /// 사내 게이트웨이가 요구하는 추가 헤더(`x-user-id` 등). 없으면 빈 벡터.
+    pub headers: Vec<(String, String)>,
+    /// 이미지 요청을 어느 API로 보낼지. 게이트웨이마다 다르다.
+    pub api: ImageApi,
+}
+
+/// 이미지 생성 API 방식.
+///
+/// 같은 "OpenAI 호환"이라도 이미지를 받는 창구가 둘로 갈린다. 하나로 통일할 수 없어서
+/// 설정에서 고르게 한다 — 잘못 고르면 404나 "이미지 없음"으로 조용히 실패하기 때문이다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ImageApi {
+    /// `POST /chat/completions` — OpenRouter·LiteLLM. **스타일 앵커 이미지를 첨부**할 수 있어
+    /// 화풍 일관성이 좋다. 기존 동작이라 기본값.
+    #[default]
+    ChatCompletions,
+    /// `POST /images/generations` — OpenAI 규격(사내 게이트웨이 다수). 프롬프트 텍스트만 받으므로
+    /// 레퍼런스 이미지를 못 붙인다 → 화풍 지시를 프롬프트 문장으로 대신한다.
+    ImagesGenerations,
+}
+
+impl ImageApi {
+    /// 설정 저장값 → 방식. 모르는 값·빈 값은 기존 동작(chat)으로 떨어뜨린다.
+    pub fn parse(s: &str) -> ImageApi {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "images" | "images_generations" | "images/generations" => ImageApi::ImagesGenerations,
+            _ => ImageApi::ChatCompletions,
+        }
+    }
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ImageApi::ChatCompletions => "chat",
+            ImageApi::ImagesGenerations => "images",
+        }
+    }
+    /// base_url 뒤에 붙일 경로.
+    fn path(self) -> &'static str {
+        match self {
+            ImageApi::ChatCompletions => "/chat/completions",
+            ImageApi::ImagesGenerations => "/images/generations",
+        }
+    }
 }
 
 pub const DEFAULT_IMAGE_MODEL: &str = "google/gemini-2.5-flash-image";
@@ -35,7 +77,7 @@ fn pick(stored: Option<&str>, env_keys: &[&str]) -> Option<String> {
 impl SpriteConfig {
     /// Engine 설정(OpenRouter 등 OpenAI 호환)을 재사용. 미설정/off면 None.
     pub fn from_env() -> Option<SpriteConfig> {
-        Self::resolve(None, None, None)
+        Self::resolve(None, None, None, None, None)
     }
 
     /// 설정창 저장값 → env 순으로 해석.
@@ -46,6 +88,8 @@ impl SpriteConfig {
         stored_url: Option<&str>,
         stored_key: Option<&str>,
         stored_model: Option<&str>,
+        stored_headers: Option<&str>,
+        stored_api: Option<&str>,
     ) -> Option<SpriteConfig> {
         if std::env::var("AGENT_MENTOR_SPRITE").map(|v| v == "off").unwrap_or(false) {
             return None;
@@ -55,10 +99,21 @@ impl SpriteConfig {
             .unwrap_or_default();
         let model = pick(stored_model, &["AGENT_MENTOR_IMAGE_MODEL"])
             .unwrap_or_else(|| DEFAULT_IMAGE_MODEL.to_string());
+        // 헤더는 텍스트 엔진 것을 물려받지 않는다 — 이미지가 다른 게이트웨이일 수 있어서다.
+        // 설정 창 값은 진짜 줄바꿈, .env 값은 리터럴 `\n`이라 파서를 나눠 쓴다.
+        let headers = match stored_headers.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(s) => crate::http_headers::parse_headers(s),
+            None => crate::http_headers::parse_headers_env(
+                &std::env::var("AGENT_MENTOR_IMAGE_HEADERS").unwrap_or_default(),
+            ),
+        };
+        let api = ImageApi::parse(&pick(stored_api, &["AGENT_MENTOR_IMAGE_API"]).unwrap_or_default());
         Some(SpriteConfig {
             base_url: base_url.trim_end_matches('/').to_string(),
             api_key,
             model,
+            headers,
+            api,
         })
     }
 }
@@ -391,13 +446,46 @@ pub fn crop_face(png_bytes: &[u8]) -> Result<Vec<u8>> {
 /// - LiteLLM(gemini-2.5-flash-image): `choices[0].message.content` 문자열 안에 `data:image…;base64,…`
 ///
 /// 둘 다 없으면 에러. 새 게이트웨이가 또 다른 위치를 쓰면 여기 후보만 추가하면 된다.
+/// 테스트용 편의 래퍼 — "바이트가 바로 나와야 하는" 응답 형태를 단언할 때 쓴다.
+/// 실사용 경로는 `extract_image_source` + 필요 시 내려받기(`request_image`)다.
+#[cfg(test)]
 fn extract_image_bytes(resp: &serde_json::Value) -> Result<Vec<u8>> {
+    match extract_image_source(resp)? {
+        ImageSource::Bytes(b) => Ok(b),
+        ImageSource::HttpUrl(u) => Err(anyhow!("sprite 응답이 링크만 줌(내려받기 필요): {u}")),
+    }
+}
+
+/// 응답에서 꺼낸 이미지의 형태. `images/generations`는 바이트 대신 **링크**를 줄 수 있어
+/// 파싱(순수)과 내려받기(네트워크)를 분리한다.
+#[derive(Debug, PartialEq, Eq)]
+enum ImageSource {
+    Bytes(Vec<u8>),
+    HttpUrl(String),
+}
+
+/// 응답 JSON → 이미지 바이트 또는 링크. 게이트웨이마다 담는 위치가 달라 알려진 형태를
+/// 순서대로 시도하는 **관용적 파서**다. 새 게이트웨이가 또 다른 위치를 쓰면 여기만 늘리면 된다.
+fn extract_image_source(resp: &serde_json::Value) -> Result<ImageSource> {
+    // A) images/generations 규격: {"data":[{"b64_json":"..."}]} 또는 {"data":[{"url":"..."}]}
+    if let Some(b64) = resp.pointer("/data/0/b64_json").and_then(|v| v.as_str()) {
+        return Ok(ImageSource::Bytes(decode_b64(b64)?));
+    }
+    if let Some(url) = resp.pointer("/data/0/url").and_then(|v| v.as_str()) {
+        return Ok(if url.starts_with("data:") {
+            ImageSource::Bytes(decode_data_url(url)?)
+        } else {
+            ImageSource::HttpUrl(url.to_string())
+        });
+    }
+
+    // B) chat/completions 규격
     let msg = resp.pointer("/choices/0/message");
-    // 1) OpenRouter 확장 필드
+    // B-1) OpenRouter 확장 필드
     let from_images = msg
         .and_then(|m| m.pointer("/images/0/image_url/url"))
         .and_then(|v| v.as_str());
-    // 2) LiteLLM: content 문자열에 박힌 data URL
+    // B-2) LiteLLM: content 문자열에 박힌 data URL
     let from_content = msg
         .and_then(|m| m.get("content"))
         .and_then(|v| v.as_str())
@@ -405,7 +493,7 @@ fn extract_image_bytes(resp: &serde_json::Value) -> Result<Vec<u8>> {
     let data_url = from_images
         .or(from_content)
         .ok_or_else(|| anyhow!("sprite 응답에 이미지 없음"))?;
-    decode_data_url(data_url)
+    Ok(ImageSource::Bytes(decode_data_url(data_url)?))
 }
 
 /// `data:image/png;base64,<payload>` → 디코드된 바이트. 모델이 뒤에 붙인 잡담·개행은 잘라낸다
@@ -415,7 +503,13 @@ fn decode_data_url(data_url: &str) -> Result<Vec<u8>> {
         .split_once(',')
         .map(|(_, b)| b)
         .ok_or_else(|| anyhow!("sprite data URL 형식 아님"))?;
-    let payload = payload.split_whitespace().next().unwrap_or("");
+    decode_b64(payload)
+}
+
+/// base64 페이로드 → 바이트. 모델이 뒤에 붙인 잡담·개행은 잘라낸다
+/// (base64 표준 알파벳에는 공백이 없으므로 첫 공백 전까지가 페이로드).
+fn decode_b64(payload: &str) -> Result<Vec<u8>> {
+    let payload = payload.trim().split_whitespace().next().unwrap_or("");
     base64::engine::general_purpose::STANDARD
         .decode(payload)
         .map_err(|e| anyhow!("sprite base64 디코드 실패: {e}"))
@@ -432,10 +526,16 @@ fn with_bearer(req: ureq::Request, api_key: &str) -> ureq::Request {
     }
 }
 
-/// 스타일 앵커(레퍼런스 이미지)를 첨부해 이미지 1장을 요청한다 — generate/generate_cut 공용 배관.
-fn request_image(cfg: &SpriteConfig, prompt: &str) -> Result<Vec<u8>> {
+/// Bearer + 사용자 지정 헤더를 한 곳에서 얹는다. 사내 헤더가 `Authorization`을 직접 지정하는
+/// 경우도 있어 사용자 헤더를 **나중에** 얹어 마지막 지정이 이기게 한다.
+fn with_auth(req: ureq::Request, cfg: &SpriteConfig) -> ureq::Request {
+    crate::http_headers::apply_headers(with_bearer(req, &cfg.api_key), &cfg.headers)
+}
+
+/// chat/completions 본문 — 스타일 앵커 이미지를 첨부한다. (순수, 테스트용으로 분리)
+fn chat_image_body(cfg: &SpriteConfig, prompt: &str) -> serde_json::Value {
     let ref_b64 = base64::engine::general_purpose::STANDARD.encode(STYLE_REF_JPG);
-    let body = serde_json::json!({
+    serde_json::json!({
         "model": cfg.model,
         "messages": [{
             "role": "user",
@@ -445,31 +545,82 @@ fn request_image(cfg: &SpriteConfig, prompt: &str) -> Result<Vec<u8>> {
             ]
         }],
         "modalities": ["image", "text"],
-    });
-    let req = ureq::post(&format!("{}/chat/completions", cfg.base_url))
+    })
+}
+
+/// images/generations 본문 — 이 규격은 참조 이미지를 받지 못하므로 프롬프트만 보낸다.
+/// `response_format: b64_json`으로 요청해 링크 왕복 없이 바이트를 바로 받는다
+/// (무시하는 게이트웨이도 있어 응답 파서는 링크도 처리한다). (순수)
+fn images_generations_body(cfg: &SpriteConfig, prompt: &str) -> serde_json::Value {
+    serde_json::json!({
+        "model": cfg.model,
+        "prompt": prompt,
+        "n": 1,
+        "size": "1024x1024",
+        "response_format": "b64_json",
+    })
+}
+
+/// 이미지 1장을 요청한다 — generate/generate_cut 공용 배관. 방식은 cfg.api가 정한다.
+fn request_image(cfg: &SpriteConfig, prompt: &str) -> Result<Vec<u8>> {
+    let body = match cfg.api {
+        ImageApi::ChatCompletions => chat_image_body(cfg, prompt),
+        ImageApi::ImagesGenerations => images_generations_body(cfg, prompt),
+    };
+    let req = ureq::post(&format!("{}{}", cfg.base_url, cfg.api.path()))
         .timeout(std::time::Duration::from_secs(120))
         .set("Content-Type", "application/json");
-    let resp: serde_json::Value = with_bearer(req, &cfg.api_key)
+    let resp: serde_json::Value = with_auth(req, cfg)
         .send_json(body)
         .map_err(|e| anyhow!("sprite 생성 요청 실패: {e}"))?
         .into_json()?;
-    extract_image_bytes(&resp)
+    match extract_image_source(&resp)? {
+        ImageSource::Bytes(b) => Ok(b),
+        // images/generations가 b64_json 요청을 무시하고 링크를 준 경우 — 한 번 더 내려받는다.
+        ImageSource::HttpUrl(url) => download_image(cfg, &url),
+    }
+}
+
+/// 응답이 준 이미지 링크를 내려받는다. 같은 게이트웨이가 서명 URL을 주는 일이 있어
+/// 인증 헤더를 그대로 얹는다(공개 CDN이면 무해).
+fn download_image(cfg: &SpriteConfig, url: &str) -> Result<Vec<u8>> {
+    let req = ureq::get(url).timeout(std::time::Duration::from_secs(60));
+    let resp = with_auth(req, cfg)
+        .call()
+        .map_err(|e| anyhow!("sprite 이미지 내려받기 실패: {e}"))?;
+    let mut buf = Vec::new();
+    std::io::Read::read_to_end(&mut resp.into_reader(), &mut buf)
+        .map_err(|e| anyhow!("sprite 이미지 읽기 실패: {e}"))?;
+    Ok(buf)
+}
+
+/// 스프라이트 프롬프트. `images/generations`는 레퍼런스 이미지를 못 붙이므로
+/// "첨부 그림과 같은 화풍" 대신 **화풍을 문장으로 지정**한다 — 첨부가 없는데 첨부를 가리키면
+/// 모델이 엉뚱한 그림을 낸다. (순수)
+///
+/// "checkerboard 금지"는 실측 대응 — 모델이 가끔 '투명 배경' 흉내로 회색-흰색 체커보드를
+/// 실제 픽셀로 그려버리는데, 균일 배경만 지우는 투명화가 이를 못 걷어낸다 (2026-07-29).
+fn sprite_prompt(api: ImageApi, description: &str) -> String {
+    const STYLE: &str = "16-bit pixel art sprite, chibi proportions with large head, clean dark \
+         pixel outline, soft cel shading, front-facing full body, centered";
+    const RULES: &str = "Single character only, no text, no watermark. The background must be one \
+         flat solid white color (#ffffff) — NEVER a gray-and-white checkerboard or any \
+         transparency pattern.";
+    match api {
+        ImageApi::ChatCompletions => format!(
+            "Using the EXACT same art style as the attached reference image ({STYLE}, plain white \
+             background), draw a DIFFERENT character: {description}. Match the reference's pixel \
+             density, outline thickness, shading style and proportions exactly. {RULES}"
+        ),
+        ImageApi::ImagesGenerations => format!(
+            "A {STYLE} on a plain white background. The character: {description}. {RULES}"
+        ),
+    }
 }
 
 /// 이미지 생성 — 스타일 앵커 + 인물 묘사. 반환 = PNG 바이트.
 pub fn generate(cfg: &SpriteConfig, description: &str) -> Result<Vec<u8>> {
-    // "checkerboard 금지"는 실측 대응 — 모델이 가끔 '투명 배경' 흉내로 회색-흰색 체커보드를
-    // 실제 픽셀로 그려버리는데, 균일 배경만 지우는 투명화가 이를 못 걷어낸다 (2026-07-29).
-    let prompt = format!(
-        "Using the EXACT same art style as the attached reference image (16-bit pixel art sprite, \
-         chibi proportions with large head, clean dark pixel outline, soft cel shading, \
-         front-facing full body, centered, plain white background), draw a DIFFERENT character: \
-         {description}. Match the reference's pixel density, outline thickness, shading style and \
-         proportions exactly. Single character only, no text, no watermark. The background must be \
-         one flat solid white color (#ffffff) — NEVER a gray-and-white checkerboard or any \
-         transparency pattern."
-    );
-    let png = request_image(cfg, &prompt)?;
+    let png = request_image(cfg, &sprite_prompt(cfg.api, description))?;
     // 흰 배경 → 투명. 실패해도 캐릭터는 보여야 하므로 원본으로 폴백(무해).
     match make_background_transparent(&png) {
         Ok(t) => Ok(t),
@@ -524,7 +675,7 @@ pub fn classify_models_body(body: &serde_json::Value, model: &str) -> ProbeVerdi
 pub fn probe_endpoint(cfg: &SpriteConfig) -> ProbeVerdict {
     let url = format!("{}/models", cfg.base_url);
     let req = ureq::get(&url).timeout(std::time::Duration::from_secs(10));
-    match with_bearer(req, &cfg.api_key).call() {
+    match with_auth(req, cfg).call() {
         Ok(resp) => {
             let body: serde_json::Value = resp.into_json().unwrap_or(serde_json::Value::Null);
             classify_models_body(&body, &cfg.model)
@@ -744,7 +895,12 @@ pub fn compute_cut_scene(
 
 /// H2 — 컷 이미지 프롬프트 조립 (로컬, 네트워크 없음). 캐릭터 묘사는 마스코트 샷에만 붙는다
 /// (Scene 컷은 캐릭터 없는 정경 — 스펙 데이터 흐름 ⑤).
-pub fn build_cut_image_prompt(shot: CutShot, character_desc: Option<&str>, scene_en: &str) -> String {
+pub fn build_cut_image_prompt(
+    shot: CutShot,
+    character_desc: Option<&str>,
+    scene_en: &str,
+    api: ImageApi,
+) -> String {
     let composition = match shot {
         CutShot::HighAngle => {
             "extreme high-angle selfie composition, face filling most of the frame, overexposed flash, hazy glow"
@@ -776,12 +932,20 @@ pub fn build_cut_image_prompt(shot: CutShot, character_desc: Option<&str>, scene
     let character = character_desc
         .map(|d| format!(" The character is {d}."))
         .unwrap_or_default();
-    format!(
-        "Using the EXACT same art style as the attached reference image (16-bit pixel art, \
-         chibi proportions, clean dark pixel outline, soft cel shading), draw one scene: \
-         {scene_en}.{character} {composition}. \
-         No text, no letters, no words, no watermark."
-    )
+    // 스프라이트와 같은 이유로 첨부 유무에 따라 화풍 지시를 바꾼다 (sprite_prompt 참고).
+    match api {
+        ImageApi::ChatCompletions => format!(
+            "Using the EXACT same art style as the attached reference image (16-bit pixel art, \
+             chibi proportions, clean dark pixel outline, soft cel shading), draw one scene: \
+             {scene_en}.{character} {composition}. \
+             No text, no letters, no words, no watermark."
+        ),
+        ImageApi::ImagesGenerations => format!(
+            "16-bit pixel art illustration with chibi proportions, clean dark pixel outline and \
+             soft cel shading. One scene: {scene_en}.{character} {composition}. \
+             No text, no letters, no words, no watermark."
+        ),
+    }
 }
 
 /// H2 — 장면 컷 생성. sprite와 달리 배경 투명화를 하지 않는다 — 장면 전체가 그림이다.
@@ -901,16 +1065,51 @@ mod tests {
             Some("  https://openrouter.ai/api/v1/  "),
             Some(" sk-test "),
             Some(" some/model "),
+            None,
+            None,
         )
         .expect("stored url이 있으면 Some");
         assert_eq!(cfg.base_url, "https://openrouter.ai/api/v1");
         assert_eq!(cfg.api_key, "sk-test");
         assert_eq!(cfg.model, "some/model");
+        assert!(cfg.headers.is_empty(), "헤더 미지정이면 비어 있다");
+        assert_eq!(cfg.api, ImageApi::ChatCompletions, "기존 사용자는 방식이 바뀌지 않는다");
+    }
+
+    #[test]
+    fn resolve_reads_custom_headers_and_api_kind() {
+        let cfg = SpriteConfig::resolve(
+            Some("https://gw.corp/v1"),
+            Some(""),
+            Some("corp-image"),
+            Some("x-user-id: abc\nx-dept-name: s/w개발팀"),
+            Some("images"),
+        )
+        .expect("stored url이 있으면 Some");
+        assert_eq!(
+            cfg.headers,
+            vec![
+                ("x-user-id".to_string(), "abc".to_string()),
+                ("x-dept-name".to_string(), "s/w개발팀".to_string()),
+            ]
+        );
+        assert_eq!(cfg.api, ImageApi::ImagesGenerations);
+    }
+
+    #[test]
+    fn image_api_parse_falls_back_to_chat_for_unknown_values() {
+        assert_eq!(ImageApi::parse("images"), ImageApi::ImagesGenerations);
+        assert_eq!(ImageApi::parse("  Images/Generations "), ImageApi::ImagesGenerations);
+        assert_eq!(ImageApi::parse("chat"), ImageApi::ChatCompletions);
+        assert_eq!(ImageApi::parse(""), ImageApi::ChatCompletions);
+        assert_eq!(ImageApi::parse("무슨소리"), ImageApi::ChatCompletions);
+        assert_eq!(ImageApi::ChatCompletions.path(), "/chat/completions");
+        assert_eq!(ImageApi::ImagesGenerations.path(), "/images/generations");
     }
 
     #[test]
     fn resolve_defaults_model_when_not_given() {
-        let cfg = SpriteConfig::resolve(Some("https://x/api/v1"), Some(""), None)
+        let cfg = SpriteConfig::resolve(Some("https://x/api/v1"), Some(""), None, None, None)
             .expect("stored url이 있으면 Some");
         // 모델 미지정 + env 미설정이면 기본 이미지 모델
         if std::env::var("AGENT_MENTOR_IMAGE_MODEL").is_err() {
@@ -963,6 +1162,95 @@ mod tests {
         });
         let got = extract_image_bytes(&resp).expect("뒤 잡담 무시");
         assert_eq!(got, raw);
+    }
+
+    fn cfg_for(api: ImageApi) -> SpriteConfig {
+        SpriteConfig {
+            base_url: "https://gw.corp/v1".into(),
+            api_key: String::new(),
+            model: "corp-image".into(),
+            headers: vec![("x-user-id".into(), "abc".into())],
+            api,
+        }
+    }
+
+    #[test]
+    fn extract_image_reads_images_generations_b64_json() {
+        // 사내 게이트웨이(OpenAI images/generations 규격)는 data[0].b64_json으로 준다.
+        let raw = vec![0x89u8, 0x50, 0x4e, 0x47, 11, 22, 33];
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&raw);
+        let resp = serde_json::json!({"created": 1, "data": [{"b64_json": b64}]});
+        assert_eq!(extract_image_bytes(&resp).expect("images 규격"), raw);
+    }
+
+    #[test]
+    fn extract_image_reads_images_generations_data_url() {
+        let raw = vec![7u8, 7, 7, 7];
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&raw);
+        let resp =
+            serde_json::json!({"data": [{"url": format!("data:image/png;base64,{b64}")}]});
+        assert_eq!(extract_image_bytes(&resp).expect("data URL 형태"), raw);
+    }
+
+    #[test]
+    fn extract_image_source_reports_http_url_for_later_download() {
+        // b64_json을 무시하고 링크만 주는 게이트웨이 — 파서는 링크를 그대로 넘기고
+        // 내려받기는 호출자(request_image)가 한다.
+        let resp = serde_json::json!({"data": [{"url": "https://cdn.corp/img/1.png"}]});
+        assert_eq!(
+            extract_image_source(&resp).unwrap(),
+            ImageSource::HttpUrl("https://cdn.corp/img/1.png".into())
+        );
+        // 링크만 있는 응답을 바이트로 요구하면 실패해야 한다(조용히 빈 그림 금지).
+        assert!(extract_image_bytes(&resp).is_err());
+    }
+
+    #[test]
+    fn images_generations_body_sends_prompt_without_reference_image() {
+        let body = images_generations_body(&cfg_for(ImageApi::ImagesGenerations), "a tiny robot");
+        assert_eq!(body["model"], "corp-image");
+        assert_eq!(body["prompt"], "a tiny robot");
+        assert_eq!(body["n"], 1);
+        assert_eq!(body["response_format"], "b64_json");
+        // 이 규격은 messages·첨부 이미지를 받지 않는다.
+        assert!(body.get("messages").is_none());
+        assert!(!body.to_string().contains("image_url"));
+    }
+
+    #[test]
+    fn chat_body_still_attaches_the_style_reference() {
+        let body = chat_image_body(&cfg_for(ImageApi::ChatCompletions), "a tiny robot");
+        assert_eq!(body["model"], "corp-image");
+        assert!(body["messages"][0]["content"][1]["image_url"]["url"]
+            .as_str()
+            .unwrap()
+            .starts_with("data:image/jpeg;base64,"));
+    }
+
+    #[test]
+    fn sprite_prompt_only_mentions_attachment_when_one_is_sent() {
+        let chat = sprite_prompt(ImageApi::ChatCompletions, "a navy robot");
+        assert!(chat.contains("attached reference image"));
+        let images = sprite_prompt(ImageApi::ImagesGenerations, "a navy robot");
+        assert!(!images.contains("attached"), "첨부가 없으면 첨부를 가리키지 않는다");
+        // 화풍·규칙은 두 방식 모두 유지된다.
+        for p in [&chat, &images] {
+            assert!(p.contains("pixel art"));
+            assert!(p.contains("a navy robot"));
+            assert!(p.contains("checkerboard"));
+        }
+    }
+
+    #[test]
+    fn cut_image_prompt_drops_attachment_wording_for_images_api() {
+        let p = build_cut_image_prompt(
+            CutShot::Haduri,
+            Some("a navy robot"),
+            "coding at night",
+            ImageApi::ImagesGenerations,
+        );
+        assert!(!p.contains("attached"));
+        assert!(p.contains("coding at night") && p.contains("No text"));
     }
 
     #[test]
@@ -1178,17 +1466,18 @@ mod tests {
 
     #[test]
     fn cut_image_prompt_composes_style_scene_and_notext() {
-        let p = build_cut_image_prompt(CutShot::Haduri, Some("a navy robot"), "coding at night");
+        let api = ImageApi::ChatCompletions;
+        let p = build_cut_image_prompt(CutShot::Haduri, Some("a navy robot"), "coding at night", api);
         assert!(p.contains("coding at night"), "장면 포함");
         assert!(p.contains("a navy robot"), "마스코트 샷은 캐릭터 묘사 포함");
         assert!(p.contains("black-and-white"), "샷별 구도(하두리 흑백) 포함");
         assert!(p.contains("No text"), "그림 안 텍스트 금지");
         assert!(p.contains("same art style"), "스타일 앵커 문구 포함");
         // 네컷은 분할 구도 + 낙서만 (글자 금지 강조)
-        let four = build_cut_image_prompt(CutShot::FourCut, Some("a navy robot"), "four moods");
+        let four = build_cut_image_prompt(CutShot::FourCut, Some("a navy robot"), "four moods", api);
         assert!(four.contains("2x2") && four.contains("no letters"));
         // 정경 샷: 캐릭터 묘사 없음 + 캐릭터 배제 구도
-        let s = build_cut_image_prompt(CutShot::Scene, None, "a quiet desk");
+        let s = build_cut_image_prompt(CutShot::Scene, None, "a quiet desk", api);
         assert!(!s.contains("The character is"));
         assert!(s.contains("NO characters"));
     }

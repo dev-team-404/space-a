@@ -360,25 +360,38 @@ export async function getOccupantSprite(seed: string): Promise<string | null> {
   try { return await invoke<string | null>('get_occupant_sprite', { seed }); } catch { return null; }
 }
 
-/** 텍스트 LLM 엔진 설정 — 일기·한마디·잡담·채팅이 쓰는 OpenAI 호환 엔드포인트. */
-export interface EngineSettings { url: string; key: string; model: string; source: 'store' | 'env' | 'none' }
+/**
+ * 텍스트 LLM 엔진 설정 — 일기·한마디·잡담·채팅이 쓰는 OpenAI 호환 엔드포인트.
+ * `headers`는 사내 게이트웨이가 요구하는 추가 헤더의 **원문**("이름: 값" 줄 목록)이다.
+ */
+export interface EngineSettings {
+  url: string; key: string; model: string; headers: string; source: 'store' | 'env' | 'none'
+}
 
 export const engineSettingsGet = () => invoke<EngineSettings>('engine_settings_get');
-export const engineSettingsSet = (url: string, key: string, model: string) =>
-  invoke<void>('engine_settings_set', { url, key, model });
+export const engineSettingsSet = (url: string, key: string, model: string, headers: string) =>
+  invoke<void>('engine_settings_set', { url, key, model, headers });
 /** 연결 확인 — 성공 시 사람이 읽는 메시지를 돌려준다. */
-export const engineTest = (url: string, key: string, model: string) =>
-  invoke<string>('engine_test', { url, key, model });
+export const engineTest = (url: string, key: string, model: string, headers: string) =>
+  invoke<string>('engine_test', { url, key, model, headers });
+
+/** 이미지 생성 API 방식 — 게이트웨이마다 창구가 다르다. */
+export type ImageApi = 'chat' | 'images';
 
 /** 캐릭터 이미지 모델 설정 (텍스트 엔진과 분리 — 사내 LLM은 이미지 생성을 못 하므로). */
-export interface ImageSettings { url: string; key: string; model: string; source: 'store' | 'env' | 'none' }
+export interface ImageSettings {
+  url: string; key: string; model: string; headers: string; api: ImageApi;
+  source: 'store' | 'env' | 'none'
+}
 
 export async function imageSettingsGet(): Promise<ImageSettings> {
   return await invoke<ImageSettings>('image_settings_get');
 }
 
-export async function imageSettingsSet(url: string, key: string, model: string): Promise<void> {
-  await invoke('image_settings_set', { url, key, model });
+export async function imageSettingsSet(
+  url: string, key: string, model: string, headers: string, api: ImageApi,
+): Promise<void> {
+  await invoke('image_settings_set', { url, key, model, headers, api });
 }
 
 /** 팀 지식 허브(a-hub work) 설정 — 지식 발행·검색·인용용. Life Server와 별개 서버다. */
@@ -420,8 +433,9 @@ export async function mascotCommit(): Promise<void> {
 }
 
 /** 이미지 엔드포인트 검증 (무과금 — GET /models). 성공/실패 모두 사람이 읽는 메시지. 실패는 reject. */
-export const imageTest = (url: string, key: string, model: string) =>
-  invoke<string>('image_test', { url, key, model });
+export const imageTest = (
+  url: string, key: string, model: string, headers: string, api: ImageApi,
+) => invoke<string>('image_test', { url, key, model, headers, api });
 
 /** 개인정보 — 이름·조직·아이디(UUID 자동)·MBTI. a-hub 연결·마스코트 시드에 쓰인다. */
 export interface Profile { name: string; org: string; uuid: string; mbti: string; owner_title: string; owner_full_name: string }

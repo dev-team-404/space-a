@@ -168,7 +168,11 @@ pub trait Engine {
 
 - 구현체: `OpenAiCompatEngine`(OpenAI 호환 `/chat/completions`) + `MockEngine`(결정적 테스트용).
 - `chat_with_tools`의 **기본 구현이 툴을 무시하고 `chat`으로 폴백**한다 — 툴 미지원 엔진에서도 깨지지 않는다.
-- 설정은 앱 설정 또는 환경변수(`AGENT_MENTOR_ENGINE_URL` / `_KEY` / `_MODEL`). 미설정이면 LLM 기능만 no-op.
+- 설정은 앱 설정 또는 환경변수(`AGENT_MENTOR_ENGINE_URL` / `_KEY` / `_MODEL` / `_HEADERS`). 미설정이면 LLM 기능만 no-op.
+- **추가 헤더**(`headers`)는 사내 게이트웨이가 요구하는 신원 헤더(`x-user-id`·`x-dept-name`·`x-service-id` 등)를
+  담는다. 요구하는 이름이 조직마다 달라 필드를 고정하지 않고 `이름: 값` 자유 입력으로 두었다
+  ([`http_headers.rs`](../../../a-mate/crates/core/src/http_headers.rs)가 파싱). `Authorization` 다음에 얹으므로
+  헤더로 인증을 직접 지정하면 그쪽이 이긴다.
 - `EngineOutput.tokens_used`로 자기 토큰 소비를 스스로 계량한다.
 
 ### 4.3 `Rule` — 코칭 규칙
@@ -290,6 +294,22 @@ a-mate가 밖으로 나가는 경로는 4개뿐이고, 전부 **꺼져 있어도
 | **a-hub / life** (미니홈피) | [`life_client.rs`](../../../a-mate/crates/core/src/life_client.rs) | 방·방문·방명록·프로필·이미지 동기화 |
 | **LLM 엔진** | `diary/engine.rs` | 일기·한마디·잡담·채팅·판정 |
 | **이미지 모델** | `sprite.rs` | 마스코트 스프라이트·오늘의 컷 생성 |
+
+LLM 엔진과 이미지 모델은 **각자 따로** 엔드포인트·키·모델·추가 헤더를 갖는다. 사내 텍스트 게이트웨이와
+이미지 게이트웨이가 다른 서버인 경우가 흔해서다.
+
+#### 이미지 API 방식 (`sprite::ImageApi`)
+
+같은 "OpenAI 호환"이라도 이미지를 주는 창구가 둘로 갈려 설정에서 고른다. 잘못 고르면 404나
+"이미지 없음"으로 조용히 실패하므로 자동 판별하지 않는다.
+
+| 방식 | 요청 | 참조 이미지 | 응답에서 이미지 위치 |
+|---|---|---|---|
+| `chat` (기본) | `POST {URL}/chat/completions` | **첨부함** — 화풍 견본을 같이 보내 캐릭터가 일관됨 | `choices[0].message.images[0].image_url.url` 또는 `…message.content` 안의 data URL |
+| `images` | `POST {URL}/images/generations` | 못 붙임 — 규격이 프롬프트만 받음 → 화풍을 문장으로 지시 | `data[0].b64_json`, 없으면 `data[0].url`(링크면 한 번 더 내려받음) |
+
+기본이 `chat`인 이유는 **기존 사용자의 동작을 바꾸지 않기 위해서**다. 사내 게이트웨이처럼
+`images/generations`만 여는 곳은 설정에서 `images`로 바꾼다.
 
 ### 7.1 지식 공유 조건 (`hub.rs` 상수)
 

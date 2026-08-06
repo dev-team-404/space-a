@@ -183,10 +183,14 @@ pub(crate) fn resolve_engine(store: &SqliteStore) -> Option<OpenAiCompatEngine> 
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| "gpt-4o-mini".to_string());
+        let headers = agent_mentor::http_headers::parse_headers(
+            &store.get_setting("engine_headers").ok().flatten().unwrap_or_default(),
+        );
         return Some(OpenAiCompatEngine {
             base_url,
             api_key,
             model,
+            headers,
         });
     }
     OpenAiCompatEngine::from_env()
@@ -200,6 +204,8 @@ pub(crate) fn resolve_sprite_cfg(store: &SqliteStore) -> Option<agent_mentor::sp
         get("image_url").as_deref(),
         get("image_key").as_deref(),
         get("image_model").as_deref(),
+        get("image_headers").as_deref(),
+        get("image_api").as_deref(),
     )
 }
 

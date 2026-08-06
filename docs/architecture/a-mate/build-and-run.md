@@ -170,6 +170,34 @@ AGENT_MENTOR_ENGINE_KEY=
 AGENT_MENTOR_ENGINE_MODEL=gpt-4.1-mini
 ```
 
+### 사내 게이트웨이 — 신원 헤더가 필요할 때
+
+사내 서빙이 `x-user-id` 같은 헤더를 요구하면 **설정 → 연결 → LLM 엔진 → 추가 헤더**에
+한 줄에 하나씩 적습니다. 캐릭터 이미지 쪽에도 같은 칸이 따로 있습니다(서버가 다를 수 있으므로).
+
+```text
+x-user-id: abc
+x-dept-name: s/w개발팀
+x-service-id: service-a
+```
+
+> **한글 값 주의** — HTTP 헤더 값은 ASCII만 실을 수 있어, 한글이 든 값은
+> **UTF-8 퍼센트 인코딩**해서 나갑니다 (`s/w개발팀` → `s%2Fw%EA%B0%9C%EB%B0%9C%ED%8C%80`가 아니라
+> `s/w%EA%B0%9C%EB%B0%9C%ED%8C%80` — ASCII 문자는 그대로). 설정 화면이 어떤 헤더가 인코딩되는지
+> 알려줍니다. **서버가 UTF-8 퍼센트 디코드를 하지 않는다면 값을 영문으로 바꿔야 합니다.**
+
+사내 이미지 모델이 `chat/completions`가 아니라 **`images/generations`** 규격이면
+**설정 → 연결 → 캐릭터 이미지 → API 방식**을 `images/generations`로 바꿉니다. 이 규격은
+화풍 견본 이미지를 첨부할 수 없어, 화풍 지시가 프롬프트 문장으로만 전달됩니다.
+
+`.env`로 넣을 때는 값이 한 줄이어야 하므로 줄바꿈을 `\n`으로 적습니다:
+
+```dotenv
+AGENT_MENTOR_ENGINE_HEADERS=x-user-id: abc\nx-dept-name: s/w개발팀
+AGENT_MENTOR_IMAGE_HEADERS=x-user-id: abc\nx-service-id: service-a
+AGENT_MENTOR_IMAGE_API=images
+```
+
 > 이 앱은 네이티브 Windows 프로세스이므로 프록시 주소는 **`localhost`**로 접속합니다.
 > `host.docker.internal`은 Docker 컨테이너 내부 전용 DNS라 네이티브 Windows에선 해석되지
 > 않습니다. 프록시가 컨테이너라면 포트를 호스트에 노출하세요 (예: `-p 4444:4444`).
